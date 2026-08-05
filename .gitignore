@@ -1,0 +1,16 @@
+﻿node_modules/
+.next/
+dist/
+coverage/
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
