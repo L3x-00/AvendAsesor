@@ -1,9 +1,10 @@
-import { redirect } from "next/navigation";
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
-} from "@/lib/authorization/resolve-admin-access";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+} from '@/lib/authorization/resolve-admin-access';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export default async function AdminPage() {
   const supabase = await createServerSupabaseClient();
@@ -11,12 +12,12 @@ export default async function AdminPage() {
     supabase as unknown as AuthorizationSupabaseClient,
   );
 
-  if (access.status === "unauthenticated") {
-    redirect("/auth/sign-in");
+  if (access.status === 'unauthenticated') {
+    redirect('/auth/sign-in');
   }
 
-  if (access.status !== "authorized") {
-    redirect("/access-denied");
+  if (access.status !== 'authorized') {
+    redirect('/access-denied');
   }
 
   return (
@@ -30,6 +31,20 @@ export default async function AdminPage() {
           Acceso confirmado con rol {access.role}. La interfaz usa rutas de
           servidor y la API protegida; no entrega acceso directo a los datos.
         </p>
+        <nav aria-label="Operaciones administrativas" className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Link
+            className="rounded-lg border border-slate-300 p-4 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+            href="/admin/modules"
+          >
+            Gestionar módulos
+          </Link>
+          <Link
+            className="rounded-lg border border-slate-300 p-4 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+            href="/admin/documents"
+          >
+            Gestionar documentos PDF
+          </Link>
+        </nav>
       </section>
     </main>
   );
