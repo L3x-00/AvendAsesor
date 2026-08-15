@@ -66,6 +66,8 @@ enabled = true
 schema_paths = []
 
 [db.seed]
+# Hito 2 must not invent or seed an initial business module. Any future seed
+# requires an explicit Product Owner decision and a dedicated migration/test.
 enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
@@ -98,6 +100,8 @@ enabled = true
 port = 55323
 # External URL of the API server that frontend connects to.
 api_url = "http://127.0.0.1"
+# Supabase Studio AI remains disabled. Hito 2 has no AI scope and local work
+# must not prepare an external OpenAI connection.
 
 # Local email capture. Supabase CLI keeps Auth messages on this workstation; it
 # never delivers them to Internet. The current CLI image labels the underlying

@@ -49,6 +49,7 @@ try {
         'web' {
             $env:NEXT_PUBLIC_SUPABASE_URL = $apiUrl
             $env:NEXT_PUBLIC_SUPABASE_ANON_KEY = $localStatus.ANON_KEY
+            $env:ADMIN_API_URL = 'http://localhost:3001'
             $env:APP_URL = 'http://localhost:3000'
             $env:NODE_ENV = 'development'
         }
