@@ -38,6 +38,13 @@ exclusivas de staging y un `APP_URL` de rama. Hasta desplegar la API dedicada
 en Render, su `ADMIN_API_URL` falla cerrado contra un host reservado; nunca
 apunta a la API de producción.
 
+La API de staging queda declarada en `render.yaml`, con CI obligatoria antes
+del deploy, worker RAG desactivado y la comprobación `/health/ready`. Esta
+última solo responde correctamente cuando Render puede autenticar contra el
+proyecto Supabase de staging. La creación del servicio y el enlace de su URL
+real como `ADMIN_API_URL` permanecen pendientes; el procedimiento verificable
+y las variables manuales sin secretos están en `infrastructure/render/README.md`.
+
 ## Lote exacto
 
 Promover como una sola unidad las migraciones desde

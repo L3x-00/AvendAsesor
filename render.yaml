@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: avend-asesor-api-staging
+    runtime: node
+    plan: free
+    region: ohio
+    branch: codex/hito3-hito4-staging-fix
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm run build --workspace=api
+    startCommand: npm run start:prod --workspace=api
+    healthCheckPath: /health/ready
+    buildFilter:
+      paths:
+        - apps/api/**
+        - packages/**
+        - package.json
+        - package-lock.json
+        - .nvmrc
+        - render.yaml
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: RAG_INGESTION_WORKER_ENABLED
+        value: "false"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
