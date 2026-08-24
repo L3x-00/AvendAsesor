@@ -44,6 +44,16 @@ async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
 }
 
+function requestBody(
+  call: [input: RequestInfo | URL, init?: RequestInit] | undefined,
+) {
+  const body = call?.[1]?.body;
+  if (typeof body !== "string") {
+    throw new Error("La solicitud de chat no contiene un cuerpo JSON.");
+  }
+  return JSON.parse(body);
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
@@ -94,11 +104,12 @@ describe("ChatPanel", () => {
 
   it("reinicia la conversación al cambiar o quitar el subtema", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn(async () =>
-      streamResponse([
-        `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
-        `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
-      ]),
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        streamResponse([
+          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
+        ]),
     );
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal("fetch", fetchMock);
@@ -114,7 +125,7 @@ describe("ChatPanel", () => {
     );
     await submitQuestion(user);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    expect(requestBody(fetchMock.mock.calls[0])).toEqual({
       moduleId: childModule.id,
       question: "¿Cómo solicito una licencia?",
     });
@@ -122,7 +133,7 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: "Quitar tema" }));
     await submitQuestion(user);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+    expect(requestBody(fetchMock.mock.calls[1])).toEqual({
       moduleId: chatModule.id,
       question: "¿Cómo solicito una licencia?",
     });
