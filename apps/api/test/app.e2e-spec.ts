@@ -129,6 +129,17 @@ describe('API endpoints (e2e)', () => {
       .expect({ service: 'avend-asesor-api', status: 'ok' });
   });
 
+  it('/health/ready (GET) fails closed without a server data-store configuration', () => {
+    return request(app.getHttpServer())
+      .get('/health/ready')
+      .expect(503)
+      .expect({
+        error: 'Service Unavailable',
+        message: 'Service dependencies are unavailable.',
+        statusCode: 503,
+      });
+  });
+
   it('/admin/access denies a request without a bearer token', () => {
     return request(app.getHttpServer()).get('/admin/access').expect(401);
   });

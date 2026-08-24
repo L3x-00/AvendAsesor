@@ -5,6 +5,7 @@ import {
   SUPABASE_CHAT_GATEWAY,
   SUPABASE_DOCUMENTS_GATEWAY,
   SUPABASE_FAQ_MEMORY_GATEWAY,
+  SUPABASE_HEALTH_GATEWAY,
   SUPABASE_INGESTION_GATEWAY,
   SUPABASE_MODULES_GATEWAY,
   SUPABASE_OPERATIONS_GATEWAY,
@@ -17,6 +18,7 @@ import { SupabaseAuthGatewayAdapter } from './supabase-auth.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
 import { SupabaseFaqMemoryGatewayAdapter } from './supabase-faq-memory.gateway';
+import { SupabaseHealthGatewayAdapter } from './supabase-health.gateway';
 import { SupabaseIngestionGatewayAdapter } from './supabase-ingestion.gateway';
 import { SupabaseModulesGatewayAdapter } from './supabase-modules.gateway';
 import { SupabaseOperationsGatewayAdapter } from './supabase-operations.gateway';
@@ -37,6 +39,18 @@ import {
         createSupabaseServerClient(
           configService.get<string>('SUPABASE_URL'),
           configService.get<string>('SUPABASE_SERVICE_ROLE_KEY'),
+        ),
+    },
+    {
+      provide: SUPABASE_HEALTH_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseHealthGatewayAdapter(
+          client
+            ? {
+                from: (table: 'profiles') => client.from(table),
+              }
+            : null,
         ),
     },
     {
@@ -115,6 +129,7 @@ import {
     SUPABASE_CHAT_GATEWAY,
     SUPABASE_DOCUMENTS_GATEWAY,
     SUPABASE_FAQ_MEMORY_GATEWAY,
+    SUPABASE_HEALTH_GATEWAY,
     SUPABASE_INGESTION_GATEWAY,
     SUPABASE_MODULES_GATEWAY,
     SUPABASE_OPERATIONS_GATEWAY,
