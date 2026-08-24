@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import type { FaqMemoryReviewStatus } from '../faq-memory.gateway';
 
@@ -7,6 +8,7 @@ export class ListFaqMemoryCandidatesQueryDto {
   status?: FaqMemoryReviewStatus;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)

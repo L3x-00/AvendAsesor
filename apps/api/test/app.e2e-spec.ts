@@ -18,6 +18,7 @@ import type {
 } from './../src/documents/domain/document';
 import { ChatService } from './../src/chat/chat.service';
 import { OperationsService } from './../src/operations/operations.service';
+import { UserAdministrationService } from './../src/user-administration/user-administration.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -65,6 +66,20 @@ describe('API endpoints (e2e)', () => {
     >(),
     reviewUnansweredQuestion: jest.fn<
       Promise<void>,
+      [string, Record<string, unknown>, AuthorizationContext]
+    >(),
+  };
+  const userAdministrationService = {
+    listAuditEvents: jest.fn<
+      Promise<unknown[]>,
+      [Record<string, unknown>, AuthorizationContext]
+    >(),
+    listUsers: jest.fn<
+      Promise<unknown[]>,
+      [Record<string, unknown>, AuthorizationContext]
+    >(),
+    updateUser: jest.fn<
+      Promise<unknown>,
       [string, Record<string, unknown>, AuthorizationContext]
     >(),
   };
@@ -129,6 +144,8 @@ describe('API endpoints (e2e)', () => {
       .useValue(chatService)
       .overrideProvider(OperationsService)
       .useValue(operationsService)
+      .overrideProvider(UserAdministrationService)
+      .useValue(userAdministrationService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -290,6 +307,58 @@ describe('API endpoints (e2e)', () => {
       { limit: 100, status: 'pending_review' },
       expect.objectContaining({ role: 'admin' }),
     );
+  });
+
+  it('/admin/users accepts numeric query parameters for SUPERADMIN listings and audit events', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'superadmin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'superadmin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    userAdministrationService.listUsers.mockResolvedValue([]);
+    userAdministrationService.listAuditEvents.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get('/admin/users?limit=100')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(200)
+      .expect([]);
+    await request(app.getHttpServer())
+      .get('/admin/users/audit-events?limit=100')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(200)
+      .expect([]);
+
+    expect(userAdministrationService.listUsers).toHaveBeenCalledWith(
+      { limit: 100 },
+      expect.objectContaining({ role: 'superadmin' }),
+    );
+    expect(userAdministrationService.listAuditEvents).toHaveBeenCalledWith(
+      { limit: 100 },
+      expect.objectContaining({ role: 'superadmin' }),
+    );
+  });
+
+  it('/admin/users rejects invalid pagination before reaching SUPERADMIN services', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'superadmin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'superadmin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+
+    await request(app.getHttpServer())
+      .get('/admin/users?limit=101')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/admin/users/audit-events?limit=not-a-number')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(400);
+
+    expect(userAdministrationService.listUsers).not.toHaveBeenCalled();
+    expect(userAdministrationService.listAuditEvents).not.toHaveBeenCalled();
   });
 
   it('/admin/modules validates and creates a module for a superadmin', async () => {
