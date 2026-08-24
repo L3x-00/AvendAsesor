@@ -11,7 +11,8 @@
 | Fase 2 — Historial privado | DONE (local) | Codex | API/RPCs de listado, lectura, continuación y baja lógica propia |
 | Fase 3 — Consultas no resueltas y métricas | DONE (local) | Codex | Bandeja administrativa, clasificación, indicadores agregados y auditoría |
 | Fase 4 — Seguridad, usuarios y permisos | DONE (local) | Codex | Gestión SUPERADMIN, eventos append-only y regresiones de autorización |
-| Fase 5 — Cierre técnico | REVIEW | Codex + revisión independiente | 264 contratos pgTAP, correcciones de release y gate remoto pendiente |
+| Fase 5 — Cierre técnico | DONE (esquema en producción) | Codex + revisión independiente | 264 contratos pgTAP, correcciones de release, 23 migraciones aplicadas y auditoría sin BLOCKER/HIGH |
+| Fase 6 — UI/UX y responsive | REVIEW (local) | Codex + revisión independiente | BFF web, historial paginado, UI accesible, 98 pruebas y re-revisión sin BLOCKER/HIGH; falta QA autenticado y gate remoto |
 
 Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
@@ -25,13 +26,16 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 | CA-H4-04 | Las acciones administrativas sensibles generan eventos de auditoría inmutables y consultables según rol. |
 | CA-H4-05 | Las métricas son agregadas, acotadas y no exponen contenido de chats ni inventan consumo de IA. |
 | CA-H4-06 | RLS, privilegios, RPCs y API niegan acceso directo y entre usuarios/roles indebidos. |
-| CA-H4-07 | La suite integral no regresa contratos Hitos 1–3; la capa visual queda diferida por instrucción vigente. |
+| CA-H4-07 | La suite integral no regresa contratos Hitos 1–3 y conserva las autorizaciones server-side. |
+| CA-H4-08 | Historial, operación, usuarios y auditoría muestran solo datos autorizados, mantienen estados claros y responden en escritorio, tableta y teléfono. |
 
 ## Riesgos y bloqueos
 
-- Producción solo contiene migraciones hasta Hito 2. El release local incorpora
-  22 migraciones acumulativas de Hitos 3–4 y no se promueve hasta que se
-  confirme recuperación verificable y staging. El runbook exacto está en
+- La Fase 1 de producción aplicó las 23 migraciones acumulativas de Hitos 3–4
+  desde un checkout limpio, con respaldo lógico privado y staging aislado.
+  El historial local/remoto coincide en 29 versiones. Aún faltan los despliegues
+  API/Web y las cuentas QA; el worker RAG, proveedores IA y correo permanecen
+  deshabilitados. El runbook y la evidencia están en
   `fase5/RELEASE_HITO3_HITO4.md`.
 - El borrado definitivo y la retención de conversaciones requieren política
   formal; Hito 4 aplica baja lógica y no programa purgas automáticas.
@@ -39,3 +43,7 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
   generado por el servidor, nunca la consulta literal ni conversaciones ajenas.
 - Las métricas de proveedor/costo permanecen `not_configured` hasta que exista
   proveedor autorizado y telemetría real.
+- La carga de datos ficticios y cuentas de prueba en producción se trata como
+  una operación separada: exige un conjunto exacto, una credencial fresca no
+  expuesta, recuperación verificable y autorización explícita para el recurso
+  remoto. No se incluye en una migración de esquema.

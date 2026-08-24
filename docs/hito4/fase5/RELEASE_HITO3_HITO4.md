@@ -2,18 +2,20 @@
 
 ## Estado
 
-**Estado remoto: BLOQUEADO.** El release local está preparado, pero no se
-ejecutará una migración contra Supabase producción mientras falte recuperación
-verificable y una validación staging.
+**Estado remoto: Fase 1 ejecutada.** El esquema Hitos 3–4 se promovió a
+Supabase producción; el despliegue de la API, la web y las pruebas autenticadas
+siguen pendientes y se controlan como fases separadas.
 
-La inspección remota de solo lectura del 2026-08-23 confirmó:
+La inspección remota de solo lectura del 2026-08-23 confirmó, antes de la
+promoción:
 
 - Producción permanece en Hitos 1–2 (`20260809045322` a `20260809220458`).
 - El proyecto no tiene PITR habilitado ni backup físico disponible.
 - No existe una rama Supabase Preview ni un proyecto staging separado.
 
-La autorización del Product Owner exige esos dos controles antes de promover,
-por lo que el bloqueo es deliberado y no una falla técnica del release.
+Para la promoción se usaron un proyecto staging aislado y un respaldo lógico
+privado recuperable de `public` fuera del repositorio. El plan Free no aporta
+PITR, por lo que el mismo control debe repetirse antes de futuras migraciones.
 
 ## Lote exacto
 
@@ -42,7 +44,8 @@ timestamps locales/remotos de Hitos 1–4, `pgvector` 0.8.2, el operador HNSW en
 auditoría. Se generó antes un respaldo lógico privado de `public`, fuera del
 repositorio. La consulta post-release de asesores no respondió en 60 segundos;
 la consulta previa no tenía hallazgos y esta limitación se mantiene registrada
-para observabilidad, no como aprobación adicional.
+para observabilidad, no como aprobación adicional. La auditoría independiente
+no dejó BLOCKER/HIGH.
 
 Las cuatro migraciones finales corrigen el release sin reescribir historial:
 

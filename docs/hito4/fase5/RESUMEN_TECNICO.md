@@ -28,12 +28,15 @@ Consolidar la verificación regresiva de los contratos Hitos 1–4, registrar el
 
 La invocación independiente de Claude Code no emitió una conclusión útil, incluso con herramientas deshabilitadas y material suministrado. Se registra como limitación de revisión, no como aprobación ni hallazgo resuelto.
 
-## Gate de promoción
+## Promoción de esquema ejecutada
 
-El cierre local no autoriza producción. Antes de cualquier promoción se requiere un checkout limpio y revisado, conjunto exacto de migraciones, respaldo/PITR comprobable, plan de reversión, staging verificable y autorización específica del Product Owner para la operación remota.
+El 2026-08-24, tras un checkout limpio/revisado, respaldo lógico privado,
+validación staging y autorización específica del Product Owner, se promovieron
+las 23 migraciones acumulativas de Hitos 3–4. El historial remoto coincide en
+29 versiones; se comprobó `pgvector` 0.8.2, el índice HNSW calificado y las
+tablas críticas. La auditoría independiente no dejó BLOCKER/HIGH.
 
-La comprobación remota de solo lectura del 2026-08-23 confirma que producción
-está en Hitos 1–2 (`20260809045322` a `20260809220458`). Hito 4 depende de las
-22 migraciones acumulativas locales Hitos 3–4, por lo que no se promueve de
-forma aislada ni desde el árbol de trabajo compartido. El runbook y estado de
-recuperación están en `RELEASE_HITO3_HITO4.md`.
+Esta evidencia solo cierra el esquema. El despliegue API/Web, la QA autenticada
+y cualquier dato ficticio se realizan en fases separadas. Worker RAG,
+proveedores IA, correo, HMAC y corpus continúan deshabilitados. El runbook de
+recuperación y límites queda en `RELEASE_HITO3_HITO4.md`.
