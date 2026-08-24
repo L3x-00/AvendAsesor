@@ -16,7 +16,7 @@ sin alterar el motor RAG, la base de datos, RLS ni los contratos de seguridad.
 
 | Fase | Nombre | Foco | Hito(s) | Estado |
 | --- | --- | --- | --- | --- |
-| **1** | Sesión y navegación | Logout + jerarquía módulo→submódulo + selección client-side/cache | hito3, hito2 | EN CURSO |
+| **1** | Sesión y navegación | Logout + jerarquía módulo→submódulo + selección client-side/cache | hito3, hito2 | ✅ IMPLEMENTADA (rama) · pendiente CI/QA |
 | **2** | Zona de trabajo y conversación | Título/descripción de módulo, jerarquía tipográfica de respuestas, estados | hito3 | PLANNED |
 | **3** | Interactividad y componentes | Micrófono, "Formatos para descargar", responsive fino, microinteracciones | hito3, hito4 | PLANNED |
 | **4** | Consistencia, accesibilidad y cierre | Admin consistente, WCAG AA, delay de ingreso (infra), regresión visual, QA 3 roles | hito2, hito4 | PLANNED |
@@ -26,7 +26,10 @@ Cada fase cierra con: `typecheck` + `lint` + `test:cov` + `build` en verde, evid
 
 ---
 
-## FASE 1 — Sesión y navegación  *(EN CURSO)*
+## FASE 1 — Sesión y navegación  *(IMPLEMENTADA EN RAMA — pendiente CI/QA)*
+
+**Commits:** `065e79f` (logout en shells docente/admin + barra lateral solo módulos padre),
+`1c157fb` (submódulos en zona principal + selección client-side + cache de módulos 120s).
 
 **Requerimientos del cliente que cubre:** guía §3 (orden de módulos), §4 (módulo activo, submódulos en zona principal), §10 (responsive), y el requisito operativo de cerrar sesión.
 
