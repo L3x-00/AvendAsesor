@@ -27,10 +27,10 @@ controles explícitos y movimiento reducido.
   demostración desde la interfaz.
 - La interfaz no otorga permisos: NestJS, Supabase Auth y RLS siguen siendo la
   autoridad para cada lectura o mutación.
-- La Fase 1 ya promovió el esquema acumulativo Hitos 3–4 en producción con
-  respaldo lógico privado y staging aislado. Las rutas Hito 4 aún no se prueban
-  contra producción porque el despliegue API/Web y las cuentas QA pertenecen a
-  las fases siguientes.
+- El esquema acumulativo Hitos 3–4, la API y la web ya están en producción con
+  respaldo lógico privado previo y staging aislado. El smoke test público
+  comprobó salud, CORS y protección de rutas. Las rutas autenticadas requieren
+  todavía cuentas QA separadas y no se declaran validadas por este despliegue.
 
 ## Verificación local
 
@@ -50,6 +50,5 @@ controles explícitos y movimiento reducido.
    responsive para historial, operación y SUPERADMIN.
 2. Definir la operación remota separada para semilla ficticia y cuentas de
    prueba, sin usar ni registrar credenciales expuestas.
-3. Despliegue controlado de API y Web desde el lote productivo exacto; validar
-   salud, CORS y rutas públicas antes de mostrar estas superficies en
-   producción.
+3. Pruebas de aceptación autenticadas en producción con evidencia de los tres
+   roles, sin habilitar todavía proveedor IA, correo ni datos de negocio reales.

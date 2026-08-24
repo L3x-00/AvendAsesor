@@ -12,7 +12,7 @@
 | Fase 3 — Consultas no resueltas y métricas | DONE (local) | Codex | Bandeja administrativa, clasificación, indicadores agregados y auditoría |
 | Fase 4 — Seguridad, usuarios y permisos | DONE (local) | Codex | Gestión SUPERADMIN, eventos append-only y regresiones de autorización |
 | Fase 5 — Cierre técnico | DONE (esquema en producción) | Codex + revisión independiente | 264 contratos pgTAP, correcciones de release, 23 migraciones aplicadas y auditoría sin BLOCKER/HIGH |
-| Fase 6 — UI/UX y responsive | REVIEW (local) | Codex + revisión independiente | BFF web, historial paginado, UI accesible, 98 pruebas y re-revisión sin BLOCKER/HIGH; falta QA autenticado y gate remoto |
+| Fase 6 — UI/UX y responsive | REVIEW (producción pública) | Codex + revisión independiente | BFF web, historial paginado, UI accesible, 98 pruebas, API/Web publicadas y smoke test remoto; falta QA autenticado por rol |
 
 Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
@@ -33,9 +33,10 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
 - La Fase 1 de producción aplicó las 23 migraciones acumulativas de Hitos 3–4
   desde un checkout limpio, con respaldo lógico privado y staging aislado.
-  El historial local/remoto coincide en 29 versiones. Aún faltan los despliegues
-  API/Web y las cuentas QA; el worker RAG, proveedores IA y correo permanecen
-  deshabilitados. El runbook y la evidencia están en
+  El historial local/remoto coincide en 29 versiones. La Fase 2 publicó API y
+  web, con health check de dependencia, CORS y protección de rutas verificados.
+  Faltan cuentas QA y validación autenticada por rol; el worker RAG, proveedores
+  IA y correo permanecen deshabilitados. El runbook y la evidencia están en
   `fase5/RELEASE_HITO3_HITO4.md`.
 - El borrado definitivo y la retención de conversaciones requieren política
   formal; Hito 4 aplica baja lógica y no programa purgas automáticas.

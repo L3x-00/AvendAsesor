@@ -12,7 +12,7 @@
 | Fase 3 — Ingesta local y vectorización | DONE | 2026-08-21 | 2026-08-21 | Codex | Worker idempotente, extracción por página, OCR local, chunking, embeddings y pruebas unitarias |
 | Fase 4 — Retrieval, fuentes y guardrails | DONE (local) | 2026-08-21 | 2026-08-22 | Codex | Retrieval, prompt evidence-only, proveedor encapsulado, RPCs atómicas y regresión local |
 | Fase 5 — Chat SSE e historial | DONE (local) | 2026-08-22 | 2026-08-22 | Codex | API autenticada, SSE, historial, BFF server-only y superficie docente con eventos reales |
-| Fase 6 — Aceptación y cierre técnico local | REVIEW | 2026-08-22 | 2026-08-24 | Codex + revisión independiente | Puerta reproducible, 264 contratos pgTAP, regresión total y corrección acumulativa de release |
+| Fase 6 — Aceptación y cierre técnico | REVIEW | 2026-08-22 | 2026-08-24 | Codex + revisión independiente | Puerta reproducible, 264 contratos pgTAP, release en producción y smoke test remoto; falta aceptación autenticada y proveedor IA autorizado |
 
 Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
@@ -40,6 +40,8 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 - La capa visual de Fase 5 consume solamente el SSE autenticado, historial y
   fuentes persistidas reales. No usa mensajes, referencias ni consultas
   simuladas como sustituto.
-- La promoción Hitos 3–4 está bloqueada hasta tener recuperación verificable
-  (PITR o backup físico) y un ambiente staging real. El conjunto exacto y sus
-  verificaciones se registran en `docs/hito4/fase5/RELEASE_HITO3_HITO4.md`.
+- La promoción Hitos 3–4 se ejecutó con staging aislado y respaldo lógico
+  privado previo; el conjunto exacto y sus verificaciones se registran en
+  `docs/hito4/fase5/RELEASE_HITO3_HITO4.md`. La aceptación funcional completa
+  sigue condicionada a cuentas QA y a un proveedor IA autorizado, que continúan
+  deliberadamente deshabilitados.

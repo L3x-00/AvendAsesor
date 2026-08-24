@@ -2,9 +2,11 @@
 
 ## Estado
 
-**Estado remoto: Fase 1 ejecutada.** El esquema Hitos 3–4 se promovió a
-Supabase producción; el despliegue de la API, la web y las pruebas autenticadas
-siguen pendientes y se controlan como fases separadas.
+**Estado remoto: Fases 1 y 2 ejecutadas.** El esquema acumulativo de Hitos 3–4
+está promovido a Supabase producción y las aplicaciones publicadas de API y web
+operan sobre el mismo release. Las pruebas autenticadas con cuentas QA se
+mantienen como una fase separada: no se las sustituye por una comprobación de
+salud pública.
 
 La inspección remota de solo lectura del 2026-08-23 confirmó, antes de la
 promoción:
@@ -34,7 +36,7 @@ staging con un `search_path` equivalente al de producción. No se requiere
 `migration repair` ni quedó cambio parcial remoto. Staging ya tiene el índice
 equivalente; una reconstrucción futura de staging empleará esta forma explícita.
 
-## Fase 1 ejecutada — producción
+## Fase 1 ejecutada — base de datos de producción
 
 El 2026-08-24 se aplicó el lote desde la rama publicada
 `codex/hito3-hito4-production-fix` (`4ee2cf2` para la corrección vectorial y
@@ -58,6 +60,36 @@ Las cuatro migraciones finales corrigen el release sin reescribir historial:
    registrador v1 deshabilitado y limpia una advertencia real de PostgreSQL.
 4. `20260824005736_retire_legacy_faq_completion_rpc.sql`: elimina el wrapper
    v1 que dependía del registrador retirado.
+
+## Fase 2 ejecutada — API y web de producción
+
+El 2026-08-24 se promovió a `main` el commit
+`9b7cbbe410fd1a31c8ee8c03adc78e066a167a7f`. Incluye la disponibilidad
+fail-closed de Supabase, revisada de forma independiente antes de la promoción.
+
+- **API Render:** `https://avend-asesor-api.onrender.com` está publicada desde
+  `main`, con health check configurado en `/health/ready`.
+- **Web Vercel:** `https://avend-asesor-web.vercel.app` está asignada al
+  despliegue de producción `dpl_8Yy6aRpj4gBewgsXupZEkpdXXXuM`.
+- **Integración:** `ADMIN_API_URL` se configuró con la URL pública de Render;
+  CORS permite el origen público exacto de Vercel.
+
+### Evidencia de smoke test remoto
+
+| Comprobación | Resultado |
+| --- | --- |
+| `GET /health` de la API | `200` |
+| `GET /health/ready` de la API | `200`; comprueba una dependencia de Supabase sin revelar detalles internos |
+| Inicio y acceso de registro de la web | `200` |
+| `/admin` sin sesión | `307` hacia `/auth/sign-in` |
+| Endpoint administrativo sin token | `401` |
+| CORS desde el origen de Vercel | Cabecera `access-control-allow-origin` con el origen público autorizado |
+
+El primer despliegue automático de Vercel asociado al push no llegó a construir
+por la restricción de autor del repositorio. Se usó un despliegue manual
+autenticado desde un archivo exacto del commit publicado, sin artefactos locales
+ni archivos del sistema de desarrollo asistido por IA. Vercel lo marcó `Ready`
+y asignó el alias de producción.
 
 ## Recuperación y reversión
 
@@ -84,8 +116,10 @@ supabase db advisors --linked --fail-on warn
 ```
 
 Luego ejecutar contratos, autenticación y el smoke test API/Web contra las URLs
-de staging. No habilitar `RAG_INGESTION_WORKER_ENABLED` ni configurar proveedor
-IA/corpus en esta promoción: esos gates siguen separados.
+de staging. En producción ya se ejecutó el smoke test no autenticado de Fase 2;
+la validación autenticada sigue pendiente de cuentas QA separadas. No habilitar
+`RAG_INGESTION_WORKER_ENABLED` ni configurar proveedor IA/corpus en esta
+promoción: esos gates siguen separados.
 
 ## Evidencia local ya obtenida
 
