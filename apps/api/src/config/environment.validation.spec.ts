@@ -37,6 +37,16 @@ describe('validateEnvironment', () => {
     });
   });
 
+  it('normalizes an optional trailing slash for the exact browser CORS origin', () => {
+    expect(
+      validateEnvironment({
+        WEB_ORIGIN: 'https://avend-asesor-web.vercel.app/',
+      }),
+    ).toMatchObject({
+      WEB_ORIGIN: 'https://avend-asesor-web.vercel.app',
+    });
+  });
+
   it('preserves future configuration keys after validating known values', () => {
     expect(
       validateEnvironment({
@@ -55,6 +65,14 @@ describe('validateEnvironment', () => {
     { PORT: '70000' },
     { NODE_ENV: 'preview' },
     { WEB_ORIGIN: 'not-a-url' },
+    { WEB_ORIGIN: 'https://avend-asesor-web.vercel.app/path' },
+    { WEB_ORIGIN: 'https://avend-asesor-web.vercel.app?redirect=unsafe' },
+    { WEB_ORIGIN: 'https://avend-asesor-web.vercel.app#unsafe' },
+    { WEB_ORIGIN: 'https://user:password@avend-asesor-web.vercel.app' },
+    { WEB_ORIGIN: 'file:///tmp/avend' },
+    { WEB_ORIGIN: 'data:text/plain,unsafe' },
+    { WEB_ORIGIN: 'ftp://avend-asesor-web.vercel.app' },
+    { NODE_ENV: 'production', WEB_ORIGIN: 'http://avend-asesor-web.local' },
     { RAG_INGESTION_LEASE_SECONDS: '1' },
     { RAG_INGESTION_WORKER_ENABLED: 'enabled' },
     { RAG_MATCH_COUNT: '11' },
