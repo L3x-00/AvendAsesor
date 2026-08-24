@@ -1,7 +1,11 @@
-import { isAdministrativeRole, type AdministrativeRole } from "./policy";
+import {
+  isActiveAccountStatus,
+  isAdministrativeRole,
+  type AdministrativeRole,
+} from "./policy";
 
 interface ProfileRoleQuery {
-  select(columns: "role"): {
+  select(columns: "role, account_status"): {
     eq(
       column: "id",
       value: string,
@@ -50,7 +54,7 @@ export async function resolveAdminAccess(
   try {
     ({ data, error } = await client
       .from("profiles")
-      .select("role")
+      .select("role, account_status")
       .eq("id", user.id)
       .maybeSingle());
   } catch {
@@ -62,6 +66,10 @@ export async function resolveAdminAccess(
     !data ||
     typeof data !== "object" ||
     !("role" in data) ||
+    !("account_status" in data) ||
+    !isActiveAccountStatus(
+      (data as { account_status: unknown }).account_status,
+    ) ||
     !isAdministrativeRole((data as { role: unknown }).role)
   ) {
     return { status: "unauthorized" };

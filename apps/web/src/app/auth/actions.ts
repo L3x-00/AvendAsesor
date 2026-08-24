@@ -1,17 +1,17 @@
-'use server';
+"use server";
 
-import { redirect } from 'next/navigation';
-import { type AuthActionState } from '@/lib/auth/action-state';
-import { AuthService } from '@/lib/auth/auth-service';
-import { getAuthRedirectUrl } from '@/lib/auth/site-url';
+import { redirect } from "next/navigation";
+import { type AuthActionState } from "@/lib/auth/action-state";
+import { AuthService } from "@/lib/auth/auth-service";
+import { getAuthRedirectUrl } from "@/lib/auth/site-url";
 import {
   parseAuthForm,
   passwordResetSchema,
   passwordUpdateSchema,
   signInSchema,
   signUpSchema,
-} from '@/lib/auth/validation';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+} from "@/lib/auth/validation";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 async function createAuthService(): Promise<AuthService> {
   return new AuthService(await createServerSupabaseClient());
@@ -31,15 +31,15 @@ export async function signUpAction(
 
   await authService.signUp({
     email: parsed.data.email,
-    emailRedirectTo: getAuthRedirectUrl('/auth/callback?next=/auth/confirmed'),
+    emailRedirectTo: getAuthRedirectUrl("/auth/callback?next=/auth/confirmed"),
     fullName: parsed.data.fullName,
     password: parsed.data.password,
   });
 
   return {
     message:
-      'Si los datos fueron aceptados, recibirás un correo para confirmar tu cuenta.',
-    status: 'success',
+      "Si los datos fueron aceptados, recibirás un correo para confirmar tu cuenta.",
+    status: "success",
   };
 }
 
@@ -58,12 +58,13 @@ export async function signInAction(
 
   if (!signedIn) {
     return {
-      message: 'No se pudo iniciar sesión. Verifica tus credenciales e inténtalo nuevamente.',
-      status: 'error',
+      message:
+        "No se pudo iniciar sesión. Verifica tus credenciales e inténtalo nuevamente.",
+      status: "error",
     };
   }
 
-  redirect('/');
+  redirect("/chat");
 }
 
 export async function requestPasswordResetAction(
@@ -80,13 +81,13 @@ export async function requestPasswordResetAction(
 
   await authService.requestPasswordReset({
     email: parsed.data.email,
-    redirectTo: getAuthRedirectUrl('/auth/callback?next=/auth/update-password'),
+    redirectTo: getAuthRedirectUrl("/auth/callback?next=/auth/update-password"),
   });
 
   return {
     message:
-      'Si existe una cuenta asociada, recibirás instrucciones para restablecer tu contraseña.',
-    status: 'success',
+      "Si existe una cuenta asociada, recibirás instrucciones para restablecer tu contraseña.",
+    status: "success",
   };
 }
 
@@ -106,10 +107,10 @@ export async function updatePasswordAction(
   if (!updated) {
     return {
       message:
-        'El enlace no es válido o expiró. Solicita una nueva recuperación de contraseña.',
-      status: 'error',
+        "El enlace no es válido o expiró. Solicita una nueva recuperación de contraseña.",
+      status: "error",
     };
   }
 
-  redirect('/auth/sign-in?password=updated');
+  redirect("/auth/sign-in?password=updated");
 }

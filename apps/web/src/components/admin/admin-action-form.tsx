@@ -24,7 +24,7 @@ function SubmitButton({ label }: { label: string }) {
 
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center rounded-md bg-sky-700 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+      className="avend-button avend-button--primary avend-admin-submit"
       disabled={pending}
       type="submit"
     >
@@ -42,8 +42,8 @@ export function AdminActionForm({
   const [state, formAction] = useActionState(action, initialAdminActionState);
   const messageClassName =
     state.status === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-      : 'border-rose-200 bg-rose-50 text-rose-900';
+      ? 'avend-feedback--success'
+      : 'avend-feedback--error';
 
   return (
     <form action={formAction} className={className} noValidate>
@@ -51,7 +51,7 @@ export function AdminActionForm({
       {state.message ? (
         <p
           aria-live="polite"
-          className={`rounded-md border px-3 py-2 text-sm ${messageClassName}`}
+          className={`avend-feedback ${messageClassName}`}
           role={state.status === 'error' ? 'alert' : 'status'}
         >
           {state.message}
@@ -59,7 +59,7 @@ export function AdminActionForm({
       ) : null}
       {state.downloadUrl ? (
         <a
-          className="block text-sm font-semibold text-sky-800 underline underline-offset-4"
+          className="avend-text-link"
           href={state.downloadUrl}
           rel="noreferrer"
           target="_blank"

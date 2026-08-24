@@ -68,3 +68,16 @@ Estado al 2026-08-09: `BLOCKED` solo para aceptación de correo/staging. El proy
 - Iniciar Docker Desktop y ejecutar Mailpit/Supabase local para repetir confirmación y recuperación sin correo real.
 - Configurar Resend SMTP y URLs exactas solo en un proyecto staging confirmado, con dominio verificado y secretos gestionados fuera de Git.
 - Repetir CA-01, CA-02 y CA-03 con cuentas de prueba, correo real y staging aislado.
+
+## Actualización visual local — 2026-08-21
+
+- Los formularios de registro, acceso, recuperación y cambio de contraseña
+  comparten ahora un marco visual sobrio con el logo oficial, texto base de
+  16px, controles de al menos 46px, contraste alto, etiquetas explícitas y
+  mensajes de estado legibles para docentes y profesionales adultos.
+- Las vistas de correo confirmado y enlace no disponible reutilizan el mismo
+  componente de estado con una única acción clara; no se modificaron Server
+  Actions, validaciones, callbacks, sesiones ni mensajes de seguridad.
+- La comprobación móvil de 375px redujo el panel institucional a una identidad
+  compacta antes del formulario y conserva el contenido orientativo completo
+  a partir de 768px. La auditoría axe-core no encontró incidencias WCAG 2 A/AA.

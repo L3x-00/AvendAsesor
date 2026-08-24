@@ -12,7 +12,10 @@ function createClient(
 ): AuthorizationSupabaseClient {
   const maybeSingle =
     overrides.maybeSingle ??
-    (async () => ({ data: { role: "admin" }, error: null }));
+    (async () => ({
+      data: { account_status: "active", role: "admin" },
+      error: null,
+    }));
   const eq = vi.fn(() => ({ maybeSingle }));
   const select = vi.fn(() => ({ eq }));
   const from = vi.fn(() => ({ select }));
@@ -90,7 +93,10 @@ describe("resolveAdminAccess", () => {
 
   it("fails closed on malformed provider data", async () => {
     const client = createClient({
-      maybeSingle: async () => ({ data: { role: 42 }, error: null }),
+      maybeSingle: async () => ({
+        data: { account_status: "active", role: 42 },
+        error: null,
+      }),
     });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
@@ -108,7 +114,10 @@ describe("resolveAdminAccess", () => {
 
   it("is unauthorized for the docente role", async () => {
     const client = createClient({
-      maybeSingle: async () => ({ data: { role: "docente" }, error: null }),
+      maybeSingle: async () => ({
+        data: { account_status: "active", role: "docente" },
+        error: null,
+      }),
     });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
@@ -118,7 +127,10 @@ describe("resolveAdminAccess", () => {
 
   it("is authorized for admin and superadmin roles and scopes the lookup to the user", async () => {
     const adminClient = createClient({
-      maybeSingle: async () => ({ data: { role: "admin" }, error: null }),
+      maybeSingle: async () => ({
+        data: { account_status: "active", role: "admin" },
+        error: null,
+      }),
     });
 
     await expect(resolveAdminAccess(adminClient)).resolves.toEqual({
@@ -129,13 +141,35 @@ describe("resolveAdminAccess", () => {
     expect(adminClient.from).toHaveBeenCalledWith("profiles");
 
     const superadminClient = createClient({
-      maybeSingle: async () => ({ data: { role: "superadmin" }, error: null }),
+      maybeSingle: async () => ({
+        data: { account_status: "active", role: "superadmin" },
+        error: null,
+      }),
     });
 
     await expect(resolveAdminAccess(superadminClient)).resolves.toEqual({
       role: "superadmin",
       status: "authorized",
       userId: "user-1",
+    });
+  });
+
+  it("fails closed for suspended or legacy-incomplete account state", async () => {
+    const suspended = createClient({
+      maybeSingle: async () => ({
+        data: { account_status: "suspended", role: "superadmin" },
+        error: null,
+      }),
+    });
+    const incomplete = createClient({
+      maybeSingle: async () => ({ data: { role: "admin" }, error: null }),
+    });
+
+    await expect(resolveAdminAccess(suspended)).resolves.toEqual({
+      status: "unauthorized",
+    });
+    await expect(resolveAdminAccess(incomplete)).resolves.toEqual({
+      status: "unauthorized",
     });
   });
 });

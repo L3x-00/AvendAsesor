@@ -1,76 +1,74 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import {
-  AdminApiError,
-  type AdminApiClient,
-} from '@/lib/admin-api/client';
-import { type AdminActionState } from '@/lib/admin-api/action-state';
-import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { revalidatePath } from "next/cache";
+import { AdminApiError, type AdminApiClient } from "@/lib/admin-api/client";
+import { type AdminActionState } from "@/lib/admin-api/action-state";
+import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
 
 class FormValidationError extends Error {}
 
 function actionFailure(error: unknown): AdminActionState {
   if (error instanceof FormValidationError) {
-    return { message: error.message, status: 'error' };
+    return { message: error.message, status: "error" };
   }
 
   if (error instanceof AdminApiError) {
     if (error.status === 401) {
       return {
-        message: 'Tu sesión expiró. Inicia sesión nuevamente.',
-        status: 'error',
+        message: "Tu sesión expiró. Inicia sesión nuevamente.",
+        status: "error",
       };
     }
 
     if (error.status === 403) {
       return {
-        message: 'No tienes permiso para realizar esta acción.',
-        status: 'error',
+        message: "No tienes permiso para realizar esta acción.",
+        status: "error",
       };
     }
 
     if (error.status === 404) {
       return {
-        message: 'El recurso ya no está disponible. Actualiza la página.',
-        status: 'error',
+        message: "El recurso ya no está disponible. Actualiza la página.",
+        status: "error",
       };
     }
 
     if (error.status === 409) {
       return {
         message:
-          'La operación entra en conflicto con el estado actual. Actualiza la página antes de continuar.',
-        status: 'error',
+          "La operación entra en conflicto con el estado actual. Actualiza la página antes de continuar.",
+        status: "error",
       };
     }
 
     if (error.status === 429) {
       return {
-        message: 'Demasiadas solicitudes. Espera un minuto antes de continuar.',
-        status: 'error',
+        message: "Demasiadas solicitudes. Espera un minuto antes de continuar.",
+        status: "error",
       };
     }
 
     if (error.status === 503) {
       return {
         message:
-          'No se pudo confirmar el resultado. Actualiza el listado o detalle antes de volver a enviar esta operación.',
-        status: 'error',
+          "No se pudo confirmar el resultado. Actualiza el listado o detalle antes de volver a enviar esta operación.",
+        status: "error",
       };
     }
   }
 
   return {
-    message: 'No fue posible completar la operación. Revisa los datos e inténtalo más tarde.',
-    status: 'error',
+    message:
+      "No fue posible completar la operación. Revisa los datos e inténtalo más tarde.",
+    status: "error",
   };
 }
 
 function requiredText(formData: FormData, name: string, label: string): string {
   const value = formData.get(name);
 
-  if (typeof value !== 'string' || !value.trim()) {
+  if (typeof value !== "string" || !value.trim()) {
     throw new FormValidationError(`${label} es obligatorio.`);
   }
 
@@ -80,7 +78,7 @@ function requiredText(formData: FormData, name: string, label: string): string {
 function optionalText(formData: FormData, name: string): string | undefined {
   const value = formData.get(name);
 
-  if (typeof value !== 'string' || !value.trim()) {
+  if (typeof value !== "string" || !value.trim()) {
     return undefined;
   }
 
@@ -120,8 +118,8 @@ function optionalJsonObject(
   try {
     const parsed: unknown = JSON.parse(value);
 
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      throw new FormValidationError('Los metadatos deben ser un objeto JSON.');
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new FormValidationError("Los metadatos deben ser un objeto JSON.");
     }
 
     return parsed as Record<string, unknown>;
@@ -130,52 +128,54 @@ function optionalJsonObject(
       throw error;
     }
 
-    throw new FormValidationError('Los metadatos deben ser un objeto JSON válido.');
+    throw new FormValidationError(
+      "Los metadatos deben ser un objeto JSON válido.",
+    );
   }
 }
 
 function selectedModuleIds(formData: FormData): string[] {
   return formData
-    .getAll('moduleId')
-    .filter((value): value is string => typeof value === 'string' && !!value);
+    .getAll("moduleId")
+    .filter((value): value is string => typeof value === "string" && !!value);
 }
 
 function requiredPdf(formData: FormData): File {
-  const file = formData.get('file');
+  const file = formData.get("file");
 
   if (!(file instanceof File) || file.size === 0) {
-    throw new FormValidationError('Selecciona un archivo PDF no vacío.');
+    throw new FormValidationError("Selecciona un archivo PDF no vacío.");
   }
 
   if (file.size > 20 * 1024 * 1024) {
-    throw new FormValidationError('El PDF no puede superar los 20 MiB.');
+    throw new FormValidationError("El PDF no puede superar los 20 MiB.");
   }
 
   return file;
 }
 
 function modulePayload(formData: FormData): Record<string, unknown> {
-  const sortOrder = optionalInteger(formData, 'sortOrder', 'El orden');
-  const metadata = optionalJsonObject(formData, 'metadata');
-  const parentModuleId = optionalText(formData, 'parentModuleId');
+  const sortOrder = optionalInteger(formData, "sortOrder", "El orden");
+  const metadata = optionalJsonObject(formData, "metadata");
+  const parentModuleId = optionalText(formData, "parentModuleId");
 
   const parentPayload =
-    parentModuleId === '__root__'
+    parentModuleId === "__root__"
       ? { parentModuleId: null }
-      : parentModuleId && parentModuleId !== '__keep__'
+      : parentModuleId && parentModuleId !== "__keep__"
         ? { parentModuleId }
         : {};
 
   return {
-    ...(optionalText(formData, 'code')
-      ? { code: optionalText(formData, 'code') }
+    ...(optionalText(formData, "code")
+      ? { code: optionalText(formData, "code") }
       : {}),
-    ...(optionalText(formData, 'description')
-      ? { description: optionalText(formData, 'description') }
+    ...(optionalText(formData, "description")
+      ? { description: optionalText(formData, "description") }
       : {}),
     ...(metadata ? { metadata } : {}),
-    ...(optionalText(formData, 'name')
-      ? { name: optionalText(formData, 'name') }
+    ...(optionalText(formData, "name")
+      ? { name: optionalText(formData, "name") }
       : {}),
     ...parentPayload,
     ...(sortOrder === undefined ? {} : { sortOrder }),
@@ -183,26 +183,26 @@ function modulePayload(formData: FormData): Record<string, unknown> {
 }
 
 function documentMetadataPayload(formData: FormData): Record<string, unknown> {
-  const metadata = optionalJsonObject(formData, 'metadata');
-  const issuanceYear = optionalInteger(formData, 'issuanceYear', 'El año');
+  const metadata = optionalJsonObject(formData, "metadata");
+  const issuanceYear = optionalInteger(formData, "issuanceYear", "El año");
 
   return {
-    ...(optionalText(formData, 'articleReference')
-      ? { articleReference: optionalText(formData, 'articleReference') }
+    ...(optionalText(formData, "articleReference")
+      ? { articleReference: optionalText(formData, "articleReference") }
       : {}),
-    ...(optionalText(formData, 'documentType')
-      ? { documentType: optionalText(formData, 'documentType') }
+    ...(optionalText(formData, "documentType")
+      ? { documentType: optionalText(formData, "documentType") }
       : {}),
     ...(issuanceYear === undefined ? {} : { issuanceYear }),
-    ...(optionalText(formData, 'issuingEntity')
-      ? { issuingEntity: optionalText(formData, 'issuingEntity') }
+    ...(optionalText(formData, "issuingEntity")
+      ? { issuingEntity: optionalText(formData, "issuingEntity") }
       : {}),
     ...(metadata ? { metadata } : {}),
-    ...(optionalText(formData, 'resolutionNumber')
-      ? { resolutionNumber: optionalText(formData, 'resolutionNumber') }
+    ...(optionalText(formData, "resolutionNumber")
+      ? { resolutionNumber: optionalText(formData, "resolutionNumber") }
       : {}),
-    ...(optionalText(formData, 'title')
-      ? { title: optionalText(formData, 'title') }
+    ...(optionalText(formData, "title")
+      ? { title: optionalText(formData, "title") }
       : {}),
   };
 }
@@ -225,13 +225,13 @@ export async function createModuleAction(
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
     const payload = modulePayload(formData);
-    payload.code = requiredText(formData, 'code', 'El código');
-    payload.name = requiredText(formData, 'name', 'El nombre');
+    payload.code = requiredText(formData, "code", "El código");
+    payload.name = requiredText(formData, "name", "El nombre");
     await client.createModule(payload);
-    revalidatePath('/admin/modules');
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/modules");
+    revalidatePath("/admin/documents");
 
-    return { message: 'Módulo creado.', status: 'success' };
+    return { message: "Módulo creado.", status: "success" };
   });
 }
 
@@ -240,18 +240,20 @@ export async function updateModuleAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const moduleId = requiredText(formData, 'moduleId', 'El módulo');
+    const moduleId = requiredText(formData, "moduleId", "El módulo");
     const payload = modulePayload(formData);
 
     if (Object.keys(payload).length === 0) {
-      throw new FormValidationError('Ingresa al menos un campo para actualizar.');
+      throw new FormValidationError(
+        "Ingresa al menos un campo para actualizar.",
+      );
     }
 
     await client.updateModule(moduleId, payload);
-    revalidatePath('/admin/modules');
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/modules");
+    revalidatePath("/admin/documents");
 
-    return { message: 'Módulo actualizado.', status: 'success' };
+    return { message: "Módulo actualizado.", status: "success" };
   });
 }
 
@@ -260,20 +262,20 @@ export async function setModuleStatusAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const moduleId = requiredText(formData, 'moduleId', 'El módulo');
-    const isActive = formData.get('isActive') === 'true';
-    const reason = optionalText(formData, 'reason');
+    const moduleId = requiredText(formData, "moduleId", "El módulo");
+    const isActive = formData.get("isActive") === "true";
+    const reason = optionalText(formData, "reason");
 
     if (!isActive && !reason) {
-      throw new FormValidationError('Indica el motivo de la desactivación.');
+      throw new FormValidationError("Indica el motivo de la desactivación.");
     }
 
     await client.setModuleStatus(moduleId, isActive, reason);
-    revalidatePath('/admin/modules');
+    revalidatePath("/admin/modules");
 
     return {
-      message: isActive ? 'Módulo activado.' : 'Módulo desactivado.',
-      status: 'success',
+      message: isActive ? "Módulo activado." : "Módulo desactivado.",
+      status: "success",
     };
   });
 }
@@ -283,13 +285,13 @@ export async function deleteModuleAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const moduleId = requiredText(formData, 'moduleId', 'El módulo');
-    const reason = requiredText(formData, 'reason', 'El motivo de baja');
+    const moduleId = requiredText(formData, "moduleId", "El módulo");
+    const reason = requiredText(formData, "reason", "El motivo de baja");
     await client.deleteModule(moduleId, reason);
-    revalidatePath('/admin/modules');
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/modules");
+    revalidatePath("/admin/documents");
 
-    return { message: 'Módulo eliminado lógicamente.', status: 'success' };
+    return { message: "Módulo eliminado lógicamente.", status: "success" };
   });
 }
 
@@ -300,26 +302,26 @@ export async function createDocumentAction(
   return withApi(async (client) => {
     const file = requiredPdf(formData);
     const payload = new FormData();
-    const documentType = requiredText(formData, 'documentType', 'El tipo');
-    const title = requiredText(formData, 'title', 'El título');
+    const documentType = requiredText(formData, "documentType", "El tipo");
+    const title = requiredText(formData, "title", "El título");
     const metadata = documentMetadataPayload(formData);
 
-    payload.set('file', file, file.name);
-    payload.set('documentType', documentType);
-    payload.set('title', title);
+    payload.set("file", file, file.name);
+    payload.set("documentType", documentType);
+    payload.set("title", title);
     for (const [key, value] of Object.entries(metadata)) {
-      if (key !== 'documentType' && key !== 'title') {
+      if (key !== "documentType" && key !== "title") {
         payload.set(
           key,
-          key === 'metadata' ? JSON.stringify(value) : String(value),
+          key === "metadata" ? JSON.stringify(value) : String(value),
         );
       }
     }
-    payload.set('moduleIds', JSON.stringify(selectedModuleIds(formData)));
+    payload.set("moduleIds", JSON.stringify(selectedModuleIds(formData)));
     await client.createDocument(payload);
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/documents");
 
-    return { message: 'Documento PDF creado.', status: 'success' };
+    return { message: "Documento PDF creado.", status: "success" };
   });
 }
 
@@ -328,15 +330,15 @@ export async function addDocumentVersionAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
+    const documentId = requiredText(formData, "documentId", "El documento");
     const file = requiredPdf(formData);
     const payload = new FormData();
-    payload.set('file', file, file.name);
+    payload.set("file", file, file.name);
     await client.addDocumentVersion(documentId, payload);
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/documents");
     revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: 'Nueva versión creada.', status: 'success' };
+    return { message: "Nueva versión creada.", status: "success" };
   });
 }
 
@@ -345,18 +347,20 @@ export async function updateDocumentAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
+    const documentId = requiredText(formData, "documentId", "El documento");
     const payload = documentMetadataPayload(formData);
 
     if (Object.keys(payload).length === 0) {
-      throw new FormValidationError('Ingresa al menos un campo para actualizar.');
+      throw new FormValidationError(
+        "Ingresa al menos un campo para actualizar.",
+      );
     }
 
     await client.updateDocument(documentId, payload);
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/documents");
     revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: 'Metadatos actualizados.', status: 'success' };
+    return { message: "Metadatos actualizados.", status: "success" };
   });
 }
 
@@ -365,21 +369,21 @@ export async function setDocumentStatusAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
-    const isActive = formData.get('isActive') === 'true';
-    const reason = optionalText(formData, 'reason');
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const isActive = formData.get("isActive") === "true";
+    const reason = optionalText(formData, "reason");
 
     if (!isActive && !reason) {
-      throw new FormValidationError('Indica el motivo de la desactivación.');
+      throw new FormValidationError("Indica el motivo de la desactivación.");
     }
 
     await client.setDocumentStatus(documentId, isActive, reason);
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/documents");
     revalidatePath(`/admin/documents/${documentId}`);
 
     return {
-      message: isActive ? 'Documento activado.' : 'Documento desactivado.',
-      status: 'success',
+      message: isActive ? "Documento activado." : "Documento desactivado.",
+      status: "success",
     };
   });
 }
@@ -389,13 +393,13 @@ export async function deleteDocumentAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
-    const reason = requiredText(formData, 'reason', 'El motivo de baja');
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const reason = requiredText(formData, "reason", "El motivo de baja");
     await client.deleteDocument(documentId, reason);
-    revalidatePath('/admin/documents');
+    revalidatePath("/admin/documents");
     revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: 'Documento eliminado lógicamente.', status: 'success' };
+    return { message: "Documento eliminado lógicamente.", status: "success" };
   });
 }
 
@@ -404,12 +408,12 @@ export async function linkDocumentModuleAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
-    const moduleId = requiredText(formData, 'moduleId', 'El módulo');
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const moduleId = requiredText(formData, "moduleId", "El módulo");
     await client.linkDocumentModule(documentId, moduleId);
     revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: 'Módulo asociado.', status: 'success' };
+    return { message: "Módulo asociado.", status: "success" };
   });
 }
 
@@ -418,12 +422,12 @@ export async function unlinkDocumentModuleAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
-    const moduleId = requiredText(formData, 'moduleId', 'El módulo');
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const moduleId = requiredText(formData, "moduleId", "El módulo");
     await client.unlinkDocumentModule(documentId, moduleId);
     revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: 'Módulo desvinculado.', status: 'success' };
+    return { message: "Módulo desvinculado.", status: "success" };
   });
 }
 
@@ -432,14 +436,101 @@ export async function createDownloadUrlAction(
   formData: FormData,
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
-    const documentId = requiredText(formData, 'documentId', 'El documento');
-    const versionId = optionalText(formData, 'versionId');
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const versionId = optionalText(formData, "versionId");
     const download = await client.getDownloadUrl(documentId, versionId);
 
     return {
       downloadUrl: download.url,
-      message: 'Enlace temporal generado por 60 segundos.',
-      status: 'success',
+      message: "Enlace temporal generado por 60 segundos.",
+      status: "success",
+    };
+  });
+}
+
+export async function reviewUnansweredQuestionAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const questionId = requiredText(formData, "questionId", "La consulta");
+    const category = requiredText(formData, "category", "La clasificación");
+    const decision = requiredText(formData, "decision", "La decisión");
+    const reviewNote = requiredText(
+      formData,
+      "reviewNote",
+      "La nota de revisión",
+    );
+    const categories = [
+      "documentation_gap",
+      "duplicate",
+      "module_configuration",
+      "other",
+      "outside_scope",
+    ] as const;
+
+    if (!categories.includes(category as (typeof categories)[number])) {
+      throw new FormValidationError("Selecciona una clasificación válida.");
+    }
+
+    if (decision !== "resolved" && decision !== "dismissed") {
+      throw new FormValidationError("Selecciona una decisión válida.");
+    }
+
+    await client.reviewUnansweredQuestion(questionId, {
+      category: category as (typeof categories)[number],
+      decision,
+      reviewNote,
+    });
+    revalidatePath("/admin");
+    revalidatePath("/admin/operations");
+
+    return { message: "Consulta revisada.", status: "success" };
+  });
+}
+
+export async function updateAdministrativeUserAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const userId = requiredText(formData, "userId", "El usuario");
+    const reason = requiredText(formData, "reason", "El motivo");
+    const accountStatus = optionalText(formData, "accountStatus");
+    const role = optionalText(formData, "role");
+    const payload: {
+      accountStatus?: "active" | "suspended";
+      reason: string;
+      role?: "admin" | "docente" | "superadmin";
+    } = { reason };
+
+    if (accountStatus && accountStatus !== "__keep__") {
+      if (accountStatus !== "active" && accountStatus !== "suspended") {
+        throw new FormValidationError("Selecciona un estado de cuenta válido.");
+      }
+      payload.accountStatus = accountStatus;
+    }
+
+    if (role && role !== "__keep__") {
+      if (role !== "admin" && role !== "docente" && role !== "superadmin") {
+        throw new FormValidationError("Selecciona un rol válido.");
+      }
+      payload.role = role;
+    }
+
+    if (!payload.accountStatus && !payload.role) {
+      throw new FormValidationError(
+        "Selecciona un rol o un estado para actualizar.",
+      );
+    }
+
+    await client.updateAdministrativeUser(userId, payload);
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+
+    return {
+      message: "Usuario actualizado. La acción quedó registrada.",
+      status: "success",
     };
   });
 }

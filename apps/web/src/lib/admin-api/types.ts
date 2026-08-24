@@ -1,11 +1,16 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-const timestampSchema = z.string().refine(
-  (value) => !Number.isNaN(Date.parse(value)),
-  'Expected an ISO-compatible timestamp.',
-);
+const timestampSchema = z
+  .string()
+  .refine(
+    (value) => !Number.isNaN(Date.parse(value)),
+    "Expected an ISO-compatible timestamp.",
+  );
 
 const jsonObjectSchema = z.record(z.string(), z.unknown());
+
+const accountStatusSchema = z.enum(["active", "suspended"]);
+const userRoleSchema = z.enum(["docente", "admin", "superadmin"]);
 
 export const managedModuleSchema = z.object({
   code: z.string(),
@@ -48,7 +53,7 @@ export const managedDocumentSchema = z.object({
   issuanceYear: z.number().int().nullable(),
   issuingEntity: z.string().nullable(),
   metadata: jsonObjectSchema,
-  publicationStatus: z.enum(['active', 'inactive']),
+  publicationStatus: z.enum(["active", "inactive"]),
   resolutionNumber: z.string().nullable(),
   title: z.string(),
   updatedAt: timestampSchema,
@@ -87,3 +92,71 @@ export const downloadUrlSchema = z.object({
 });
 
 export type DownloadUrl = z.infer<typeof downloadUrlSchema>;
+
+export const operationalMetricsSchema = z.object({
+  activeDocuments: z.number().int().nonnegative(),
+  activeModules: z.number().int().nonnegative(),
+  dismissedUnansweredQuestions: z.number().int().nonnegative(),
+  pendingIngestionJobs: z.number().int().nonnegative(),
+  pendingUnansweredQuestions: z.number().int().nonnegative(),
+  providerCostStatus: z.literal("not_configured"),
+  resolvedUnansweredQuestions: z.number().int().nonnegative(),
+  totalConversations: z.number().int().nonnegative(),
+  totalUsers: z.number().int().nonnegative(),
+});
+
+export type OperationalMetrics = z.infer<typeof operationalMetricsSchema>;
+
+export const unansweredQuestionSchema = z.object({
+  category: z
+    .enum([
+      "documentation_gap",
+      "module_configuration",
+      "outside_scope",
+      "duplicate",
+      "other",
+    ])
+    .nullable(),
+  conversationId: z.string().uuid().nullable(),
+  createdAt: timestampSchema,
+  id: z.string().uuid(),
+  messageId: z.string().uuid().nullable(),
+  question: z.string().min(1).max(8_000),
+  reason: z.enum(["ambiguous_request", "insufficient_evidence"]),
+  reviewedAt: timestampSchema.nullable(),
+  reviewedBy: z.string().uuid().nullable(),
+  reviewNote: z.string().nullable(),
+  selectedModuleId: z.string().uuid().nullable(),
+  status: z.enum(["pending_review", "resolved", "dismissed"]),
+  topRelevanceScore: z.number().min(0).max(1).nullable(),
+});
+
+export type UnansweredQuestion = z.infer<typeof unansweredQuestionSchema>;
+
+export const administrativeUserSchema = z.object({
+  accountStatus: accountStatusSchema,
+  fullName: z.string().min(1).max(255),
+  id: z.string().uuid(),
+  lastAccessAt: timestampSchema.nullable(),
+  role: userRoleSchema,
+});
+
+export type AdministrativeUser = z.infer<typeof administrativeUserSchema>;
+
+export const operationalAuditEventSchema = z.object({
+  action: z.enum([
+    "chat_history_deleted",
+    "unanswered_question_reviewed",
+    "user_role_changed",
+    "user_status_changed",
+  ]),
+  actorId: z.string().uuid(),
+  actorRole: userRoleSchema,
+  id: z.string().uuid(),
+  metadata: jsonObjectSchema,
+  occurredAt: timestampSchema,
+  resourceId: z.string().uuid(),
+  resourceType: z.enum(["chat_conversation", "unanswered_question", "profile"]),
+});
+
+export type OperationalAuditEvent = z.infer<typeof operationalAuditEventSchema>;

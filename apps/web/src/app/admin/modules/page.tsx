@@ -15,6 +15,7 @@ export default async function ModulesPage() {
 
   return (
     <AdminShell
+      activeSection="modules"
       description="Crea y administra la jerarquía de módulos. Todas las acciones se validan nuevamente en la API."
       title="Módulos"
     >
@@ -24,74 +25,74 @@ export default async function ModulesPage() {
             <h2 className="text-lg font-bold" id="module-list-title">
               Módulos registrados
             </h2>
-            <span className="text-sm text-slate-600">{modules.length} en total</span>
+            <span className="text-base text-avend-text-muted">{modules.length} en total</span>
           </div>
 
           {modules.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">
+            <p className="rounded-lg border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
               Aún no hay módulos. El primer módulo se crea aquí cuando el responsable administrativo lo defina.
             </p>
           ) : (
             <ul className="space-y-3">
               {modules.map((module) => (
-                <li className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={module.id}>
+                <li className="avend-elevated rounded-lg border border-avend-border bg-avend-surface p-4" key={module.id}>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="font-semibold">{module.name}</h3>
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="mt-1 text-base text-avend-text-muted">
                         Código {module.code} · Orden {module.sortOrder} ·{' '}
                         {module.isActive ? 'Activo' : 'Inactivo'}
                       </p>
                       {module.description ? (
-                        <p className="mt-2 text-sm text-slate-700">{module.description}</p>
+                        <p className="mt-2 text-base text-avend-text">{module.description}</p>
                       ) : null}
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    <span className="rounded-full bg-avend-surface-muted px-2 py-1 text-base font-semibold text-avend-text">
                       {module.parentModuleId ? 'Submódulo' : 'Módulo raíz'}
                     </span>
                   </div>
 
-                  <details className="mt-4 rounded-md border border-slate-200 p-3">
+                  <details className="mt-4 rounded-md border border-avend-border p-3">
                     <summary className="cursor-pointer font-semibold">Editar, ordenar o cambiar estado</summary>
                     <div className="mt-4 grid gap-5 lg:grid-cols-2">
                       <AdminActionForm action={updateModuleAction} submitLabel="Guardar cambios">
                         <input name="moduleId" type="hidden" value={module.id} />
-                        <label className="block text-sm font-medium" htmlFor={`module-name-${module.id}`}>
+                        <label className="block text-base font-medium" htmlFor={`module-name-${module.id}`}>
                           Nombre
                         </label>
                         <input
-                          className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                           defaultValue={module.name}
                           id={`module-name-${module.id}`}
                           name="name"
                           required
                         />
-                        <label className="block text-sm font-medium" htmlFor={`module-code-${module.id}`}>
+                        <label className="block text-base font-medium" htmlFor={`module-code-${module.id}`}>
                           Código
                         </label>
                         <input
-                          className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                           defaultValue={module.code}
                           id={`module-code-${module.id}`}
                           name="code"
                           required
                         />
-                        <label className="block text-sm font-medium" htmlFor={`module-order-${module.id}`}>
+                        <label className="block text-base font-medium" htmlFor={`module-order-${module.id}`}>
                           Orden
                         </label>
                         <input
-                          className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                           defaultValue={module.sortOrder}
                           id={`module-order-${module.id}`}
                           min="0"
                           name="sortOrder"
                           type="number"
                         />
-                        <label className="block text-sm font-medium" htmlFor={`module-parent-${module.id}`}>
+                        <label className="block text-base font-medium" htmlFor={`module-parent-${module.id}`}>
                           Padre (opcional)
                         </label>
                         <select
-                          className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                           defaultValue={module.parentModuleId ?? ''}
                           id={`module-parent-${module.id}`}
                           name="parentModuleId"
@@ -118,10 +119,10 @@ export default async function ModulesPage() {
                           <input name="moduleId" type="hidden" value={module.id} />
                           <input name="isActive" type="hidden" value={String(!module.isActive)} />
                           {!module.isActive ? null : (
-                            <label className="block text-sm font-medium" htmlFor={`module-status-reason-${module.id}`}>
+                            <label className="block text-base font-medium" htmlFor={`module-status-reason-${module.id}`}>
                               Motivo de desactivación
                               <input
-                                className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                                 id={`module-status-reason-${module.id}`}
                                 name="reason"
                                 required
@@ -132,10 +133,10 @@ export default async function ModulesPage() {
 
                         <AdminActionForm action={deleteModuleAction} submitLabel="Eliminar lógicamente">
                           <input name="moduleId" type="hidden" value={module.id} />
-                          <label className="block text-sm font-medium" htmlFor={`module-delete-reason-${module.id}`}>
+                          <label className="block text-base font-medium" htmlFor={`module-delete-reason-${module.id}`}>
                             Motivo de baja
                             <input
-                              className="mt-1 min-h-10 w-full rounded-md border border-rose-300 px-3"
+                              className="mt-1 min-h-11 w-full rounded-md border border-avend-navy px-3"
                               id={`module-delete-reason-${module.id}`}
                               name="reason"
                               required
@@ -151,53 +152,53 @@ export default async function ModulesPage() {
           )}
         </section>
 
-        <aside className="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <aside className="avend-elevated h-fit rounded-lg border border-avend-border bg-avend-surface p-5">
           <h2 className="text-lg font-bold">Crear módulo</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
+          <p className="mt-1 text-base leading-6 text-avend-text-muted">
             No se generan módulos de negocio automáticamente.
           </p>
           <AdminActionForm action={createModuleAction} className="mt-4 space-y-3" submitLabel="Crear módulo">
-            <label className="block text-sm font-medium" htmlFor="new-module-name">
+            <label className="block text-base font-medium" htmlFor="new-module-name">
               Nombre
               <input
-                className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="new-module-name"
                 name="name"
                 required
               />
             </label>
-            <label className="block text-sm font-medium" htmlFor="new-module-code">
+            <label className="block text-base font-medium" htmlFor="new-module-code">
               Código
               <input
-                className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="new-module-code"
                 name="code"
                 pattern="[A-Za-z][A-Za-z0-9_]{1,63}"
                 required
               />
             </label>
-            <label className="block text-sm font-medium" htmlFor="new-module-description">
+            <label className="block text-base font-medium" htmlFor="new-module-description">
               Descripción (opcional)
               <textarea
-                className="mt-1 min-h-20 w-full rounded-md border border-slate-300 px-3 py-2"
+                className="mt-1 min-h-20 w-full rounded-md border border-avend-border px-3 py-2"
                 id="new-module-description"
                 name="description"
               />
             </label>
-            <label className="block text-sm font-medium" htmlFor="new-module-order">
+            <label className="block text-base font-medium" htmlFor="new-module-order">
               Orden (opcional)
               <input
-                className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="new-module-order"
                 min="0"
                 name="sortOrder"
                 type="number"
               />
             </label>
-            <label className="block text-sm font-medium" htmlFor="new-module-parent">
+            <label className="block text-base font-medium" htmlFor="new-module-parent">
               Módulo padre (opcional)
               <select
-                className="mt-1 min-h-10 w-full rounded-md border border-slate-300 px-3"
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="new-module-parent"
                 name="parentModuleId"
               >

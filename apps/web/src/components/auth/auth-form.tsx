@@ -7,6 +7,7 @@ import {
   type AuthActionState,
   type AuthFieldName,
 } from '@/lib/auth/action-state';
+import { AuthLayout } from './auth-layout';
 
 export type AuthAction = (
   state: AuthActionState,
@@ -39,7 +40,7 @@ function SubmitButton({ label }: { label: string }) {
 
   return (
     <button
-      className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-sky-700 px-4 py-2 font-semibold text-white transition hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+      className="avend-button avend-button--primary avend-auth-submit"
       disabled={pending}
       type="submit"
     >
@@ -59,24 +60,21 @@ export function AuthForm({
   const [state, formAction] = useActionState(action, initialAuthActionState);
   const messageClassName =
     state.status === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-rose-200 bg-rose-50 text-rose-800';
+      ? 'avend-feedback--success'
+      : 'avend-feedback--error';
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 text-slate-900">
-      <section
-        aria-labelledby="auth-title"
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
-      >
-        <p className="text-sm font-semibold tracking-wide text-sky-700">
-          AVEND ASESOR
-        </p>
-        <h1 className="mt-2 text-2xl font-bold" id="auth-title">
+    <AuthLayout>
+      <section aria-labelledby="auth-title">
+        <header className="avend-auth-heading">
+          <p className="avend-eyebrow">Acceso seguro</p>
+          <h1 id="auth-title">
           {title}
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+          </h1>
+          <p>{description}</p>
+        </header>
 
-        <form action={formAction} className="mt-6 space-y-4" noValidate>
+        <form action={formAction} className="avend-auth-form" noValidate>
           {fields.map((field) => {
             const error = state.fieldErrors?.[field.name];
             const errorId = `${field.name}-error`;
@@ -84,7 +82,7 @@ export function AuthForm({
             return (
               <div key={field.name}>
                 <label
-                  className="mb-1.5 block text-sm font-medium text-slate-800"
+                  className="avend-field-label"
                   htmlFor={field.name}
                 >
                   {field.label}
@@ -93,14 +91,14 @@ export function AuthForm({
                   aria-describedby={error ? errorId : undefined}
                   aria-invalid={Boolean(error)}
                   autoComplete={field.autoComplete}
-                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-700 focus:ring-2 focus:ring-sky-100 aria-[invalid=true]:border-rose-600"
+                  className="avend-field"
                   id={field.name}
                   name={field.name}
                   required
                   type={field.type}
                 />
                 {error ? (
-                  <p className="mt-1.5 text-sm text-rose-700" id={errorId}>
+                  <p className="avend-field-error" id={errorId}>
                     {error}
                   </p>
                 ) : null}
@@ -111,7 +109,7 @@ export function AuthForm({
           {state.message ? (
             <p
               aria-live="polite"
-              className={`rounded-lg border px-3 py-2 text-sm ${messageClassName}`}
+              className={`avend-feedback ${messageClassName}`}
               role={state.status === 'error' ? 'alert' : 'status'}
             >
               {state.message}
@@ -122,10 +120,10 @@ export function AuthForm({
         </form>
 
         {links.length > 0 ? (
-          <nav aria-label="Enlaces de autenticación" className="mt-5 space-y-2 text-sm">
+          <nav aria-label="Enlaces de autenticación" className="avend-auth-links">
             {links.map((link) => (
               <a
-                className="block font-medium text-sky-700 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+                className="avend-text-link"
                 href={link.href}
                 key={link.href}
               >
@@ -135,6 +133,6 @@ export function AuthForm({
           </nav>
         ) : null}
       </section>
-    </main>
+    </AuthLayout>
   );
 }
