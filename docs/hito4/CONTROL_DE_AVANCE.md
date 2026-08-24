@@ -12,7 +12,7 @@
 | Fase 3 — Consultas no resueltas y métricas | DONE (local) | Codex | Bandeja administrativa, clasificación, indicadores agregados y auditoría |
 | Fase 4 — Seguridad, usuarios y permisos | DONE (local) | Codex | Gestión SUPERADMIN, eventos append-only y regresiones de autorización |
 | Fase 5 — Cierre técnico | DONE (esquema en producción) | Codex + revisión independiente | 264 contratos pgTAP, correcciones de release, 23 migraciones aplicadas y auditoría sin BLOCKER/HIGH |
-| Fase 6 — UI/UX y responsive | REVIEW (producción pública) | Codex + revisión independiente | BFF web, historial paginado, UI accesible, 98 pruebas, API/Web publicadas y smoke test remoto; falta QA autenticado por rol |
+| Fase 6 — UI/UX y responsive | DONE (piloto QA de lectura) | Codex + revisión independiente | BFF web, historial paginado, UI accesible, 100 pruebas, API/Web publicadas, QA autenticado por rol y responsive PASS; ver `fase6/VERIFICACION_VISUAL_QA_PRODUCCION_2026-08-24.md` |
 
 Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
@@ -35,9 +35,11 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
   desde un checkout limpio, con respaldo lógico privado y staging aislado.
   El historial local/remoto coincide en 29 versiones. La Fase 2 publicó API y
   web, con health check de dependencia, CORS y protección de rutas verificados.
-  Faltan cuentas QA y validación autenticada por rol; el worker RAG, proveedores
-  IA y correo permanecen deshabilitados. El runbook y la evidencia están en
-  `fase5/RELEASE_HITO3_HITO4.md`.
+  El piloto QA ficticio validó las lecturas autenticadas por rol y las rutas
+  responsive seleccionadas. El worker RAG, proveedores IA y correo permanecen
+  deshabilitados. El runbook está en `fase5/RELEASE_HITO3_HITO4.md` y la
+  evidencia visual en
+  `fase6/VERIFICACION_VISUAL_QA_PRODUCCION_2026-08-24.md`.
 - El borrado definitivo y la retención de conversaciones requieren política
   formal; Hito 4 aplica baja lógica y no programa purgas automáticas.
 - La administración de una consulta sin sustento muestra un resumen operativo

@@ -91,6 +91,20 @@ autenticado desde un archivo exacto del commit publicado, sin artefactos locales
 ni archivos del sistema de desarrollo asistido por IA. Vercel lo marcó `Ready`
 y asignó el alias de producción.
 
+### Seguimiento QA autenticado de Fase 6
+
+El 2026-08-24 se aplicó un piloto controlado de datos exclusivamente ficticios
+y se validaron rutas de lectura con las tres jerarquías de rol. La corrección
+posterior de parámetros de consulta administrativos se publicó en
+`8dadcfb`/`1cd3136`; el ajuste final de etiquetas localizadas y del selector
+docente se publicó en `e492b3e` mediante el despliegue web
+`dpl_Ao6LNGnnbmNKgwBFmgv5L7escM7g`.
+
+La evidencia visual autenticada, móvil y de control de acceso se documenta en
+`../fase6/VERIFICACION_VISUAL_QA_PRODUCCION_2026-08-24.md`. Las acciones que
+escriben auditoría append-only continúan excluidas hasta contar con staging
+desechable o retención QA explícitamente autorizada.
+
 ## Recuperación y reversión
 
 1. Habilitar y confirmar PITR o crear un backup físico recuperable en Supabase.
@@ -116,8 +130,8 @@ supabase db advisors --linked --fail-on warn
 ```
 
 Luego ejecutar contratos, autenticación y el smoke test API/Web contra las URLs
-de staging. En producción ya se ejecutó el smoke test no autenticado de Fase 2;
-la validación autenticada sigue pendiente de cuentas QA separadas. No habilitar
+de staging. En producción ya se ejecutó el smoke test no autenticado de Fase 2
+y la validación autenticada de lectura del piloto QA de Fase 6. No habilitar
 `RAG_INGESTION_WORKER_ENABLED` ni configurar proveedor IA/corpus en esta
 promoción: esos gates siguen separados.
 

@@ -2,7 +2,7 @@
 
 **Fecha:** 24 de agosto de 2026
 
-**Fuente versionada:** `1898ca5` en `codex/hito4-qa-pilot`
+**Fuente versionada:** `e492b3e` en `codex/hito4-qa-pilot`
 **Objetivo:** habilitar evidencia autenticada de lectura sin cargar datos de
 negocio, documentos, fuentes ni respuestas normativas ficticias.
 
@@ -45,14 +45,22 @@ portapapeles local mediante la confirmación explícita que documenta
 `infrastructure/qa/README.md`. Los correos de referencia están definidos en
 `Invoke-QAPilot.ps1`; no se usan cuentas de clientes ni correo transaccional.
 
+## Validación visual autenticada
+
+La validación visual de solo lectura ya se completó en producción para DOCENTE,
+ADMIN y SUPERADMIN, tanto en escritorio como en las rutas móviles seleccionadas.
+Confirmó la separación efectiva de acceso, navegación responsive, la lectura de
+los datos ficticios y la ausencia de códigos técnicos en el selector docente.
+La evidencia, los commits correctivos y los límites se registran en
+`VERIFICACION_VISUAL_QA_PRODUCCION_2026-08-24.md`.
+
 ## Límites y siguiente control
 
-Este resultado valida datos y autorización de API, no una aceptación visual
-final. Permanecen pendientes las pruebas visuales autenticadas/responsive y la
-decisión formal sobre pruebas que dejan auditoría append-only: borrar historial,
-revisar una consulta no resuelta o modificar rol/estado. Esas acciones deben
-realizarse en staging desechable o con retención explícita de su evidencia QA en
-producción.
+Permanecen excluidas las pruebas que dejan auditoría append-only: borrar
+historial, revisar una consulta no resuelta o modificar rol/estado. Esas acciones
+deben realizarse en staging desechable o con retención explícita de su evidencia
+QA en producción. La evidencia del piloto no sustituye la aceptación contractual
+del cliente.
 
 ## Limpieza
 

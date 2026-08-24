@@ -54,12 +54,16 @@ roles DOCENTE, ADMIN y SUPERADMIN y la visibilidad de los cuatro historiales del
 docente. El detalle, límites y limpieza están registrados en
 `PILOTO_QA_PRODUCCION_2026-08-24.md`.
 
-## Pendiente de cierre
+La validación visual autenticada y responsive de solo lectura quedó completada
+después en el despliegue web `dpl_Ao6LNGnnbmNKgwBFmgv5L7escM7g`, publicado
+desde `e492b3e`. La evidencia de DOCENTE, ADMIN y SUPERADMIN, además de los
+hallazgos corregidos antes de la prueba, se encuentra en
+`VERIFICACION_VISUAL_QA_PRODUCCION_2026-08-24.md`.
 
-1. Pruebas visuales autenticadas y evidencia responsive para historial,
-   Operación y SUPERADMIN usando las cuentas QA ya preparadas.
-2. Cierre manual de aceptación de las rutas autenticadas de los tres roles;
+## Límites pendientes de aceptación
+
+1. Cierre manual de aceptación de las rutas autenticadas de los tres roles;
    la evidencia API no sustituye la revisión visual del cliente.
-3. Elegir staging desechable o retención explícita para probar acciones que
+2. Elegir staging desechable o retención explícita para probar acciones que
    escriben auditoría append-only: revisión de no resueltas, cambio de rol o
    eliminación de historial.
