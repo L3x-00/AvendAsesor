@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   ChatConversationDetail,
   ChatHistoryMessage,
@@ -81,6 +82,32 @@ function resolveActiveParentId(
   const selected = modules.find((module) => module.id === selectedModuleId);
   if (!selected) return undefined;
   return selected.parentModuleId ?? selected.id;
+}
+
+/** Resalta frases clave con **negrita** sin inyectar HTML (guía §6). El resto
+ * del cuerpo se mantiene en texto normal (negro); el azul se reserva para
+ * acentos, enlaces y estados. */
+function renderInline(text: string): ReactNode[] {
+  return text
+    .split("**")
+    .map((segment, index) =>
+      index % 2 === 1 ? <strong key={index}>{segment}</strong> : segment,
+    );
+}
+
+function renderRichContent(content: string): ReactNode[] {
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+
+  const source = paragraphs.length > 0 ? paragraphs : [content];
+
+  return source.map((paragraph, index) => (
+    <p className="avend-chat-paragraph" key={index}>
+      {renderInline(paragraph)}
+    </p>
+  ));
 }
 
 export function ChatPanel({
@@ -433,7 +460,9 @@ export function ChatPanel({
                 <p className="avend-chat-message-label">
                   {message.role === "user" ? "Tu consulta" : "AVEND ASESOR"}
                 </p>
-                <p className="avend-chat-message-content">{message.content}</p>
+                <div className="avend-chat-message-content">
+                  {renderRichContent(message.content)}
+                </div>
                 {message.modules?.length ? (
                   <div className="avend-chat-clarification-options">
                     {message.modules.map((module) => (

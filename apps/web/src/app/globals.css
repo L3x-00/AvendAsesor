@@ -1580,3 +1580,28 @@ body {
   margin: 0.25rem 0 0;
   max-width: 60ch;
 }
+
+/* Jerarquía tipográfica de la respuesta (Fase 2, guía §6). */
+.avend-chat-message-content {
+  color: var(--avend-text);
+}
+
+.avend-chat-paragraph {
+  line-height: 1.6;
+  margin: 0 0 0.75rem;
+}
+
+.avend-chat-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.avend-chat-message-content strong {
+  color: var(--avend-text);
+  font-weight: 700;
+}
+
+/* Observaciones secundarias (sin evidencia / aclaración) en gris. */
+.avend-chat-message--no_evidence .avend-chat-message-content,
+.avend-chat-message--clarification .avend-chat-message-content {
+  color: var(--avend-text-muted);
+}
