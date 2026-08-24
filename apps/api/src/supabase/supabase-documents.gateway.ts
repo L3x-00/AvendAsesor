@@ -207,6 +207,7 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     const { data, error } = await query
       .order('updated_at', { ascending: false })
       .order('title', { ascending: true })
+      .order('id', { ascending: true })
       .range(options.offset, options.offset + options.limit - 1);
 
     if (error) {

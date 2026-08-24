@@ -1,0 +1,1 @@
+export const EMBEDDINGS_GATEWAY = Symbol('EMBEDDINGS_GATEWAY');

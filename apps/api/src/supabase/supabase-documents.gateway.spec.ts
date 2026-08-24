@@ -208,6 +208,11 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     await expect(
       gateway.list({ limit: 25, offset: 0, status: 'active' }),
     ).resolves.toHaveLength(1);
+    expect(builder.order.mock.calls.slice(0, 3)).toEqual([
+      ['updated_at', { ascending: false }],
+      ['title', { ascending: true }],
+      ['id', { ascending: true }],
+    ]);
 
     builder.data = versionRow;
     await expect(
