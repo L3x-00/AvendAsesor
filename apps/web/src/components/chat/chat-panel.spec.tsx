@@ -21,6 +21,16 @@ const childModule = {
 
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
+const initialConversation = {
+  conversation: {
+    createdAt: "2026-08-24T12:00:00.000Z",
+    id: conversationId,
+    selectedModuleId: chatModule.id,
+    title: "Consulta inicial",
+    updatedAt: "2026-08-24T12:00:00.000Z",
+  },
+  messages: [],
+};
 
 function streamResponse(frames: string[]) {
   return new Response(frames.join(""), { status: 200 });
@@ -80,6 +90,42 @@ describe("ChatPanel", () => {
     expect(
       screen.queryByText("Tema: Licencia por salud"),
     ).not.toBeInTheDocument();
+  });
+
+  it("reinicia la conversación al cambiar o quitar el subtema", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+        `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
+      ]),
+    );
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ChatPanel
+        initialConversation={initialConversation}
+        modules={[chatModule, childModule]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /licencia por salud/i }),
+    );
+    await submitQuestion(user);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      moduleId: childModule.id,
+      question: "¿Cómo solicito una licencia?",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Quitar tema" }));
+    await submitQuestion(user);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      moduleId: chatModule.id,
+      question: "¿Cómo solicito una licencia?",
+    });
   });
 
   it("renders streamed text and references only after receiving SSE events", async () => {

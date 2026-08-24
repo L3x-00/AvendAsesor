@@ -209,9 +209,16 @@ export function ChatPanel({
     return selected && selected.parentModuleId ? selected : undefined;
   }, [modules, selectedModuleId]);
 
+  function changeModuleContext(moduleId: string | undefined) {
+    if (isStreaming || moduleId === selectedModuleId) return;
+    // Una conversación conserva el módulo con el que fue creada. Cambiar el
+    // contexto inicia la siguiente consulta en una conversación nueva.
+    setSelectedModuleId(moduleId);
+    setConversationId(undefined);
+  }
+
   function clearSubmodule() {
-    if (isStreaming) return;
-    setSelectedModuleId(activeParentId);
+    changeModuleContext(activeParentId);
   }
 
   useEffect(() => {
@@ -533,7 +540,7 @@ export function ChatPanel({
                 className="avend-chat-module"
                 disabled={isStreaming}
                 key={submodule.id}
-                onClick={() => setSelectedModuleId(submodule.id)}
+                onClick={() => changeModuleContext(submodule.id)}
                 type="button"
               >
                  <span>{submodule.name}</span>
