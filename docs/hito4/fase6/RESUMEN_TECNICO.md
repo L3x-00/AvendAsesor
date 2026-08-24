@@ -44,15 +44,22 @@ controles explícitos y movimiento reducido.
   paginado de historial, la accesibilidad de las regiones vivas y el descarte
   de SSE truncado; no dejó hallazgos BLOCKER ni HIGH.
 
+## Piloto QA de producción
+
+El 24 de agosto de 2026 se ejecutó un piloto controlado de lectura desde el
+commit `1898ca5`. Creó tres identidades ficticias confirmadas, siete módulos
+identificados y cuatro conversaciones con prompts explícitamente ficticios.
+La comprobación autenticada contra la API publicada confirmó la separación de
+roles DOCENTE, ADMIN y SUPERADMIN y la visibilidad de los cuatro historiales del
+docente. El detalle, límites y limpieza están registrados en
+`PILOTO_QA_PRODUCCION_2026-08-24.md`.
+
 ## Pendiente de cierre
 
-1. Pruebas de interfaces autenticadas con cuentas desechables y evidencia
-   responsive para historial, operación y SUPERADMIN.
-2. Ejecutar el piloto de lectura con la herramienta controlada
-   `infrastructure/qa/Invoke-QAPilot.ps1`, sin usar ni registrar credenciales
-   expuestas.
-3. Pruebas de aceptación autenticadas con evidencia de los tres roles, sin
-   habilitar todavía proveedor IA, correo ni datos de negocio reales.
-4. Elegir staging desechable o retención explícita para probar acciones que
+1. Pruebas visuales autenticadas y evidencia responsive para historial,
+   Operación y SUPERADMIN usando las cuentas QA ya preparadas.
+2. Cierre manual de aceptación de las rutas autenticadas de los tres roles;
+   la evidencia API no sustituye la revisión visual del cliente.
+3. Elegir staging desechable o retención explícita para probar acciones que
    escriben auditoría append-only: revisión de no resueltas, cambio de rol o
    eliminación de historial.
