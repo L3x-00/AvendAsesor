@@ -16,6 +16,7 @@ import type {
   ManagedDocument,
   ManagedDocumentDetails,
 } from './../src/documents/domain/document';
+import { ChatService } from './../src/chat/chat.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -42,6 +43,18 @@ describe('API endpoints (e2e)', () => {
     setStatus: jest.fn<Promise<ManagedDocument>, never[]>(),
     unlinkModule: jest.fn<Promise<void>, never[]>(),
     updateMetadata: jest.fn<Promise<ManagedDocument>, never[]>(),
+  };
+  const chatService = {
+    getConversation: jest.fn<
+      Promise<unknown>,
+      [string, AuthorizationContext]
+    >(),
+    listConversations: jest.fn<
+      Promise<unknown[]>,
+      [number | undefined, AuthorizationContext]
+    >(),
+    listModules: jest.fn<Promise<unknown[]>, never[]>(),
+    stream: jest.fn(),
   };
 
   const moduleRecord: ManagedModule = {
@@ -100,6 +113,8 @@ describe('API endpoints (e2e)', () => {
       .useValue(modulesService)
       .overrideProvider(DocumentsService)
       .useValue(documentsService)
+      .overrideProvider(ChatService)
+      .useValue(chatService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -430,6 +445,92 @@ describe('API endpoints (e2e)', () => {
     expect(documentsService.updateMetadata).toHaveBeenCalled();
     expect(documentsService.unlinkModule).toHaveBeenCalled();
     expect(documentsService.logicalDelete).toHaveBeenCalled();
+  });
+
+  it('/chat denies a missing bearer token before reaching the chat service', async () => {
+    await request(app.getHttpServer()).get('/chat/modules').expect(401);
+
+    expect(chatService.listModules).not.toHaveBeenCalled();
+  });
+
+  it('/chat allows a confirmed docente to read the minimal module projection', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'docente@example.com',
+      emailConfirmedAt: '2026-08-22T00:00:00.000Z',
+      role: 'docente',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    chatService.listModules.mockResolvedValue([
+      {
+        code: 'LICENSES',
+        id: '78d7f37f-1d50-4707-8f4b-e701d450e83e',
+        name: 'Licencias',
+        parentModuleId: null,
+        sortOrder: 0,
+      },
+    ]);
+
+    await request(app.getHttpServer())
+      .get('/chat/modules')
+      .set('Authorization', 'Bearer docente-token')
+      .expect(200)
+      .expect([
+        {
+          code: 'LICENSES',
+          id: '78d7f37f-1d50-4707-8f4b-e701d450e83e',
+          name: 'Licencias',
+          parentModuleId: null,
+          sortOrder: 0,
+        },
+      ]);
+  });
+
+  it('/chat/stream validates input and emits structured SSE for a docente', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'docente@example.com',
+      emailConfirmedAt: '2026-08-22T00:00:00.000Z',
+      role: 'docente',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+
+    await request(app.getHttpServer())
+      .post('/chat/stream')
+      .set('Authorization', 'Bearer docente-token')
+      .send({ question: '' })
+      .expect(400);
+
+    chatService.stream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield {
+          data: { conversationId: '9a15a92-9899-4ee2-81e0-30d7c3f7677c' },
+          type: 'conversation',
+        };
+        yield {
+          data: { text: 'Respuesta con sustento.' },
+          type: 'token',
+        };
+        yield {
+          data: {
+            conversationId: '9a15a92-9899-4ee2-81e0-30d7c3f7677c',
+            messageId: 'aa15a92-9899-4ee2-81e0-30d7c3f7677c',
+            provider: 'openai',
+          },
+          type: 'done',
+        };
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/chat/stream')
+      .set('Authorization', 'Bearer docente-token')
+      .send({ question: 'Consulta válida' })
+      .expect('Content-Type', /text\/event-stream/)
+      .expect(200);
+
+    expect(response.text).toContain('event: conversation');
+    expect(response.text).toContain('event: token');
+    expect(response.text).toContain('event: done');
   });
 
   afterEach(async () => {
