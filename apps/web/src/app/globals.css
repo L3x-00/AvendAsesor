@@ -1540,3 +1540,34 @@ body {
     width: auto;
   }
 }
+
+/* --- Cerrar sesión (Fase 1: sesión y navegación) --- */
+.avend-teacher-sign-out,
+.avend-admin-sign-out {
+  margin-top: auto;
+  padding-top: 0.75rem;
+}
+
+.avend-teacher-sign-out-button,
+.avend-admin-sign-out-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.avend-admin-sign-out-button {
+  color: var(--avend-text-muted);
+}
+
+.avend-admin-sign-out-button:hover {
+  color: var(--avend-text);
+}
+
+/* Acento lateral celeste del módulo activo en la barra docente (guía §4). */
+.avend-teacher-sidebar .avend-teacher-module-link[aria-current="page"] {
+  border-left: 3px solid var(--avend-accent);
+}

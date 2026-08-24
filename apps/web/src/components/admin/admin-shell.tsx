@@ -48,6 +48,18 @@ function AdminNavigation({
             {item.label}
           </Link>
         ))}
+      <form
+        action="/auth/sign-out"
+        className="avend-admin-sign-out"
+        method="post"
+      >
+        <button
+          className="avend-admin-navigation-link avend-admin-sign-out-button"
+          type="submit"
+        >
+          Cerrar sesión
+        </button>
+      </form>
     </nav>
   );
 }

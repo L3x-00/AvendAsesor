@@ -6,7 +6,21 @@ import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
 type TeacherSection = "chat" | "guide" | "history" | "profile";
-type NavigationIconName = "chat" | "guide" | "history" | "module" | "profile";
+type NavigationIconName =
+  | "chat"
+  | "guide"
+  | "history"
+  | "module"
+  | "profile"
+  | "signout";
+
+/** Solo los módulos raíz se listan en la barra lateral; los submódulos se
+ * muestran en la zona principal de trabajo (guía visual §3–§4). */
+function parentModules(modules: ChatModule[]): ChatModule[] {
+  return modules
+    .filter((module) => module.parentModuleId === null)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
 
 interface TeacherShellProps {
   activeSection: TeacherSection;
@@ -37,6 +51,12 @@ function NavigationIcon({ name }: { name: NavigationIconName }) {
       <>
         <circle cx="12" cy="8" r="3.5" />
         <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+      </>
+    ),
+    signout: (
+      <>
+        <path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2" />
+        <path d="M10 12h10m0 0-3-3m3 3-3 3" />
       </>
     ),
   };
@@ -75,15 +95,15 @@ function TeacherNavigation({
         aria-label="Módulos de consulta"
         className="avend-teacher-module-list"
       >
-        {modules.length === 0 ? (
+        {parentModules(modules).length === 0 ? (
           <p className="avend-teacher-modules-empty">
             Los módulos aparecerán aquí cuando estén configurados.
           </p>
         ) : (
-          modules.map((module) => (
+          parentModules(modules).map((module) => (
             <Link
               aria-current={module.id === selectedModuleId ? "page" : undefined}
-              className="avend-teacher-navigation-link"
+              className="avend-teacher-navigation-link avend-teacher-module-link"
               href={`/chat?module=${encodeURIComponent(module.id)}`}
               key={module.id}
             >
@@ -119,6 +139,20 @@ function TeacherNavigation({
         <NavigationIcon name="profile" />
         Mi perfil
       </Link>
+
+      <form
+        action="/auth/sign-out"
+        className="avend-teacher-sign-out"
+        method="post"
+      >
+        <button
+          className="avend-teacher-navigation-link avend-teacher-sign-out-button"
+          type="submit"
+        >
+          <NavigationIcon name="signout" />
+          <span>Cerrar sesión</span>
+        </button>
+      </form>
     </nav>
   );
 }
