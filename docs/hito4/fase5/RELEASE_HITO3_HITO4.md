@@ -19,7 +19,18 @@ por lo que el bloqueo es deliberado y no una falla técnica del release.
 
 Promover como una sola unidad las migraciones desde
 `20260821064610_create_hito3_rag_foundation.sql` hasta
-`20260824005736_retire_legacy_faq_completion_rpc.sql`: **22 migraciones**.
+`20260824005736_retire_legacy_faq_completion_rpc.sql`: **23 migraciones**.
+
+### Corrección de compatibilidad previa a producción
+
+La primera aplicación contra producción falló dentro de su transacción antes
+de registrar historial: el índice HNSW resolvía `vector_cosine_ops` mediante
+el `search_path` de la sesión, mientras que producción no incluye
+`extensions`. La migración pendiente ahora usa
+`extensions.vector_cosine_ops`, verificado en una transacción revertida de
+staging con un `search_path` equivalente al de producción. No se requiere
+`migration repair` ni quedó cambio parcial remoto. Staging ya tiene el índice
+equivalente; una reconstrucción futura de staging empleará esta forma explícita.
 
 Las cuatro migraciones finales corrigen el release sin reescribir historial:
 
