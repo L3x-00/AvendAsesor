@@ -11,6 +11,14 @@ const chatModule = {
   sortOrder: 0,
 };
 
+const childModule = {
+  code: "LICENSES-A",
+  id: "7c8b56af-6d0c-4fef-881e-7c00907540dd",
+  name: "Licencia por salud",
+  parentModuleId: chatModule.id,
+  sortOrder: 0,
+};
+
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
 
@@ -29,20 +37,27 @@ async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
-  it("keeps module selection explicit and removable", async () => {
+  it("muestra los submódulos del módulo activo en la zona principal y permite quitar el subtema", async () => {
     const user = userEvent.setup();
-    render(<ChatPanel modules={[chatModule]} />);
+    render(
+      <ChatPanel
+        initialModuleId={chatModule.id}
+        modules={[chatModule, childModule]}
+      />,
+    );
 
-    expect(
-      screen.getByRole("button", { name: "Licencias" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
     expect(screen.queryByText("LICENSES")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /licencias/i }));
-    expect(screen.getByText("Contexto: Licencias")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: /licencia por salud/i }),
+    );
+    expect(screen.getByText("Tema: Licencia por salud")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Quitar contexto" }));
-    expect(screen.queryByText("Contexto: Licencias")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quitar tema" }));
+    expect(
+      screen.queryByText("Tema: Licencia por salud"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders streamed text and references only after receiving SSE events", async () => {
@@ -175,7 +190,7 @@ describe("ChatPanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Consultar Licencias" }),
     );
-    expect(screen.getByText("Contexto: Licencias")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
   });
 
   it("renders the persisted no-evidence outcome without a fabricated source", async () => {
