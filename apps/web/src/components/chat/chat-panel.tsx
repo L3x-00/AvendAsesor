@@ -358,7 +358,6 @@ export function ChatPanel({
                 type="button"
               >
                 <span>{module.name}</span>
-                <small>{module.code}</small>
               </button>
             ))
           )}

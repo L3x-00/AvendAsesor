@@ -33,6 +33,11 @@ describe("ChatPanel", () => {
     const user = userEvent.setup();
     render(<ChatPanel modules={[chatModule]} />);
 
+    expect(
+      screen.getByRole("button", { name: "Licencias" }),
+    ).toBeVisible();
+    expect(screen.queryByText("LICENSES")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: /licencias/i }));
     expect(screen.getByText("Contexto: Licencias")).toBeVisible();
 

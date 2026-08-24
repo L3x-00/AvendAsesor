@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
+import { formatUserRole } from "@/lib/admin-api/labels";
 import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
@@ -40,7 +41,7 @@ export default async function AdminPage() {
         <p className="avend-eyebrow">Área protegida</p>
         <h2 id="admin-entry-title">Resumen operativo</h2>
         <p className="avend-admin-entry-role">
-          Rol de acceso: <strong>{access.role}</strong>
+          Rol de acceso: <strong>{formatUserRole(access.role)}</strong>
         </p>
         <dl className="avend-operation-metrics">
           <div>

@@ -629,8 +629,7 @@ body {
   border-color: var(--avend-accent);
 }
 
-.avend-chat-module span,
-.avend-chat-module small {
+.avend-chat-module span {
   display: block;
 }
 
@@ -638,12 +637,6 @@ body {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.35;
-}
-
-.avend-chat-module small {
-  color: var(--avend-text-muted);
-  font-size: 0.8125rem;
-  margin-top: 0.25rem;
 }
 
 .avend-chat-empty-modules,

@@ -4,6 +4,12 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { updateAdministrativeUserAction } from "../actions";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
 import {
+  formatAccountStatus,
+  formatOperationalAuditAction,
+  formatOperationalAuditResourceType,
+  formatUserRole,
+} from "@/lib/admin-api/labels";
+import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
 } from "@/lib/authorization/resolve-admin-access";
@@ -36,7 +42,7 @@ export default async function UsersPage() {
   return (
     <AdminShell
       activeSection="users"
-      description="Solo SUPERADMIN puede actualizar roles y estados de cuenta. Cada cambio exige un motivo y queda auditado."
+      description="Solo el superadministrador puede actualizar roles y estados de cuenta. Cada cambio exige un motivo y queda auditado."
       isSuperadmin
       title="Usuarios y auditoría"
     >
@@ -50,8 +56,8 @@ export default async function UsersPage() {
               <div>
                 <h3>{user.fullName}</h3>
                 <p>
-                  Rol: <strong>{user.role}</strong> · Estado:{" "}
-                  <strong>{user.accountStatus}</strong>
+                  Rol: <strong>{formatUserRole(user.role)}</strong> · Estado:{" "}
+                  <strong>{formatAccountStatus(user.accountStatus)}</strong>
                 </p>
                 <p>Último acceso: {formatDate(user.lastAccessAt)}</p>
               </div>
@@ -127,9 +133,11 @@ export default async function UsersPage() {
               <tbody>
                 {events.map((event) => (
                   <tr key={event.id}>
-                    <td>{event.action}</td>
-                    <td>{event.actorRole}</td>
-                    <td>{event.resourceType}</td>
+                    <td>{formatOperationalAuditAction(event.action)}</td>
+                    <td>{formatUserRole(event.actorRole)}</td>
+                    <td>
+                      {formatOperationalAuditResourceType(event.resourceType)}
+                    </td>
                     <td>{formatDate(event.occurredAt)}</td>
                   </tr>
                 ))}
