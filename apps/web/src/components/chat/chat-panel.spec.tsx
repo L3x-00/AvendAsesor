@@ -37,6 +37,28 @@ async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
+  it("muestra el dictado por voz solo cuando el navegador lo soporta", async () => {
+    class SpeechRecognitionMock {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onend = null;
+      onerror = null;
+      onresult = null;
+
+      start() {}
+      stop() {}
+    }
+
+    vi.stubGlobal("SpeechRecognition", SpeechRecognitionMock);
+
+    render(<ChatPanel modules={[chatModule]} />);
+
+    expect(
+      await screen.findByRole("button", { name: "Dictar la consulta por voz" }),
+    ).toBeVisible();
+  });
+
   it("muestra los submódulos del módulo activo en la zona principal y permite quitar el subtema", async () => {
     const user = userEvent.setup();
     render(

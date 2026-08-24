@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import type {
   ChatConversationDetail,
@@ -142,6 +149,18 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
   );
 }
 
+function subscribeToSpeechRecognitionSupport(): () => void {
+  return () => undefined;
+}
+
+function getSpeechRecognitionSupportSnapshot(): boolean {
+  return getSpeechRecognition() !== null;
+}
+
+function getServerSpeechRecognitionSupportSnapshot(): boolean {
+  return false;
+}
+
 export function ChatPanel({
   initialConversation,
   initialModuleId,
@@ -160,9 +179,13 @@ export function ChatPanel({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const micSupported = useSyncExternalStore(
+    subscribeToSpeechRecognitionSupport,
+    getSpeechRecognitionSupportSnapshot,
+    getServerSpeechRecognitionSupportSnapshot,
+  );
   const activeParentId = useMemo(
     () => resolveActiveParentId(modules, selectedModuleId),
     [modules, selectedModuleId],
@@ -192,7 +215,6 @@ export function ChatPanel({
   }
 
   useEffect(() => {
-    setMicSupported(getSpeechRecognition() !== null);
     return () => {
       recognitionRef.current?.stop();
       recognitionRef.current = null;
