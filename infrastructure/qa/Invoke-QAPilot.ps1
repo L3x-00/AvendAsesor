@@ -218,6 +218,40 @@ function Get-QAPilotUserMarker {
     return [string]$property.Value
 }
 
+function Get-AuthUserByEmail {
+    param(
+        [AllowNull()] [object[]]$Users = @(),
+        [Parameter(Mandatory)] [string]$Email
+    )
+
+    foreach ($candidate in @($Users)) {
+        if ($null -eq $candidate -or $candidate -isnot [System.Management.Automation.PSCustomObject]) {
+            continue
+        }
+
+        $emailProperty = $candidate.PSObject.Properties['email']
+        if ($null -ne $emailProperty -and [string]$emailProperty.Value -ieq $Email) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Get-QAPilotUsers {
+    param([AllowNull()] [object[]]$Users = @())
+
+    $matches = @()
+    foreach ($definition in $pilotUsers) {
+        $candidate = Get-AuthUserByEmail -Users $Users -Email $definition.Email
+        if ($null -ne $candidate) {
+            $matches += $candidate
+        }
+    }
+
+    return $matches
+}
+
 function Assert-QAPilotUserMarker {
     param(
         [Parameter(Mandatory)] $User,
@@ -247,7 +281,7 @@ function Ensure-QAUser {
         [Parameter(Mandatory)] [System.Management.Automation.PSCredential]$Credential
     )
 
-    $existing = $ExistingUsers | Where-Object { $_.email -ieq $Definition.Email } | Select-Object -First 1
+    $existing = Get-AuthUserByEmail -Users $ExistingUsers -Email $Definition.Email
     $created = $false
 
     if ($null -eq $existing) {
@@ -421,7 +455,7 @@ function Remove-QAPilotData {
     $deletedModules = 0
     $deletedUsers = 0
     $allUsers = Get-AuthUsers -Secret $Secret
-    $qaUsers = @($allUsers | Where-Object { $_.email -in $pilotUsers.Email })
+    $qaUsers = @(Get-QAPilotUsers -Users $allUsers)
 
     foreach ($qaUser in $qaUsers) {
         Assert-QAPilotUserMarker -User $qaUser -Email ([string]$qaUser.email)
@@ -490,7 +524,7 @@ if ($Mode -eq 'Cleanup') {
 }
 
 $allUsers = Get-AuthUsers -Secret $secret
-$existingQaUsers = @($allUsers | Where-Object { $_.email -in $pilotUsers.Email })
+$existingQaUsers = @(Get-QAPilotUsers -Users $allUsers)
 foreach ($qaUser in $existingQaUsers) {
     Assert-QAPilotUserMarker -User $qaUser -Email ([string]$qaUser.email)
 }
