@@ -13,4 +13,8 @@ export class UsersService {
   findProfileById(userId: string): Promise<UserProfile | null> {
     return this.profilesGateway.findById(userId);
   }
+
+  touchLastAccess(userId: string): Promise<void> {
+    return this.profilesGateway.touchLastAccess(userId);
+  }
 }

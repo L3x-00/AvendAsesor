@@ -25,10 +25,12 @@ describe('AuthorizationService', () => {
     const profilesGateway: SupabaseProfilesGateway = {
       findById: () =>
         Promise.resolve({
+          accountStatus: 'active',
           fullName: 'Administrador Demo',
           id: userId,
           role: 'admin',
         }),
+      touchLastAccess: () => Promise.resolve(),
     };
     const service = new AuthorizationService(
       createAuthService(),
@@ -46,6 +48,7 @@ describe('AuthorizationService', () => {
   it('denies an authenticated user without a profile', async () => {
     const profilesGateway: SupabaseProfilesGateway = {
       findById: () => Promise.resolve(null),
+      touchLastAccess: () => Promise.resolve(),
     };
     const service = new AuthorizationService(
       createAuthService(),
@@ -55,5 +58,51 @@ describe('AuthorizationService', () => {
     await expect(service.resolveContext('valid-token')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('denies a suspended account before exposing any role', async () => {
+    const profilesGateway: SupabaseProfilesGateway = {
+      findById: () =>
+        Promise.resolve({
+          accountStatus: 'suspended',
+          fullName: 'Cuenta Suspendida',
+          id: userId,
+          role: 'admin',
+        }),
+      touchLastAccess: () => Promise.resolve(),
+    };
+    const service = new AuthorizationService(
+      createAuthService(),
+      new UsersService(profilesGateway),
+    );
+
+    await expect(service.resolveContext('valid-token')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('keeps authorization available when best-effort access telemetry is unavailable', async () => {
+    const touchLastAccess = jest
+      .fn()
+      .mockRejectedValue(new Error('telemetry store unavailable'));
+    const profilesGateway: SupabaseProfilesGateway = {
+      findById: () =>
+        Promise.resolve({
+          accountStatus: 'active',
+          fullName: 'Administrador Demo',
+          id: userId,
+          role: 'admin',
+        }),
+      touchLastAccess,
+    };
+    const service = new AuthorizationService(
+      createAuthService(),
+      new UsersService(profilesGateway),
+    );
+
+    await expect(service.resolveContext('valid-token')).resolves.toEqual(
+      expect.objectContaining({ role: 'admin', userId }),
+    );
+    expect(touchLastAccess).toHaveBeenCalledWith(userId);
   });
 });

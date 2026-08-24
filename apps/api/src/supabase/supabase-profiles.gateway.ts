@@ -20,10 +20,15 @@ interface SupabaseProfilesQuery {
 
 export interface SupabaseProfilesClient {
   from(table: 'profiles'): SupabaseProfilesQuery;
+  rpc(
+    functionName: 'touch_profile_last_access',
+    args: { p_user_id: string },
+  ): PromiseLike<{ error: unknown }>;
 }
 
 export interface SupabaseProfilesGateway {
   findById(userId: string): Promise<UserProfile | null>;
+  touchLastAccess(userId: string): Promise<void>;
 }
 
 export class SupabaseProfilesGatewayAdapter implements SupabaseProfilesGateway {
@@ -38,7 +43,7 @@ export class SupabaseProfilesGatewayAdapter implements SupabaseProfilesGateway {
 
     const { data, error } = await this.client
       .from('profiles')
-      .select('id, full_name, role')
+      .select('id, full_name, role, account_status')
       .eq('id', userId)
       .maybeSingle();
 
@@ -59,9 +64,28 @@ export class SupabaseProfilesGatewayAdapter implements SupabaseProfilesGateway {
     }
 
     return {
+      accountStatus: result.data.account_status,
       fullName: result.data.full_name,
       id: result.data.id,
       role: result.data.role,
     };
+  }
+
+  async touchLastAccess(userId: string): Promise<void> {
+    if (!this.client) {
+      throw new ServiceUnavailableException(
+        'User profile store is not configured.',
+      );
+    }
+
+    const { error } = await this.client.rpc('touch_profile_last_access', {
+      p_user_id: userId,
+    });
+
+    if (error) {
+      throw new ServiceUnavailableException(
+        'User profile access tracking is temporarily unavailable.',
+      );
+    }
   }
 }

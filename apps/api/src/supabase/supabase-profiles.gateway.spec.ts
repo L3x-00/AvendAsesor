@@ -19,6 +19,7 @@ function createProfilesClient(result: {
         }),
       }),
     }),
+    rpc: () => Promise.resolve({ error: null }),
   };
 }
 
@@ -27,6 +28,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     const gateway = new SupabaseProfilesGatewayAdapter(
       createProfilesClient({
         data: {
+          account_status: 'active',
           full_name: 'Docente Demo',
           id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
           role: 'docente',
@@ -38,6 +40,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     await expect(
       gateway.findById('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
     ).resolves.toEqual({
+      accountStatus: 'active',
       fullName: 'Docente Demo',
       id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
       role: 'docente',
@@ -58,6 +61,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     const gateway = new SupabaseProfilesGatewayAdapter(
       createProfilesClient({
         data: {
+          account_status: 'active',
           full_name: 'Docente Demo',
           id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
           role: 'superuser',
@@ -89,6 +93,37 @@ describe('SupabaseProfilesGatewayAdapter', () => {
 
     await expect(
       gateway.findById('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('records bounded access telemetry through the server-only profile client', async () => {
+    const rpc = jest.fn().mockResolvedValue({ error: null });
+    const client: SupabaseProfilesClient = {
+      ...createProfilesClient({ data: null, error: null }),
+      rpc,
+    };
+    const gateway = new SupabaseProfilesGatewayAdapter(client);
+
+    await expect(
+      gateway.touchLastAccess('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
+    ).resolves.toBeUndefined();
+    expect(rpc).toHaveBeenCalledWith('touch_profile_last_access', {
+      p_user_id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+  });
+
+  it('fails closed when profile telemetry cannot be persisted', async () => {
+    const unavailable = new SupabaseProfilesGatewayAdapter(null);
+    const failing = new SupabaseProfilesGatewayAdapter({
+      ...createProfilesClient({ data: null, error: null }),
+      rpc: () => Promise.resolve({ error: { message: 'provider failure' } }),
+    });
+
+    await expect(
+      unavailable.touchLastAccess('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      failing.touchLastAccess('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

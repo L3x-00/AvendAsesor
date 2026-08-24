@@ -27,6 +27,14 @@ export class AuthorizationService {
       );
     }
 
+    if (profile.accountStatus !== 'active') {
+      throw new ForbiddenException('Account access is suspended.');
+    }
+
+    // Access telemetry is useful to superadministrators but must never weaken
+    // the authorization boundary when its optional persistence path is down.
+    void this.usersService.touchLastAccess(profile.id).catch(() => undefined);
+
     return {
       email: identity.email,
       emailConfirmedAt: identity.emailConfirmedAt,
