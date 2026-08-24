@@ -1,0 +1,1 @@
+export const RAG_ANSWER_GATEWAY = Symbol('RAG_ANSWER_GATEWAY');
