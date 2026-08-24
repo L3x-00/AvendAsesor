@@ -1,7 +1,7 @@
 # Mapa de Base de Datos y Hardening — AVEND ASESOR
 
-**Estado:** verificado localmente el 2026-08-22.  
-**Fuente de verdad:** migraciones versionadas en `supabase/migrations/`.  
+**Estado:** verificado localmente el 2026-08-22.
+**Fuente de verdad:** migraciones versionadas en `supabase/migrations/`.
 **Límite importante:** el proyecto remoto contiene Hitos 1 y 2; Hito 3 y este
 hardening permanecen locales hasta una promoción autorizada desde un checkout
 limpio.

@@ -51,4 +51,3 @@ endpoints, migraciones o superficies administrativas.
 - Proveedor IA, PDFs de prueba/reales, ingestion worker, embeddings remotos,
   calibración, HMAC, presupuesto, despliegues, secretos, cambios remotos,
   purgas físicas y nuevas pantallas visuales.
-

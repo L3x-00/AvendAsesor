@@ -32,4 +32,3 @@ Cada fase requiere pruebas enfocadas, regresión proporcional, revisión
 independiente cuando sea posible y su resumen técnico. El cierre solo se
 considerará local hasta pasar el gate de release limpio, respaldo, staging y
 autorización explícita de producción.
-

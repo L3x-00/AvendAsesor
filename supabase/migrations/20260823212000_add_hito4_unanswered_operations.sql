@@ -276,4 +276,3 @@ grant execute on function public.review_unanswered_question(uuid, uuid, public.u
   to service_role;
 grant execute on function public.get_hito4_operational_metrics(uuid)
   to service_role;
-

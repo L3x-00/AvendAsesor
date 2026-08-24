@@ -111,4 +111,3 @@ grant execute on function public.list_chat_conversations_page(uuid, integer, tim
   to service_role;
 grant execute on function public.delete_chat_conversation(uuid, uuid)
   to service_role;
-

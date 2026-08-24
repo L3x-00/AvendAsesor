@@ -45,4 +45,3 @@ begin
   returning conversation.id, conversation.deleted_at;
 end;
 $$;
-

@@ -1,6 +1,6 @@
 # Mejora continua gobernada del RAG
 
-**Estado:** implementado y verificado solo en el entorno local el 2026-08-23.  
+**Estado:** implementado y verificado solo en el entorno local el 2026-08-23.
 **No es una base de conocimiento ni un mecanismo de autoentrenamiento.**
 
 ## Objetivo
