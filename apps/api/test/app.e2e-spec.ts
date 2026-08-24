@@ -17,6 +17,7 @@ import type {
   ManagedDocumentDetails,
 } from './../src/documents/domain/document';
 import { ChatService } from './../src/chat/chat.service';
+import { OperationsService } from './../src/operations/operations.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -55,6 +56,17 @@ describe('API endpoints (e2e)', () => {
     >(),
     listModules: jest.fn<Promise<unknown[]>, never[]>(),
     stream: jest.fn(),
+  };
+  const operationsService = {
+    getMetrics: jest.fn<Promise<unknown>, [AuthorizationContext]>(),
+    listUnansweredQuestions: jest.fn<
+      Promise<unknown[]>,
+      [Record<string, unknown>, AuthorizationContext]
+    >(),
+    reviewUnansweredQuestion: jest.fn<
+      Promise<void>,
+      [string, Record<string, unknown>, AuthorizationContext]
+    >(),
   };
 
   const moduleRecord: ManagedModule = {
@@ -115,6 +127,8 @@ describe('API endpoints (e2e)', () => {
       .useValue(documentsService)
       .overrideProvider(ChatService)
       .useValue(chatService)
+      .overrideProvider(OperationsService)
+      .useValue(operationsService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -253,6 +267,29 @@ describe('API endpoints (e2e)', () => {
       .expect([moduleRecord]);
 
     expect(modulesService.list).toHaveBeenCalledWith({ status: 'active' });
+  });
+
+  it('/admin/operations accepts numeric query parameters from the protected web client', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    operationsService.listUnansweredQuestions.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get(
+        '/admin/operations/unanswered-questions?limit=100&status=pending_review',
+      )
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+      .expect([]);
+
+    expect(operationsService.listUnansweredQuestions).toHaveBeenCalledWith(
+      { limit: 100, status: 'pending_review' },
+      expect.objectContaining({ role: 'admin' }),
+    );
   });
 
   it('/admin/modules validates and creates a module for a superadmin', async () => {
