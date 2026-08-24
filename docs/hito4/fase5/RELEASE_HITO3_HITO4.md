@@ -2,24 +2,41 @@
 
 ## Estado
 
-**Estado remoto: BLOQUEADO.** El release local está preparado, pero no se
-ejecutará una migración contra Supabase producción mientras falte recuperación
-verificable y una validación staging.
+**Estado remoto: Fase 1 ejecutada.** El esquema Hitos 3–4 se promovió a
+Supabase producción; el despliegue de la API, la web y las pruebas autenticadas
+siguen pendientes y se controlan como fases separadas.
 
-La inspección remota de solo lectura del 2026-08-23 confirmó:
+La inspección remota de solo lectura del 2026-08-23 confirmó, antes de la
+promoción:
 
 - Producción permanece en Hitos 1–2 (`20260809045322` a `20260809220458`).
 - El proyecto no tiene PITR habilitado ni backup físico disponible.
 - No existe una rama Supabase Preview ni un proyecto staging separado.
 
-La autorización del Product Owner exige esos dos controles antes de promover,
-por lo que el bloqueo es deliberado y no una falla técnica del release.
+Para la promoción se usaron un proyecto staging aislado y un respaldo lógico
+privado recuperable de `public` fuera del repositorio. El plan Free no aporta
+PITR, por lo que el mismo control debe repetirse antes de futuras migraciones.
 
 ## Lote exacto
 
 Promover como una sola unidad las migraciones desde
 `20260821064610_create_hito3_rag_foundation.sql` hasta
-`20260824005736_retire_legacy_faq_completion_rpc.sql`: **22 migraciones**.
+`20260824005736_retire_legacy_faq_completion_rpc.sql`: **23 migraciones**.
+
+### Fase 1 ejecutada — producción
+
+El 2026-08-24 se aplicó el lote desde el checkout limpio
+`codex/hito3-hito4-production-fix`. La verificación posterior confirmó los 29
+timestamps locales/remotos de Hitos 1–4, `pgvector` 0.8.2, el operador HNSW en
+`extensions` y la presencia de las tablas críticas de RAG, historial, cola y
+auditoría. El primer intento falló transaccionalmente sin dejar historial ni
+esquema parcial porque el operador vectorial no estaba calificado; se corrigió
+la migración aún pendiente a `extensions.vector_cosine_ops` y se reintentó con
+éxito. La auditoría independiente no dejó BLOCKER/HIGH.
+
+La consulta post-release de asesores agotó el tiempo y el cache experimental
+`pg-delta` del CLI informó un error posterior a la promoción; ambos quedan como
+limitación de observabilidad, no como evidencia de migración incompleta.
 
 Las cuatro migraciones finales corrigen el release sin reescribir historial:
 

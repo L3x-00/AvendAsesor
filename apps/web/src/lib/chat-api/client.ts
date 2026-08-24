@@ -3,9 +3,9 @@ import { ZodError, type ZodType } from "zod";
 import { getAdminApiUrl } from "@/lib/admin-api/config";
 import {
   chatConversationDetailSchema,
-  chatConversationSchema,
+  chatConversationPageSchema,
   chatModuleSchema,
-  type ChatConversation,
+  type ChatConversationPage,
   type ChatConversationDetail,
   type ChatModule,
 } from "./types";
@@ -36,24 +36,42 @@ export class ChatApiClient {
     );
   }
 
-  listConversations(): Promise<ChatConversation[]> {
-    return this.send("/chat/conversations", chatConversationSchema.array());
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.send(`/chat/conversations/${conversationId}`, undefined, {
+      method: "DELETE",
+    });
+  }
+
+  listConversations(
+    input: { cursor?: string } = {},
+  ): Promise<ChatConversationPage> {
+    const query = input.cursor
+      ? `?${new URLSearchParams({ cursor: input.cursor }).toString()}`
+      : "";
+    return this.send(`/chat/conversations${query}`, chatConversationPageSchema);
   }
 
   listModules(): Promise<ChatModule[]> {
     return this.send("/chat/modules", chatModuleSchema.array());
   }
 
-  private async send<T>(path: string, schema: ZodType<T>): Promise<T> {
+  private async send<T>(
+    path: string,
+    schema?: ZodType<T>,
+    options: { method?: "DELETE" | "GET" } = {},
+  ): Promise<T> {
     const response = await this.request(`${this.baseUrl}${path}`, {
       cache: "no-store",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${this.accessToken}`,
       },
+      method: options.method ?? "GET",
     });
 
     if (!response.ok) throw new ChatApiError(response.status);
+
+    if (!schema) return undefined as T;
 
     let payload: unknown;
     try {

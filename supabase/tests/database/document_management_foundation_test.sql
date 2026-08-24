@@ -199,8 +199,8 @@ select throws_ok(
     where id = '00000000-0000-0000-0000-000000000202'
   $$,
   'P0001',
-  'Document versions are immutable; create a new version instead',
-  'Hito 2 cannot mutate pending ingestion metadata before the future workflow exists'
+  'Document ingestion state is controlled by the ingestion worker',
+  'Hito 3 still rejects direct mutation of pending ingestion metadata'
 );
 
 insert into public.documents (id, title, document_type)

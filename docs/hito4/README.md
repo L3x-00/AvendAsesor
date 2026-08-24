@@ -8,15 +8,18 @@ agregadas, auditoría de acciones sensibles, ajustes RBAC y cierre técnico.
 
 ## Límite de alcance vigente
 
-Este hito es **backend y contratos primero**. Por decisión del Product Owner,
-el trabajo visual y responsive se realizará después de su cierre; por ello no
-se adelantan nuevas pantallas, rediseños ni componentes visuales en las fases
-actuales. Las APIs conservan contratos consumibles posteriormente por una
-interfaz responsive y accesible.
+Este hito se construyó **backend y contratos primero**. Posteriormente, el
+Product Owner autorizó una fase visual complementaria para consumir únicamente
+los contratos ya existentes: historial privado, operación administrativa,
+usuarios y auditoría. Esta fase no altera API, base de datos, RLS, proveedores
+ni reglas de negocio; mantiene el BFF server-side como único consumidor web de
+la API.
 
 Tampoco habilita proveedor de IA, corpus de PDFs, embeddings remotos, secretos
-HMAC, presupuesto de IA, calibración RAG ni cambios de producción. La memoria
-FAQ continúa siendo una señal gobernada y nunca una fuente de respuestas.
+HMAC, presupuesto de IA ni calibración RAG. La Fase 1 de producción ya promovió
+el esquema acumulativo; los despliegues API/Web y la QA autenticada son fases
+posteriores. La memoria FAQ continúa siendo una señal gobernada y nunca una
+fuente de respuestas.
 
 ## Fases
 
@@ -27,8 +30,11 @@ FAQ continúa siendo una señal gobernada y nunca una fuente de respuestas.
 | 3 | Consultas no resueltas, métricas administrativas y operación RAG sin proveedor |
 | 4 | Auditoría de seguridad, gestión de usuarios/roles y endurecimiento RBAC |
 | 5 | Pruebas integrales, auditoría independiente, documentación y cierre técnico |
+| 6 | UI/UX responsive: navegación docente, historial, operación, usuarios y auditoría |
 
 Cada fase requiere pruebas enfocadas, regresión proporcional, revisión
-independiente cuando sea posible y su resumen técnico. El cierre solo se
-considerará local hasta pasar el gate de release limpio, respaldo, staging y
-autorización explícita de producción.
+independiente cuando sea posible y su resumen técnico. La promoción de esquema
+se hizo con release limpio, respaldo lógico privado, staging y autorización
+explícita; no autoriza por sí misma datos QA, proveedor IA/correo ni despliegues
+de aplicación. La Fase 6 requiere además evidencia de accesibilidad y de las
+interfaces reales antes de cualquier semilla remota.

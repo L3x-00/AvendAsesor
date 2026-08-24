@@ -56,14 +56,29 @@ describe("ChatApiClient", () => {
     };
     const request = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify([conversation])))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [conversation],
+            nextCursor: "eyJpZCI6Im5leHQifQ",
+          }),
+        ),
+      )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ conversation, messages: [] })),
       )
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     const client = new ChatApiClient("verified-token", undefined, request);
 
-    await expect(client.listConversations()).resolves.toEqual([conversation]);
+    await expect(
+      client.listConversations({ cursor: "eyJpZCI6ImN1cnNvciJ9" }),
+    ).resolves.toEqual({
+      items: [conversation],
+      nextCursor: "eyJpZCI6Im5leHQifQ",
+    });
+    expect(request.mock.calls[0]?.[0]).toBe(
+      "http://localhost:3001/chat/conversations?cursor=eyJpZCI6ImN1cnNvciJ9",
+    );
     await expect(client.getConversation(conversation.id)).resolves.toEqual({
       conversation,
       messages: [],
@@ -72,6 +87,19 @@ describe("ChatApiClient", () => {
       {
         status: 404,
       },
+    );
+  });
+
+  it("deletes only through the protected owned-conversation route", async () => {
+    const request = vi.fn(async () => new Response(null, { status: 200 }));
+    const client = new ChatApiClient("verified-token", undefined, request);
+
+    await expect(
+      client.deleteConversation("4c8b56af-6d0c-4fef-881e-7c00907540dd"),
+    ).resolves.toBeUndefined();
+    expect(request).toHaveBeenCalledWith(
+      "http://localhost:3001/chat/conversations/4c8b56af-6d0c-4fef-881e-7c00907540dd",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 

@@ -39,6 +39,12 @@ export const chatConversationSchema = z.object({
 });
 export type ChatConversation = z.infer<typeof chatConversationSchema>;
 
+export const chatConversationPageSchema = z.object({
+  items: z.array(chatConversationSchema),
+  nextCursor: z.string().min(1).max(256).nullable(),
+});
+export type ChatConversationPage = z.infer<typeof chatConversationPageSchema>;
+
 export const chatHistoryMessageSchema = z.object({
   content: z.string().min(1).max(20_000),
   createdAt: timestampSchema,

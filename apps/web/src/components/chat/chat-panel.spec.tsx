@@ -125,6 +125,30 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
   });
 
+  it("does not retain a partial reply when the stream closes without a done event", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          'event: token\ndata: {"text":"Texto parcial"}\n\n',
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText(
+        "Se interrumpió la conexión. No se guardó contenido parcial.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
+  });
+
   it("renders a persisted clarification and lets the user choose its module", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });

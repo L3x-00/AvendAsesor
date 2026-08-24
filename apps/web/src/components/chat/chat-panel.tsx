@@ -8,6 +8,7 @@ import type {
   ChatSource,
 } from "@/lib/chat-api/types";
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
+import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { ChatSources } from "./chat-sources";
 
 type MessageRole = ChatHistoryMessage["role"];
@@ -22,6 +23,7 @@ interface RenderedMessage {
 
 interface ChatPanelProps {
   initialConversation?: ChatConversationDetail;
+  initialModuleId?: string;
   modules: ChatModule[];
 }
 
@@ -64,7 +66,11 @@ function parseSseFrames(buffer: string): {
   return { frames, remainder };
 }
 
-export function ChatPanel({ initialConversation, modules }: ChatPanelProps) {
+export function ChatPanel({
+  initialConversation,
+  initialModuleId,
+  modules,
+}: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | undefined>(
     initialConversation?.conversation.id,
   );
@@ -73,7 +79,7 @@ export function ChatPanel({ initialConversation, modules }: ChatPanelProps) {
   );
   const [question, setQuestion] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(
-    initialConversation?.conversation.selectedModuleId ?? undefined,
+    initialConversation?.conversation.selectedModuleId ?? initialModuleId,
   );
   const [status, setStatus] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -298,7 +304,12 @@ export function ChatPanel({ initialConversation, modules }: ChatPanelProps) {
           }
         }
 
-        if (done) completed = true;
+        if (done && !completed) {
+          discardStreamingMessage(
+            "Se interrumpió la conexión. No se guardó contenido parcial.",
+          );
+          return;
+        }
       }
     } catch {
       discardStreamingMessage(
@@ -310,124 +321,126 @@ export function ChatPanel({ initialConversation, modules }: ChatPanelProps) {
   }
 
   return (
-    <main className="avend-chat-page" id="main-content">
-      <header className="avend-chat-header">
-        <div>
-          <p className="avend-eyebrow">Consulta normativa</p>
-          <h1>Chat general</h1>
-          <p>
-            Selecciona un tema relacionado si lo deseas. También puedes escribir
-            directamente tu consulta.
-          </p>
-        </div>
-      </header>
+    <TeacherShell
+      activeSection="chat"
+      modules={modules}
+      selectedModuleId={selectedModuleId}
+    >
+      <section aria-labelledby="chat-title" className="avend-chat-page">
+        <header className="avend-chat-header">
+          <div>
+            <p className="avend-eyebrow">Consulta normativa</p>
+            <h1 id="chat-title">Chat general</h1>
+            <p>
+              Selecciona un tema relacionado si lo deseas. También puedes
+              escribir directamente tu consulta.
+            </p>
+          </div>
+        </header>
 
-      <section aria-label="Temas disponibles" className="avend-chat-modules">
-        {modules.length === 0 ? (
-          <p className="avend-chat-empty-modules">
-            Aún no hay módulos activos para filtrar la consulta. Puedes
-            consultar de forma general cuando existan documentos procesados.
-          </p>
-        ) : (
-          modules.map((module) => (
-            <button
-              aria-pressed={module.id === selectedModuleId}
-              className="avend-chat-module"
-              disabled={isStreaming}
-              key={module.id}
-              onClick={() => {
-                setSelectedModuleId(module.id);
-                setConversationId(undefined);
-              }}
-              type="button"
-            >
-              <span>{module.name}</span>
-              <small>{module.code}</small>
+        <section aria-label="Temas disponibles" className="avend-chat-modules">
+          {modules.length === 0 ? (
+            <p className="avend-chat-empty-modules">
+              Aún no hay módulos activos para filtrar la consulta. Puedes
+              consultar de forma general cuando existan documentos procesados.
+            </p>
+          ) : (
+            modules.map((module) => (
+              <button
+                aria-pressed={module.id === selectedModuleId}
+                className="avend-chat-module"
+                disabled={isStreaming}
+                key={module.id}
+                onClick={() => {
+                  setSelectedModuleId(module.id);
+                  setConversationId(undefined);
+                }}
+                type="button"
+              >
+                <span>{module.name}</span>
+                <small>{module.code}</small>
+              </button>
+            ))
+          )}
+        </section>
+
+        {selectedModule ? (
+          <div className="avend-chat-context" role="status">
+            <span>Contexto: {selectedModule.name}</span>
+            <button disabled={isStreaming} onClick={clearContext} type="button">
+              Quitar contexto
             </button>
-          ))
-        )}
-      </section>
+          </div>
+        ) : null}
 
-      {selectedModule ? (
-        <div className="avend-chat-context" role="status">
-          <span>Contexto: {selectedModule.name}</span>
-          <button disabled={isStreaming} onClick={clearContext} type="button">
-            Quitar contexto
-          </button>
-        </div>
-      ) : null}
+        <section aria-busy={isStreaming} className="avend-chat-conversation">
+          {messages.length === 0 ? (
+            <p className="avend-chat-empty-state">
+              Escribe una consulta para recibir una respuesta respaldada
+              únicamente por los documentos vigentes disponibles.
+            </p>
+          ) : (
+            messages.map((message) => (
+              <article
+                className={`avend-chat-message avend-chat-message--${message.role}`}
+                key={message.id}
+              >
+                <p className="avend-chat-message-label">
+                  {message.role === "user" ? "Tu consulta" : "AVEND ASESOR"}
+                </p>
+                <p className="avend-chat-message-content">{message.content}</p>
+                {message.modules?.length ? (
+                  <div className="avend-chat-clarification-options">
+                    {message.modules.map((module) => (
+                      <button
+                        disabled={isStreaming}
+                        key={module.id}
+                        onClick={() => {
+                          setSelectedModuleId(module.id);
+                          setConversationId(undefined);
+                        }}
+                        type="button"
+                      >
+                        Consultar {module.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {message.sources.length ? (
+                  <ChatSources sources={message.sources} />
+                ) : null}
+              </article>
+            ))
+          )}
+        </section>
 
-      <section
-        aria-live="polite"
-        aria-busy={isStreaming}
-        className="avend-chat-conversation"
-      >
-        {messages.length === 0 ? (
-          <p className="avend-chat-empty-state">
-            Escribe una consulta para recibir una respuesta respaldada
-            únicamente por los documentos vigentes disponibles.
-          </p>
-        ) : (
-          messages.map((message) => (
-            <article
-              className={`avend-chat-message avend-chat-message--${message.role}`}
-              key={message.id}
+        <form className="avend-chat-composer" onSubmit={handleSubmit}>
+          <label htmlFor="chat-question">Escribe tu consulta</label>
+          <textarea
+            disabled={isStreaming}
+            id="chat-question"
+            maxLength={8_000}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Escribe tu consulta aquí…"
+            required
+            rows={3}
+            value={question}
+          />
+          <div className="avend-chat-composer-actions">
+            <p aria-live="polite" className="avend-chat-status">
+              {status ??
+                "La respuesta se sustentará en los documentos disponibles."}
+            </p>
+            <button
+              className="avend-button avend-button--primary"
+              disabled={isStreaming || !question.trim()}
+              type="submit"
             >
-              <p className="avend-chat-message-label">
-                {message.role === "user" ? "Tu consulta" : "AVEND ASESOR"}
-              </p>
-              <p className="avend-chat-message-content">{message.content}</p>
-              {message.modules?.length ? (
-                <div className="avend-chat-clarification-options">
-                  {message.modules.map((module) => (
-                    <button
-                      disabled={isStreaming}
-                      key={module.id}
-                      onClick={() => {
-                        setSelectedModuleId(module.id);
-                        setConversationId(undefined);
-                      }}
-                      type="button"
-                    >
-                      Consultar {module.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {message.sources.length ? (
-                <ChatSources sources={message.sources} />
-              ) : null}
-            </article>
-          ))
-        )}
+              {isStreaming ? "Consultando…" : "Enviar consulta"}
+            </button>
+          </div>
+        </form>
       </section>
-
-      <form className="avend-chat-composer" onSubmit={handleSubmit}>
-        <label htmlFor="chat-question">Escribe tu consulta</label>
-        <textarea
-          disabled={isStreaming}
-          id="chat-question"
-          maxLength={8_000}
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Escribe tu consulta aquí…"
-          required
-          rows={3}
-          value={question}
-        />
-        <div className="avend-chat-composer-actions">
-          <p aria-live="polite" className="avend-chat-status">
-            {status ??
-              "La respuesta se sustentará en los documentos disponibles."}
-          </p>
-          <button
-            className="avend-button avend-button--primary"
-            disabled={isStreaming || !question.trim()}
-            type="submit"
-          >
-            {isStreaming ? "Consultando…" : "Enviar consulta"}
-          </button>
-        </div>
-      </form>
-    </main>
+    </TeacherShell>
   );
 }
