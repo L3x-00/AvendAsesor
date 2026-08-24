@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   ChatConversationDetail,
@@ -110,6 +110,38 @@ function renderRichContent(content: string): ReactNode[] {
   ));
 }
 
+interface SpeechRecognitionResultLike {
+  0: { transcript: string };
+  isFinal: boolean;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+/** Detección segura del dictado por voz (no está en todos los navegadores). */
+function getSpeechRecognition(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const candidate = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return (
+    candidate.SpeechRecognition ?? candidate.webkitSpeechRecognition ?? null
+  );
+}
+
 export function ChatPanel({
   initialConversation,
   initialModuleId,
@@ -128,6 +160,9 @@ export function ChatPanel({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const activeParentId = useMemo(
     () => resolveActiveParentId(modules, selectedModuleId),
     [modules, selectedModuleId],
@@ -156,6 +191,56 @@ export function ChatPanel({
     setSelectedModuleId(activeParentId);
   }
 
+  useEffect(() => {
+    setMicSupported(getSpeechRecognition() !== null);
+    return () => {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  function stopDictation() {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsDictating(false);
+  }
+
+  function toggleDictation() {
+    if (isStreaming) return;
+    if (isDictating) {
+      stopDictation();
+      return;
+    }
+
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) return;
+
+    const recognition = new Recognition();
+    recognition.lang = "es-PE";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const clean = Array.from(event.results)
+        .slice(event.resultIndex)
+        .filter((result) => result.isFinal)
+        .map((result) => result[0].transcript)
+        .join("")
+        .trim();
+      if (clean) {
+        setQuestion((current) => (current ? `${current} ${clean}` : clean));
+      }
+    };
+    recognition.onerror = () => stopDictation();
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setIsDictating(false);
+    };
+
+    recognitionRef.current = recognition;
+    setIsDictating(true);
+    recognition.start();
+  }
+
   function replaceStreamingMessage(
     update: (message: RenderedMessage) => RenderedMessage,
   ) {
@@ -176,6 +261,7 @@ export function ChatPanel({
     event.preventDefault();
     const normalizedQuestion = question.trim();
     if (!normalizedQuestion || isStreaming) return;
+    if (isDictating) stopDictation();
 
     const abortController = new AbortController();
     setMessages((current) => [
@@ -513,13 +599,44 @@ export function ChatPanel({
               {status ??
                 "La respuesta se sustentará en los documentos disponibles."}
             </p>
-            <button
-              className="avend-button avend-button--primary"
-              disabled={isStreaming || !question.trim()}
-              type="submit"
-            >
-              {isStreaming ? "Consultando…" : "Enviar consulta"}
-            </button>
+            <div className="avend-chat-composer-buttons">
+              {micSupported ? (
+                <button
+                  aria-label={
+                    isDictating
+                      ? "Detener el dictado por voz"
+                      : "Dictar la consulta por voz"
+                  }
+                  aria-pressed={isDictating}
+                  className={`avend-chat-mic${isDictating ? " avend-chat-mic--active" : ""}`}
+                  disabled={isStreaming}
+                  onClick={toggleDictation}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="avend-chat-mic-icon"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.6"
+                    viewBox="0 0 24 24"
+                  >
+                    <rect height="11" rx="3" width="6" x="9" y="3" />
+                    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                  </svg>
+                  <span>{isDictating ? "Escuchando…" : "Voz"}</span>
+                </button>
+              ) : null}
+              <button
+                className="avend-button avend-button--primary"
+                disabled={isStreaming || !question.trim()}
+                type="submit"
+              >
+                {isStreaming ? "Consultando…" : "Enviar consulta"}
+              </button>
+            </div>
           </div>
         </form>
       </section>
