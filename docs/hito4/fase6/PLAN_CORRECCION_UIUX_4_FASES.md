@@ -66,7 +66,12 @@ datos QA con descripciones/submódulos (Codex, TSK-0023 Tarea B).
 
 ---
 
-## FASE 3 — Interactividad y componentes  *(PLANNED)*
+## FASE 3 — Interactividad y componentes  *(PARCIAL EN RAMA)*
+
+**Commits:** `7ab855a` (micrófono por voz accesible con Web Speech API + detección de soporte;
+submódulos en carrusel horizontal en móvil; microinteracciones con `prefers-reduced-motion`).
+**Bloqueado:** "Formatos para descargar" (§9) espera los archivos Word de AVEND y la definición de
+dónde vive su metadata. Pendiente: matriz responsive 375/768/1024/1440 (revisión visual).
 
 **Requerimientos:** guía §5 (micrófono), §9 (formatos para descargar), §10 (responsive/celular).
 
