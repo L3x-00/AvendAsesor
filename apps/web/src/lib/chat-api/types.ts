@@ -9,6 +9,7 @@ const timestampSchema = z
 
 export const chatModuleSchema = z.object({
   code: z.string().min(1).max(64),
+  description: z.string().max(2_000).nullish(),
   id: z.string().uuid(),
   name: z.string().min(1).max(255),
   parentModuleId: z.string().uuid().nullable(),

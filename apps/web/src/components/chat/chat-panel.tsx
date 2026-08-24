@@ -367,6 +367,11 @@ export function ChatPanel({
             <h1 id="chat-title">
               {activeParent ? activeParent.name : "Chat general"}
             </h1>
+            {activeParent?.description ? (
+              <p className="avend-chat-module-description">
+                {activeParent.description}
+              </p>
+            ) : null}
             <p>
               Selecciona el tema relacionado si lo deseas. También puedes
               escribir directamente tu consulta.

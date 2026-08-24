@@ -2,6 +2,7 @@ export type ChatReplyRole = 'assistant' | 'clarification' | 'no_evidence';
 
 export interface ActiveChatModule {
   code: string;
+  description: string | null;
   id: string;
   name: string;
   parentModuleId: string | null;

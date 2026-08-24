@@ -134,6 +134,7 @@ describe('SupabaseChatGatewayAdapter', () => {
       moduleData: [
         {
           code: 'LICENSES',
+          description: 'Consultas sobre licencias docentes.',
           id: conversationId,
           name: 'Licencias',
           parent_module_id: null,
@@ -155,6 +156,7 @@ describe('SupabaseChatGatewayAdapter', () => {
     await expect(gateway.listActiveModules()).resolves.toEqual([
       {
         code: 'LICENSES',
+        description: 'Consultas sobre licencias docentes.',
         id: conversationId,
         name: 'Licencias',
         parentModuleId: null,

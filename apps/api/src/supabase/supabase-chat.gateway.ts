@@ -16,7 +16,8 @@ import type {
 } from '../chat/chat-history.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
 
-const CHAT_MODULE_COLUMNS = 'id,name,code,parent_module_id,sort_order';
+const CHAT_MODULE_COLUMNS =
+  'id,name,code,description,parent_module_id,sort_order';
 
 function databaseError(error: PostgrestError): never {
   if (error.code === 'P0002') {
@@ -158,6 +159,7 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
 
     return (data ?? []).map((module) => ({
       code: module.code,
+      description: module.description ?? null,
       id: module.id,
       name: module.name,
       parentModuleId: module.parent_module_id,
