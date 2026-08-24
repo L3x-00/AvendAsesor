@@ -32,6 +32,18 @@ staging con un `search_path` equivalente al de producción. No se requiere
 `migration repair` ni quedó cambio parcial remoto. Staging ya tiene el índice
 equivalente; una reconstrucción futura de staging empleará esta forma explícita.
 
+## Fase 1 ejecutada — producción
+
+El 2026-08-24 se aplicó el lote desde la rama publicada
+`codex/hito3-hito4-production-fix` (`4ee2cf2` para la corrección vectorial y
+`7465f69` para el runbook). La verificación posterior confirmó los 29
+timestamps locales/remotos de Hitos 1–4, `pgvector` 0.8.2, el operador HNSW en
+`extensions` y la presencia de las tablas críticas de RAG, historial, cola y
+auditoría. Se generó antes un respaldo lógico privado de `public`, fuera del
+repositorio. La consulta post-release de asesores no respondió en 60 segundos;
+la consulta previa no tenía hallazgos y esta limitación se mantiene registrada
+para observabilidad, no como aprobación adicional.
+
 Las cuatro migraciones finales corrigen el release sin reescribir historial:
 
 1. `20260824005015_hito3_hito4_release_security_hardening.sql`: evidencia
