@@ -1,5 +1,30 @@
 import { z } from 'zod';
 
+const webOriginSchema = z
+  .string()
+  .url()
+  .transform((value, context) => {
+    const origin = new URL(value);
+
+    if (
+      (origin.protocol !== 'http:' && origin.protocol !== 'https:') ||
+      origin.origin === 'null' ||
+      origin.username !== '' ||
+      origin.password !== '' ||
+      (origin.pathname !== '' && origin.pathname !== '/') ||
+      origin.search !== '' ||
+      origin.hash !== ''
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'WEB_ORIGIN must be a credential-free HTTP(S) origin.',
+      });
+      return z.NEVER;
+    }
+
+    return origin.origin;
+  });
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -26,7 +51,20 @@ const environmentSchema = z
     RAG_ANSWER_MODEL: z.string().trim().min(1).default('gpt-4o-mini'),
     FAQ_MEMORY_FINGERPRINT_SECRET: z.string().trim().min(32).optional(),
     CHAT_HISTORY_LIMIT: z.coerce.number().int().min(1).max(50).default(20),
-    WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
+    WEB_ORIGIN: webOriginSchema.default('http://localhost:3000'),
+  })
+  .superRefine((environment, context) => {
+    if (
+      (environment.NODE_ENV === 'production' ||
+        environment.NODE_ENV === 'staging') &&
+      !environment.WEB_ORIGIN.startsWith('https://')
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Staging and production WEB_ORIGIN must use HTTPS.',
+        path: ['WEB_ORIGIN'],
+      });
+    }
   })
   .passthrough();
 
