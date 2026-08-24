@@ -126,6 +126,7 @@ export function ChatPanel({
     initialConversation?.conversation.selectedModuleId ?? initialModuleId,
   );
   const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const activeParentId = useMemo(
     () => resolveActiveParentId(modules, selectedModuleId),
@@ -167,7 +168,8 @@ export function ChatPanel({
 
   function discardStreamingMessage(message: string) {
     setMessages((current) => current.filter((item) => item.id !== "streaming"));
-    setStatus(message);
+    setError(message);
+    setStatus(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -187,6 +189,7 @@ export function ChatPanel({
     ]);
     setIsStreaming(true);
     setQuestion("");
+    setError(null);
     setStatus("Buscando sustento en los documentos vigentes…");
 
     try {
@@ -487,6 +490,12 @@ export function ChatPanel({
             ))
           )}
         </section>
+
+        {error ? (
+          <p className="avend-chat-error" role="alert">
+            {error}
+          </p>
+        ) : null}
 
         <form className="avend-chat-composer" onSubmit={handleSubmit}>
           <label htmlFor="chat-question">Escribe tu consulta</label>
