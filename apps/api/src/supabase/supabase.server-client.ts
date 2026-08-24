@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { UserRole } from '../users/domain/user-profile';
+import type { AccountStatus, UserRole } from '../users/domain/user-profile';
 
 export type Json =
   | boolean
@@ -14,24 +14,39 @@ export interface SupabaseDatabase {
     Tables: {
       profiles: {
         Row: {
+          account_status: AccountStatus;
           created_at: string;
           full_name: string;
           id: string;
+          last_access_at: string | null;
           role: UserRole;
+          status_changed_at: string | null;
+          status_changed_by: string | null;
+          status_reason: string | null;
           updated_at: string;
         };
         Insert: {
+          account_status?: AccountStatus;
           created_at?: string;
           full_name: string;
           id: string;
+          last_access_at?: string | null;
           role?: UserRole;
+          status_changed_at?: string | null;
+          status_changed_by?: string | null;
+          status_reason?: string | null;
           updated_at?: string;
         };
         Update: {
+          account_status?: AccountStatus;
           created_at?: string;
           full_name?: string;
           id?: string;
+          last_access_at?: string | null;
           role?: UserRole;
+          status_changed_at?: string | null;
+          status_changed_by?: string | null;
+          status_reason?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -135,7 +150,7 @@ export interface SupabaseDatabase {
           document_id: string;
           file_size_bytes: number;
           id: string;
-          ingestion_status: 'pending';
+          ingestion_status: 'failed' | 'indexed' | 'pending' | 'processing';
           ingestion_updated_at: string;
           mime_type: 'application/pdf';
           original_file_name: string;
@@ -159,6 +174,56 @@ export interface SupabaseDatabase {
           module_id: string;
         };
         Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      document_ingestion_jobs: {
+        Row: {
+          attempt_count: number;
+          document_id: string;
+          document_version_id: string;
+          id: string;
+          last_error_code: string | null;
+          last_error_message: string | null;
+          lease_expires_at: string | null;
+          lease_token: string | null;
+          leased_at: string | null;
+          max_attempts: number;
+          status: 'completed' | 'failed' | 'pending' | 'processing';
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      document_chunks: {
+        Row: {
+          article_reference: string | null;
+          chunk_content: string;
+          chunk_index: number;
+          document_id: string;
+          document_version_id: string;
+          embedding: string;
+          id: string;
+          numeral_reference: string | null;
+          page_end: number;
+          page_start: number;
+          section_title: string | null;
+          token_count: number;
+        };
+        Insert: {
+          article_reference?: string | null;
+          chunk_content: string;
+          chunk_index: number;
+          document_id: string;
+          document_version_id: string;
+          embedding: number[];
+          id?: string;
+          numeral_reference?: string | null;
+          page_end: number;
+          page_start: number;
+          section_title?: string | null;
+          token_count: number;
+        };
         Update: never;
         Relationships: [];
       };
@@ -240,9 +305,355 @@ export interface SupabaseDatabase {
         Args: { p_actor_id: string; p_document_id: string; p_patch: Json };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
+      claim_document_ingestion_job: {
+        Args: { p_lease_seconds?: number };
+        Returns: {
+          attempt_count: number;
+          document_id: string;
+          document_version_id: string;
+          job_id: string;
+          lease_token: string;
+          page_count: number;
+          sha256: string;
+          storage_bucket: string;
+          storage_path: string;
+        }[];
+      };
+      clear_document_ingestion_chunks: {
+        Args: { p_job_id: string; p_lease_token: string };
+        Returns: null;
+      };
+      complete_document_ingestion_job: {
+        Args: { p_job_id: string; p_lease_token: string };
+        Returns: null;
+      };
+      fail_document_ingestion_job: {
+        Args: {
+          p_error_code: string;
+          p_error_message: string;
+          p_job_id: string;
+          p_lease_token: string;
+          p_retryable: boolean;
+        };
+        Returns: null;
+      };
+      refresh_document_ingestion_job_lease: {
+        Args: {
+          p_job_id: string;
+          p_lease_seconds?: number;
+          p_lease_token: string;
+        };
+        Returns: null;
+      };
+      begin_chat_turn: {
+        Args: {
+          p_conversation_id?: string | null;
+          p_question?: string | null;
+          p_selected_module_id?: string | null;
+          p_user_id: string;
+        };
+        Returns: {
+          conversation_id: string;
+          user_message_id: string;
+        }[];
+      };
+      complete_chat_turn: {
+        Args: {
+          p_answer: string;
+          p_answer_role: 'assistant' | 'clarification' | 'no_evidence';
+          p_conversation_id: string;
+          p_sources?: Json;
+          p_top_relevance_score?: number | null;
+          p_unanswered_reason?:
+            'ambiguous_request' | 'insufficient_evidence' | null;
+          p_user_id: string;
+          p_user_message_id: string;
+        };
+        Returns: { answer_message_id: string }[];
+      };
+      complete_chat_turn_with_learning: {
+        Args: {
+          p_answer: string;
+          p_answer_role: 'assistant' | 'clarification' | 'no_evidence';
+          p_conversation_id: string;
+          p_faq_canonical_question?: string | null;
+          p_faq_question_fingerprint?: string | null;
+          p_sources?: Json;
+          p_top_relevance_score?: number | null;
+          p_unanswered_reason?:
+            'ambiguous_request' | 'insufficient_evidence' | null;
+          p_user_id: string;
+          p_user_message_id: string;
+        };
+        Returns: { answer_message_id: string }[];
+      };
+      complete_chat_turn_with_learning_v2: {
+        Args: {
+          p_answer: string;
+          p_answer_role: 'assistant' | 'clarification' | 'no_evidence';
+          p_conversation_id: string;
+          p_faq_question_fingerprint?: string | null;
+          p_sources?: Json;
+          p_top_relevance_score?: number | null;
+          p_unanswered_reason?:
+            'ambiguous_request' | 'insufficient_evidence' | null;
+          p_user_id: string;
+          p_user_message_id: string;
+        };
+        Returns: { answer_message_id: string }[];
+      };
+      get_faq_memory_quality_summary: {
+        Args: { p_reviewer_id: string };
+        Returns: {
+          ambiguous_observations: number;
+          approved_candidates: number;
+          evidence_observations: number;
+          no_evidence_observations: number;
+          pending_review_candidates: number;
+          rejected_candidates: number;
+          suppressed_candidates: number;
+          total_candidates: number;
+          total_observations: number;
+        }[];
+      };
+      get_hito4_operational_metrics: {
+        Args: { p_reviewer_id: string };
+        Returns: {
+          active_documents: number;
+          active_modules: number;
+          dismissed_unanswered_questions: number;
+          pending_ingestion_jobs: number;
+          pending_unanswered_questions: number;
+          provider_cost_status: 'not_configured';
+          resolved_unanswered_questions: number;
+          total_conversations: number;
+          total_users: number;
+        }[];
+      };
+      get_chat_conversation: {
+        Args: {
+          p_conversation_id: string;
+          p_limit?: number;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
+      delete_chat_conversation: {
+        Args: { p_conversation_id: string; p_user_id: string };
+        Returns: { deleted_at: string; id: string }[];
+      };
+      list_chat_conversations: {
+        Args: { p_limit?: number; p_user_id: string };
+        Returns: {
+          created_at: string;
+          id: string;
+          selected_module_id: string | null;
+          title: string | null;
+          updated_at: string;
+        }[];
+      };
+      list_chat_conversations_page: {
+        Args: {
+          p_cursor_id?: string | null;
+          p_cursor_updated_at?: string | null;
+          p_limit?: number;
+          p_user_id: string;
+        };
+        Returns: {
+          created_at: string;
+          id: string;
+          selected_module_id: string | null;
+          title: string | null;
+          updated_at: string;
+        }[];
+      };
+      list_faq_memory_candidates: {
+        Args: {
+          p_limit?: number;
+          p_reviewer_id: string;
+          p_status?: 'pending_review' | 'approved' | 'rejected' | 'suppressed';
+        };
+        Returns: {
+          ambiguous_count: number;
+          canonical_question: string;
+          evidence_count: number;
+          first_seen_at: string;
+          id: string;
+          last_seen_at: string;
+          no_evidence_count: number;
+          occurrence_count: number;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          selected_module_id: string | null;
+          status: 'pending_review' | 'approved' | 'rejected' | 'suppressed';
+        }[];
+      };
+      list_faq_memory_candidates_v2: {
+        Args: {
+          p_limit?: number;
+          p_reviewer_id: string;
+          p_status?: 'pending_review' | 'approved' | 'rejected' | 'suppressed';
+        };
+        Returns: {
+          ambiguous_count: number;
+          evidence_count: number;
+          first_seen_at: string;
+          id: string;
+          last_seen_at: string;
+          no_evidence_count: number;
+          occurrence_count: number;
+          review_label: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          selected_module_id: string | null;
+          status: 'pending_review' | 'approved' | 'rejected' | 'suppressed';
+        }[];
+      };
+      list_unanswered_questions: {
+        Args: {
+          p_limit?: number;
+          p_reviewer_id: string;
+          p_status?: 'pending_review' | 'resolved' | 'dismissed';
+        };
+        Returns: {
+          category:
+            | 'documentation_gap'
+            | 'module_configuration'
+            | 'outside_scope'
+            | 'duplicate'
+            | 'other'
+            | null;
+          conversation_id: string | null;
+          created_at: string;
+          id: string;
+          message_id: string | null;
+          question: string;
+          reason: 'ambiguous_request' | 'insufficient_evidence';
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          review_note: string | null;
+          selected_module_id: string | null;
+          status: 'pending_review' | 'resolved' | 'dismissed';
+          top_relevance_score: number | null;
+        }[];
+      };
+      list_administrative_users: {
+        Args: {
+          p_actor_id: string;
+          p_limit?: number;
+          p_search?: string | null;
+        };
+        Returns: {
+          account_status: AccountStatus;
+          created_at: string;
+          full_name: string;
+          id: string;
+          last_access_at: string | null;
+          role: UserRole;
+        }[];
+      };
+      update_administrative_user: {
+        Args: {
+          p_account_status?: AccountStatus | null;
+          p_actor_id: string;
+          p_reason?: string | null;
+          p_role?: UserRole | null;
+          p_target_user_id: string;
+        };
+        Returns: {
+          account_status: AccountStatus;
+          full_name: string;
+          id: string;
+          last_access_at: string | null;
+          role: UserRole;
+        }[];
+      };
+      list_operational_audit_events: {
+        Args: { p_actor_id: string; p_limit?: number };
+        Returns: {
+          action:
+            | 'chat_history_deleted'
+            | 'unanswered_question_reviewed'
+            | 'user_role_changed'
+            | 'user_status_changed';
+          actor_id: string;
+          actor_role: UserRole;
+          id: string;
+          metadata: Json;
+          occurred_at: string;
+          resource_id: string;
+          resource_type:
+            'chat_conversation' | 'unanswered_question' | 'profile';
+        }[];
+      };
+      touch_profile_last_access: {
+        Args: { p_user_id: string };
+        Returns: null;
+      };
+      review_faq_memory_candidate: {
+        Args: {
+          p_candidate_id: string;
+          p_decision: 'approved' | 'rejected' | 'suppressed';
+          p_review_note?: string | null;
+          p_reviewer_id: string;
+        };
+        Returns: null;
+      };
+      review_faq_memory_candidate_v2: {
+        Args: {
+          p_candidate_id: string;
+          p_decision: 'approved' | 'rejected' | 'suppressed';
+          p_review_label?: string | null;
+          p_review_note?: string | null;
+          p_reviewer_id: string;
+        };
+        Returns: null;
+      };
+      review_unanswered_question: {
+        Args: {
+          p_category:
+            | 'documentation_gap'
+            | 'module_configuration'
+            | 'outside_scope'
+            | 'duplicate'
+            | 'other';
+          p_decision: 'resolved' | 'dismissed';
+          p_review_note: string;
+          p_reviewer_id: string;
+          p_unanswered_question_id: string;
+        };
+        Returns: null;
+      };
+      search_document_chunks: {
+        Args: {
+          p_match_count?: number;
+          p_match_threshold?: number;
+          p_query_embedding: number[];
+          p_query_text: string;
+          p_selected_module_id?: string | null;
+        };
+        Returns: {
+          article_reference: string | null;
+          chunk_content: string;
+          chunk_id: string;
+          document_id: string;
+          document_title: string;
+          document_version_id: string;
+          lexical_score: number;
+          module_ids: string[];
+          module_names: string[];
+          numeral_reference: string | null;
+          page_end: number;
+          page_start: number;
+          section_title: string | null;
+          semantic_score: number;
+          version_number: number;
+        }[];
+      };
     };
     Enums: {
       app_role: UserRole;
+      account_status: AccountStatus;
       document_audit_action:
         | 'activated'
         | 'created'
@@ -254,8 +665,26 @@ export interface SupabaseDatabase {
         | 'module_unlinked'
         | 'restored'
         | 'version_added';
-      document_ingestion_status: 'pending';
+      document_ingestion_status:
+        'failed' | 'indexed' | 'pending' | 'processing';
       document_publication_status: 'active' | 'inactive';
+      chat_message_role: 'assistant' | 'clarification' | 'no_evidence' | 'user';
+      unanswered_question_reason: 'ambiguous_request' | 'insufficient_evidence';
+      unanswered_question_status: 'pending_review' | 'resolved' | 'dismissed';
+      unanswered_question_category:
+        | 'documentation_gap'
+        | 'module_configuration'
+        | 'outside_scope'
+        | 'duplicate'
+        | 'other';
+      faq_memory_outcome: 'evidence' | 'ambiguous' | 'no_evidence';
+      faq_memory_review_status:
+        'pending_review' | 'approved' | 'rejected' | 'suppressed';
+      operational_audit_action:
+        | 'chat_history_deleted'
+        | 'unanswered_question_reviewed'
+        | 'user_role_changed'
+        | 'user_status_changed';
     };
     CompositeTypes: Record<string, never>;
   };

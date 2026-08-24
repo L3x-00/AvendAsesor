@@ -9,7 +9,10 @@ async function bootstrap(): Promise<void> {
 
   configureApplication(app, configService);
 
-  await app.listen(configService.getOrThrow<number>('PORT'));
+  // Render forwards traffic through the address exposed by the service. Binding
+  // explicitly to all IPv4 interfaces preserves local behavior and avoids a
+  // deployment that listens only on loopback.
+  await app.listen(configService.getOrThrow<number>('PORT'), '0.0.0.0');
 }
 
 void bootstrap().catch((error: unknown) => {
