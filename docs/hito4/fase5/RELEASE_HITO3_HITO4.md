@@ -33,6 +33,11 @@ contrato pgTAP específico pasa contra el entorno local. El servicio hospedado
 no instala pgTAP como dependencia de producto, por lo que no se ejecutan sus
 contratos dentro de staging.
 
+El Preview de Vercel para la rama de corrección usa variables de Supabase
+exclusivas de staging y un `APP_URL` de rama. Hasta desplegar la API dedicada
+en Render, su `ADMIN_API_URL` falla cerrado contra un host reservado; nunca
+apunta a la API de producción.
+
 ## Lote exacto
 
 Promover como una sola unidad las migraciones desde
