@@ -17,7 +17,7 @@ sin alterar el motor RAG, la base de datos, RLS ni los contratos de seguridad.
 | Fase | Nombre | Foco | Hito(s) | Estado |
 | --- | --- | --- | --- | --- |
 | **1** | Sesión y navegación | Logout + jerarquía módulo→submódulo + selección client-side/cache | hito3, hito2 | ✅ IMPLEMENTADA (rama) · pendiente CI/QA |
-| **2** | Zona de trabajo y conversación | Título/descripción de módulo, jerarquía tipográfica de respuestas, estados | hito3 | PLANNED |
+| **2** | Zona de trabajo y conversación | Título/descripción de módulo, jerarquía tipográfica de respuestas, estados | hito3 | ✅ IMPLEMENTADA (rama) · pendiente CI/QA/visual |
 | **3** | Interactividad y componentes | Micrófono, "Formatos para descargar", responsive fino, microinteracciones | hito3, hito4 | PLANNED |
 | **4** | Consistencia, accesibilidad y cierre | Admin consistente, WCAG AA, delay de ingreso (infra), regresión visual, QA 3 roles | hito2, hito4 | PLANNED |
 
@@ -47,7 +47,12 @@ Cada fase cierra con: `typecheck` + `lint` + `test:cov` + `build` en verde, evid
 
 ---
 
-## FASE 2 — Zona de trabajo y conversación  *(PLANNED)*
+## FASE 2 — Zona de trabajo y conversación  *(IMPLEMENTADA EN RAMA — pendiente CI/QA/visual)*
+
+**Commits:** `b4e9a05` (descripción de módulo end-to-end: contrato `/chat/modules` + render),
+`765393b` (jerarquía tipográfica de respuestas §6, negrita segura), `da34264` (estados: error en región `alert`).
+El orden de la zona de trabajo (§5) ya se cumple. Pendiente: revisión visual con respuestas RAG reales y
+datos QA con descripciones/submódulos (Codex, TSK-0023 Tarea B).
 
 **Requerimientos:** guía §5 (estructura de la zona de trabajo), §6 (diseño de la conversación).
 
