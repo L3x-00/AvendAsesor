@@ -1,7 +1,8 @@
 # Hito 4 — Piloto QA ficticio de producción
 
-**Fecha:** 24 de agosto de 2026  
-**Fuente versionada:** `1898ca5` en `codex/hito4-qa-pilot`  
+**Fecha:** 24 de agosto de 2026
+
+**Fuente versionada:** `1898ca5` en `codex/hito4-qa-pilot`
 **Objetivo:** habilitar evidencia autenticada de lectura sin cargar datos de
 negocio, documentos, fuentes ni respuestas normativas ficticias.
 
