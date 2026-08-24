@@ -2,18 +2,36 @@
 
 ## Estado
 
-**Estado remoto: BLOQUEADO.** El release local está preparado, pero no se
-ejecutará una migración contra Supabase producción mientras falte recuperación
-verificable y una validación staging.
+**Estado de producción: BLOQUEADO.** El release local está preparado, pero no
+se ejecutará una migración contra Supabase producción mientras falte una
+recuperación verificable. La validación de esquema en staging ya está activa.
 
 La inspección remota de solo lectura del 2026-08-23 confirmó:
 
 - Producción permanece en Hitos 1–2 (`20260809045322` a `20260809220458`).
 - El proyecto no tiene PITR habilitado ni backup físico disponible.
-- No existe una rama Supabase Preview ni un proyecto staging separado.
+- Staging aislado contiene el lote completo de Hitos 1–4. El proyecto no usa
+  datos de producción ni sus credenciales se registran en este repositorio.
 
 La autorización del Product Owner exige esos dos controles antes de promover,
-por lo que el bloqueo es deliberado y no una falla técnica del release.
+por lo que el bloqueo de producción es deliberado y no una falla técnica del
+release.
+
+## Validación staging
+
+El primer intento contra staging reveló que `pgvector` está instalado en el
+esquema `extensions`, por lo que el operador HNSW debía referirse como
+`extensions.vector_cosine_ops`. La migración falló de forma atómica antes de
+registrarse; Hitos 3–4 no quedaron aplicados parcialmente. El arreglo quedó
+versionado en `4ee2cf2` junto con un contrato pgTAP que comprueba el esquema
+del operador del índice.
+
+Tras el arreglo, staging aplicó las 30 migraciones acumuladas de Hitos 1–4;
+`supabase migration list --linked` quedó alineado y
+`supabase db advisors --linked --fail-on warn` no reportó hallazgos. El
+contrato pgTAP específico pasa contra el entorno local. El servicio hospedado
+no instala pgTAP como dependencia de producto, por lo que no se ejecutan sus
+contratos dentro de staging.
 
 ## Lote exacto
 
