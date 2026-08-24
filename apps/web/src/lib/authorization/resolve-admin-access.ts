@@ -1,7 +1,7 @@
 import { isAdministrativeRole, type AdministrativeRole } from "./policy";
 
 interface ProfileRoleQuery {
-  select(columns: "role"): {
+  select(columns: "role" | "role, account_status"): {
     eq(
       column: "id",
       value: string,

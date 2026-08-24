@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isAdministrativeRole } from './policy';
+import {
+  isActiveAccountStatus,
+  isAdministrativeRole,
+  isChatRole,
+} from './policy';
 
 describe('isAdministrativeRole', () => {
   it('allows admin and superadmin', () => {
@@ -19,5 +23,20 @@ describe('isAdministrativeRole', () => {
     expect(isAdministrativeRole(0)).toBe(false);
     expect(isAdministrativeRole({ role: 'admin' })).toBe(false);
     expect(isAdministrativeRole(['admin'])).toBe(false);
+  });
+});
+
+describe('chat and account policies', () => {
+  it('allows every confirmed product role to access chat', () => {
+    expect(isChatRole('docente')).toBe(true);
+    expect(isChatRole('admin')).toBe(true);
+    expect(isChatRole('superadmin')).toBe(true);
+    expect(isChatRole('unknown')).toBe(false);
+  });
+
+  it('allows chat only for active accounts', () => {
+    expect(isActiveAccountStatus('active')).toBe(true);
+    expect(isActiveAccountStatus('suspended')).toBe(false);
+    expect(isActiveAccountStatus(undefined)).toBe(false);
   });
 });
