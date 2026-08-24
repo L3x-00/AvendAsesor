@@ -243,7 +243,7 @@ function Ensure-QAUser {
     param(
         [Parameter(Mandatory)] [string]$Secret,
         [Parameter(Mandatory)] $Definition,
-        [Parameter(Mandatory)] [object[]]$ExistingUsers,
+        [AllowNull()] [object[]]$ExistingUsers = @(),
         [Parameter(Mandatory)] [System.Management.Automation.PSCredential]$Credential
     )
 
