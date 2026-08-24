@@ -1617,3 +1617,96 @@ body {
   margin: 0 0 1rem;
   padding: 0.75rem 1rem;
 }
+
+/* ===== Fase 3: micrófono, responsive de submódulos y microinteracciones ===== */
+.avend-chat-composer-buttons {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.avend-chat-mic {
+  align-items: center;
+  appearance: none;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0 0.85rem;
+}
+
+.avend-chat-mic:hover {
+  background: var(--avend-soft-blue);
+}
+
+.avend-chat-mic:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.avend-chat-mic-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.avend-chat-mic--active {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+  color: var(--avend-accent);
+}
+
+@keyframes avend-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Submódulos: en móvil, carrusel horizontal desplazable (guía §10). */
+@media (max-width: 47.9375rem) {
+  .avend-chat-submodules {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .avend-chat-submodules .avend-chat-module {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+}
+
+/* Microinteracciones discretas, respetando prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .avend-chat-module,
+  .avend-chat-mic,
+  .avend-button,
+  .avend-teacher-navigation-link,
+  .avend-admin-navigation-link {
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.12s ease;
+  }
+
+  .avend-chat-module:active,
+  .avend-button:active {
+    transform: translateY(1px);
+  }
+
+  .avend-chat-mic--active .avend-chat-mic-icon {
+    animation: avend-mic-pulse 1.4s ease-in-out infinite;
+  }
+}
