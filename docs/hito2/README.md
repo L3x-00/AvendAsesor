@@ -36,3 +36,10 @@ La API NestJS es la frontera decisiva. La interfaz web solo mejora la navegació
 | [Fase 6](fase6/RESUMEN_TECNICO.md) | Aceptación local, regresión y cierre técnico | DONE |
 
 Las decisiones persistentes de alcance y seguridad están registradas en `ADR-0006`.
+
+## Estado de esquema remoto
+
+El 2026-08-22, con autorización expresa, se promovieron las cinco migraciones
+de Hito 2 desde un checkout limpio del release. El historial remoto y los
+asesores quedaron verificados; las migraciones de Hito 3 continúan fuera del
+proyecto remoto hasta una promoción independiente.

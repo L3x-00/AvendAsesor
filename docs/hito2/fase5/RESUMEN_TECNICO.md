@@ -31,3 +31,23 @@ Construir rutas administrativas locales de módulos y documentos con formularios
 - Los formularios cubren el ciclo administrativo ya disponible en la API y se deshabilitan durante la operación. Crear, cargar y versionar no incorporan reintentos automáticos. El detalle entrega una URL firmada temporal únicamente tras la acción autenticada.
 - `Test-LocalAdminWeb.ps1` acepta puertos alternativos para no interferir con otros procesos locales, valida que sean libres y detiene únicamente los procesos que inició. Crea y elimina cuentas de prueba delimitadas por prefijo; no crea módulo ni documento de negocio.
 - Verificado el 2026-08-09: web typecheck, lint, 53 pruebas con cobertura, build de producción, `git diff --check` y la regresión local administrativa: PASS.
+
+## Actualización visual local — 2026-08-21
+
+- La presentación administrativa usa ahora el sistema visual aprobado de AVEND
+  ASESOR: barra lateral azul marino en escritorio, navegación móvil explícita,
+  logo oficial sin reinterpretación y estados activos celestes. La navegación
+  distingue visualmente la sección actual sin alterar sus rutas ni permisos.
+- Las listas, formularios, avisos y acciones emplean tokens semánticos de la
+  paleta aprobada, texto base de al menos 16 px, focos visibles y controles de
+  al menos 44 px. Esto prioriza la lectura y el manejo predecible para docentes
+  y profesionales adultos.
+- No se modificaron Server Components, Server Actions, `AdminApiClient`,
+  sesiones SSR, bearer hacia NestJS, límites PDF, reintentos, RBAC ni contratos
+  del backend. El rediseño sigue siendo exclusivamente de presentación.
+- Verificado el 2026-08-21: lint, typecheck, 57 pruebas web con 98.74 % de
+  statements y 96.63 % de branches, build de producción, acceso anónimo a
+  `/admin/modules` redirigido a inicio de sesión y auditoría axe WCAG 2 A/AA
+  sin violaciones en 375 px. La regresión integral con identidades temporales
+  quedó pendiente de finalizar en el ejecutor local después de sus builds; no
+  se registra como PASS en esta actualización.

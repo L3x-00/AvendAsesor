@@ -1,51 +1,112 @@
-import Link from 'next/link';
-import type { ReactNode } from 'react';
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { BrandLogo } from "@/components/ui/brand-logo";
+
+type AdminSection = "documents" | "home" | "modules" | "operations" | "users";
 
 interface AdminShellProps {
+  activeSection: AdminSection;
   children: ReactNode;
   description: string;
+  isSuperadmin?: boolean;
   title: string;
 }
 
-export function AdminShell({ children, description, title }: AdminShellProps) {
+const navigation: ReadonlyArray<{
+  href: string;
+  label: string;
+  requiresSuperadmin?: boolean;
+  section: AdminSection;
+}> = [
+  { href: "/admin", label: "Inicio", section: "home" },
+  { href: "/admin/operations", label: "Operación", section: "operations" },
+  { href: "/admin/modules", label: "Módulos", section: "modules" },
+  { href: "/admin/documents", label: "Documentos", section: "documents" },
+  {
+    href: "/admin/users",
+    label: "Usuarios",
+    requiresSuperadmin: true,
+    section: "users",
+  },
+];
+
+function AdminNavigation({
+  activeSection,
+  isSuperadmin,
+}: Pick<AdminShellProps, "activeSection" | "isSuperadmin">) {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6">
-      <div className="mx-auto w-full max-w-6xl">
-        <header className="border-b border-slate-200 pb-5">
-          <p className="text-sm font-semibold tracking-wide text-sky-700">
-            AVEND ASESOR
-          </p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-                {description}
-              </p>
-            </div>
-            <nav aria-label="Administración" className="flex flex-wrap gap-2 text-sm">
-              <Link
-                className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-                href="/admin"
-              >
-                Inicio
-              </Link>
-              <Link
-                className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-                href="/admin/modules"
-              >
-                Módulos
-              </Link>
-              <Link
-                className="rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-                href="/admin/documents"
-              >
-                Documentos
-              </Link>
-            </nav>
+    <nav aria-label="Administración" className="avend-admin-navigation">
+      {navigation
+        .filter((item) => !item.requiresSuperadmin || isSuperadmin)
+        .map((item) => (
+          <Link
+            aria-current={item.section === activeSection ? "page" : undefined}
+            className="avend-admin-navigation-link"
+            href={item.href}
+            key={item.href}
+          >
+            {item.label}
+          </Link>
+        ))}
+    </nav>
+  );
+}
+
+/**
+ * Presentational frame for the administrative BFF. It contains no identity,
+ * data or mutation logic; the server route and Server Actions remain the
+ * authority for every operation rendered inside it.
+ */
+export function AdminShell({
+  activeSection,
+  children,
+  description,
+  isSuperadmin = false,
+  title,
+}: AdminShellProps) {
+  return (
+    <div className="avend-admin-shell">
+      <a className="avend-skip-link" href="#main-content">
+        Saltar al contenido principal
+      </a>
+      <aside
+        aria-label="Identidad y navegación administrativa"
+        className="avend-admin-sidebar"
+      >
+        <BrandLogo
+          className="avend-admin-sidebar-logo"
+          priority
+          tone="dark-surface"
+        />
+        <p className="avend-admin-sidebar-kicker">Área protegida</p>
+        <p className="avend-admin-sidebar-description">
+          Gestiona los recursos autorizados. Las acciones se validan nuevamente
+          antes de aplicarse.
+        </p>
+        <AdminNavigation
+          activeSection={activeSection}
+          isSuperadmin={isSuperadmin}
+        />
+      </aside>
+
+      <main className="avend-admin-main" id="main-content">
+        <header className="avend-admin-header">
+          <div className="avend-admin-mobile-bar">
+            <BrandLogo className="avend-admin-mobile-logo" />
+            <details className="avend-admin-mobile-menu">
+              <summary>Menú administrativo</summary>
+              <AdminNavigation
+                activeSection={activeSection}
+                isSuperadmin={isSuperadmin}
+              />
+            </details>
           </div>
+          <p className="avend-eyebrow">Administración</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
         </header>
-        <div className="py-6">{children}</div>
-      </div>
-    </main>
+        <div className="avend-admin-content">{children}</div>
+      </main>
+    </div>
   );
 }

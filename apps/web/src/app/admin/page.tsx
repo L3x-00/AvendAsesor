@@ -1,10 +1,12 @@
-import { redirect } from 'next/navigation';
-import Link from 'next/link';
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { AdminShell } from "@/components/admin/admin-shell";
+import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
 import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
-} from '@/lib/authorization/resolve-admin-access';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+} from "@/lib/authorization/resolve-admin-access";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export default async function AdminPage() {
   const supabase = await createServerSupabaseClient();
@@ -12,40 +14,76 @@ export default async function AdminPage() {
     supabase as unknown as AuthorizationSupabaseClient,
   );
 
-  if (access.status === 'unauthenticated') {
-    redirect('/auth/sign-in');
+  if (access.status === "unauthenticated") {
+    redirect("/auth/sign-in");
   }
 
-  if (access.status !== 'authorized') {
-    redirect('/access-denied');
+  if (access.status !== "authorized") {
+    redirect("/access-denied");
   }
+
+  const metrics = await (
+    await createAuthorizedAdminApiClient()
+  ).getOperationalMetrics();
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 text-slate-900">
-      <section className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold tracking-wide text-sky-700">
-          AVEND ASESOR
+    <AdminShell
+      activeSection="home"
+      description="Consulta el estado operativo y accede a las herramientas autorizadas para tu rol. Cada cambio se vuelve a validar en la API."
+      isSuperadmin={access.role === "superadmin"}
+      title="Panel administrativo"
+    >
+      <section
+        aria-labelledby="admin-entry-title"
+        className="avend-admin-dashboard"
+      >
+        <p className="avend-eyebrow">Área protegida</p>
+        <h2 id="admin-entry-title">Resumen operativo</h2>
+        <p className="avend-admin-entry-role">
+          Rol de acceso: <strong>{access.role}</strong>
         </p>
-        <h1 className="mt-2 text-2xl font-bold">Panel administrativo</h1>
-        <p className="mt-3 leading-6 text-slate-600">
-          Acceso confirmado con rol {access.role}. La interfaz usa rutas de
-          servidor y la API protegida; no entrega acceso directo a los datos.
+        <dl className="avend-operation-metrics">
+          <div>
+            <dt>Usuarios registrados</dt>
+            <dd>{metrics.totalUsers}</dd>
+          </div>
+          <div>
+            <dt>Módulos activos</dt>
+            <dd>{metrics.activeModules}</dd>
+          </div>
+          <div>
+            <dt>Documentos activos</dt>
+            <dd>{metrics.activeDocuments}</dd>
+          </div>
+          <div>
+            <dt>Consultas pendientes</dt>
+            <dd>{metrics.pendingUnansweredQuestions}</dd>
+          </div>
+        </dl>
+        <p className="avend-admin-entry-description">
+          El costo del proveedor IA no está configurado y no se muestra como
+          indicador operativo.
         </p>
-        <nav aria-label="Operaciones administrativas" className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Link
-            className="rounded-lg border border-slate-300 p-4 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-            href="/admin/modules"
-          >
+        <nav
+          aria-label="Operaciones administrativas"
+          className="avend-admin-entry-nav"
+        >
+          <Link className="avend-admin-entry-link" href="/admin/operations">
+            Revisar operación
+          </Link>
+          <Link className="avend-admin-entry-link" href="/admin/modules">
             Gestionar módulos
           </Link>
-          <Link
-            className="rounded-lg border border-slate-300 p-4 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
-            href="/admin/documents"
-          >
+          <Link className="avend-admin-entry-link" href="/admin/documents">
             Gestionar documentos PDF
           </Link>
+          {access.role === "superadmin" ? (
+            <Link className="avend-admin-entry-link" href="/admin/users">
+              Usuarios y auditoría
+            </Link>
+          ) : null}
         </nav>
       </section>
-    </main>
+    </AdminShell>
   );
 }

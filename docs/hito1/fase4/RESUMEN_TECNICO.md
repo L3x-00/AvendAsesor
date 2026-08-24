@@ -47,3 +47,15 @@ El Hito 1 estará listo para validación del cliente cuando los cuatro criterios
 - No se autorizó ni realizó despliegue, cambio de staging/producción, alta de usuarios reales ni configuración remota de Resend.
 
 Estado al 2026-08-09: `BLOCKED` únicamente por la aceptación contractual de staging. El alcance local y de desarrollo está integrado y verificado; CA-01 a CA-03 requieren Mailpit local o SMTP/URLs de staging, y CA-18 requiere el smoke de staging antes de declarar el Hito 1 terminado.
+
+## Actualización visual local — 2026-08-21
+
+- La vista de acceso restringido explica el límite de permisos en lenguaje
+  directo, ofrece una única salida segura y no revela contenido administrativo.
+- La puerta `/admin` conserva sus comprobaciones server-side y presenta un
+  acceso visual claro con el rol confirmado y las dos operaciones existentes.
+  No se añadieron rutas, privilegios, llamadas de navegador ni lógica de
+  autorización.
+- Las verificaciones de interfaz, tipo, lint, pruebas y build se ejecutan sobre
+  el código integrado; la evidencia de staging sigue siendo una dependencia
+  contractual independiente.

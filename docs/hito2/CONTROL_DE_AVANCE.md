@@ -26,6 +26,24 @@ Estados permitidos: `PLANNED`, `ACTIVE`, `REVIEW`, `DONE`, `BLOCKED`.
 
 El criterio contractual de staging no se ejecuta durante esta fase local. Requerirá una autorización y un ambiente separado cuando corresponda.
 
+## Promoción de esquema remoto autorizada — 2026-08-22
+
+Tras la autorización expresa del Product Owner, se promovió **solo** el esquema
+versionado de Hito 2 al proyecto remoto de Supabase. La operación se hizo desde
+un worktree limpio anclado a `c057d87`, por lo que sus únicas migraciones eran:
+
+1. `20260809194717_create_document_management_foundation.sql`;
+2. `20260809203949_enforce_module_logical_hierarchy.sql`;
+3. `20260809205720_grant_server_role_profile_role_update.sql`;
+4. `20260809213049_document_lifecycle_rpc.sql`;
+5. `20260809220458_document_download_audit.sql`.
+
+La simulación previa y el `db push` aplicaron exactamente esas cinco
+migraciones. El historial remoto ahora registra las seis migraciones de Hitos
+1–2 y `supabase db advisors --linked --fail-on warn` devolvió cero hallazgos.
+No se promovieron migraciones de Hito 3, datos de negocio, objetos Storage,
+usuarios, secretos, correo ni configuración de autenticación.
+
 ## Evidencia de Fase 5 — 2026-08-09
 
 - Interfaz: `/admin/modules`, `/admin/documents` y detalle documental entregan listado, alta, edición, orden, ciclo lógico, asociación, nueva versión y enlace temporal. Un submódulo puede volver explícitamente a raíz. No se creó ningún dato de negocio.
@@ -33,6 +51,26 @@ El criterio contractual de staging no se ejecuta durante esta fase local. Requer
 - Confiabilidad: formularios bloquean el reenvío mientras hay una petición. El cliente no reintenta; un `503` pide actualizar listado/detalle antes de repetir la operación. La idempotencia persistente queda registrada como TD-003.
 - Pruebas: tipo, lint, 53 pruebas web y build de producción aprobaron. `Test-LocalAdminWeb.ps1` construyó/lanzó API y web locales aisladas, comprobó redirección anónima, páginas BFF de ADMIN y bloqueo DOCENTE, y eliminó las identidades temporales.
 - Revisión: Claude Code Haiku realizó una revisión independiente por material exacto del flujo SSR/BFF y no encontró hallazgos relevantes. Dos solicitudes más amplias a Claude Opus agotaron el tiempo y no se cuentan como dictamen.
+
+### Actualización visual local de Fase 5 — 2026-08-21
+
+- La interfaz protegida de módulos y documentos recibió el shell administrativo
+  responsive, navegación visible, logo oficial y tokens de la guía visual
+  aprobada. En móvil el menú es explícito y en escritorio la barra lateral
+  permanece estable; ninguna ruta ni decisión de autorización cambió.
+- Los componentes priorizan legibilidad para el público objetivo: texto base de
+  16 px, controles de al menos 44 px, etiquetas explícitas, foco visible,
+  contraste basado en la paleta aprobada y movimiento reducido respetado.
+- Calidad local: lint, typecheck, build, 57 pruebas de web (98.74 % statements;
+  96.63 % branches), comprobación de espacios y auditoría axe WCAG 2 A/AA a
+  375 px: PASS. La guarda anónima de `/admin/modules` se comprobó en navegador
+  y no expuso contenido administrativo.
+- La revisión independiente nueva no se declara aprobada: Claude Code local no
+  está autenticado y su invocación de solo lectura no produjo dictamen. La
+  regresión integrada de identidades temporales se inició sobre Supabase local,
+  pero el ejecutor terminó después de los builds antes de emitir su resultado;
+  se mantiene la evidencia PASS histórica de la Fase 5 y esta actualización no
+  la sustituye.
 
 ## Evidencia de Fase 6 — 2026-08-09
 

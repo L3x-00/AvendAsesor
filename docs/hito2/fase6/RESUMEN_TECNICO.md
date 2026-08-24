@@ -32,3 +32,12 @@ La Fase 6 y el Hito 2 solo pueden declararse `DONE` si cada bloque de la matriz 
 El ejecutor exige `-AllowLocalReset`, comprueba herramientas y scripts requeridos, fija el destino a loopback `:55321`, busca puertos web libres sin ocultar errores y verifica tablas/bucket vacíos después del reset documental y al terminar. No guarda ni imprime secretos; la clave de servicio local se mantiene solamente en la memoria de un proceso Node efímero imprescindible para verificar la limpieza y los privilegios del entorno de prueba.
 
 Claude Code Haiku revisó el script inicial y su versión corregida. Los hallazgos de barrera local, limpieza y preflight se resolvieron; no quedó BLOCKER ni HIGH. El Hito 2 queda cerrado **solo para aceptación local**. Staging, despliegue, dominio/correo remoto e idempotencia persistente no se han ejecutado ni se presumen aprobados.
+
+## Promoción de esquema remoto autorizada — 2026-08-22
+
+La promoción posterior se limitó al esquema Hito 2 desde el release limpio
+`c057d87`. El dry-run y la ejecución registraron solo las cinco migraciones
+pendientes de Hito 2; el historial remoto y los asesores de Supabase se
+verificaron inmediatamente después sin incidencias. Esta evidencia habilita el
+esquema productivo para el código Hito 2 ya publicado, pero no convierte la
+aceptación local previa en aceptación contractual ni habilita Hito 3.

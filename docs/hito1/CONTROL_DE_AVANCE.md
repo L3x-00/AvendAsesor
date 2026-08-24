@@ -13,17 +13,6 @@
 
 Estados permitidos: `PLANNED`, `ACTIVE`, `BLOCKED`, `REVIEW`, `DONE`.
 
-## Historial versionado del Hito 1
-
-| Fase | Commit | Contenido controlado |
-| --- | --- | --- |
-| Fase 1 | `948437f` | Política de Node, puerta de calidad, configuración segura, endpoint de salud y módulos base. |
-| Fase 2 | `89514f5` | Perfiles y roles de Supabase, migración/RLS y adaptadores server-side de identidad. |
-| Fase 3 | `e16136c` | Registro, confirmación, sesión y recuperación con Supabase SSR y Mailpit local. |
-| Fase 4 | `cbd4741` | Guards de autorización, límites administrativos, acceso web server-side y regresión local de CA-18. |
-
-Este historial contiene solo código, infraestructura local y documentación del producto. Las herramientas, reglas y memoria de asistencia de IA se mantienen fuera de estos commits.
-
 ## Lista de evidencia por fase
 
 Antes de cerrar una fase, enlazar o anotar aquí:
@@ -66,6 +55,22 @@ Antes de cerrar una fase, enlazar o anotar aquí:
 - Calidad: API 42 pruebas unitarias y 8 E2E; cobertura API 99.36% sentencias, 92.64% ramas, 90.32% funciones y 99.27% líneas. Web: 33 pruebas; 100% sentencias/funciones/líneas y 96.96% ramas.
 - Revisión: Claude Code revisó el API/configuración en modo de solo lectura real sin hallazgos `BLOCKER`, `HIGH` ni `MEDIUM`. Codex revisó la implementación web de Claude Code, endureció las excepciones inesperadas para fallar cerrado y volvió a verificarla.
 - Entorno de correo: Mailpit queda versionado y limitado a loopback para desarrollo; Resend queda documentado para el SMTP remoto futuro. No se modificó Resend, staging ni producción.
+
+### Actualización visual de Fases 3 y 4 — 2026-08-21
+
+- Alcance: marco de autenticación responsive, estados de confirmación/error,
+  acceso denegado y entrada administrativa; todos emplean logo oficial, paleta
+  aprobada y componentes de foco/estado legibles para docentes y profesionales
+  adultos.
+- Preservación: la revisión de diff confirmó que esta actualización no modifica
+  `apps/api/`, migraciones, RLS, Storage, contratos, Server Actions ni la
+  frontera administrativa server-side ya existente.
+- Calidad: web lint, typecheck, 56 pruebas, cobertura 98.71 % de sentencias y
+  96.58 % de ramas, y build de producción: PASS. Navegador móvil de 375px y
+  axe-core WCAG 2 A/AA: PASS sin incidencias.
+- Revisión independiente: permanece pendiente mientras la CLI local de Claude
+  Code no esté autenticada. Este límite no se presenta como aprobación de
+  staging ni como sustituto de las pruebas contractuales ya bloqueadas.
 
 ## Registro de bloqueos externos
 
