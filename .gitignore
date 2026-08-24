@@ -12,3 +12,6 @@ Thumbs.db
 !.vscode/settings.json
 
 .vercel
+
+# Local, DPAPI-protected credentials used only by the production QA pilot.
+infrastructure/qa/.local/

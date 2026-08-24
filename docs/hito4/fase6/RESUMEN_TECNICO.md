@@ -48,7 +48,11 @@ controles explícitos y movimiento reducido.
 
 1. Pruebas de interfaces autenticadas con cuentas desechables y evidencia
    responsive para historial, operación y SUPERADMIN.
-2. Definir la operación remota separada para semilla ficticia y cuentas de
-   prueba, sin usar ni registrar credenciales expuestas.
-3. Pruebas de aceptación autenticadas en producción con evidencia de los tres
-   roles, sin habilitar todavía proveedor IA, correo ni datos de negocio reales.
+2. Ejecutar el piloto de lectura con la herramienta controlada
+   `infrastructure/qa/Invoke-QAPilot.ps1`, sin usar ni registrar credenciales
+   expuestas.
+3. Pruebas de aceptación autenticadas con evidencia de los tres roles, sin
+   habilitar todavía proveedor IA, correo ni datos de negocio reales.
+4. Elegir staging desechable o retención explícita para probar acciones que
+   escriben auditoría append-only: revisión de no resueltas, cambio de rol o
+   eliminación de historial.
