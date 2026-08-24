@@ -263,7 +263,7 @@ create index document_chunks_document_version_idx
 
 create index document_chunks_embedding_hnsw_idx
   on public.document_chunks
-  using hnsw (embedding vector_cosine_ops);
+  using hnsw (embedding extensions.vector_cosine_ops);
 
 create index document_chunks_content_tsv_idx
   on public.document_chunks using gin (content_tsv);

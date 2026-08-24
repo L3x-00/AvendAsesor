@@ -1,6 +1,6 @@
 begin;
 
-select plan(39);
+select plan(40);
 
 select has_extension('vector', 'pgvector is enabled for RAG embeddings');
 select has_table('public', 'document_ingestion_jobs', 'The durable ingestion queue exists');
@@ -95,6 +95,17 @@ select ok(
     )
   ) > 0,
   'Filtered vector retrieval enables supported iterative HNSW scans'
+);
+select is(
+  (
+    select operator_class.opcnamespace::regnamespace::text
+    from pg_index as index_definition
+    join pg_opclass as operator_class
+      on operator_class.oid = index_definition.indclass[0]
+    where index_definition.indexrelid = 'public.document_chunks_embedding_hnsw_idx'::regclass
+  ),
+  'extensions',
+  'The HNSW embedding index resolves its operator class from the extensions schema'
 );
 select ok(
   position(
