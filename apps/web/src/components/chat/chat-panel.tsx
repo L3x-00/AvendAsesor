@@ -66,6 +66,23 @@ function parseSseFrames(buffer: string): {
   return { frames, remainder };
 }
 
+function sortModules(list: ChatModule[]): ChatModule[] {
+  return [...list].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+  );
+}
+
+/** Módulo raíz activo a partir de la selección (sea un módulo o un submódulo). */
+function resolveActiveParentId(
+  modules: ChatModule[],
+  selectedModuleId: string | undefined,
+): string | undefined {
+  if (!selectedModuleId) return undefined;
+  const selected = modules.find((module) => module.id === selectedModuleId);
+  if (!selected) return undefined;
+  return selected.parentModuleId ?? selected.id;
+}
+
 export function ChatPanel({
   initialConversation,
   initialModuleId,
@@ -83,15 +100,32 @@ export function ChatPanel({
   );
   const [status, setStatus] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-  const selectedModule = useMemo(
-    () => modules.find((module) => module.id === selectedModuleId),
+  const activeParentId = useMemo(
+    () => resolveActiveParentId(modules, selectedModuleId),
     [modules, selectedModuleId],
   );
+  const activeParent = useMemo(
+    () => modules.find((module) => module.id === activeParentId),
+    [modules, activeParentId],
+  );
+  const submodules = useMemo(
+    () =>
+      activeParentId
+        ? sortModules(
+            modules.filter((module) => module.parentModuleId === activeParentId),
+          )
+        : [],
+    [modules, activeParentId],
+  );
+  // Etiqueta de contexto: solo cuando el usuario elige un submódulo concreto.
+  const selectedSubmodule = useMemo(() => {
+    const selected = modules.find((module) => module.id === selectedModuleId);
+    return selected && selected.parentModuleId ? selected : undefined;
+  }, [modules, selectedModuleId]);
 
-  function clearContext() {
+  function clearSubmodule() {
     if (isStreaming) return;
-    setSelectedModuleId(undefined);
-    setConversationId(undefined);
+    setSelectedModuleId(activeParentId);
   }
 
   function replaceStreamingMessage(
@@ -324,51 +358,57 @@ export function ChatPanel({
     <TeacherShell
       activeSection="chat"
       modules={modules}
-      selectedModuleId={selectedModuleId}
+      selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">
         <header className="avend-chat-header">
           <div>
             <p className="avend-eyebrow">Consulta normativa</p>
-            <h1 id="chat-title">Chat general</h1>
+            <h1 id="chat-title">
+              {activeParent ? activeParent.name : "Chat general"}
+            </h1>
             <p>
-              Selecciona un tema relacionado si lo deseas. También puedes
+              Selecciona el tema relacionado si lo deseas. También puedes
               escribir directamente tu consulta.
             </p>
           </div>
         </header>
 
-        <section aria-label="Temas disponibles" className="avend-chat-modules">
-          {modules.length === 0 ? (
-            <p className="avend-chat-empty-modules">
-              Aún no hay módulos activos para filtrar la consulta. Puedes
-              consultar de forma general cuando existan documentos procesados.
-            </p>
-          ) : (
-            modules.map((module) => (
+        {modules.length === 0 ? (
+          <p className="avend-chat-empty-modules">
+            Aún no hay módulos activos para filtrar la consulta. Puedes
+            consultar de forma general cuando existan documentos procesados.
+          </p>
+        ) : activeParent && submodules.length > 0 ? (
+          <section
+            aria-label={`Subtemas de ${activeParent.name}`}
+            className="avend-chat-modules avend-chat-submodules"
+          >
+            {submodules.map((submodule) => (
               <button
-                aria-pressed={module.id === selectedModuleId}
+                aria-pressed={submodule.id === selectedModuleId}
                 className="avend-chat-module"
                 disabled={isStreaming}
-                key={module.id}
-                onClick={() => {
-                  setSelectedModuleId(module.id);
-                  setConversationId(undefined);
-                }}
+                key={submodule.id}
+                onClick={() => setSelectedModuleId(submodule.id)}
                 type="button"
               >
-                <span>{module.name}</span>
-                <small>{module.code}</small>
+                <span>{submodule.name}</span>
+                <small>{submodule.code}</small>
               </button>
-            ))
-          )}
-        </section>
+            ))}
+          </section>
+        ) : null}
 
-        {selectedModule ? (
+        {selectedSubmodule ? (
           <div className="avend-chat-context" role="status">
-            <span>Contexto: {selectedModule.name}</span>
-            <button disabled={isStreaming} onClick={clearContext} type="button">
-              Quitar contexto
+            <span>Tema: {selectedSubmodule.name}</span>
+            <button
+              disabled={isStreaming}
+              onClick={clearSubmodule}
+              type="button"
+            >
+              Quitar tema
             </button>
           </div>
         ) : null}

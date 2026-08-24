@@ -52,16 +52,22 @@ export class ChatApiClient {
   }
 
   listModules(): Promise<ChatModule[]> {
-    return this.send("/chat/modules", chatModuleSchema.array());
+    // El catálogo de módulos es estable y compartido; se cachea unos minutos
+    // para eliminar el ida y vuelta al API en cada navegación entre módulos.
+    return this.send("/chat/modules", chatModuleSchema.array(), {
+      revalidate: 120,
+    });
   }
 
   private async send<T>(
     path: string,
     schema?: ZodType<T>,
-    options: { method?: "DELETE" | "GET" } = {},
+    options: { method?: "DELETE" | "GET"; revalidate?: number } = {},
   ): Promise<T> {
     const response = await this.request(`${this.baseUrl}${path}`, {
-      cache: "no-store",
+      ...(typeof options.revalidate === "number"
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store" }),
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${this.accessToken}`,
