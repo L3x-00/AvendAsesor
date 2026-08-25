@@ -14,7 +14,11 @@ export default async function ProfilePage() {
   const modules = await new ChatApiClient(session.accessToken).listModules();
 
   return (
-    <TeacherShell activeSection="profile" modules={modules}>
+    <TeacherShell
+      activeSection="profile"
+      modules={modules}
+      role={session.access.role}
+    >
       <section aria-labelledby="profile-title" className="avend-content-page">
         <header className="avend-content-header">
           <p className="avend-eyebrow">Cuenta protegida</p>

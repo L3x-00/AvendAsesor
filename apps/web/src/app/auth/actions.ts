@@ -3,6 +3,10 @@
 import { redirect } from "next/navigation";
 import { type AuthActionState } from "@/lib/auth/action-state";
 import { AuthService } from "@/lib/auth/auth-service";
+import {
+  resolveAdminAccess,
+  type AuthorizationSupabaseClient,
+} from "@/lib/authorization/resolve-admin-access";
 import { getAuthRedirectUrl } from "@/lib/auth/site-url";
 import {
   parseAuthForm,
@@ -64,7 +68,15 @@ export async function signInAction(
     };
   }
 
-  redirect("/chat");
+  // Aterrizaje por rol: admin y superadmin entran al panel; el docente al chat.
+  // La autoridad sigue siendo server-side en cada ruta; esto solo dirige el
+  // destino inicial. Ante cualquier duda, se cae al chat (el destino más acotado).
+  const supabase = await createServerSupabaseClient();
+  const access = await resolveAdminAccess(
+    supabase as unknown as AuthorizationSupabaseClient,
+  );
+
+  redirect(access.status === "authorized" ? "/admin" : "/chat");
 }
 
 export async function requestPasswordResetAction(

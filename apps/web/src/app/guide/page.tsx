@@ -1,12 +1,12 @@
 import { TeacherShell } from "@/components/teacher/teacher-shell";
-import { createAuthorizedChatApiClient } from "@/lib/chat-api/authorized-client";
+import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 
 export default async function GuidePage() {
-  const client = await createAuthorizedChatApiClient();
+  const { client, role } = await resolveAuthorizedChatContext();
   const modules = await client.listModules();
 
   return (
-    <TeacherShell activeSection="guide" modules={modules}>
+    <TeacherShell activeSection="guide" modules={modules} role={role}>
       <article
         aria-labelledby="guide-title"
         className="avend-content-page avend-guide-page"

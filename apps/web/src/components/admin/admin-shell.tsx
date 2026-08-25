@@ -48,6 +48,12 @@ function AdminNavigation({
             {item.label}
           </Link>
         ))}
+      <Link
+        className="avend-admin-navigation-link avend-admin-chat-entry"
+        href="/chat"
+      >
+        Ir al chat de consulta
+      </Link>
       <form
         action="/auth/sign-out"
         className="avend-admin-sign-out"

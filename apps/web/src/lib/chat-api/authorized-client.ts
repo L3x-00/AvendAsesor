@@ -47,3 +47,27 @@ export async function createAuthorizedChatApiClient(): Promise<ChatApiClient> {
 
   return new ChatApiClient(session.accessToken);
 }
+
+type AuthorizedChatAccess = Extract<ChatAccessResult, { status: "authorized" }>;
+
+/**
+ * Igual que `createAuthorizedChatApiClient`, pero además expone el rol del perfil
+ * para que la interfaz pueda mostrar la entrada al panel a administradores. El
+ * rol solo afecta la navegación visible; cada ruta protegida lo revalida.
+ */
+export async function resolveAuthorizedChatContext(): Promise<{
+  client: ChatApiClient;
+  role: AuthorizedChatAccess["role"];
+}> {
+  const session = await resolveAuthorizedChatSession();
+
+  if ("status" in session) {
+    if (session.status === "unauthenticated") redirect("/auth/sign-in");
+    redirect("/access-denied");
+  }
+
+  return {
+    client: new ChatApiClient(session.accessToken),
+    role: session.access.role,
+  };
+}

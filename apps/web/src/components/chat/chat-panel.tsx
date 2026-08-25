@@ -33,6 +33,7 @@ interface ChatPanelProps {
   initialConversation?: ChatConversationDetail;
   initialModuleId?: string;
   modules: ChatModule[];
+  role?: "docente" | "admin" | "superadmin";
 }
 
 function initialMessages(
@@ -165,6 +166,7 @@ export function ChatPanel({
   initialConversation,
   initialModuleId,
   modules,
+  role,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | undefined>(
     initialConversation?.conversation.id,
@@ -503,6 +505,7 @@ export function ChatPanel({
     <TeacherShell
       activeSection="chat"
       modules={modules}
+      role={role}
       selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">

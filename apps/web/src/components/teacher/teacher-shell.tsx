@@ -6,13 +6,19 @@ import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
 type TeacherSection = "chat" | "guide" | "history" | "profile";
+type TeacherRole = "docente" | "admin" | "superadmin";
 type NavigationIconName =
+  | "admin"
   | "chat"
   | "guide"
   | "history"
   | "module"
   | "profile"
   | "signout";
+
+function isAdministrative(role: TeacherRole | undefined): boolean {
+  return role === "admin" || role === "superadmin";
+}
 
 /** Solo los módulos raíz se listan en la barra lateral; los submódulos se
  * muestran en la zona principal de trabajo (guía visual §3–§4). */
@@ -26,11 +32,18 @@ interface TeacherShellProps {
   activeSection: TeacherSection;
   children: ReactNode;
   modules: ChatModule[];
+  role?: TeacherRole;
   selectedModuleId?: string;
 }
 
 function NavigationIcon({ name }: { name: NavigationIconName }) {
   const paths: Record<NavigationIconName, ReactNode> = {
+    admin: (
+      <>
+        <path d="M12 3 5 6v5c0 4.2 2.9 7.3 7 8 4.1-.7 7-3.8 7-8V6l-7-3Z" />
+        <path d="m9.2 12 1.9 1.9 3.7-3.8" />
+      </>
+    ),
     chat: <path d="M5 18.5 3.5 21l3.1-1.1A8.5 8.5 0 1 0 5 18.5Z" />,
     guide: (
       <>
@@ -76,8 +89,12 @@ function NavigationIcon({ name }: { name: NavigationIconName }) {
 function TeacherNavigation({
   activeSection,
   modules,
+  role,
   selectedModuleId,
-}: Pick<TeacherShellProps, "activeSection" | "modules" | "selectedModuleId">) {
+}: Pick<
+  TeacherShellProps,
+  "activeSection" | "modules" | "role" | "selectedModuleId"
+>) {
   return (
     <nav aria-label="Navegación principal" className="avend-teacher-navigation">
       <Link
@@ -115,6 +132,15 @@ function TeacherNavigation({
       </div>
 
       <div className="avend-teacher-navigation-divider" />
+      {isAdministrative(role) ? (
+        <Link
+          className="avend-teacher-navigation-link avend-teacher-admin-entry"
+          href="/admin"
+        >
+          <NavigationIcon name="admin" />
+          <span>Panel de administración</span>
+        </Link>
+      ) : null}
       <Link
         aria-current={activeSection === "history" ? "page" : undefined}
         className="avend-teacher-navigation-link"
@@ -162,6 +188,7 @@ export function TeacherShell({
   activeSection,
   children,
   modules,
+  role,
   selectedModuleId,
 }: TeacherShellProps) {
   return (
@@ -178,6 +205,7 @@ export function TeacherShell({
         <TeacherNavigation
           activeSection={activeSection}
           modules={modules}
+          role={role}
           selectedModuleId={selectedModuleId}
         />
       </aside>
