@@ -1,6 +1,6 @@
 import { ChatHistoryList } from "@/components/chat/chat-history-list";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
-import { createAuthorizedChatApiClient } from "@/lib/chat-api/authorized-client";
+import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 
 export default async function HistoryPage({
   searchParams,
@@ -9,14 +9,14 @@ export default async function HistoryPage({
 }) {
   const params = await searchParams;
   const cursor = typeof params.cursor === "string" ? params.cursor : undefined;
-  const client = await createAuthorizedChatApiClient();
+  const { client, role } = await resolveAuthorizedChatContext();
   const [conversationPage, modules] = await Promise.all([
     client.listConversations({ cursor }),
     client.listModules(),
   ]);
 
   return (
-    <TeacherShell activeSection="history" modules={modules}>
+    <TeacherShell activeSection="history" modules={modules} role={role}>
       <section aria-labelledby="history-title" className="avend-content-page">
         <header className="avend-content-header">
           <p className="avend-eyebrow">Tu actividad</p>

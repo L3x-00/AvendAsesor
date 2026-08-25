@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ChatPanel } from "@/components/chat/chat-panel";
-import { createAuthorizedChatApiClient } from "@/lib/chat-api/authorized-client";
+import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 import { ChatApiError } from "@/lib/chat-api/client";
 import type { ChatConversationDetail, ChatModule } from "@/lib/chat-api/types";
 
@@ -12,7 +12,7 @@ export default async function ConversationPage({
   params,
 }: ConversationPageProps) {
   const { conversationId } = await params;
-  const client = await createAuthorizedChatApiClient();
+  const { client, role } = await resolveAuthorizedChatContext();
   let conversation: ChatConversationDetail;
   let modules: ChatModule[];
 
@@ -26,5 +26,11 @@ export default async function ConversationPage({
     throw error;
   }
 
-  return <ChatPanel initialConversation={conversation} modules={modules} />;
+  return (
+    <ChatPanel
+      initialConversation={conversation}
+      modules={modules}
+      role={role}
+    />
+  );
 }
