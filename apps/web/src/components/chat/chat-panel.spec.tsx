@@ -312,6 +312,14 @@ describe("ChatPanel", () => {
       `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: done\ndata: {}\n\n`,
       "El cierre de la respuesta no tiene un formato válido.",
     ],
+    [
+      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: clarification\ndata: {"message":"Precisa el tema."}\n\n`,
+      "La aclaración recibida no tiene un formato válido.",
+    ],
+    [
+      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: no_evidence\ndata: {}\n\n`,
+      "El resultado recibido no tiene un formato válido.",
+    ],
   ])("rejects malformed %s SSE payloads", async (frame, message) => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
@@ -324,6 +332,21 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
 
     expect(await screen.findByText(message)).toBeVisible();
+  });
+
+  it("expone la entrada al panel de administración solo para roles administrativos", () => {
+    const { unmount } = render(
+      <ChatPanel modules={[chatModule]} role="docente" />,
+    );
+    expect(
+      screen.queryByRole("link", { name: "Panel de administración" }),
+    ).toBeNull();
+    unmount();
+
+    render(<ChatPanel modules={[chatModule]} role="superadmin" />);
+    expect(
+      screen.getAllByRole("link", { name: "Panel de administración" })[0],
+    ).toHaveAttribute("href", "/admin");
   });
 
   it("treats invalid stream JSON and transport failures as non-persistent failures", async () => {

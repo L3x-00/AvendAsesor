@@ -183,6 +183,14 @@ export function ChatPanel({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // Contador monotónico para keys locales estables (evita colisiones de key de
+  // React entre mensajes creados en el cliente, independiente de crypto.randomUUID).
+  const localIdRef = useRef(0);
+
+  function nextLocalId(prefix: string): string {
+    localIdRef.current += 1;
+    return `${prefix}-${localIdRef.current}`;
+  }
   const micSupported = useSyncExternalStore(
     subscribeToSpeechRecognitionSupport,
     getSpeechRecognitionSupportSnapshot,
@@ -299,7 +307,7 @@ export function ChatPanel({
       ...current,
       {
         content: normalizedQuestion,
-        id: `local-question-${crypto.randomUUID()}`,
+        id: nextLocalId("local-question"),
         role: "user",
         sources: [],
       },
@@ -426,7 +434,7 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
-                id: `clarification-${crypto.randomUUID()}`,
+                id: nextLocalId("clarification"),
                 modules: result.data.modules,
                 role: "clarification",
                 sources: [],
@@ -449,7 +457,7 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
-                id: `no-evidence-${crypto.randomUUID()}`,
+                id: nextLocalId("no-evidence"),
                 role: "no_evidence",
                 sources: [],
               },
