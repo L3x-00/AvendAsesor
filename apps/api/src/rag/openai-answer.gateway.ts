@@ -1,6 +1,7 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
+import { createAiGatewayClient } from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
 import { buildEvidenceSystemPrompt } from './prompt.builder';
 
@@ -9,26 +10,27 @@ export class OpenAiAnswerGateway implements AnswerGateway {
   constructor(private readonly configService: ConfigService) {}
 
   async *generate(input: AnswerGatewayInput): AsyncIterable<string> {
-    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    const client = createAiGatewayClient(this.configService);
+    const primaryModel =
+      this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini';
+    const fallbackModel = this.configService.get<string>(
+      'RAG_ANSWER_FALLBACK_MODEL',
+    );
 
-    if (!apiKey) {
-      throw new ServiceUnavailableException(
-        'The RAG answer provider is not configured.',
-      );
-    }
-
-    const stream = await new OpenAI({ apiKey }).chat.completions.create(
-      {
-        messages: [
-          { content: buildEvidenceSystemPrompt(input.sources), role: 'system' },
-          { content: input.question, role: 'user' },
-        ],
-        model:
-          this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini',
-        stream: true,
-        temperature: 0,
+    const stream = await this.createStream(client, input, primaryModel).catch(
+      (error: unknown) => {
+        // Fallback SOLO ante error técnico del proveedor primario (límite, caída
+        // o modelo inválido). Nunca por falta de evidencia o ambigüedad: esas
+        // decisiones se toman antes de llegar aquí. Tampoco si se abortó.
+        if (
+          !fallbackModel ||
+          fallbackModel === primaryModel ||
+          input.abortSignal?.aborted
+        ) {
+          throw error;
+        }
+        return this.createStream(client, input, fallbackModel);
       },
-      { signal: input.abortSignal },
     );
 
     for await (const part of stream) {
@@ -38,5 +40,24 @@ export class OpenAiAnswerGateway implements AnswerGateway {
         yield token;
       }
     }
+  }
+
+  private createStream(
+    client: OpenAI,
+    input: AnswerGatewayInput,
+    model: string,
+  ) {
+    return client.chat.completions.create(
+      {
+        messages: [
+          { content: buildEvidenceSystemPrompt(input.sources), role: 'system' },
+          { content: input.question, role: 'user' },
+        ],
+        model,
+        stream: true,
+        temperature: 0,
+      },
+      { signal: input.abortSignal },
+    );
   }
 }
