@@ -77,4 +77,35 @@ describe('OpenAiAnswerGateway', () => {
       expect.any(Object),
     );
   });
+
+  it('falls back to the paid model only when the primary provider fails technically', async () => {
+    mockCreate
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          await Promise.resolve();
+          yield { choices: [{ delta: { content: 'Respaldo.' } }] };
+        },
+      });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) => {
+        if (key === 'OPENAI_API_KEY') return 'test-key';
+        if (key === 'RAG_ANSWER_MODEL') return 'google/gemma-4-31b-it:free';
+        if (key === 'RAG_ANSWER_FALLBACK_MODEL') return 'openai/gpt-5-mini';
+        return undefined;
+      }),
+    } as never);
+
+    await expect(collect(gateway)).resolves.toEqual(['Respaldo.']);
+    expect(mockCreate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ model: 'google/gemma-4-31b-it:free' }),
+      expect.any(Object),
+    );
+    expect(mockCreate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ model: 'openai/gpt-5-mini' }),
+      expect.any(Object),
+    );
+  });
 });

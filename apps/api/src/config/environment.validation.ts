@@ -49,6 +49,14 @@ const environmentSchema = z
       .min(1)
       .default('text-embedding-3-small'),
     RAG_ANSWER_MODEL: z.string().trim().min(1).default('gpt-4o-mini'),
+    // Modelo pagado de respaldo; solo se usa ante error técnico del primario.
+    RAG_ANSWER_FALLBACK_MODEL: z.string().trim().min(1).optional(),
+    // Gateway único de IA. Con OPENROUTER_API_KEY se enruta todo por OpenRouter;
+    // en su ausencia se usa OPENAI_API_KEY directo. AI_GATEWAY_BASE_URL permite
+    // sobreescribir el endpoint compatible con la API de OpenAI.
+    OPENROUTER_API_KEY: z.string().trim().min(1).optional(),
+    OPENAI_API_KEY: z.string().trim().min(1).optional(),
+    AI_GATEWAY_BASE_URL: z.string().url().optional(),
     FAQ_MEMORY_FINGERPRINT_SECRET: z.string().trim().min(32).optional(),
     CHAT_HISTORY_LIMIT: z.coerce.number().int().min(1).max(50).default(20),
     WEB_ORIGIN: webOriginSchema.default('http://localhost:3000'),
