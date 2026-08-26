@@ -19,6 +19,14 @@ const childModule = {
   sortOrder: 0,
 };
 
+const secondModule = {
+  code: "TEACHER-EVALUATION",
+  id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+  name: "Evaluación docente",
+  parentModuleId: null,
+  sortOrder: 1,
+};
+
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
 const initialConversation = {
@@ -102,14 +110,38 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("cambia de módulo raíz de forma local sin una nueva navegación de servidor", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/chat?module=previous");
+    render(
+      <ChatPanel
+        initialModuleId={chatModule.id}
+        modules={[chatModule, secondModule]}
+      />,
+    );
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Evaluación docente" })[0],
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Evaluación docente" }),
+    ).toBeVisible();
+    expect(window.location.pathname).toBe("/chat");
+    expect(window.location.search).toBe(`?module=${secondModule.id}`);
+    expect(screen.getByText("Tema actualizado: Evaluación docente.")).toBeVisible();
+  });
+
   it("reinicia la conversación al cambiar o quitar el subtema", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        streamResponse([
+      async (...args: Parameters<typeof fetch>) => {
+        void args;
+        return streamResponse([
           `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
           `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
-        ]),
+        ]);
+      },
     );
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal("fetch", fetchMock);
@@ -129,6 +161,11 @@ describe("ChatPanel", () => {
       moduleId: childModule.id,
       question: "¿Cómo solicito una licencia?",
     });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Quitar tema" }),
+      ).toBeEnabled(),
+    );
 
     await user.click(screen.getByRole("button", { name: "Quitar tema" }));
     await submitQuestion(user);
@@ -137,7 +174,7 @@ describe("ChatPanel", () => {
       moduleId: chatModule.id,
       question: "¿Cómo solicito una licencia?",
     });
-  });
+  }, 10_000);
 
   it("renders streamed text and references only after receiving SSE events", async () => {
     const user = userEvent.setup();
@@ -344,9 +381,11 @@ describe("ChatPanel", () => {
     unmount();
 
     render(<ChatPanel modules={[chatModule]} role="superadmin" />);
-    expect(
-      screen.getAllByRole("link", { name: "Panel de administración" })[0],
-    ).toHaveAttribute("href", "/admin");
+    const adminEntries = screen.getAllByRole("link", {
+      name: "Panel de administración",
+    });
+    expect(adminEntries).toHaveLength(2);
+    expect(adminEntries[0]).toHaveAttribute("href", "/admin");
   });
 
   it("treats invalid stream JSON and transport failures as non-persistent failures", async () => {

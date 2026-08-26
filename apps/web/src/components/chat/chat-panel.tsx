@@ -219,16 +219,39 @@ export function ChatPanel({
     return selected && selected.parentModuleId ? selected : undefined;
   }, [modules, selectedModuleId]);
 
-  function changeModuleContext(moduleId: string | undefined) {
-    if (isStreaming || moduleId === selectedModuleId) return;
+  function changeModuleContext(
+    moduleId: string | undefined,
+    forceNewConversation = false,
+  ) {
+    if (isStreaming || (!forceNewConversation && moduleId === selectedModuleId)) {
+      return;
+    }
     // Una conversación conserva el módulo con el que fue creada. Cambiar el
-    // contexto inicia la siguiente consulta en una conversación nueva.
+    // contexto inicia la siguiente consulta en una conversación nueva, sin
+    // esperar una nueva navegación de servidor.
     setSelectedModuleId(moduleId);
     setConversationId(undefined);
+    setMessages([]);
+    setError(null);
+    const selectedModule = modules.find((module) => module.id === moduleId);
+    setStatus(
+      selectedModule
+        ? `Tema actualizado: ${selectedModule.name}.`
+        : "Chat general activado.",
+    );
+    window.history.replaceState(
+      null,
+      "",
+      moduleId ? `/chat?module=${encodeURIComponent(moduleId)}` : "/chat",
+    );
   }
 
   function clearSubmodule() {
     changeModuleContext(activeParentId);
+  }
+
+  function startNewChat() {
+    changeModuleContext(undefined, true);
   }
 
   useEffect(() => {
@@ -512,66 +535,80 @@ export function ChatPanel({
   return (
     <TeacherShell
       activeSection="chat"
+      moduleNavigationDisabled={isStreaming}
       modules={modules}
+      onModuleSelect={changeModuleContext}
+      onNewChat={startNewChat}
       role={role}
       selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">
-        <header className="avend-chat-header">
-          <div>
-            <p className="avend-eyebrow">Consulta normativa</p>
-            <h1 id="chat-title">
-              {activeParent ? activeParent.name : "Chat general"}
-            </h1>
-            {activeParent?.description ? (
-              <p className="avend-chat-module-description">
-                {activeParent.description}
+        <div
+          className="avend-chat-workspace-transition"
+          key={activeParentId ?? "general"}
+        >
+          <header className="avend-chat-header">
+            <div>
+              <p className="avend-eyebrow">Consulta normativa</p>
+              <h1 id="chat-title">
+                {activeParent ? activeParent.name : "Chat general"}
+              </h1>
+              {activeParent?.description ? (
+                <p className="avend-chat-module-description">
+                  {activeParent.description}
+                </p>
+              ) : null}
+              <p>
+                Selecciona el tema relacionado si lo deseas. También puedes
+                escribir directamente tu consulta.
               </p>
-            ) : null}
-            <p>
-              Selecciona el tema relacionado si lo deseas. También puedes
-              escribir directamente tu consulta.
-            </p>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {modules.length === 0 ? (
-          <p className="avend-chat-empty-modules">
-            Aún no hay módulos activos para filtrar la consulta. Puedes
-            consultar de forma general cuando existan documentos procesados.
-          </p>
-        ) : activeParent && submodules.length > 0 ? (
-          <section
-            aria-label={`Subtemas de ${activeParent.name}`}
-            className="avend-chat-modules avend-chat-submodules"
-          >
-            {submodules.map((submodule) => (
+          {modules.length === 0 ? (
+            <p className="avend-chat-empty-modules">
+              Aún no hay módulos activos para filtrar la consulta. Puedes
+              consultar de forma general cuando existan documentos procesados.
+            </p>
+          ) : activeParent && submodules.length > 0 ? (
+            <section
+              aria-label={`Subtemas de ${activeParent.name}`}
+              className="avend-chat-modules avend-chat-submodules"
+            >
+              {submodules.map((submodule) => (
+                <button
+                  aria-pressed={submodule.id === selectedModuleId}
+                  className="avend-chat-module"
+                  disabled={isStreaming}
+                  key={submodule.id}
+                  onClick={() => changeModuleContext(submodule.id)}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="avend-chat-module-icon">
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <path d="M7 3.75h7L18 7.7v12.55H7z" />
+                      <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
+                    </svg>
+                  </span>
+                  <span>{submodule.name}</span>
+                </button>
+              ))}
+            </section>
+          ) : null}
+
+          {selectedSubmodule ? (
+            <div className="avend-chat-context" role="status">
+              <span>Tema: {selectedSubmodule.name}</span>
               <button
-                aria-pressed={submodule.id === selectedModuleId}
-                className="avend-chat-module"
                 disabled={isStreaming}
-                key={submodule.id}
-                onClick={() => changeModuleContext(submodule.id)}
+                onClick={clearSubmodule}
                 type="button"
               >
-                 <span>{submodule.name}</span>
+                Quitar tema
               </button>
-            ))}
-          </section>
-        ) : null}
-
-        {selectedSubmodule ? (
-          <div className="avend-chat-context" role="status">
-            <span>Tema: {selectedSubmodule.name}</span>
-            <button
-              disabled={isStreaming}
-              onClick={clearSubmodule}
-              type="button"
-            >
-              Quitar tema
-            </button>
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <section aria-busy={isStreaming} className="avend-chat-conversation">
           {messages.length === 0 ? (
@@ -597,10 +634,7 @@ export function ChatPanel({
                       <button
                         disabled={isStreaming}
                         key={module.id}
-                        onClick={() => {
-                          setSelectedModuleId(module.id);
-                          setConversationId(undefined);
-                        }}
+                        onClick={() => changeModuleContext(module.id)}
                         type="button"
                       >
                         Consultar {module.name}

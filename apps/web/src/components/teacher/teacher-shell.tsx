@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
@@ -31,7 +31,10 @@ function parentModules(modules: ChatModule[]): ChatModule[] {
 interface TeacherShellProps {
   activeSection: TeacherSection;
   children: ReactNode;
+  moduleNavigationDisabled?: boolean;
   modules: ChatModule[];
+  onModuleSelect?: (moduleId: string) => void;
+  onNewChat?: () => void;
   role?: TeacherRole;
   selectedModuleId?: string;
 }
@@ -88,46 +91,86 @@ function NavigationIcon({ name }: { name: NavigationIconName }) {
 
 function TeacherNavigation({
   activeSection,
+  moduleNavigationDisabled,
   modules,
+  onModuleSelect,
+  onNewChat,
   role,
   selectedModuleId,
 }: Pick<
   TeacherShellProps,
-  "activeSection" | "modules" | "role" | "selectedModuleId"
+  | "activeSection"
+  | "moduleNavigationDisabled"
+  | "modules"
+  | "onModuleSelect"
+  | "onNewChat"
+  | "role"
+  | "selectedModuleId"
 >) {
+  const rootModules = parentModules(modules);
+
   return (
     <nav aria-label="Navegación principal" className="avend-teacher-navigation">
-      <Link
-        aria-current={
-          activeSection === "chat" && !selectedModuleId ? "page" : undefined
-        }
-        className="avend-teacher-new-chat"
-        href="/chat"
-      >
-        <NavigationIcon name="chat" />
-        Nuevo chat
-      </Link>
+      {onNewChat ? (
+        <button
+          aria-current={
+            activeSection === "chat" && !selectedModuleId ? "page" : undefined
+          }
+          className="avend-teacher-new-chat"
+          disabled={moduleNavigationDisabled}
+          onClick={onNewChat}
+          type="button"
+        >
+          <NavigationIcon name="chat" />
+          Nuevo chat
+        </button>
+      ) : (
+        <Link
+          aria-current={
+            activeSection === "chat" && !selectedModuleId ? "page" : undefined
+          }
+          className="avend-teacher-new-chat"
+          href="/chat"
+        >
+          <NavigationIcon name="chat" />
+          Nuevo chat
+        </Link>
+      )}
 
       <div
         aria-label="Módulos de consulta"
         className="avend-teacher-module-list"
       >
-        {parentModules(modules).length === 0 ? (
+        {rootModules.length === 0 ? (
           <p className="avend-teacher-modules-empty">
             Los módulos aparecerán aquí cuando estén configurados.
           </p>
         ) : (
-          parentModules(modules).map((module) => (
-            <Link
-              aria-current={module.id === selectedModuleId ? "page" : undefined}
-              className="avend-teacher-navigation-link avend-teacher-module-link"
-              href={`/chat?module=${encodeURIComponent(module.id)}`}
-              key={module.id}
-            >
-              <NavigationIcon name="module" />
-              <span>{module.name}</span>
-            </Link>
-          ))
+          rootModules.map((module) =>
+            onModuleSelect ? (
+              <button
+                aria-pressed={module.id === selectedModuleId}
+                className="avend-teacher-navigation-link avend-teacher-module-link"
+                disabled={moduleNavigationDisabled}
+                key={module.id}
+                onClick={() => onModuleSelect(module.id)}
+                type="button"
+              >
+                <NavigationIcon name="module" />
+                <span>{module.name}</span>
+              </button>
+            ) : (
+              <Link
+                aria-current={module.id === selectedModuleId ? "page" : undefined}
+                className="avend-teacher-navigation-link avend-teacher-module-link"
+                href={`/chat?module=${encodeURIComponent(module.id)}`}
+                key={module.id}
+              >
+                <NavigationIcon name="module" />
+                <span>{module.name}</span>
+              </Link>
+            ),
+          )
         )}
       </div>
 
@@ -187,10 +230,29 @@ function TeacherNavigation({
 export function TeacherShell({
   activeSection,
   children,
+  moduleNavigationDisabled,
   modules,
+  onModuleSelect,
+  onNewChat,
   role,
   selectedModuleId,
 }: TeacherShellProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  function closeMobileMenu() {
+    setMobileMenuOpen(false);
+  }
+
+  function handleModuleSelect(moduleId: string) {
+    onModuleSelect?.(moduleId);
+    closeMobileMenu();
+  }
+
+  function handleNewChat() {
+    onNewChat?.();
+    closeMobileMenu();
+  }
+
   return (
     <div className="avend-teacher-shell">
       <a className="avend-skip-link" href="#main-content">
@@ -204,7 +266,10 @@ export function TeacherShell({
         />
         <TeacherNavigation
           activeSection={activeSection}
+          moduleNavigationDisabled={moduleNavigationDisabled}
           modules={modules}
+          onModuleSelect={onModuleSelect ? handleModuleSelect : undefined}
+          onNewChat={onNewChat ? handleNewChat : undefined}
           role={role}
           selectedModuleId={selectedModuleId}
         />
@@ -213,11 +278,19 @@ export function TeacherShell({
       <main className="avend-teacher-main" id="main-content">
         <div className="avend-teacher-mobile-bar">
           <BrandLogo className="avend-teacher-mobile-logo" />
-          <details className="avend-teacher-mobile-menu">
+          <details
+            className="avend-teacher-mobile-menu"
+            onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
+            open={mobileMenuOpen}
+          >
             <summary aria-label="Abrir navegación principal">Menú</summary>
             <TeacherNavigation
               activeSection={activeSection}
+              moduleNavigationDisabled={moduleNavigationDisabled}
               modules={modules}
+              onModuleSelect={onModuleSelect ? handleModuleSelect : undefined}
+              onNewChat={onNewChat ? handleNewChat : undefined}
+              role={role}
               selectedModuleId={selectedModuleId}
             />
           </details>

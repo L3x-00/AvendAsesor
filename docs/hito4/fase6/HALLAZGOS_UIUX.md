@@ -7,7 +7,7 @@ Clasificación: 🔴 bug/bloqueo · 🟠 inconsistencia de flujo · 🟡 mejora 
 | --- | --- | --- | --- | --- | --- |
 | H-01 | 🔴 | `teacher-shell.tsx`, `admin-shell.tsx` | No hay control de "Cerrar sesión" dentro de la app (solo en la landing `/`). | 1 | ✅ RESUELTO (`065e79f`) |
 | H-02 | 🔴 | `teacher-shell.tsx`, `chat-panel.tsx` | Navegación pinta módulos planos; ignora `parentModuleId`/`sortOrder`; no hay submódulos en zona principal (guía §3–§4). | 1 | ✅ RESUELTO (`065e79f`+`1c157fb`) |
-| H-03 | 🟠 | `teacher-shell.tsx`, `chat-api/client.ts` | Cambiar de módulo re-consultaba el API con `no-store` → delay. | 1 | 🟡 MITIGADO: submódulos client-side + cache de módulos (120s); cold start de Render pendiente (H-04). |
+| H-03 | 🟠 | `teacher-shell.tsx`, `chat-api/client.ts` | Cambiar de módulo re-consultaba el API con `no-store` → delay. | 1 | 🟡 MITIGADO: submódulos + módulos principales pasan a selección client-side en el checkout de mejora UI/UX; el cold start de Render permanece en H-04. Pendiente de revisión independiente. |
 | H-04 | 🟠 | Infra Render + páginas `await listModules()` | Delay al ingresar: cold start de Render (free) + fetch bloqueante en cada página. | 4 | ABIERTO |
 | H-05 | 🟠 | `chat-panel.tsx` + `teacher-shell.tsx` | Los módulos se listaban duplicados (barra lateral y zona principal). | 1 | ✅ RESUELTO (`1c157fb`) |
 | H-06 | 🔵 | `chat-panel.tsx` (composer) | Micrófono en la caja de chat (guía §5). | 3 | ✅ RESUELTO (`7ab855a`) — dictado por voz con Web Speech API, detectado y accesible; carrusel móvil + microinteracciones incluidos. |
@@ -15,5 +15,6 @@ Clasificación: 🔴 bug/bloqueo · 🟠 inconsistencia de flujo · 🟡 mejora 
 | H-07 | 🟡 | `chat-panel.tsx` (respuesta) | Jerarquía tipográfica de respuestas: negrita solo en frases clave, cuerpo negro, gris secundario; azul no invade cuerpo (guía §6). | 2 | ✅ RESUELTO (`765393b`) — pendiente revisión visual con respuestas RAG reales. |
 | H-08 | 🟡 | Vista de módulo | Falta título+descripción del módulo y "Formatos para descargar" (guía §5, §9). | 2/3 | PARCIAL: título (F1) + descripción end-to-end (`b4e9a05`). "Formatos" en F3. Requiere datos QA con descripciones/submódulos → Codex Tarea B (`HANDOFF.md`). |
 | H-09 | 🟡 | Datos / admin | Al cambiar el catálogo de módulos, el cache de 120s puede mostrar la lista vieja hasta 2 min; conviene `revalidateTag('chat-modules')` en las mutaciones admin de módulos. | 2/4 | ABIERTO |
+| H-11 | 🟡 | Acceso y navegación | El acceso y las transiciones de ruta parecían estáticos durante operaciones remotas. | 4 | 🟡 MITIGADO en el checkout de mejora UI/UX: feedback de envío, pantalla de carga con marca y transiciones reducidas. La latencia de Supabase/Render se mantiene como H-04. Pendiente de revisión independiente. |
 
 > Nuevos hallazgos se agregan aquí conforme avanza el desarrollo.

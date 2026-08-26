@@ -1,0 +1,309 @@
+:root {
+  --avend-shadow-card: 0 18px 42px rgb(13 27 61 / 10%);
+  --avend-shadow-raised: 0 14px 28px rgb(13 27 61 / 14%);
+  --avend-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --avend-ease-interaction: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes avend-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes avend-skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.avend-auth-layout,
+.avend-content-page,
+.avend-admin-content,
+.avend-chat-page {
+  animation: avend-page-enter 360ms var(--avend-ease-enter) both;
+}
+
+.avend-button {
+  box-shadow: 0 1px 0 rgb(13 27 61 / 8%);
+  transition-duration: 200ms;
+  transition-timing-function: var(--avend-ease-interaction);
+}
+
+.avend-button--primary {
+  background-image: linear-gradient(135deg, #1677ff 0%, #115eca 100%);
+  box-shadow: 0 8px 18px rgb(22 119 255 / 24%);
+}
+
+.avend-button--primary:hover {
+  box-shadow: 0 12px 22px rgb(13 27 61 / 20%);
+}
+
+.avend-button:active,
+.avend-chat-module:active,
+.avend-teacher-navigation-link:active,
+.avend-admin-navigation-link:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.avend-button:focus-visible,
+.avend-chat-module:focus-visible,
+.avend-teacher-navigation-link:focus-visible,
+.avend-admin-navigation-link:focus-visible {
+  outline-offset: 3px;
+}
+
+.avend-auth-aside {
+  background-image:
+    radial-gradient(circle at 92% 12%, rgb(22 119 255 / 36%), transparent 30%),
+    linear-gradient(160deg, #0d1b3d 0%, #10244c 100%);
+}
+
+.avend-auth-card {
+  padding-bottom: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.avend-auth-submit-wrap {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.avend-auth-submit {
+  gap: 0.625rem;
+}
+
+.avend-button-spinner {
+  animation: avend-button-spin 700ms linear infinite;
+  border: 2px solid rgb(255 255 255 / 42%);
+  border-right-color: #ffffff;
+  border-radius: 50%;
+  height: 1rem;
+  width: 1rem;
+}
+
+@keyframes avend-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.avend-auth-pending {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  margin: 0;
+  text-align: center;
+}
+
+.avend-route-loading {
+  align-items: center;
+  background:
+    radial-gradient(circle at 10% 0%, rgb(22 119 255 / 10%), transparent 35%),
+    var(--avend-surface-muted);
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 1.5rem;
+}
+
+.avend-route-loading-card {
+  animation: avend-page-enter 360ms var(--avend-ease-enter) both;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--avend-shadow-card);
+  max-width: 31rem;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  text-align: center;
+}
+
+.avend-route-loading-logo {
+  margin: 0 auto 1.5rem;
+  max-width: 5.75rem;
+}
+
+.avend-route-loading-card h1 {
+  color: var(--avend-text);
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.avend-route-loading-card > p:not(.avend-eyebrow) {
+  color: var(--avend-text-muted);
+  line-height: 1.6;
+  margin: 0.875rem auto 0;
+  max-width: 26rem;
+}
+
+.avend-route-loading-lines {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 1.75rem;
+}
+
+.avend-route-loading-lines span {
+  background: linear-gradient(
+    90deg,
+    var(--avend-surface-muted) 25%,
+    var(--avend-soft-blue) 45%,
+    var(--avend-surface-muted) 65%
+  );
+  background-size: 220% 100%;
+  border-radius: 99px;
+  height: 0.625rem;
+  width: 100%;
+  animation: avend-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.avend-route-loading-lines span:nth-child(2) {
+  width: 78%;
+}
+
+.avend-route-loading-lines span:nth-child(3) {
+  width: 58%;
+}
+
+.avend-teacher-navigation-link,
+.avend-teacher-new-chat,
+.avend-admin-navigation-link {
+  transition:
+    background-color 180ms var(--avend-ease-interaction),
+    box-shadow 180ms var(--avend-ease-interaction),
+    color 180ms var(--avend-ease-interaction),
+    transform 180ms var(--avend-ease-interaction);
+}
+
+button.avend-teacher-navigation-link,
+button.avend-teacher-new-chat {
+  appearance: none;
+  border-bottom: 0;
+  border-right: 0;
+  border-top: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+button.avend-teacher-new-chat {
+  border-left: 0;
+}
+
+.avend-teacher-navigation-link[aria-pressed="true"] {
+  background: var(--avend-soft-blue);
+  border-left-color: var(--avend-accent);
+  color: var(--avend-navy);
+}
+
+.avend-teacher-sidebar .avend-teacher-navigation-link[aria-pressed="true"] {
+  background: rgb(232 241 255 / 16%);
+  color: #ffffff;
+}
+
+.avend-chat-workspace-transition {
+  animation: avend-page-enter 260ms var(--avend-ease-enter) both;
+}
+
+.avend-chat-module {
+  box-shadow: 0 2px 0 rgb(13 27 61 / 3%);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  transition:
+    background-color 180ms var(--avend-ease-interaction),
+    border-color 180ms var(--avend-ease-interaction),
+    box-shadow 180ms var(--avend-ease-interaction),
+    transform 180ms var(--avend-ease-interaction);
+}
+
+.avend-chat-module:hover,
+.avend-chat-module[aria-pressed="true"] {
+  box-shadow: 0 10px 20px rgb(13 27 61 / 9%);
+  transform: translateY(-2px);
+}
+
+.avend-chat-module-icon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border: 1px solid rgb(22 119 255 / 18%);
+  border-radius: 0.625rem;
+  color: var(--avend-accent);
+  display: inline-flex;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.avend-chat-module-icon svg {
+  height: 1.2rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.2rem;
+}
+
+.avend-chat-module span {
+  align-self: center;
+}
+
+.avend-chat-composer {
+  box-shadow: var(--avend-shadow-card);
+}
+
+.avend-chat-composer:focus-within {
+  border-color: rgb(22 119 255 / 50%);
+  box-shadow: 0 0 0 4px rgb(232 241 255 / 88%), var(--avend-shadow-card);
+}
+
+.avend-admin-sidebar,
+.avend-teacher-sidebar {
+  background-image:
+    radial-gradient(circle at 100% 0%, rgb(22 119 255 / 26%), transparent 32%),
+    linear-gradient(165deg, #0d1b3d, #0a1937);
+}
+
+.avend-admin-entry-card,
+.avend-history-item,
+.avend-profile-summary > div,
+.avend-guide-page ol,
+.avend-content-empty {
+  transition:
+    border-color 180ms var(--avend-ease-interaction),
+    box-shadow 180ms var(--avend-ease-interaction),
+    transform 180ms var(--avend-ease-interaction);
+}
+
+.avend-history-item:hover,
+.avend-profile-summary > div:hover,
+.avend-guide-page ol:hover,
+.avend-content-empty:hover {
+  border-color: rgb(22 119 255 / 36%);
+  box-shadow: var(--avend-shadow-card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-auth-layout,
+  .avend-content-page,
+  .avend-admin-content,
+  .avend-chat-page,
+  .avend-route-loading-card,
+  .avend-chat-workspace-transition,
+  .avend-route-loading-lines span,
+  .avend-button-spinner {
+    animation: none;
+  }
+}
