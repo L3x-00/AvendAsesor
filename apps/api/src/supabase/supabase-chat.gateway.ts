@@ -8,6 +8,7 @@ import {
 import type { PostgrestError } from '@supabase/supabase-js';
 import type {
   ActiveChatModule,
+  ChatConversationContext,
   ChatConversationSummary,
   ChatHistoryGateway,
   DeletedChatConversation,
@@ -53,6 +54,51 @@ function requireSingle<T>(data: T[] | null, message: string): T {
   return result;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseConversationContext(
+  data: unknown,
+  expectedConversationId: string,
+): ChatConversationContext {
+  if (
+    !isRecord(data) ||
+    data.conversationId !== expectedConversationId ||
+    !Array.isArray(data.messages) ||
+    (data.selectedModuleId !== null &&
+      typeof data.selectedModuleId !== 'string')
+  ) {
+    throw new ServiceUnavailableException(
+      'The chat context could not be loaded.',
+    );
+  }
+
+  const messages = data.messages.map((message) => {
+    if (
+      !isRecord(message) ||
+      typeof message.content !== 'string' ||
+      !['assistant', 'clarification', 'no_evidence', 'user'].includes(
+        String(message.role),
+      )
+    ) {
+      throw new ServiceUnavailableException(
+        'The chat context could not be loaded.',
+      );
+    }
+    return {
+      content: message.content,
+      role: message.role as ChatConversationContext['messages'][number]['role'],
+    };
+  });
+
+  return {
+    conversationId: expectedConversationId,
+    messages,
+    selectedModuleId: data.selectedModuleId,
+  };
+}
+
 @Injectable()
 export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
@@ -91,6 +137,7 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
           chunkId: source.chunkId,
           moduleId: source.moduleId ?? '',
           relevanceScore: source.relevanceScore,
+          sourceId: source.sourceId,
         })),
         p_top_relevance_score: input.topRelevanceScore,
         p_unanswered_reason: input.unansweredReason,
@@ -123,6 +170,58 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
 
     if (error) databaseError(error);
     return data;
+  }
+
+  async getConversationContext(
+    input: Parameters<ChatHistoryGateway['getConversationContext']>[0],
+  ): Promise<ChatConversationContext> {
+    const { data, error } = await this.requireClient().rpc(
+      'get_chat_conversation_context',
+      {
+        p_character_limit: input.characterLimit,
+        p_conversation_id: input.conversationId,
+        p_message_limit: input.messageLimit,
+        p_user_id: input.userId,
+      },
+    );
+
+    if (error) databaseError(error);
+    return parseConversationContext(data, input.conversationId);
+  }
+
+  async createSourceDownloadUrl(
+    input: Parameters<ChatHistoryGateway['createSourceDownloadUrl']>[0],
+  ) {
+    const client = this.requireClient();
+    const { data, error } = await client.rpc('authorize_chat_source_download', {
+      p_source_id: input.sourceId,
+      p_user_id: input.userId,
+    });
+    if (error) databaseError(error);
+
+    const source = requireSingle(
+      data,
+      'The requested chat source was not found.',
+    );
+    const expiresAt = new Date(
+      Date.now() + input.ttlSeconds * 1_000,
+    ).toISOString();
+    const signed = await client.storage
+      .from(source.storage_bucket)
+      .createSignedUrl(source.storage_path, input.ttlSeconds, {
+        download: true,
+      });
+    if (signed.error || !signed.data?.signedUrl) {
+      throw new ServiceUnavailableException(
+        'The source download is temporarily unavailable.',
+      );
+    }
+
+    return {
+      expiresAt,
+      sourceId: input.sourceId,
+      url: signed.data.signedUrl,
+    };
   }
 
   async deleteConversation(

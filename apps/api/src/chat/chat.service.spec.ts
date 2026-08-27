@@ -6,6 +6,7 @@ import {
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
 import { ChatService, type ChatStreamEvent } from './chat.service';
+import type { ChatHistoryGateway } from './chat-history.gateway';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -54,8 +55,10 @@ describe('ChatService', () => {
   let historyGateway: {
     beginTurn: jest.Mock;
     completeTurn: jest.Mock;
+    createSourceDownloadUrl: jest.Mock;
     deleteConversation: jest.Mock;
     getConversation: jest.Mock;
+    getConversationContext: jest.Mock;
     listActiveModules: jest.Mock;
     listConversations: jest.Mock;
   };
@@ -74,8 +77,10 @@ describe('ChatService', () => {
       completeTurn: jest.fn().mockResolvedValue({
         answerMessageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
       }),
+      createSourceDownloadUrl: jest.fn(),
       deleteConversation: jest.fn(),
       getConversation: jest.fn(),
+      getConversationContext: jest.fn(),
       listActiveModules: jest.fn(),
       listConversations: jest.fn(),
     };
@@ -104,7 +109,11 @@ describe('ChatService', () => {
 
     await expect(collect(service)).resolves.toEqual([
       {
-        data: { conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd' },
+        data: {
+          conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+          moduleId: null,
+          startedNewConversation: true,
+        },
         type: 'conversation',
       },
       { data: { message: RAG_NO_EVIDENCE_MESSAGE }, type: 'no_evidence' },
@@ -131,26 +140,47 @@ describe('ChatService', () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
       modules: [{ id: source.moduleIds[0], name: 'Licencias' }],
+      sources: [source],
       topRelevanceScore: 0.9,
     });
 
     const events = await collect(service);
 
-    expect(events[1]).toEqual({
-      data: {
-        message: RAG_AMBIGUITY_MESSAGE,
-        modules: [{ id: source.moduleIds[0], name: 'Licencias' }],
-      },
-      type: 'clarification',
-    });
-    expect(answerGateway.generate).not.toHaveBeenCalled();
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        replyRole: 'clarification',
-        sources: [],
-        unansweredReason: 'ambiguous_request',
-      }),
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events[2];
+    expect(clarification?.type).toBe('clarification');
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain(RAG_AMBIGUITY_MESSAGE);
+    expect(clarification.data.message).toContain(source.chunkContent);
+    expect(clarification.data.message).toContain('[1]');
+    expect(
+      clarification.data.message.indexOf(source.chunkContent),
+    ).toBeLessThan(
+      clarification.data.message.indexOf(
+        '¿A cuál de estos temas corresponde tu consulta?',
+      ),
     );
+    expect(clarification.data.modules).toEqual([
+      { id: source.moduleIds[0], name: 'Licencias' },
+    ]);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    expect(completion).toMatchObject({
+      replyRole: 'clarification',
+      unansweredReason: 'ambiguous_request',
+    });
+    expect(completion?.sources[0]?.chunkId).toBe(source.chunkId);
+    expect(typeof completion?.sources[0]?.sourceId).toBe('string');
   });
 
   it('streams evidence, then persists real sources only after completion', async () => {
@@ -176,19 +206,49 @@ describe('ChatService', () => {
       'token',
       'done',
     ]);
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        answer: 'La licencia se solicita conforme al procedimiento. [1]',
-        replyRole: 'assistant',
-        sources: [
-          {
-            chunkId: source.chunkId,
-            moduleId: source.moduleIds[0],
-            relevanceScore: 0.9,
-          },
-        ],
-      }),
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    expect(completion).toMatchObject({
+      answer: 'La licencia se solicita conforme al procedimiento. [1]',
+      replyRole: 'assistant',
+    });
+    expect(completion?.sources[0]).toMatchObject({
+      chunkId: source.chunkId,
+      moduleId: source.moduleIds[0],
+      relevanceScore: 0.9,
+    });
+    expect(typeof completion?.sources[0]?.sourceId).toBe('string');
+  });
+
+  it('starts an unfiltered answer in the single module resolved by evidence', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Respuesta fundada. [1]';
+      },
+    });
+
+    const events = await collect(service);
+
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedModuleId: source.moduleIds[0] }),
     );
+    expect(events[0]).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        moduleId: source.moduleIds[0],
+        startedNewConversation: true,
+      },
+      type: 'conversation',
+    });
   });
 
   it('does not persist a partial assistant reply after a disconnect', async () => {
@@ -225,7 +285,8 @@ describe('ChatService', () => {
 
     const events = await collect(service, { abortSignal: controller.signal });
 
-    expect(events.map((event) => event.type)).toEqual(['conversation']);
+    expect(events).toEqual([]);
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });
 
@@ -356,6 +417,203 @@ describe('ChatService', () => {
     });
     expect(historyGateway.deleteConversation).toHaveBeenCalledWith({
       conversationId,
+      userId: authorization.userId,
+    });
+  });
+
+  it('loads bounded owned history and passes it to retrieval and generation', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: 'Necesito una licencia por salud.', role: 'user' },
+        { content: 'Respuesta anterior fundada. [1]', role: 'assistant' },
+      ],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: {
+        id: source.moduleIds[0],
+        name: 'Licencias',
+      },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'El plazo aplicable está sustentado. [1]';
+      },
+    });
+
+    await collect(service, {
+      conversationId,
+      question: '¿Y cuál es el plazo?',
+      selectedModuleId: source.moduleIds[0],
+    });
+
+    expect(historyGateway.getConversationContext).toHaveBeenCalledWith({
+      characterLimit: 10_000,
+      conversationId,
+      messageLimit: 12,
+      userId: authorization.userId,
+    });
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Y cuál es el plazo?',
+      source.moduleIds[0],
+      ['Necesito una licencia por salud.'],
+    );
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationContext: [
+          { content: 'Necesito una licencia por salud.', role: 'user' },
+          { content: 'Respuesta anterior fundada. [1]', role: 'assistant' },
+        ],
+      }),
+    );
+  });
+
+  it('keeps the stored module when a continuation omits the optional module id', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Continuación fundada. [1]';
+      },
+    });
+
+    await collect(service, {
+      conversationId,
+      selectedModuleId: null,
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      expect.any(String),
+      source.moduleIds[0],
+      ['Consulta anterior'],
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
+      }),
+    );
+  });
+
+  it('starts a separate conversation when the current question changes modules', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'topic_change',
+      resolvedModule: { id: newModuleId, name: 'Vacaciones' },
+      sources: [
+        {
+          ...source,
+          moduleIds: [newModuleId],
+          moduleNames: ['Vacaciones'],
+        },
+      ],
+      topRelevanceScore: 0.92,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Nueva respuesta. [1]';
+      },
+    });
+
+    const events = await collect(service, {
+      conversationId,
+      selectedModuleId: source.moduleIds[0],
+    });
+
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: null,
+        selectedModuleId: newModuleId,
+      }),
+    );
+    expect(events[0]).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        moduleId: newModuleId,
+        startedNewConversation: true,
+      },
+      type: 'conversation',
+    });
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationContext: [] }),
+    );
+  });
+
+  it('moves an ambiguous topic away from the prior selected-module conversation', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [
+        { id: 'module-b', name: 'Nombramiento' },
+        { id: 'module-c', name: 'Vacaciones' },
+      ],
+      sources: [
+        {
+          ...source,
+          moduleIds: ['module-b'],
+          moduleNames: ['Nombramiento'],
+        },
+      ],
+      topRelevanceScore: 0.88,
+    });
+
+    await collect(service, {
+      conversationId,
+      selectedModuleId: source.moduleIds[0],
+    });
+
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: null,
+        selectedModuleId: null,
+      }),
+    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('delegates a citation download with an exact sixty-second TTL', async () => {
+    const sourceId = 'cc8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.createSourceDownloadUrl.mockResolvedValue({
+      expiresAt: '2026-08-27T12:01:00.000Z',
+      sourceId,
+      url: 'https://storage.example/signed',
+    });
+
+    await expect(
+      service.createSourceDownloadUrl(sourceId, authorization),
+    ).resolves.toEqual(expect.objectContaining({ sourceId }));
+    expect(historyGateway.createSourceDownloadUrl).toHaveBeenCalledWith({
+      sourceId,
+      ttlSeconds: 60,
       userId: authorization.userId,
     });
   });

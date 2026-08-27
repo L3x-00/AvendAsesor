@@ -57,6 +57,14 @@ export class ChatController {
     return this.chatService.getConversation(conversationId, authorization);
   }
 
+  @Get('sources/:sourceId/download-url')
+  createSourceDownloadUrl(
+    @Param('sourceId', new ParseUUIDPipe({ version: '4' })) sourceId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ) {
+    return this.chatService.createSourceDownloadUrl(sourceId, authorization);
+  }
+
   @Delete('conversations/:id')
   deleteConversation(
     @Param('id', new ParseUUIDPipe({ version: '4' })) conversationId: string,

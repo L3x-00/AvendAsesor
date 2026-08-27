@@ -4,6 +4,7 @@ import type { ChatService } from './chat.service';
 
 describe('ChatController', () => {
   const service = {
+    createSourceDownloadUrl: jest.fn(),
     deleteConversation: jest.fn(),
     getConversation: jest.fn(),
     listConversations: jest.fn(),
@@ -31,6 +32,11 @@ describe('ChatController', () => {
       deletedAt: '2026-08-23T00:00:00.000Z',
       id: '4c8b56af-6d0c-4fef-881e-7c00907540dd',
     });
+    service.createSourceDownloadUrl.mockResolvedValue({
+      expiresAt: '2026-08-23T00:01:00.000Z',
+      sourceId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+      url: 'https://storage.example/signed',
+    });
 
     await expect(controller.listModules()).resolves.toEqual([]);
     await expect(
@@ -50,6 +56,16 @@ describe('ChatController', () => {
     ).resolves.toEqual({
       deletedAt: '2026-08-23T00:00:00.000Z',
       id: '4c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+    await expect(
+      controller.createSourceDownloadUrl(
+        '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+        authorization,
+      ),
+    ).resolves.toEqual({
+      expiresAt: '2026-08-23T00:01:00.000Z',
+      sourceId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+      url: 'https://storage.example/signed',
     });
   });
 

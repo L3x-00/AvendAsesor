@@ -30,6 +30,7 @@ const source = {
 async function collect(gateway: OpenAiAnswerGateway): Promise<string[]> {
   const tokens: string[] = [];
   for await (const token of gateway.generate({
+    conversationContext: [],
     question: 'Consulta',
     sources: [source],
   })) {
@@ -76,6 +77,23 @@ describe('OpenAiAnswerGateway', () => {
       }),
       expect.any(Object),
     );
+    const calls = mockCreate.mock.calls as Array<
+      [
+        {
+          messages: Array<{ content: string; role: string }>;
+        },
+      ]
+    >;
+    const messages = calls[0]?.[0].messages;
+    const systemMessage = messages?.find(
+      (message) => message.role === 'system',
+    );
+    const userMessage = messages?.find((message) => message.role === 'user');
+
+    expect(systemMessage?.content).not.toContain(source.chunkContent);
+    expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
+    expect(userMessage?.content).toContain(source.chunkContent);
+    expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
   });
 
   it('falls back to the paid model only when the primary provider fails technically', async () => {

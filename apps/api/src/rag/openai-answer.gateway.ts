@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import type OpenAI from 'openai';
 import { createAiGatewayClient } from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
-import { buildEvidenceSystemPrompt } from './prompt.builder';
+import {
+  buildEvidenceSystemPrompt,
+  buildEvidenceUserPrompt,
+} from './prompt.builder';
 
 @Injectable()
 export class OpenAiAnswerGateway implements AnswerGateway {
@@ -50,8 +53,15 @@ export class OpenAiAnswerGateway implements AnswerGateway {
     return client.chat.completions.create(
       {
         messages: [
-          { content: buildEvidenceSystemPrompt(input.sources), role: 'system' },
-          { content: input.question, role: 'user' },
+          { content: buildEvidenceSystemPrompt(), role: 'system' },
+          {
+            content: buildEvidenceUserPrompt(
+              input.question,
+              input.conversationContext,
+              input.sources,
+            ),
+            role: 'user',
+          },
         ],
         model,
         stream: true,

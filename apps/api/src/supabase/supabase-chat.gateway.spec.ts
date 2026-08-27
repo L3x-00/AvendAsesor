@@ -31,6 +31,8 @@ function createClient(
     moduleError?: unknown;
     rpcData?: unknown;
     rpcError?: unknown;
+    signedUrl?: string;
+    storageError?: unknown;
   } = {},
 ) {
   const modules = moduleBuilder({
@@ -42,12 +44,23 @@ function createClient(
     data: options.rpcData ?? null,
     error: options.rpcError ?? null,
   });
+  const createSignedUrl = jest.fn().mockResolvedValue({
+    data: options.signedUrl ? { signedUrl: options.signedUrl } : null,
+    error: options.storageError ?? null,
+  });
+  const storageFrom = jest.fn().mockReturnValue({ createSignedUrl });
 
   return {
-    client: { from, rpc } as unknown as SupabaseServerClient,
+    client: {
+      from,
+      rpc,
+      storage: { from: storageFrom },
+    } as unknown as SupabaseServerClient,
+    createSignedUrl,
     from,
     modules,
     rpc,
+    storageFrom,
   };
 }
 
@@ -55,6 +68,8 @@ describe('SupabaseChatGatewayAdapter', () => {
   const userId = '4c8b56af-6d0c-4fef-881e-7c00907540dd';
   const conversationId = '5c8b56af-6d0c-4fef-881e-7c00907540dd';
   const messageId = '6c8b56af-6d0c-4fef-881e-7c00907540dd';
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('fails closed when the server-only database client is unavailable', async () => {
     const gateway = new SupabaseChatGatewayAdapter(null);
@@ -105,6 +120,7 @@ describe('SupabaseChatGatewayAdapter', () => {
             chunkId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
             moduleId: null,
             relevanceScore: 0.9,
+            sourceId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
           },
         ],
         topRelevanceScore: 0.9,
@@ -123,10 +139,136 @@ describe('SupabaseChatGatewayAdapter', () => {
             chunkId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
             moduleId: '',
             relevanceScore: 0.9,
+            sourceId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
           },
         ],
       }),
     );
+  });
+
+  it('loads a validated bounded context through its owner-only RPC', async () => {
+    const { client, rpc } = createClient({
+      rpcData: {
+        conversationId,
+        messages: [
+          { content: 'Consulta anterior', role: 'user' },
+          { content: 'Respuesta anterior', role: 'assistant' },
+        ],
+        selectedModuleId: null,
+      },
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await expect(
+      gateway.getConversationContext({
+        characterLimit: 10_000,
+        conversationId,
+        messageLimit: 12,
+        userId,
+      }),
+    ).resolves.toEqual({
+      conversationId,
+      messages: [
+        { content: 'Consulta anterior', role: 'user' },
+        { content: 'Respuesta anterior', role: 'assistant' },
+      ],
+      selectedModuleId: null,
+    });
+    expect(rpc).toHaveBeenCalledWith('get_chat_conversation_context', {
+      p_character_limit: 10_000,
+      p_conversation_id: conversationId,
+      p_message_limit: 12,
+      p_user_id: userId,
+    });
+  });
+
+  it('fails closed for a malformed or mismatched context payload', async () => {
+    const mismatched = createClient({
+      rpcData: {
+        conversationId: '00000000-0000-0000-0000-000000000099',
+        messages: [],
+        selectedModuleId: null,
+      },
+    });
+    await expect(
+      new SupabaseChatGatewayAdapter(mismatched.client).getConversationContext({
+        characterLimit: 10_000,
+        conversationId,
+        messageLimit: 12,
+        userId,
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    const invalidMessage = createClient({
+      rpcData: {
+        conversationId,
+        messages: [{ content: 'Dato', role: 'system' }],
+        selectedModuleId: null,
+      },
+    });
+    await expect(
+      new SupabaseChatGatewayAdapter(
+        invalidMessage.client,
+      ).getConversationContext({
+        characterLimit: 10_000,
+        conversationId,
+        messageLimit: 12,
+        userId,
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('authorizes a source before creating a sixty-second private URL', async () => {
+    const sourceId = '8c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const now = Date.parse('2026-08-27T12:00:00.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const { client, createSignedUrl, rpc, storageFrom } = createClient({
+      rpcData: [
+        {
+          source_id: sourceId,
+          storage_bucket: 'normative-documents',
+          storage_path: 'documents/version.pdf',
+        },
+      ],
+      signedUrl: 'https://storage.example/signed',
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    const result = await gateway.createSourceDownloadUrl({
+      sourceId,
+      ttlSeconds: 60,
+      userId,
+    });
+    expect(result.sourceId).toBe(sourceId);
+    expect(result.url).toBe('https://storage.example/signed');
+    expect(result.expiresAt).toBe('2026-08-27T12:01:00.000Z');
+    expect(rpc).toHaveBeenCalledWith('authorize_chat_source_download', {
+      p_source_id: sourceId,
+      p_user_id: userId,
+    });
+    expect(storageFrom).toHaveBeenCalledWith('normative-documents');
+    expect(createSignedUrl).toHaveBeenCalledWith('documents/version.pdf', 60, {
+      download: true,
+    });
+  });
+
+  it('fails closed when an authorized source URL cannot be signed', async () => {
+    const sourceId = '8c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const { client } = createClient({
+      rpcData: [
+        {
+          source_id: sourceId,
+          storage_bucket: 'normative-documents',
+          storage_path: 'documents/version.pdf',
+        },
+      ],
+      storageError: new Error('private detail'),
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await expect(
+      gateway.createSourceDownloadUrl({ sourceId, ttlSeconds: 60, userId }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('maps active modules and owned conversation reads to safe application shapes', async () => {
