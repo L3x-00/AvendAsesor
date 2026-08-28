@@ -227,6 +227,22 @@ export interface SupabaseDatabase {
         Update: never;
         Relationships: [];
       };
+      chat_source_access_events: {
+        Row: {
+          id: string;
+          occurred_at: string;
+          source_id: string;
+          user_id: string;
+        };
+        Insert: {
+          id?: string;
+          occurred_at?: string;
+          source_id: string;
+          user_id: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -437,6 +453,23 @@ export interface SupabaseDatabase {
           p_user_id: string;
         };
         Returns: Json;
+      };
+      get_chat_conversation_context: {
+        Args: {
+          p_character_limit?: number;
+          p_conversation_id: string;
+          p_message_limit?: number;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
+      authorize_chat_source_download: {
+        Args: { p_source_id: string; p_user_id: string };
+        Returns: {
+          source_id: string;
+          storage_bucket: string;
+          storage_path: string;
+        }[];
       };
       delete_chat_conversation: {
         Args: { p_conversation_id: string; p_user_id: string };

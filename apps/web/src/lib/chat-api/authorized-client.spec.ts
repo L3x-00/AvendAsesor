@@ -40,6 +40,7 @@ describe("authorized chat API context", () => {
 
   it("exposes the client and the profile role for an authorized session", async () => {
     mocks.resolveChatAccess.mockResolvedValue({
+      fullName: "María Pérez",
       role: "admin",
       status: "authorized",
       userId: "user-1",
@@ -52,6 +53,7 @@ describe("authorized chat API context", () => {
     const context = await resolveAuthorizedChatContext();
 
     expect(context.role).toBe("admin");
+    expect(context.fullName).toBe("María Pérez");
     expect(context.client).toBeDefined();
     expect(mocks.resolveChatAccess).toHaveBeenCalledTimes(1);
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
@@ -71,6 +73,7 @@ describe("authorized chat API context", () => {
 
   it("redirects when an authorized profile has no usable session token", async () => {
     mocks.resolveChatAccess.mockResolvedValue({
+      fullName: "María Pérez",
       role: "docente",
       status: "authorized",
       userId: "user-1",
@@ -87,6 +90,7 @@ describe("authorized chat API context", () => {
 
   it("still provides the plain client factory for callers that ignore the role", async () => {
     mocks.resolveChatAccess.mockResolvedValue({
+      fullName: "María Pérez",
       role: "docente",
       status: "authorized",
       userId: "user-1",

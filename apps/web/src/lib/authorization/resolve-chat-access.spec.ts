@@ -7,7 +7,7 @@ function clientFor(
   accountStatus: unknown = "active",
 ): AuthorizationSupabaseClient {
   const maybeSingle = vi.fn(async () => ({
-    data: { account_status: accountStatus, role },
+    data: { account_status: accountStatus, full_name: "María Pérez", role },
     error: null,
   }));
   const eq = vi.fn(() => ({ maybeSingle }));
@@ -29,6 +29,7 @@ describe("resolveChatAccess", () => {
     "authorizes the %s role for chat only",
     async (role) => {
       await expect(resolveChatAccess(clientFor(role))).resolves.toEqual({
+        fullName: "María Pérez",
         role,
         status: "authorized",
         userId: "user-1",
@@ -52,6 +53,20 @@ describe("resolveChatAccess", () => {
     await expect(
       resolveChatAccess(clientFor("docente", "suspended")),
     ).resolves.toEqual({ status: "unauthorized" });
+
+    const invalidName = clientFor("docente");
+    const maybeSingle = vi.fn(async () => ({
+      data: { account_status: "active", full_name: "   ", role: "docente" },
+      error: null,
+    }));
+    invalidName.from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({ maybeSingle })),
+      })),
+    })) as never;
+    await expect(resolveChatAccess(invalidName)).resolves.toEqual({
+      status: "unauthorized",
+    });
   });
 
   it("fails closed when identity or profile lookups throw", async () => {

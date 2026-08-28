@@ -22,6 +22,7 @@ export default defineConfig({
         "src/components/**/*.tsx",
         "src/lib/admin-api/**/*.ts",
         "src/lib/chat-api/**/*.ts",
+        "src/lib/orientation-document/**/*.ts",
         "src/lib/auth/**/*.ts",
         "src/lib/authorization/**/*.ts",
         "src/components/chat/**/*.tsx",

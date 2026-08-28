@@ -30,6 +30,7 @@ const source = {
 async function collect(gateway: OpenAiAnswerGateway): Promise<string[]> {
   const tokens: string[] = [];
   for await (const token of gateway.generate({
+    conversationContext: [],
     question: 'Consulta',
     sources: [source],
   })) {
@@ -74,6 +75,54 @@ describe('OpenAiAnswerGateway', () => {
         stream: true,
         temperature: 0,
       }),
+      expect.any(Object),
+    );
+    const calls = mockCreate.mock.calls as Array<
+      [
+        {
+          messages: Array<{ content: string; role: string }>;
+        },
+      ]
+    >;
+    const messages = calls[0]?.[0].messages;
+    const systemMessage = messages?.find(
+      (message) => message.role === 'system',
+    );
+    const userMessage = messages?.find((message) => message.role === 'user');
+
+    expect(systemMessage?.content).not.toContain(source.chunkContent);
+    expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
+    expect(userMessage?.content).toContain(source.chunkContent);
+    expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
+  });
+
+  it('falls back to the paid model only when the primary provider fails technically', async () => {
+    mockCreate
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          await Promise.resolve();
+          yield { choices: [{ delta: { content: 'Respaldo.' } }] };
+        },
+      });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) => {
+        if (key === 'OPENAI_API_KEY') return 'test-key';
+        if (key === 'RAG_ANSWER_MODEL') return 'google/gemma-4-31b-it:free';
+        if (key === 'RAG_ANSWER_FALLBACK_MODEL') return 'openai/gpt-5-mini';
+        return undefined;
+      }),
+    } as never);
+
+    await expect(collect(gateway)).resolves.toEqual(['Respaldo.']);
+    expect(mockCreate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ model: 'google/gemma-4-31b-it:free' }),
+      expect.any(Object),
+    );
+    expect(mockCreate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ model: 'openai/gpt-5-mini' }),
       expect.any(Object),
     );
   });

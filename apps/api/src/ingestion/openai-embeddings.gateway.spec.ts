@@ -42,6 +42,7 @@ describe('OpenAiEmbeddingsGateway', () => {
       vector(),
     ]);
     expect(mockCreate).toHaveBeenCalledWith({
+      dimensions: 1536,
       input: ['primera', 'segunda'],
       model: 'text-embedding-3-small',
     });

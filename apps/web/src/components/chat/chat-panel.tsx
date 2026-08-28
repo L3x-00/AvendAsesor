@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   FormEvent,
   useEffect,
@@ -24,6 +25,7 @@ type MessageRole = ChatHistoryMessage["role"];
 interface RenderedMessage {
   content: string;
   id: string;
+  inReplyToMessageId: string | null;
   modules?: ChatModule[];
   role: MessageRole;
   sources: ChatSource[];
@@ -36,12 +38,31 @@ interface ChatPanelProps {
   role?: "docente" | "admin" | "superadmin";
 }
 
+export function canPrepareOrientation(
+  message: Pick<
+    RenderedMessage,
+    "id" | "inReplyToMessageId" | "role" | "sources"
+  >,
+  conversationId: string | undefined,
+  hasLinkedVisibleQuestion: boolean,
+): boolean {
+  return Boolean(
+    conversationId &&
+    message.inReplyToMessageId &&
+    hasLinkedVisibleQuestion &&
+    message.id !== "streaming" &&
+    message.role === "assistant" &&
+    message.sources.length > 0,
+  );
+}
+
 function initialMessages(
   conversation: ChatConversationDetail | undefined,
 ): RenderedMessage[] {
   return (conversation?.messages ?? []).map((message) => ({
     content: message.content,
     id: message.id,
+    inReplyToMessageId: message.inReplyToMessageId,
     role: message.role,
     sources: message.sources,
   }));
@@ -208,7 +229,9 @@ export function ChatPanel({
     () =>
       activeParentId
         ? sortModules(
-            modules.filter((module) => module.parentModuleId === activeParentId),
+            modules.filter(
+              (module) => module.parentModuleId === activeParentId,
+            ),
           )
         : [],
     [modules, activeParentId],
@@ -219,16 +242,42 @@ export function ChatPanel({
     return selected && selected.parentModuleId ? selected : undefined;
   }, [modules, selectedModuleId]);
 
-  function changeModuleContext(moduleId: string | undefined) {
-    if (isStreaming || moduleId === selectedModuleId) return;
+  function changeModuleContext(
+    moduleId: string | undefined,
+    forceNewConversation = false,
+  ) {
+    if (
+      isStreaming ||
+      (!forceNewConversation && moduleId === selectedModuleId)
+    ) {
+      return;
+    }
     // Una conversación conserva el módulo con el que fue creada. Cambiar el
-    // contexto inicia la siguiente consulta en una conversación nueva.
+    // contexto inicia la siguiente consulta en una conversación nueva, sin
+    // esperar una nueva navegación de servidor.
     setSelectedModuleId(moduleId);
     setConversationId(undefined);
+    setMessages([]);
+    setError(null);
+    const selectedModule = modules.find((module) => module.id === moduleId);
+    setStatus(
+      selectedModule
+        ? `Tema actualizado: ${selectedModule.name}.`
+        : "Chat general activado.",
+    );
+    window.history.replaceState(
+      null,
+      "",
+      moduleId ? `/chat?module=${encodeURIComponent(moduleId)}` : "/chat",
+    );
   }
 
   function clearSubmodule() {
     changeModuleContext(activeParentId);
+  }
+
+  function startNewChat() {
+    changeModuleContext(undefined, true);
   }
 
   useEffect(() => {
@@ -308,6 +357,7 @@ export function ChatPanel({
       {
         content: normalizedQuestion,
         id: nextLocalId("local-question"),
+        inReplyToMessageId: null,
         role: "user",
         sources: [],
       },
@@ -319,6 +369,7 @@ export function ChatPanel({
 
     try {
       let currentSources: ChatSource[] = [];
+      let currentUserMessageId: string | null = null;
       const response = await fetch("/api/chat/stream", {
         body: JSON.stringify({
           ...(conversationId ? { conversationId } : {}),
@@ -366,7 +417,22 @@ export function ChatPanel({
               );
               return;
             }
+            currentUserMessageId = result.data.userMessageId;
             setConversationId(result.data.conversationId);
+            setMessages((current) => {
+              const localQuestionIndex = current.findLastIndex(
+                (message) =>
+                  message.role === "user" &&
+                  message.id.startsWith("local-question-"),
+              );
+              if (localQuestionIndex < 0) return current;
+
+              return current.map((message, index) =>
+                index === localQuestionIndex
+                  ? { ...message, id: result.data.userMessageId }
+                  : message,
+              );
+            });
             window.history.replaceState(
               null,
               "",
@@ -412,6 +478,7 @@ export function ChatPanel({
                 {
                   content: result.data.text,
                   id: "streaming",
+                  inReplyToMessageId: currentUserMessageId,
                   role: "assistant",
                   sources: currentSources,
                 },
@@ -435,9 +502,10 @@ export function ChatPanel({
               {
                 content: result.data.message,
                 id: nextLocalId("clarification"),
+                inReplyToMessageId: currentUserMessageId,
                 modules: result.data.modules,
                 role: "clarification",
-                sources: [],
+                sources: currentSources,
               },
             ]);
             setStatus(null);
@@ -458,6 +526,7 @@ export function ChatPanel({
               {
                 content: result.data.message,
                 id: nextLocalId("no-evidence"),
+                inReplyToMessageId: currentUserMessageId,
                 role: "no_evidence",
                 sources: [],
               },
@@ -487,6 +556,7 @@ export function ChatPanel({
             replaceStreamingMessage((message) => ({
               ...message,
               id: result.data.messageId,
+              inReplyToMessageId: result.data.inReplyToMessageId,
             }));
             setStatus(null);
             completed = true;
@@ -512,66 +582,80 @@ export function ChatPanel({
   return (
     <TeacherShell
       activeSection="chat"
+      moduleNavigationDisabled={isStreaming}
       modules={modules}
+      onModuleSelect={changeModuleContext}
+      onNewChat={startNewChat}
       role={role}
       selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">
-        <header className="avend-chat-header">
-          <div>
-            <p className="avend-eyebrow">Consulta normativa</p>
-            <h1 id="chat-title">
-              {activeParent ? activeParent.name : "Chat general"}
-            </h1>
-            {activeParent?.description ? (
-              <p className="avend-chat-module-description">
-                {activeParent.description}
+        <div
+          className="avend-chat-workspace-transition"
+          key={activeParentId ?? "general"}
+        >
+          <header className="avend-chat-header">
+            <div>
+              <p className="avend-eyebrow">Consulta normativa</p>
+              <h1 id="chat-title">
+                {activeParent ? activeParent.name : "Chat general"}
+              </h1>
+              {activeParent?.description ? (
+                <p className="avend-chat-module-description">
+                  {activeParent.description}
+                </p>
+              ) : null}
+              <p>
+                Selecciona el tema relacionado si lo deseas. También puedes
+                escribir directamente tu consulta.
               </p>
-            ) : null}
-            <p>
-              Selecciona el tema relacionado si lo deseas. También puedes
-              escribir directamente tu consulta.
-            </p>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {modules.length === 0 ? (
-          <p className="avend-chat-empty-modules">
-            Aún no hay módulos activos para filtrar la consulta. Puedes
-            consultar de forma general cuando existan documentos procesados.
-          </p>
-        ) : activeParent && submodules.length > 0 ? (
-          <section
-            aria-label={`Subtemas de ${activeParent.name}`}
-            className="avend-chat-modules avend-chat-submodules"
-          >
-            {submodules.map((submodule) => (
+          {modules.length === 0 ? (
+            <p className="avend-chat-empty-modules">
+              Aún no hay módulos activos para filtrar la consulta. Puedes
+              consultar de forma general cuando existan documentos procesados.
+            </p>
+          ) : activeParent && submodules.length > 0 ? (
+            <section
+              aria-label={`Subtemas de ${activeParent.name}`}
+              className="avend-chat-modules avend-chat-submodules"
+            >
+              {submodules.map((submodule) => (
+                <button
+                  aria-pressed={submodule.id === selectedModuleId}
+                  className="avend-chat-module"
+                  disabled={isStreaming}
+                  key={submodule.id}
+                  onClick={() => changeModuleContext(submodule.id)}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="avend-chat-module-icon">
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <path d="M7 3.75h7L18 7.7v12.55H7z" />
+                      <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
+                    </svg>
+                  </span>
+                  <span>{submodule.name}</span>
+                </button>
+              ))}
+            </section>
+          ) : null}
+
+          {selectedSubmodule ? (
+            <div className="avend-chat-context" role="status">
+              <span>Tema: {selectedSubmodule.name}</span>
               <button
-                aria-pressed={submodule.id === selectedModuleId}
-                className="avend-chat-module"
                 disabled={isStreaming}
-                key={submodule.id}
-                onClick={() => changeModuleContext(submodule.id)}
+                onClick={clearSubmodule}
                 type="button"
               >
-                 <span>{submodule.name}</span>
+                Quitar tema
               </button>
-            ))}
-          </section>
-        ) : null}
-
-        {selectedSubmodule ? (
-          <div className="avend-chat-context" role="status">
-            <span>Tema: {selectedSubmodule.name}</span>
-            <button
-              disabled={isStreaming}
-              onClick={clearSubmodule}
-              type="button"
-            >
-              Quitar tema
-            </button>
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <section aria-busy={isStreaming} className="avend-chat-conversation">
           {messages.length === 0 ? (
@@ -580,7 +664,7 @@ export function ChatPanel({
               únicamente por los documentos vigentes disponibles.
             </p>
           ) : (
-            messages.map((message) => (
+            messages.map((message, messageIndex) => (
               <article
                 className={`avend-chat-message avend-chat-message--${message.role}`}
                 key={message.id}
@@ -597,10 +681,7 @@ export function ChatPanel({
                       <button
                         disabled={isStreaming}
                         key={module.id}
-                        onClick={() => {
-                          setSelectedModuleId(module.id);
-                          setConversationId(undefined);
-                        }}
+                        onClick={() => changeModuleContext(module.id)}
                         type="button"
                       >
                         Consultar {module.name}
@@ -608,8 +689,35 @@ export function ChatPanel({
                     ))}
                   </div>
                 ) : null}
-                {message.sources.length ? (
+                {message.sources.length && message.id !== "streaming" ? (
                   <ChatSources sources={message.sources} />
+                ) : null}
+                {conversationId &&
+                canPrepareOrientation(
+                  message,
+                  conversationId,
+                  messages
+                    .slice(0, messageIndex)
+                    .some(
+                      (candidate) =>
+                        candidate.role === "user" &&
+                        candidate.id === message.inReplyToMessageId,
+                    ),
+                ) ? (
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    <Link
+                      className="avend-button avend-button--secondary"
+                      href={`/chat/${encodeURIComponent(conversationId)}/orientacion/${encodeURIComponent(message.id)}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Preparar ficha de orientación
+                    </Link>
+                    <p className="m-0 text-base text-avend-text-muted">
+                      Se abrirá una vista previa editable solo en sus datos de
+                      presentación.
+                    </p>
+                  </div>
                 ) : null}
               </article>
             ))

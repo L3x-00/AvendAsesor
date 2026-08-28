@@ -13,6 +13,24 @@ export interface ChatCitationInput {
   chunkId: string;
   moduleId: string | null;
   relevanceScore: number;
+  sourceId: string;
+}
+
+export interface ChatContextMessage {
+  content: string;
+  role: ChatReplyRole | 'user';
+}
+
+export interface ChatConversationContext {
+  conversationId: string;
+  messages: ChatContextMessage[];
+  selectedModuleId: string | null;
+}
+
+export interface ChatSourceDownload {
+  expiresAt: string;
+  sourceId: string;
+  url: string;
 }
 
 export interface FaqMemoryObservationInput {
@@ -64,6 +82,17 @@ export interface ChatHistoryGateway {
     limit: number;
     userId: string;
   }): Promise<unknown>;
+  getConversationContext(input: {
+    characterLimit: number;
+    conversationId: string;
+    messageLimit: number;
+    userId: string;
+  }): Promise<ChatConversationContext>;
+  createSourceDownloadUrl(input: {
+    sourceId: string;
+    ttlSeconds: number;
+    userId: string;
+  }): Promise<ChatSourceDownload>;
   deleteConversation(input: {
     conversationId: string;
     userId: string;

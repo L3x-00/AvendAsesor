@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -6,31 +7,36 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
+import type { AnswerGateway } from '../rag/answer.gateway';
+import {
+  MAX_CHAT_CONTEXT_CHARS,
+  MAX_CHAT_CONTEXT_MESSAGES,
+  MAX_RAG_ANSWER_CHARS,
+  RAG_AMBIGUITY_MESSAGE,
+  RAG_NO_EVIDENCE_MESSAGE,
+} from '../rag/rag.constants';
+import { RagService, type ResolvedModule } from '../rag/rag.service';
+import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
+import type { RetrievedChunk } from '../rag/retrieval.gateway';
+import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
 import type {
   ActiveChatModule,
   ChatCitationInput,
-  DeletedChatConversation,
+  ChatContextMessage,
   ChatConversationSummary,
   ChatHistoryGateway,
+  ChatSourceDownload,
+  DeletedChatConversation,
 } from './chat-history.gateway';
 import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
 } from './chat-history-cursor';
-import {
-  RAG_AMBIGUITY_MESSAGE,
-  MAX_RAG_ANSWER_CHARS,
-  RAG_NO_EVIDENCE_MESSAGE,
-} from '../rag/rag.constants';
-import type { AnswerGateway } from '../rag/answer.gateway';
-import { RagService } from '../rag/rag.service';
-import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
-import type { RetrievedChunk } from '../rag/retrieval.gateway';
-import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
 
 export interface ChatSource {
   articleReference: string | null;
   documentTitle: string;
+  id: string;
   moduleName: string | null;
   numeralReference: string | null;
   pageEnd: number;
@@ -42,11 +48,18 @@ export interface ChatSource {
 }
 
 export type ChatStreamEvent =
-  | { data: { conversationId: string }; type: 'conversation' }
+  | {
+      data: {
+        conversationId: string;
+        moduleId: string | null;
+        startedNewConversation: boolean;
+      };
+      type: 'conversation';
+    }
   | { data: { sources: ChatSource[] }; type: 'sources' }
   | { data: { text: string }; type: 'token' }
   | {
-      data: { message: string; modules: { id: string; name: string }[] };
+      data: { message: string; modules: ResolvedModule[] };
       type: 'clarification';
     }
   | { data: { message: string }; type: 'no_evidence' }
@@ -64,6 +77,13 @@ export interface ChatConversationPage {
   nextCursor: string | null;
 }
 
+interface CitationBundle {
+  inputs: ChatCitationInput[];
+  sources: ChatSource[];
+}
+
+const MAX_AMBIGUITY_EXCERPT_CHARS = 280;
+
 function clampScore(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
@@ -76,31 +96,98 @@ function selectCitationModule(
   return source.moduleIds.length === 1 ? (source.moduleIds[0] ?? null) : null;
 }
 
-function toSources(sources: RetrievedChunk[]): ChatSource[] {
-  return sources.map((source, index) => ({
-    articleReference: source.articleReference,
-    documentTitle: source.documentTitle,
-    moduleName:
-      source.moduleNames.length === 1 ? (source.moduleNames[0] ?? null) : null,
-    numeralReference: source.numeralReference,
-    pageEnd: source.pageEnd,
-    pageStart: source.pageStart,
-    rank: index + 1,
-    relevanceScore: clampScore(source.semanticScore),
-    sectionTitle: source.sectionTitle,
-    versionNumber: source.versionNumber,
-  }));
+function toCitationBundle(
+  retrieved: RetrievedChunk[],
+  selectedModuleId: string | null,
+): CitationBundle {
+  const inputs: ChatCitationInput[] = [];
+  const sources: ChatSource[] = [];
+
+  retrieved.forEach((source, index) => {
+    const sourceId = randomUUID();
+    const relevanceScore = clampScore(source.semanticScore);
+    inputs.push({
+      chunkId: source.chunkId,
+      moduleId: selectCitationModule(source, selectedModuleId),
+      relevanceScore,
+      sourceId,
+    });
+    sources.push({
+      articleReference: source.articleReference,
+      documentTitle: source.documentTitle,
+      id: sourceId,
+      moduleName:
+        source.moduleNames.length === 1
+          ? (source.moduleNames[0] ?? null)
+          : null,
+      numeralReference: source.numeralReference,
+      pageEnd: source.pageEnd,
+      pageStart: source.pageStart,
+      rank: index + 1,
+      relevanceScore,
+      sectionTitle: source.sectionTitle,
+      versionNumber: source.versionNumber,
+    });
+  });
+
+  return { inputs, sources };
 }
 
-function toCitationInputs(
+function evidenceExcerpt(source: RetrievedChunk): string {
+  const normalized = [...source.chunkContent]
+    .map((character) => {
+      const codePoint = character.codePointAt(0);
+      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127)
+        ? ' '
+        : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstSentence = normalized.match(/^.*?[.!?](?=\s|$)/u)?.[0];
+  const excerpt = (firstSentence ?? normalized).slice(
+    0,
+    MAX_AMBIGUITY_EXCERPT_CHARS,
+  );
+
+  return excerpt.length < (firstSentence ?? normalized).length
+    ? `${excerpt.trimEnd()}…`
+    : excerpt;
+}
+
+function evidenceOrientation(sources: RetrievedChunk[]): string {
+  return sources
+    .slice(0, 2)
+    .map((source, index) => {
+      const excerpt = evidenceExcerpt(source);
+      if (!excerpt) return null;
+      const reference =
+        source.articleReference ??
+        source.numeralReference ??
+        source.sectionTitle ??
+        source.documentTitle;
+      return `Como orientación inicial, ${reference} señala: “${excerpt}” [${index + 1}].`;
+    })
+    .filter((orientation): orientation is string => Boolean(orientation))
+    .join(' ');
+}
+
+function ambiguityMessage(
+  modules: ResolvedModule[],
   sources: RetrievedChunk[],
-  selectedModuleId: string | null,
-): ChatCitationInput[] {
-  return sources.map((source) => ({
-    chunkId: source.chunkId,
-    moduleId: selectCitationModule(source, selectedModuleId),
-    relevanceScore: clampScore(source.semanticScore),
-  }));
+): string {
+  const names = modules
+    .slice(0, 4)
+    .map((module) => module.name)
+    .join(', ');
+  const orientation = evidenceOrientation(sources);
+  const clarification = names
+    ? `Los documentos recuperados se relacionan con: ${names}. ¿A cuál de estos temas corresponde tu consulta?`
+    : '¿Qué tema específico deseas consultar?';
+
+  return [RAG_AMBIGUITY_MESSAGE, orientation, clarification]
+    .filter(Boolean)
+    .join(' ');
 }
 
 @Injectable()
@@ -121,6 +208,17 @@ export class ChatService {
     return this.historyGateway.getConversation({
       conversationId,
       limit: this.historyLimit(),
+      userId: authorization.userId,
+    });
+  }
+
+  createSourceDownloadUrl(
+    sourceId: string,
+    authorization: AuthorizationContext,
+  ): Promise<ChatSourceDownload> {
+    return this.historyGateway.createSourceDownloadUrl({
+      sourceId,
+      ttlSeconds: 60,
       userId: authorization.userId,
     });
   }
@@ -173,22 +271,76 @@ export class ChatService {
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
     const faqMemory = this.faqMemoryService.prepare(input.question);
+    const storedContext = input.conversationId
+      ? await this.historyGateway.getConversationContext({
+          characterLimit: MAX_CHAT_CONTEXT_CHARS,
+          conversationId: input.conversationId,
+          messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
+          userId: input.authorization.userId,
+        })
+      : null;
+    const manuallyChangedModule = Boolean(
+      storedContext &&
+      input.selectedModuleId !== null &&
+      input.selectedModuleId !== storedContext.selectedModuleId,
+    );
+    let startedNewConversation = !input.conversationId || manuallyChangedModule;
+    let conversationContext: ChatContextMessage[] = manuallyChangedModule
+      ? []
+      : (storedContext?.messages ?? []);
+    let selectedModuleId = manuallyChangedModule
+      ? input.selectedModuleId
+      : (storedContext?.selectedModuleId ?? input.selectedModuleId);
+    let conversationId = manuallyChangedModule ? null : input.conversationId;
+    const priorUserQuestions = conversationContext
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content);
+    const retrieval = await this.ragService.retrieve(
+      input.question,
+      selectedModuleId,
+      priorUserQuestions,
+    );
+
+    if (input.abortSignal?.aborted) return;
+
+    if (retrieval.kind === 'topic_change') {
+      conversationId = null;
+      conversationContext = [];
+      selectedModuleId = retrieval.resolvedModule.id;
+      startedNewConversation = true;
+    } else if (retrieval.kind === 'ambiguous' && selectedModuleId) {
+      conversationId = null;
+      conversationContext = [];
+      selectedModuleId = null;
+      startedNewConversation = true;
+    } else if (
+      retrieval.kind === 'evidence' &&
+      !selectedModuleId &&
+      retrieval.resolvedModule
+    ) {
+      if (storedContext) {
+        conversationId = null;
+        conversationContext = [];
+        startedNewConversation = true;
+      }
+      selectedModuleId = retrieval.resolvedModule.id;
+    }
+
     const turn = await this.historyGateway.beginTurn({
-      conversationId: input.conversationId,
+      conversationId,
       question: input.question,
-      selectedModuleId: input.selectedModuleId,
+      selectedModuleId,
       userId: input.authorization.userId,
     });
 
     yield {
-      data: { conversationId: turn.conversationId },
+      data: {
+        conversationId: turn.conversationId,
+        moduleId: selectedModuleId,
+        startedNewConversation,
+      },
       type: 'conversation',
     };
-
-    const retrieval = await this.ragService.retrieve(
-      input.question,
-      input.selectedModuleId,
-    );
 
     if (input.abortSignal?.aborted) return;
 
@@ -217,19 +369,23 @@ export class ChatService {
     }
 
     if (retrieval.kind === 'ambiguous') {
+      const citations = toCitationBundle(retrieval.sources, null);
+      const message = ambiguityMessage(retrieval.modules, retrieval.sources);
+      yield { data: { sources: citations.sources }, type: 'sources' };
+      if (input.abortSignal?.aborted) return;
       const completed = await this.historyGateway.completeTurn({
-        answer: RAG_AMBIGUITY_MESSAGE,
+        answer: message,
         conversationId: turn.conversationId,
         faqMemory,
         replyRole: 'clarification',
-        sources: [],
+        sources: citations.inputs,
         topRelevanceScore: retrieval.topRelevanceScore,
         unansweredReason: 'ambiguous_request',
         userId: input.authorization.userId,
         userMessageId: turn.userMessageId,
       });
       yield {
-        data: { message: RAG_AMBIGUITY_MESSAGE, modules: retrieval.modules },
+        data: { message, modules: retrieval.modules },
         type: 'clarification',
       };
       yield {
@@ -243,12 +399,13 @@ export class ChatService {
       return;
     }
 
-    const sources = toSources(retrieval.sources);
-    yield { data: { sources }, type: 'sources' };
+    const citations = toCitationBundle(retrieval.sources, selectedModuleId);
+    yield { data: { sources: citations.sources }, type: 'sources' };
 
     let answer = '';
     for await (const token of this.answerGateway.generate({
       abortSignal: input.abortSignal,
+      conversationContext,
       question: input.question,
       sources: retrieval.sources,
     })) {
@@ -277,7 +434,7 @@ export class ChatService {
       conversationId: turn.conversationId,
       faqMemory,
       replyRole: 'assistant',
-      sources: toCitationInputs(retrieval.sources, input.selectedModuleId),
+      sources: citations.inputs,
       topRelevanceScore: retrieval.topRelevanceScore,
       unansweredReason: null,
       userId: input.authorization.userId,

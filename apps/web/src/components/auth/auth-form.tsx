@@ -39,13 +39,22 @@ function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
 
   return (
-    <button
-      className="avend-button avend-button--primary avend-auth-submit"
-      disabled={pending}
-      type="submit"
-    >
-      {pending ? 'Procesando…' : label}
-    </button>
+    <div className="avend-auth-submit-wrap">
+      <button
+        aria-busy={pending}
+        className="avend-button avend-button--primary avend-auth-submit"
+        disabled={pending}
+        type="submit"
+      >
+        {pending ? <span aria-hidden="true" className="avend-button-spinner" /> : null}
+        <span>{pending ? 'Procesando…' : label}</span>
+      </button>
+      {pending ? (
+        <p className="avend-auth-pending" role="status">
+          Procesamos tu solicitud de forma segura. Esto puede tomar unos segundos.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
