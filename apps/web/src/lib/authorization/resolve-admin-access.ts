@@ -5,7 +5,7 @@ import {
 } from "./policy";
 
 interface ProfileRoleQuery {
-  select(columns: "role, account_status"): {
+  select(columns: "role, account_status" | "role, account_status, full_name"): {
     eq(
       column: "id",
       value: string,

@@ -57,6 +57,7 @@ type AuthorizedChatAccess = Extract<ChatAccessResult, { status: "authorized" }>;
  */
 export async function resolveAuthorizedChatContext(): Promise<{
   client: ChatApiClient;
+  fullName: AuthorizedChatAccess["fullName"];
   role: AuthorizedChatAccess["role"];
 }> {
   const session = await resolveAuthorizedChatSession();
@@ -68,6 +69,7 @@ export async function resolveAuthorizedChatContext(): Promise<{
 
   return {
     client: new ChatApiClient(session.accessToken),
+    fullName: session.access.fullName,
     role: session.access.role,
   };
 }

@@ -2,7 +2,12 @@ import { isActiveAccountStatus, isChatRole, type ChatRole } from "./policy";
 import type { AuthorizationSupabaseClient } from "./resolve-admin-access";
 
 export type ChatAccessResult =
-  | { status: "authorized"; role: ChatRole; userId: string }
+  | {
+      fullName: string;
+      status: "authorized";
+      role: ChatRole;
+      userId: string;
+    }
   | { status: "unauthenticated" }
   | { status: "unauthorized" };
 
@@ -31,7 +36,7 @@ export async function resolveChatAccess(
   try {
     ({ data, error } = await client
       .from("profiles")
-      .select("role, account_status")
+      .select("role, account_status, full_name")
       .eq("id", user.id)
       .maybeSingle());
   } catch {
@@ -44,6 +49,9 @@ export async function resolveChatAccess(
     typeof data !== "object" ||
     !("role" in data) ||
     !("account_status" in data) ||
+    !("full_name" in data) ||
+    typeof (data as { full_name: unknown }).full_name !== "string" ||
+    !(data as { full_name: string }).full_name.trim() ||
     !isActiveAccountStatus(
       (data as { account_status: unknown }).account_status,
     ) ||
@@ -53,6 +61,7 @@ export async function resolveChatAccess(
   }
 
   return {
+    fullName: (data as { full_name: string }).full_name.trim(),
     role: (data as { role: ChatRole }).role,
     status: "authorized",
     userId: user.id,
