@@ -1,5 +1,5 @@
 import "server-only";
-import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   AlignmentType,
   BorderStyle,
@@ -23,33 +23,46 @@ const NAVY = "0D1B3D";
 const ACCENT = "1677FF";
 const MUTED = "667085";
 
-// Obtain the native require via process.getBuiltinModule so the bundler neither
-// rewrites nor traces require/require.resolve. The font packages are declared in
-// serverExternalPackages; pdfkit/fontkit read their .woff assets from disk at
-// runtime. The specifier is kept dynamic as a second layer of defense.
-const moduleRequire = process
-  .getBuiltinModule("module")
-  .createRequire(import.meta.url);
-function resolveFontFilesDir(packageName: string): string {
-  return join(dirname(moduleRequire.resolve(`${packageName}/package.json`)), "files");
-}
-const notoSansFiles = resolveFontFilesDir("@fontsource/noto-sans");
-const notoEmojiFiles = resolveFontFilesDir("@fontsource/noto-emoji");
+// Fonts are vendored under ./fonts and referenced with static
+// `new URL(..., import.meta.url)` literals so the bundler traces and ships them
+// as assets. Turbopack does not honor outputFileTracingIncludes for files read
+// only at runtime, so resolving them from node_modules would leave the .woff out
+// of a serverless/standalone deployment and break PDF generation. Vendored from
+// the @fontsource Noto Sans / Noto Emoji packages (SIL Open Font License).
 const PDF_FONT_PATHS = {
-  emoji: join(notoEmojiFiles, "noto-emoji-emoji-400-normal.woff"),
-  latinBold: join(notoSansFiles, "noto-sans-latin-700-normal.woff"),
-  latinExtBold: join(notoSansFiles, "noto-sans-latin-ext-700-normal.woff"),
-  latinExtItalic: join(notoSansFiles, "noto-sans-latin-ext-400-italic.woff"),
-  latinExtRegular: join(notoSansFiles, "noto-sans-latin-ext-400-normal.woff"),
-  latinItalic: join(notoSansFiles, "noto-sans-latin-400-italic.woff"),
-  latinRegular: join(notoSansFiles, "noto-sans-latin-400-normal.woff"),
+  emoji: fileURLToPath(
+    new URL("./fonts/noto-emoji-emoji-400-normal.woff", import.meta.url),
+  ),
+  latinBold: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-700-normal.woff", import.meta.url),
+  ),
+  latinExtBold: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-ext-700-normal.woff", import.meta.url),
+  ),
+  latinExtItalic: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-ext-400-italic.woff", import.meta.url),
+  ),
+  latinExtRegular: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-ext-400-normal.woff", import.meta.url),
+  ),
+  latinItalic: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-400-italic.woff", import.meta.url),
+  ),
+  latinRegular: fileURLToPath(
+    new URL("./fonts/noto-sans-latin-400-normal.woff", import.meta.url),
+  ),
 } as const;
 
 interface FontGlyphLookup {
   hasGlyphForCodePoint(codePoint: number): boolean;
 }
 
-const fontkit = moduleRequire("fontkit") as {
+// fontkit is required (not imported) so the bundler keeps it external via
+// serverExternalPackages; a require call is not statically rewritten the way
+// require.resolve is.
+const fontkit = process
+  .getBuiltinModule("module")
+  .createRequire(import.meta.url)("fontkit") as {
   openSync(path: string): FontGlyphLookup;
 };
 const PDF_FONT_LOOKUPS = {
