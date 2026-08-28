@@ -113,6 +113,7 @@ describe('ChatService', () => {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
           moduleId: null,
           startedNewConversation: true,
+          userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
         },
         type: 'conversation',
       },
@@ -120,6 +121,7 @@ describe('ChatService', () => {
       {
         data: {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+          inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
           messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
           provider: 'rule',
         },
@@ -181,6 +183,15 @@ describe('ChatService', () => {
     });
     expect(completion?.sources[0]?.chunkId).toBe(source.chunkId);
     expect(typeof completion?.sources[0]?.sourceId).toBe('string');
+    expect(events.at(-1)).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
+        provider: 'rule',
+      },
+      type: 'done',
+    });
   });
 
   it('streams evidence, then persists real sources only after completion', async () => {
@@ -220,6 +231,15 @@ describe('ChatService', () => {
       relevanceScore: 0.9,
     });
     expect(typeof completion?.sources[0]?.sourceId).toBe('string');
+    expect(events.at(-1)).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
+        provider: 'openai',
+      },
+      type: 'done',
+    });
   });
 
   it('starts an unfiltered answer in the single module resolved by evidence', async () => {
@@ -246,6 +266,7 @@ describe('ChatService', () => {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
         moduleId: source.moduleIds[0],
         startedNewConversation: true,
+        userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
       },
       type: 'conversation',
     });
@@ -555,6 +576,7 @@ describe('ChatService', () => {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
         moduleId: newModuleId,
         startedNewConversation: true,
+        userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
       },
       type: 'conversation',
     });

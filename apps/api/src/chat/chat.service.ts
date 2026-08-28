@@ -53,6 +53,7 @@ export type ChatStreamEvent =
         conversationId: string;
         moduleId: string | null;
         startedNewConversation: boolean;
+        userMessageId: string;
       };
       type: 'conversation';
     }
@@ -66,6 +67,7 @@ export type ChatStreamEvent =
   | {
       data: {
         conversationId: string;
+        inReplyToMessageId: string;
         messageId: string;
         provider: 'openai' | 'rule';
       };
@@ -338,6 +340,7 @@ export class ChatService {
         conversationId: turn.conversationId,
         moduleId: selectedModuleId,
         startedNewConversation,
+        userMessageId: turn.userMessageId,
       },
       type: 'conversation',
     };
@@ -360,6 +363,7 @@ export class ChatService {
       yield {
         data: {
           conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
           messageId: completed.answerMessageId,
           provider: 'rule',
         },
@@ -391,6 +395,7 @@ export class ChatService {
       yield {
         data: {
           conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
           messageId: completed.answerMessageId,
           provider: 'rule',
         },
@@ -443,6 +448,7 @@ export class ChatService {
     yield {
       data: {
         conversationId: turn.conversationId,
+        inReplyToMessageId: turn.userMessageId,
         messageId: completed.answerMessageId,
         provider: 'openai',
       },
