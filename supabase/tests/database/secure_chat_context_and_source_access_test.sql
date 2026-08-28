@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(27);
 
 select has_table(
   'public',
@@ -225,6 +225,21 @@ select is(
   ),
   '00000000-0000-0000-0000-00000000e701',
   'Owned history exposes the stored citation UUID without a bucket path'
+);
+select is(
+  (
+    select message ->> 'inReplyToMessageId'
+    from jsonb_array_elements(
+      public.get_chat_conversation(
+        '00000000-0000-0000-0000-00000000e501',
+        '00000000-0000-0000-0000-00000000e401'
+      ) -> 'messages'
+    ) as message
+    where message ->> 'role' = 'clarification'
+    limit 1
+  ),
+  '00000000-0000-0000-0000-00000000e601',
+  'Owned history exposes the canonical user message linked to each reply'
 );
 
 insert into public.chat_messages (id, conversation_id, role, content, created_at)
