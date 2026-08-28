@@ -18,18 +18,36 @@ export const chatModuleSchema = z.object({
 export type ChatModule = z.infer<typeof chatModuleSchema>;
 
 export const chatSourceSchema = z.object({
-  articleReference: z.string().nullable(),
+  articleReference: z.string().max(500).nullable(),
   documentTitle: z.string().min(1).max(500),
-  moduleName: z.string().nullable(),
-  numeralReference: z.string().nullable(),
+  id: z.string().uuid(),
+  moduleName: z.string().max(255).nullable(),
+  numeralReference: z.string().max(255).nullable(),
   pageEnd: z.number().int().min(1).max(300),
   pageStart: z.number().int().min(1).max(300),
   rank: z.number().int().min(1).max(20),
   relevanceScore: z.number().min(0).max(1),
-  sectionTitle: z.string().nullable(),
+  sectionTitle: z.string().max(500).nullable(),
   versionNumber: z.number().int().positive(),
 });
 export type ChatSource = z.infer<typeof chatSourceSchema>;
+
+const absoluteHttpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "https:" || protocol === "http:";
+  }, "Expected an absolute HTTP(S) URL.");
+
+export const chatSourceDownloadSchema = z
+  .object({
+    expiresAt: timestampSchema,
+    sourceId: z.string().uuid(),
+    url: absoluteHttpUrlSchema,
+  })
+  .strict();
+export type ChatSourceDownload = z.infer<typeof chatSourceDownloadSchema>;
 
 export const chatConversationSchema = z.object({
   createdAt: timestampSchema,
@@ -50,14 +68,15 @@ export const chatHistoryMessageSchema = z.object({
   content: z.string().min(1).max(20_000),
   createdAt: timestampSchema,
   id: z.string().uuid(),
+  inReplyToMessageId: z.string().uuid().nullable(),
   role: z.enum(["user", "assistant", "clarification", "no_evidence"]),
-  sources: z.array(chatSourceSchema),
+  sources: z.array(chatSourceSchema).max(10),
 });
 export type ChatHistoryMessage = z.infer<typeof chatHistoryMessageSchema>;
 
 export const chatConversationDetailSchema = z.object({
   conversation: chatConversationSchema,
-  messages: z.array(chatHistoryMessageSchema),
+  messages: z.array(chatHistoryMessageSchema).max(100),
 });
 export type ChatConversationDetail = z.infer<
   typeof chatConversationDetailSchema
@@ -75,9 +94,13 @@ export const chatStreamPayloadSchemas = {
     message: z.string().min(1),
     modules: z.array(chatModuleSchema),
   }),
-  conversation: z.object({ conversationId: z.string().uuid() }),
+  conversation: z.object({
+    conversationId: z.string().uuid(),
+    userMessageId: z.string().uuid(),
+  }),
   done: z.object({
     conversationId: z.string().uuid(),
+    inReplyToMessageId: z.string().uuid(),
     messageId: z.string().uuid(),
     provider: z.enum(["openai", "rule"]),
   }),

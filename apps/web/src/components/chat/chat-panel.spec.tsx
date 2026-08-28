@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "./chat-panel";
@@ -29,6 +35,8 @@ const secondModule = {
 
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
+const questionMessageId = "bc8b56af-6d0c-4fef-881e-7c00907540dd";
+const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
 const initialConversation = {
   conversation: {
     createdAt: "2026-08-24T12:00:00.000Z",
@@ -40,14 +48,58 @@ const initialConversation = {
   messages: [],
 };
 
+const eligibleConversation = {
+  ...initialConversation,
+  messages: [
+    {
+      content: "¿Qué requisitos corresponden?",
+      createdAt: "2026-08-24T12:00:00.000Z",
+      id: questionMessageId,
+      inReplyToMessageId: null,
+      role: "user" as const,
+      sources: [],
+    },
+    {
+      content: "Respuesta respaldada. [1]",
+      createdAt: "2026-08-24T12:01:00.000Z",
+      id: messageId,
+      inReplyToMessageId: questionMessageId,
+      role: "assistant" as const,
+      sources: [
+        {
+          articleReference: "Artículo 5",
+          documentTitle: "Norma de licencias",
+          id: sourceId,
+          moduleName: "Licencias",
+          numeralReference: null,
+          pageEnd: 1,
+          pageStart: 1,
+          rank: 1,
+          relevanceScore: 0.91,
+          sectionTitle: "Requisitos",
+          versionNumber: 1,
+        },
+      ],
+    },
+  ],
+};
+
 function streamResponse(frames: string[]) {
   return new Response(frames.join(""), { status: 200 });
 }
 
+function conversationEvent(): string {
+  return `event: conversation\ndata: {"conversationId":"${conversationId}","userMessageId":"${questionMessageId}"}\n\n`;
+}
+
+function doneEvent(provider: "openai" | "rule"): string {
+  return `event: done\ndata: {"conversationId":"${conversationId}","inReplyToMessageId":"${questionMessageId}","messageId":"${messageId}","provider":"${provider}"}\n\n`;
+}
+
 async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(
+  fireEvent.change(
     screen.getByRole("textbox", { name: "Escribe tu consulta" }),
-    "¿Cómo solicito una licencia?",
+    { target: { value: "¿Cómo solicito una licencia?" } },
   );
   await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
 }
@@ -65,6 +117,65 @@ function requestBody(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
+  it("offers the orientation sheet only for a completed sourced assistant message", () => {
+    render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+      />,
+    );
+
+    const action = screen.getByRole("link", {
+      name: "Preparar ficha de orientación",
+    });
+    expect(action).toHaveAttribute(
+      "href",
+      `/chat/${conversationId}/orientacion/${messageId}`,
+    );
+    expect(action).toHaveAttribute("target", "_blank");
+  });
+
+  it("does not offer a document for a source-less assistant outcome", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            { ...eligibleConversation.messages[1], sources: [] },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "Preparar ficha de orientación" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer a document when its question is outside visible history", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            {
+              ...eligibleConversation.messages[0],
+              id: "ac8b56af-6d0c-4fef-881e-7c00907540dd",
+            },
+            eligibleConversation.messages[1],
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "Preparar ficha de orientación" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("muestra el dictado por voz solo cuando el navegador lo soporta", async () => {
     class SpeechRecognitionMock {
       continuous = false;
@@ -129,20 +240,20 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(window.location.pathname).toBe("/chat");
     expect(window.location.search).toBe(`?module=${secondModule.id}`);
-    expect(screen.getByText("Tema actualizado: Evaluación docente.")).toBeVisible();
+    expect(
+      screen.getByText("Tema actualizado: Evaluación docente."),
+    ).toBeVisible();
   });
 
   it("reinicia la conversación al cambiar o quitar el subtema", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn(
-      async (...args: Parameters<typeof fetch>) => {
-        void args;
-        return streamResponse([
-          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
-          `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
-        ]);
-      },
-    );
+    const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      void args;
+      return streamResponse([
+        conversationEvent(),
+        doneEvent("rule"),
+      ]);
+    });
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal("fetch", fetchMock);
     render(
@@ -162,9 +273,7 @@ describe("ChatPanel", () => {
       question: "¿Cómo solicito una licencia?",
     });
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Quitar tema" }),
-      ).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Quitar tema" })).toBeEnabled(),
     );
 
     await user.click(screen.getByRole("button", { name: "Quitar tema" }));
@@ -185,10 +294,10 @@ describe("ChatPanel", () => {
         async () =>
           new Response(
             [
-              'event: conversation\ndata: {"conversationId":"5c8b56af-6d0c-4fef-881e-7c00907540dd"}\n\n',
-              'event: sources\ndata: {"sources":[{"rank":1,"documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n',
+              conversationEvent(),
+              'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n',
               'event: token\ndata: {"text":"Respuesta sustentada. [1]"}\n\n',
-              'event: done\ndata: {"conversationId":"5c8b56af-6d0c-4fef-881e-7c00907540dd","messageId":"6c8b56af-6d0c-4fef-881e-7c00907540dd","provider":"openai"}\n\n',
+              doneEvent("openai"),
             ].join(""),
             { status: 200 },
           ),
@@ -203,6 +312,12 @@ describe("ChatPanel", () => {
     });
     expect(screen.getByText("Norma de licencias")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Preparar ficha de orientación" }),
+    ).toHaveAttribute(
+      "href",
+      `/chat/${conversationId}/orientacion/${messageId}`,
+    );
   });
 
   it("keeps the empty module state explicit instead of inventing a category", () => {
@@ -213,6 +328,54 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(
       screen.getByText(/Escribe una consulta para recibir/i),
+    ).toBeVisible();
+  });
+
+  it("enables source links only after the sourced answer is persisted", async () => {
+    const user = userEvent.setup();
+    const encoder = new TextEncoder();
+    let finishStream!: () => void;
+    const responseStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              conversationEvent(),
+              `event: sources\ndata: {"sources":[{"id":"${sourceId}","rank":1,"documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n`,
+              'event: token\ndata: {"text":"Respuesta en curso. [1]"}\n\n',
+            ].join(""),
+          ),
+        );
+        finishStream = () => {
+          controller.enqueue(
+            encoder.encode(
+              doneEvent("openai"),
+            ),
+          );
+          controller.close();
+        };
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(responseStream)),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+    expect(await screen.findByText("Respuesta en curso. [1]")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Referencias" }),
+    ).not.toBeInTheDocument();
+
+    act(() => finishStream());
+    expect(
+      await screen.findByRole("heading", { name: "Referencias" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: /Abrir fuente \[1\]: Norma de licencias/,
+      }),
     ).toBeVisible();
   });
 
@@ -243,7 +406,7 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          conversationEvent(),
           'event: token\ndata: {"text":"Texto parcial"}\n\n',
           'event: error\ndata: {"code":"CHAT_STREAM_FAILED"}\n\n',
         ]),
@@ -268,7 +431,7 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          conversationEvent(),
           'event: token\ndata: {"text":"Texto parcial"}\n\n',
         ]),
       ),
@@ -292,9 +455,9 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          conversationEvent(),
           `event: clarification\ndata: {"message":"Precisa el tema.","modules":[${JSON.stringify(chatModule)}]}\n\n`,
-          `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
+          doneEvent("rule"),
         ]),
       ),
     );
@@ -316,9 +479,9 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\n`,
+          conversationEvent(),
           'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
-          `event: done\ndata: {"conversationId":"${conversationId}","messageId":"${messageId}","provider":"rule"}\n\n`,
+          doneEvent("rule"),
         ]),
       ),
     );
@@ -338,23 +501,23 @@ describe("ChatPanel", () => {
       "La conversación recibida no tiene un formato válido.",
     ],
     [
-      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: sources\ndata: {"sources":[{}]}\n\n`,
+      `${conversationEvent()}event: sources\ndata: {"sources":[{}]}\n\n`,
       "Las referencias recibidas no tienen un formato válido.",
     ],
     [
-      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: token\ndata: {"text":""}\n\n`,
+      `${conversationEvent()}event: token\ndata: {"text":""}\n\n`,
       "La respuesta recibida no tiene un formato válido.",
     ],
     [
-      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: done\ndata: {}\n\n`,
+      `${conversationEvent()}event: done\ndata: {}\n\n`,
       "El cierre de la respuesta no tiene un formato válido.",
     ],
     [
-      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: clarification\ndata: {"message":"Precisa el tema."}\n\n`,
+      `${conversationEvent()}event: clarification\ndata: {"message":"Precisa el tema."}\n\n`,
       "La aclaración recibida no tiene un formato válido.",
     ],
     [
-      `event: conversation\ndata: {"conversationId":"${conversationId}"}\n\nevent: no_evidence\ndata: {}\n\n`,
+      `${conversationEvent()}event: no_evidence\ndata: {}\n\n`,
       "El resultado recibido no tiene un formato válido.",
     ],
   ])("rejects malformed %s SSE payloads", async (frame, message) => {

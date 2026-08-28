@@ -1,0 +1,247 @@
+.page {
+  margin: 0 auto;
+  max-width: 78rem;
+}
+
+.header {
+  max-width: 48rem;
+}
+
+.header h1 {
+  color: var(--avend-navy);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0.25rem 0 0;
+}
+
+.header p:last-child {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.75rem 0 0;
+}
+
+.disclaimer {
+  background: var(--avend-soft-blue);
+  border-left: 0.25rem solid var(--avend-accent);
+  border-radius: 0.625rem;
+  color: var(--avend-navy);
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 1.25rem 0;
+  padding: 1rem;
+}
+
+.layout {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.form,
+.preview {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  box-shadow: 0 14px 32px rgb(13 27 61 / 9%);
+}
+
+.form {
+  align-self: start;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.form h2 {
+  color: var(--avend-navy);
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.form p {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.4rem 0 0;
+}
+
+.form label {
+  color: var(--avend-text);
+  display: grid;
+  font-size: 1rem;
+  font-weight: 650;
+  gap: 0.4rem;
+}
+
+.form input,
+.form textarea {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.form textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.form input:focus,
+.form textarea:focus {
+  border-color: var(--avend-accent);
+  box-shadow: 0 0 0 3px var(--avend-soft-blue);
+  outline: none;
+}
+
+.help {
+  margin-top: -0.65rem !important;
+}
+
+.actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.feedback {
+  min-height: 1.6rem;
+}
+
+.feedback p {
+  color: var(--avend-navy);
+  font-weight: 650;
+  margin: 0;
+}
+
+.backLink {
+  color: var(--avend-navy);
+  font-size: 1rem;
+  font-weight: 650;
+  min-height: 2.75rem;
+  padding: 0.65rem 0;
+  text-underline-offset: 0.2rem;
+}
+
+.preview {
+  animation: preview-enter 280ms ease-out both;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: clamp(1rem, 4vw, 2.5rem);
+}
+
+.previewBrand {
+  color: var(--avend-navy);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.previewType {
+  border-bottom: 0.15rem solid var(--avend-accent);
+  color: var(--avend-navy);
+  font-size: 1rem;
+  font-weight: 750;
+  margin: 0.4rem 0 1rem;
+  padding-bottom: 0.8rem;
+  text-transform: uppercase;
+}
+
+.preview h2 {
+  color: var(--avend-navy);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  line-height: 1.25;
+  margin: 0;
+}
+
+.previewDisclaimer {
+  background: var(--avend-soft-blue);
+  border-radius: 0.5rem;
+  color: var(--avend-navy);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.55;
+  margin: 1rem 0;
+  padding: 0.875rem;
+}
+
+.identity {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 1.25rem 0;
+}
+
+.identity dt {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.identity dd {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.2rem 0 0;
+}
+
+.previewSection {
+  margin-top: 1.5rem;
+}
+
+.previewSection h3 {
+  color: var(--avend-navy);
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+
+.previewSection p {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@keyframes preview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 40rem) {
+  .actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form {
+    padding: 1.25rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    align-items: start;
+    grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.28fr);
+  }
+
+  .form {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview {
+    animation: none;
+  }
+}

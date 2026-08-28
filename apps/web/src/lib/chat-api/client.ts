@@ -5,9 +5,11 @@ import {
   chatConversationDetailSchema,
   chatConversationPageSchema,
   chatModuleSchema,
+  chatSourceDownloadSchema,
   type ChatConversationPage,
   type ChatConversationDetail,
   type ChatModule,
+  type ChatSourceDownload,
 } from "./types";
 
 export class ChatApiError extends Error {
@@ -56,17 +58,34 @@ export class ChatApiClient {
     // para eliminar el ida y vuelta al API en cada navegación entre módulos.
     return this.send("/chat/modules", chatModuleSchema.array(), {
       revalidate: 120,
+      tags: ["chat-modules"],
     });
+  }
+
+  getSourceDownloadUrl(sourceId: string): Promise<ChatSourceDownload> {
+    return this.send(
+      `/chat/sources/${sourceId}/download-url`,
+      chatSourceDownloadSchema,
+    );
   }
 
   private async send<T>(
     path: string,
     schema?: ZodType<T>,
-    options: { method?: "DELETE" | "GET"; revalidate?: number } = {},
+    options: {
+      method?: "DELETE" | "GET";
+      revalidate?: number;
+      tags?: string[];
+    } = {},
   ): Promise<T> {
     const response = await this.request(`${this.baseUrl}${path}`, {
       ...(typeof options.revalidate === "number"
-        ? { next: { revalidate: options.revalidate } }
+        ? {
+            next: {
+              revalidate: options.revalidate,
+              ...(options.tags ? { tags: options.tags } : {}),
+            },
+          }
         : { cache: "no-store" }),
       headers: {
         Accept: "application/json",

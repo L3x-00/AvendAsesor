@@ -30,7 +30,49 @@ describe("ChatApiClient", () => {
         headers: expect.objectContaining({
           Authorization: "Bearer verified-token",
         }),
+        next: { revalidate: 120, tags: ["chat-modules"] },
       }),
+    );
+  });
+
+  it("validates the owned source download contract and never caches signed URLs", async () => {
+    const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
+    const payload = {
+      expiresAt: "2026-08-27T12:01:00.000Z",
+      sourceId,
+      url: "https://storage.example.test/object/sign/document.pdf?token=short-lived",
+    };
+    const request = vi.fn(
+      async () => new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    const client = new ChatApiClient("verified-token", undefined, request);
+
+    await expect(client.getSourceDownloadUrl(sourceId)).resolves.toEqual(payload);
+    expect(request).toHaveBeenCalledWith(
+      `http://localhost:3001/chat/sources/${sourceId}/download-url`,
+      expect.objectContaining({ cache: "no-store", method: "GET" }),
+    );
+  });
+
+  it("fails closed for non-HTTP source URLs or extra response fields", async () => {
+    const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
+    const client = new ChatApiClient(
+      "verified-token",
+      undefined,
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            expiresAt: "2026-08-27T12:01:00.000Z",
+            leakedPath: "private/document.pdf",
+            sourceId,
+            url: "javascript:alert(1)",
+          }),
+        ),
+      ),
+    );
+
+    await expect(client.getSourceDownloadUrl(sourceId)).rejects.toBeInstanceOf(
+      ChatApiResponseError,
     );
   });
 
