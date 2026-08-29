@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApiError } from "@/lib/admin-api/client";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
 import {
-  createDocumentAction,
   createModuleAction,
   createDownloadUrlAction,
   deleteModuleAction,
@@ -23,7 +22,6 @@ vi.mock("@/lib/admin-api/authorized-client", () => ({
 }));
 
 const client = {
-  createDocument: vi.fn(),
   createModule: vi.fn(),
   deleteModule: vi.fn(),
   getDownloadUrl: vi.fn(),
@@ -185,20 +183,6 @@ describe("admin server actions", () => {
     expect(states.every((state) => state.status === "error")).toBe(true);
     expect(updateTag).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
-  });
-
-  it("refuses a document upload without a non-empty PDF", async () => {
-    const formData = new FormData();
-    formData.set("documentType", "NORMA");
-    formData.set("title", "Documento de prueba");
-
-    const state = await createDocumentAction(initialState, formData);
-
-    expect(state).toEqual({
-      message: "Selecciona un archivo PDF no vacío.",
-      status: "error",
-    });
-    expect(client.createDocument).not.toHaveBeenCalled();
   });
 
   it("returns a safe confirmation-recovery message instead of backend details", async () => {

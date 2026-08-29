@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getAdminApiUrl } from './config';
 
 describe('administrative API configuration', () => {
-  it('accepts HTTPS and loopback HTTP endpoints without exposing them to the browser', () => {
+  it('accepts credential-free HTTPS origins and loopback HTTP origins', () => {
     expect(
       getAdminApiUrl({ ADMIN_API_URL: 'https://api.avend.example/' }),
     ).toBe('https://api.avend.example');
@@ -21,5 +21,16 @@ describe('administrative API configuration', () => {
     expect(() =>
       getAdminApiUrl({ ADMIN_API_URL: 'http://api.avend.example' }),
     ).toThrow('Administrative API configuration is invalid.');
+  });
+
+  it.each([
+    'https://user:password@api.avend.example',
+    'https://api.avend.example/internal',
+    'https://api.avend.example?token=unsafe',
+    'https://api.avend.example#unsafe',
+  ])('rejects a value that is not a safe origin: %s', (value) => {
+    expect(() => getAdminApiUrl({ ADMIN_API_URL: value })).toThrow(
+      'Administrative API configuration is invalid.',
+    );
   });
 });

@@ -134,26 +134,6 @@ function optionalJsonObject(
   }
 }
 
-function selectedModuleIds(formData: FormData): string[] {
-  return formData
-    .getAll("moduleId")
-    .filter((value): value is string => typeof value === "string" && !!value);
-}
-
-function requiredPdf(formData: FormData): File {
-  const file = formData.get("file");
-
-  if (!(file instanceof File) || file.size === 0) {
-    throw new FormValidationError("Selecciona un archivo PDF no vacío.");
-  }
-
-  if (file.size > 20 * 1024 * 1024) {
-    throw new FormValidationError("El PDF no puede superar los 20 MiB.");
-  }
-
-  return file;
-}
-
 function modulePayload(
   formData: FormData,
   options: { allowClearingDescription?: boolean } = {},
@@ -304,53 +284,6 @@ export async function deleteModuleAction(
     revalidatePath("/admin/documents");
 
     return { message: "Módulo eliminado lógicamente.", status: "success" };
-  });
-}
-
-export async function createDocumentAction(
-  _previousState: AdminActionState,
-  formData: FormData,
-): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const file = requiredPdf(formData);
-    const payload = new FormData();
-    const documentType = requiredText(formData, "documentType", "El tipo");
-    const title = requiredText(formData, "title", "El título");
-    const metadata = documentMetadataPayload(formData);
-
-    payload.set("file", file, file.name);
-    payload.set("documentType", documentType);
-    payload.set("title", title);
-    for (const [key, value] of Object.entries(metadata)) {
-      if (key !== "documentType" && key !== "title") {
-        payload.set(
-          key,
-          key === "metadata" ? JSON.stringify(value) : String(value),
-        );
-      }
-    }
-    payload.set("moduleIds", JSON.stringify(selectedModuleIds(formData)));
-    await client.createDocument(payload);
-    revalidatePath("/admin/documents");
-
-    return { message: "Documento PDF creado.", status: "success" };
-  });
-}
-
-export async function addDocumentVersionAction(
-  _previousState: AdminActionState,
-  formData: FormData,
-): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const file = requiredPdf(formData);
-    const payload = new FormData();
-    payload.set("file", file, file.name);
-    await client.addDocumentVersion(documentId, payload);
-    revalidatePath("/admin/documents");
-    revalidatePath(`/admin/documents/${documentId}`);
-
-    return { message: "Nueva versión creada.", status: "success" };
   });
 }
 

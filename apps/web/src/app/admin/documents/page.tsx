@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { AdminActionForm } from '@/components/admin/admin-action-form';
 import { AdminShell } from '@/components/admin/admin-shell';
+import { DocumentPdfUploadForm } from '@/components/admin/document-pdf-upload-form';
 import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
-import { createDocumentAction } from '../actions';
+import { getAdminApiUrl } from '@/lib/admin-api/config';
 
 export default async function DocumentsPage() {
   const client = await createAuthorizedAdminApiClient();
+  const apiBaseUrl = getAdminApiUrl();
   const [documents, modules] = await Promise.all([
     client.listDocuments('all'),
     client.listModules('active'),
@@ -57,9 +58,15 @@ export default async function DocumentsPage() {
         <aside className="avend-elevated h-fit rounded-lg border border-avend-border bg-avend-surface p-5">
           <h2 className="text-lg font-bold">Cargar documento PDF</h2>
           <p className="mt-1 text-base leading-6 text-avend-text-muted">
-            No cierres ni reenvíes este formulario mientras se procesa. Ante un error de confirmación, actualiza el listado antes de repetir la carga.
+            El formulario conservará todos los datos si ocurre un error. Se admiten PDFs de hasta 20 MiB.
           </p>
-          <AdminActionForm action={createDocumentAction} className="mt-4 space-y-3" submitLabel="Cargar PDF">
+          <DocumentPdfUploadForm
+            apiBaseUrl={apiBaseUrl}
+            className="mt-4 space-y-3"
+            endpoint="/admin/documents"
+            submitLabel="Cargar PDF"
+            successMessage="Documento PDF creado."
+          >
             <label className="block text-base font-medium" htmlFor="document-file">
               Archivo PDF
               <input
@@ -76,6 +83,8 @@ export default async function DocumentsPage() {
               <input
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="document-title"
+                maxLength={500}
+                minLength={2}
                 name="title"
                 required
               />
@@ -85,6 +94,8 @@ export default async function DocumentsPage() {
               <input
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="document-type"
+                maxLength={64}
+                minLength={2}
                 name="documentType"
                 pattern="[A-Za-z][A-Za-z0-9_]{1,63}"
                 required
@@ -95,6 +106,8 @@ export default async function DocumentsPage() {
               <input
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3"
                 id="document-entity"
+                maxLength={255}
+                minLength={2}
                 name="issuingEntity"
               />
             </label>
@@ -133,7 +146,7 @@ export default async function DocumentsPage() {
                 placeholder='{"origen":"administración"}'
               />
             </label>
-          </AdminActionForm>
+          </DocumentPdfUploadForm>
         </aside>
       </div>
     </AdminShell>
