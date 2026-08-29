@@ -203,6 +203,7 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
+  const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   // Contador monotónico para keys locales estables (evita colisiones de key de
   // React entre mensajes creados en el cliente, independiente de crypto.randomUUID).
@@ -252,6 +253,10 @@ export function ChatPanel({
     ) {
       return;
     }
+    const shouldMoveFocusToComposer = Boolean(
+      document.activeElement instanceof HTMLElement &&
+        document.activeElement.closest(".avend-chat-page"),
+    );
     // Una conversación conserva el módulo con el que fue creada. Cambiar el
     // contexto inicia la siguiente consulta en una conversación nueva, sin
     // esperar una nueva navegación de servidor.
@@ -270,6 +275,9 @@ export function ChatPanel({
       "",
       moduleId ? `/chat?module=${encodeURIComponent(moduleId)}` : "/chat",
     );
+    if (shouldMoveFocusToComposer) {
+      queueMicrotask(() => questionInputRef.current?.focus());
+    }
   }
 
   function clearSubmodule() {
@@ -592,7 +600,7 @@ export function ChatPanel({
       <section aria-labelledby="chat-title" className="avend-chat-page">
         <div
           className="avend-chat-workspace-transition"
-          key={activeParentId ?? "general"}
+          key={selectedModuleId ?? activeParentId ?? "general"}
         >
           <header className="avend-chat-header">
             <div>
@@ -738,6 +746,7 @@ export function ChatPanel({
             maxLength={8_000}
             onChange={(event) => setQuestion(event.target.value)}
             placeholder="Escribe tu consulta aquí…"
+            ref={questionInputRef}
             required
             rows={3}
             value={question}

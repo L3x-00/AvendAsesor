@@ -6,13 +6,13 @@ import { BrandLogo } from "@/components/ui/brand-logo";
  */
 export default function Loading() {
   return (
-    <main
-      aria-busy="true"
-      aria-live="polite"
-      className="avend-route-loading"
-      role="status"
-    >
-      <section className="avend-route-loading-card">
+    <main aria-busy="true" className="avend-route-loading">
+      <section
+        aria-atomic="true"
+        aria-live="polite"
+        className="avend-route-loading-card"
+        role="status"
+      >
         <BrandLogo className="avend-route-loading-logo" priority />
         <p className="avend-eyebrow">AVEND ASESOR</p>
         <h1>Preparando tu espacio de trabajo</h1>

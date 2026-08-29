@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApiError } from "@/lib/admin-api/client";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
@@ -6,13 +6,17 @@ import {
   createDocumentAction,
   createModuleAction,
   createDownloadUrlAction,
+  deleteModuleAction,
   reviewUnansweredQuestionAction,
   setModuleStatusAction,
   updateAdministrativeUserAction,
   updateModuleAction,
 } from "./actions";
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+  updateTag: vi.fn(),
+}));
 
 vi.mock("@/lib/admin-api/authorized-client", () => ({
   createAuthorizedAdminApiClient: vi.fn(),
@@ -21,6 +25,7 @@ vi.mock("@/lib/admin-api/authorized-client", () => ({
 const client = {
   createDocument: vi.fn(),
   createModule: vi.fn(),
+  deleteModule: vi.fn(),
   getDownloadUrl: vi.fn(),
   reviewUnansweredQuestion: vi.fn(),
   setModuleStatus: vi.fn(),
@@ -33,6 +38,7 @@ const initialState = { status: "idle" as const };
 describe("admin server actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.values(client).forEach((method) => method.mockReset());
     vi.mocked(createAuthorizedAdminApiClient).mockResolvedValue(
       client as never,
     );
@@ -69,6 +75,10 @@ describe("admin server actions", () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith("/admin/modules");
     expect(revalidatePath).toHaveBeenCalledWith("/admin/documents");
+    expect(updateTag).toHaveBeenCalledWith("chat-modules");
+    expect(client.createModule.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(updateTag).mock.invocationCallOrder[0],
+    );
     expect(state.status).toBe("success");
   });
 
@@ -90,14 +100,91 @@ describe("admin server actions", () => {
     client.updateModule.mockResolvedValue({});
     const formData = new FormData();
     formData.set("moduleId", "module-id");
+    formData.set("description", "Descripción actualizada");
     formData.set("parentModuleId", "__root__");
 
     const state = await updateModuleAction(initialState, formData);
 
     expect(client.updateModule).toHaveBeenCalledWith("module-id", {
+      description: "Descripción actualizada",
       parentModuleId: null,
     });
+    expect(updateTag).toHaveBeenCalledWith("chat-modules");
     expect(state.status).toBe("success");
+  });
+
+  it("allows an administrator to clear an existing module description", async () => {
+    client.updateModule.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("moduleId", "module-id");
+    formData.set("description", "");
+
+    const state = await updateModuleAction(initialState, formData);
+
+    expect(client.updateModule).toHaveBeenCalledWith("module-id", {
+      description: null,
+    });
+    expect(updateTag).toHaveBeenCalledWith("chat-modules");
+    expect(state.status).toBe("success");
+  });
+
+  it("invalidates the teacher module catalog after a successful status change", async () => {
+    client.setModuleStatus.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("moduleId", "module-id");
+    formData.set("isActive", "true");
+
+    const state = await setModuleStatusAction(initialState, formData);
+
+    expect(client.setModuleStatus).toHaveBeenCalledWith(
+      "module-id",
+      true,
+      undefined,
+    );
+    expect(updateTag).toHaveBeenCalledWith("chat-modules");
+    expect(state.status).toBe("success");
+  });
+
+  it("invalidates the teacher module catalog after a successful logical deletion", async () => {
+    client.deleteModule.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("moduleId", "module-id");
+    formData.set("reason", "Catálogo retirado");
+
+    const state = await deleteModuleAction(initialState, formData);
+
+    expect(client.deleteModule).toHaveBeenCalledWith(
+      "module-id",
+      "Catálogo retirado",
+    );
+    expect(updateTag).toHaveBeenCalledWith("chat-modules");
+    expect(state.status).toBe("success");
+  });
+
+  it("does not invalidate the teacher catalog after rejected module mutations", async () => {
+    const error = new AdminApiError(503);
+    client.updateModule.mockRejectedValue(error);
+    client.setModuleStatus.mockRejectedValue(error);
+    client.deleteModule.mockRejectedValue(error);
+    const updateData = new FormData();
+    updateData.set("moduleId", "module-id");
+    updateData.set("description", "Descripción pendiente");
+    const statusData = new FormData();
+    statusData.set("moduleId", "module-id");
+    statusData.set("isActive", "true");
+    const deleteData = new FormData();
+    deleteData.set("moduleId", "module-id");
+    deleteData.set("reason", "Catálogo retirado");
+
+    const states = await Promise.all([
+      updateModuleAction(initialState, updateData),
+      setModuleStatusAction(initialState, statusData),
+      deleteModuleAction(initialState, deleteData),
+    ]);
+
+    expect(states.every((state) => state.status === "error")).toBe(true);
+    expect(updateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("refuses a document upload without a non-empty PDF", async () => {
@@ -127,6 +214,8 @@ describe("admin server actions", () => {
         "No se pudo confirmar el resultado. Actualiza el listado o detalle antes de volver a enviar esta operación.",
       status: "error",
     });
+    expect(updateTag).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("returns the short-lived download URL only through the authenticated server action", async () => {
