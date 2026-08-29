@@ -28,5 +28,15 @@ export function getAdminApiUrl(
     throw new Error('Administrative API configuration is invalid.');
   }
 
-  return url.toString().replace(/\/$/, '');
+  if (
+    url.username ||
+    url.password ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error('Administrative API configuration is invalid.');
+  }
+
+  return url.origin;
 }

@@ -1,15 +1,16 @@
 import { notFound } from 'next/navigation';
 import { AdminActionForm } from '@/components/admin/admin-action-form';
 import { AdminShell } from '@/components/admin/admin-shell';
+import { DocumentPdfUploadForm } from '@/components/admin/document-pdf-upload-form';
 import { AdminApiError } from '@/lib/admin-api/client';
 import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { getAdminApiUrl } from '@/lib/admin-api/config';
 import { getDocumentIngestionStatusContent } from '@/lib/admin-api/labels';
 import type {
   ManagedDocumentDetails,
   ManagedModule,
 } from '@/lib/admin-api/types';
 import {
-  addDocumentVersionAction,
   createDownloadUrlAction,
   deleteDocumentAction,
   linkDocumentModuleAction,
@@ -31,6 +32,7 @@ const ingestionTimestampFormatter = new Intl.DateTimeFormat('es-PE', {
 export default async function DocumentDetailPage({ params }: DocumentDetailPageProps) {
   const { id } = await params;
   const client = await createAuthorizedAdminApiClient();
+  const apiBaseUrl = getAdminApiUrl();
   let document: ManagedDocumentDetails;
   let modules: ManagedModule[];
 
@@ -124,14 +126,19 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
         <section className="space-y-5">
           <article className="avend-elevated rounded-lg border border-avend-border bg-avend-surface p-5">
             <h2 className="text-lg font-bold">Cargar una nueva versión</h2>
-            <p className="mt-1 text-base text-avend-text-muted">La versión anterior permanece intacta. No reenvíes automáticamente ante un resultado incierto.</p>
-            <AdminActionForm action={addDocumentVersionAction} className="mt-4 space-y-3" submitLabel="Crear nueva versión">
-              <input name="documentId" type="hidden" value={document.id} />
+            <p className="mt-1 text-base text-avend-text-muted">La versión anterior permanece intacta y el archivo seleccionado se conserva si ocurre un error.</p>
+            <DocumentPdfUploadForm
+              apiBaseUrl={apiBaseUrl}
+              className="mt-4 space-y-3"
+              endpoint={'/admin/documents/' + encodeURIComponent(document.id) + '/versions'}
+              submitLabel="Crear nueva versión"
+              successMessage="Nueva versión creada."
+            >
               <label className="block text-base font-medium" htmlFor="detail-file">
                 Archivo PDF
                 <input accept="application/pdf,.pdf" className="mt-1 block w-full text-base" id="detail-file" name="file" required type="file" />
               </label>
-            </AdminActionForm>
+            </DocumentPdfUploadForm>
           </article>
 
           <article className="avend-elevated rounded-lg border border-avend-border bg-avend-surface p-5">
