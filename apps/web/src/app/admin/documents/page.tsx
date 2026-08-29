@@ -98,8 +98,14 @@ export default async function DocumentsPage() {
                 minLength={2}
                 name="documentType"
                 pattern="[A-Za-z][A-Za-z0-9_]{1,63}"
+                placeholder="RESOLUCION_MINISTERIAL"
                 required
+                title="Use solo letras, números y guion bajo, sin espacios ni acentos. Ejemplo: RESOLUCION_MINISTERIAL"
               />
+              <span className="mt-1 block text-sm text-avend-text-muted">
+                Código sin espacios ni acentos (letras, números y guion bajo). El
+                título descriptivo va en el campo «Título».
+              </span>
             </label>
             <label className="block text-base font-medium" htmlFor="document-entity">
               Entidad emisora (opcional)

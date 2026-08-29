@@ -107,6 +107,20 @@ export function DocumentPdfUploadForm({
     if (pending) return;
 
     const form = event.currentTarget;
+
+    // Native validation is disabled on the form (noValidate) so this custom
+    // handler always runs — otherwise the browser silently blocks the submit
+    // and scrolls to the first invalid field, and the button appears to do
+    // nothing. Surface any constraint error explicitly instead.
+    if (!form.reportValidity()) {
+      setFeedback({
+        message:
+          'Revisa los campos marcados: falta el PDF o algún dato no cumple el formato solicitado.',
+        status: 'error',
+      });
+      return;
+    }
+
     const formData = new window.FormData(form);
     const fileInput = form.elements.namedItem('file');
     const selectedFile =
@@ -207,6 +221,7 @@ export function DocumentPdfUploadForm({
     <form
       aria-busy={pending}
       className={className}
+      noValidate
       onSubmit={(event) => void submit(event)}
       ref={formRef}
     >
