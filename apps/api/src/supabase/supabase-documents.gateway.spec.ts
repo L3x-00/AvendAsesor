@@ -36,6 +36,8 @@ const versionRow = {
   document_id: documentRow.id,
   file_size_bytes: 512,
   id: documentRow.current_version_id,
+  ingestion_status: 'indexed' as const,
+  ingestion_updated_at: '2026-08-10T00:00:00+00:00',
   mime_type: 'application/pdf' as const,
   original_file_name: 'documento.pdf',
   page_count: 1,
@@ -217,9 +219,21 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     builder.data = versionRow;
     await expect(
       gateway.findVersion(documentRow.id, versionRow.id),
-    ).resolves.toMatchObject({ storagePath: versionRow.storage_path });
+    ).resolves.toMatchObject({
+      ingestionStatus: versionRow.ingestion_status,
+      ingestionUpdatedAt: versionRow.ingestion_updated_at,
+      storagePath: versionRow.storage_path,
+    });
     builder.data = [versionRow];
-    await expect(gateway.listVersions(documentRow.id)).resolves.toHaveLength(1);
+    await expect(gateway.listVersions(documentRow.id)).resolves.toEqual([
+      expect.objectContaining({
+        ingestionStatus: versionRow.ingestion_status,
+        ingestionUpdatedAt: versionRow.ingestion_updated_at,
+      }),
+    ]);
+    expect(builder.select).toHaveBeenCalledWith(
+      expect.stringContaining('ingestion_status,ingestion_updated_at'),
+    );
 
     builder.data = [{ module_id: 'f3fbec69-2b7f-4c9e-bddd-8c72c7a9cc51' }];
     await expect(gateway.listModuleIds(documentRow.id)).resolves.toEqual([
@@ -248,6 +262,11 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     await expect(gateway.findById(documentRow.id)).rejects.toBeInstanceOf(
       InternalServerErrorException,
     );
+
+    builder.data = { ...versionRow, ingestion_status: 'unknown' };
+    await expect(
+      gateway.findVersion(documentRow.id, versionRow.id),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 
   it('runs metadata, status, module link and download-audit operations only through restricted RPCs', async () => {
