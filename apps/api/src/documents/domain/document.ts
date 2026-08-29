@@ -3,6 +3,8 @@ import { z } from 'zod';
 export type DocumentMetadata = Record<string, unknown>;
 export type DocumentPublicationFilter = 'active' | 'all' | 'inactive';
 export type DocumentPublicationStatus = 'active' | 'inactive';
+export type DocumentIngestionStatus =
+  'failed' | 'indexed' | 'pending' | 'processing';
 
 export interface ManagedDocument {
   articleReference: string | null;
@@ -31,6 +33,8 @@ export interface ManagedDocument {
 export interface ManagedDocumentVersion {
   fileSizeBytes: number;
   id: string;
+  ingestionStatus: DocumentIngestionStatus;
+  ingestionUpdatedAt: string;
   originalFileName: string;
   pageCount: number;
   uploadedAt: string;
@@ -89,6 +93,8 @@ const storedDocumentVersionRowSchema = z.object({
   document_id: z.string().uuid(),
   file_size_bytes: z.number().int().positive(),
   id: z.string().uuid(),
+  ingestion_status: z.enum(['failed', 'indexed', 'pending', 'processing']),
+  ingestion_updated_at: timestampSchema,
   mime_type: z.literal('application/pdf'),
   original_file_name: z.string().min(1),
   page_count: z.number().int().min(1).max(300),
@@ -142,6 +148,8 @@ export function toStoredDocumentVersion(value: unknown): StoredDocumentVersion {
   return {
     fileSizeBytes: result.data.file_size_bytes,
     id: result.data.id,
+    ingestionStatus: result.data.ingestion_status,
+    ingestionUpdatedAt: result.data.ingestion_updated_at,
     mimeType: result.data.mime_type,
     originalFileName: result.data.original_file_name,
     pageCount: result.data.page_count,
@@ -160,6 +168,8 @@ export function toManagedDocumentVersion(
   return {
     fileSizeBytes: version.fileSizeBytes,
     id: version.id,
+    ingestionStatus: version.ingestionStatus,
+    ingestionUpdatedAt: version.ingestionUpdatedAt,
     originalFileName: version.originalFileName,
     pageCount: version.pageCount,
     uploadedAt: version.uploadedAt,
