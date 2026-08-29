@@ -3,6 +3,7 @@ import { AdminActionForm } from '@/components/admin/admin-action-form';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { AdminApiError } from '@/lib/admin-api/client';
 import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { getDocumentIngestionStatusContent } from '@/lib/admin-api/labels';
 import type {
   ManagedDocumentDetails,
   ManagedModule,
@@ -20,6 +21,12 @@ import {
 interface DocumentDetailPageProps {
   params: Promise<{ id: string }>;
 }
+
+const ingestionTimestampFormatter = new Intl.DateTimeFormat('es-PE', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'America/Lima',
+});
 
 export default async function DocumentDetailPage({ params }: DocumentDetailPageProps) {
   const { id } = await params;
@@ -130,16 +137,43 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
           <article className="avend-elevated rounded-lg border border-avend-border bg-avend-surface p-5">
             <h2 className="text-lg font-bold">Versiones y descargas</h2>
             <ul className="mt-4 space-y-3">
-              {document.versions.map((version) => (
-                <li className="rounded-md bg-avend-surface-muted p-3" key={version.id}>
-                  <p className="text-base font-semibold">Versión {version.versionNumber} · {version.originalFileName}</p>
-                  <p className="mt-1 text-base text-avend-text-muted">{version.pageCount} páginas · {version.fileSizeBytes} bytes</p>
-                  <AdminActionForm action={createDownloadUrlAction} className="mt-3 space-y-2" submitLabel="Generar enlace temporal">
-                    <input name="documentId" type="hidden" value={document.id} />
-                    <input name="versionId" type="hidden" value={version.id} />
-                  </AdminActionForm>
-                </li>
-              ))}
+              {document.versions.map((version) => {
+                const ingestionContent = getDocumentIngestionStatusContent(
+                  version.ingestionStatus,
+                );
+
+                return (
+                  <li className="rounded-md bg-avend-surface-muted p-3" key={version.id}>
+                    <p className="text-base font-semibold">Versión {version.versionNumber} · {version.originalFileName}</p>
+                    <p className="mt-1 text-base text-avend-text-muted">{version.pageCount} páginas · {version.fileSizeBytes} bytes</p>
+                    <div
+                      aria-labelledby={`ingestion-status-${version.id}`}
+                      className="mt-3 rounded-md border border-avend-border bg-avend-surface p-3"
+                      role="group"
+                    >
+                      <p className="text-base" id={`ingestion-status-${version.id}`}>
+                        <span className="font-medium">Estado de búsqueda:</span>{' '}
+                        <strong className="text-avend-navy">{ingestionContent.label}</strong>
+                      </p>
+                      <p className="mt-1 text-base leading-6 text-avend-text-muted">
+                        {ingestionContent.description}
+                      </p>
+                      <p className="mt-1 text-base text-avend-text-muted">
+                        Última actualización del procesamiento:{' '}
+                        <time dateTime={version.ingestionUpdatedAt}>
+                          {ingestionTimestampFormatter.format(
+                            new Date(version.ingestionUpdatedAt),
+                          )}
+                        </time>
+                      </p>
+                    </div>
+                    <AdminActionForm action={createDownloadUrlAction} className="mt-3 space-y-2" submitLabel="Generar enlace temporal">
+                      <input name="documentId" type="hidden" value={document.id} />
+                      <input name="versionId" type="hidden" value={version.id} />
+                    </AdminActionForm>
+                  </li>
+                );
+              })}
             </ul>
           </article>
 

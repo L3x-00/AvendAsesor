@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
@@ -238,19 +238,21 @@ export function TeacherShell({
   selectedModuleId,
 }: TeacherShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuSummaryRef = useRef<HTMLElement>(null);
 
-  function closeMobileMenu() {
+  function closeMobileMenuAndRestoreFocus() {
     setMobileMenuOpen(false);
+    mobileMenuSummaryRef.current?.focus();
   }
 
-  function handleModuleSelect(moduleId: string) {
+  function handleMobileModuleSelect(moduleId: string) {
     onModuleSelect?.(moduleId);
-    closeMobileMenu();
+    closeMobileMenuAndRestoreFocus();
   }
 
-  function handleNewChat() {
+  function handleMobileNewChat() {
     onNewChat?.();
-    closeMobileMenu();
+    closeMobileMenuAndRestoreFocus();
   }
 
   return (
@@ -268,8 +270,8 @@ export function TeacherShell({
           activeSection={activeSection}
           moduleNavigationDisabled={moduleNavigationDisabled}
           modules={modules}
-          onModuleSelect={onModuleSelect ? handleModuleSelect : undefined}
-          onNewChat={onNewChat ? handleNewChat : undefined}
+          onModuleSelect={onModuleSelect}
+          onNewChat={onNewChat}
           role={role}
           selectedModuleId={selectedModuleId}
         />
@@ -283,13 +285,24 @@ export function TeacherShell({
             onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
             open={mobileMenuOpen}
           >
-            <summary aria-label="Abrir navegación principal">Menú</summary>
+            <summary
+              aria-label={
+                mobileMenuOpen
+                  ? "Cerrar navegación principal"
+                  : "Abrir navegación principal"
+              }
+              ref={mobileMenuSummaryRef}
+            >
+              Menú
+            </summary>
             <TeacherNavigation
               activeSection={activeSection}
               moduleNavigationDisabled={moduleNavigationDisabled}
               modules={modules}
-              onModuleSelect={onModuleSelect ? handleModuleSelect : undefined}
-              onNewChat={onNewChat ? handleNewChat : undefined}
+              onModuleSelect={
+                onModuleSelect ? handleMobileModuleSelect : undefined
+              }
+              onNewChat={onNewChat ? handleMobileNewChat : undefined}
               role={role}
               selectedModuleId={selectedModuleId}
             />

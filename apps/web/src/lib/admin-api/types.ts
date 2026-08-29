@@ -65,6 +65,8 @@ export type ManagedDocument = z.infer<typeof managedDocumentSchema>;
 export const managedDocumentVersionSchema = z.object({
   fileSizeBytes: z.number().int().positive(),
   id: z.string().uuid(),
+  ingestionStatus: z.enum(["failed", "indexed", "pending", "processing"]),
+  ingestionUpdatedAt: timestampSchema,
   originalFileName: z.string(),
   pageCount: z.number().int().min(1).max(300),
   uploadedAt: timestampSchema,

@@ -20,6 +20,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:coverage": "npm run test:cov --workspaces --if-present",
-    "test:e2e": "npm run test:e2e --workspace=api"
+    "test:e2e": "npm run test:e2e --workspace=api",
+    "verify:build-artifacts": "npm run verify:build-artifacts --workspace=web"
   }
 }

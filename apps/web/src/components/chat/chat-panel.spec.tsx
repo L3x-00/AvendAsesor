@@ -25,6 +25,14 @@ const childModule = {
   sortOrder: 0,
 };
 
+const secondChildModule = {
+  code: "LICENSES-B",
+  id: "ac8b56af-6d0c-4fef-881e-7c00907540dd",
+  name: "Licencia por estudios",
+  parentModuleId: chatModule.id,
+  sortOrder: 1,
+};
+
 const secondModule = {
   code: "TEACHER-EVALUATION",
   id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
@@ -219,6 +227,32 @@ describe("ChatPanel", () => {
     expect(
       screen.queryByText("Tema: Licencia por salud"),
     ).not.toBeInTheDocument();
+  });
+
+  it("restarts the workspace transition between sibling submodules", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <ChatPanel
+        initialModuleId={childModule.id}
+        modules={[chatModule, childModule, secondChildModule]}
+      />,
+    );
+    const initialWorkspace = container.querySelector(
+      ".avend-chat-workspace-transition",
+    );
+
+    expect(initialWorkspace).not.toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: /licencia por estudios/i }),
+    );
+
+    await waitFor(() =>
+      expect(
+        container.querySelector(".avend-chat-workspace-transition"),
+      ).not.toBe(initialWorkspace),
+    );
+    expect(screen.getByText("Tema: Licencia por estudios")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Escribe tu consulta" })).toHaveFocus();
   });
 
   it("cambia de módulo raíz de forma local sin una nueva navegación de servidor", async () => {

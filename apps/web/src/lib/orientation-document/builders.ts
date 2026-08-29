@@ -11,6 +11,7 @@ import {
   Paragraph,
   TextRun,
 } from "docx";
+import * as fontkit from "fontkit";
 import PDFDocument from "pdfkit";
 import {
   describeOrientationSource,
@@ -57,18 +58,15 @@ interface FontGlyphLookup {
   hasGlyphForCodePoint(codePoint: number): boolean;
 }
 
-// fontkit is required (not imported) so the bundler keeps it external via
-// serverExternalPackages; a require call is not statically rewritten the way
-// require.resolve is.
-const fontkit = process
-  .getBuiltinModule("module")
-  .createRequire(import.meta.url)("fontkit") as {
-  openSync(path: string): FontGlyphLookup;
-};
+// Keep this as a static import. `serverExternalPackages` preserves Node's
+// implementation, while static analysis can trace fontkit's complete runtime
+// dependency graph into the serverless function. A dynamic createRequire call
+// hid the require-only `restructure/dist/main.cjs` entry from Vercel tracing.
+const openFont = fontkit.openSync as (path: string) => FontGlyphLookup;
 const PDF_FONT_LOOKUPS = {
-  emoji: fontkit.openSync(PDF_FONT_PATHS.emoji),
-  latin: fontkit.openSync(PDF_FONT_PATHS.latinRegular),
-  latinExt: fontkit.openSync(PDF_FONT_PATHS.latinExtRegular),
+  emoji: openFont(PDF_FONT_PATHS.emoji),
+  latin: openFont(PDF_FONT_PATHS.latinRegular),
+  latinExt: openFont(PDF_FONT_PATHS.latinExtRegular),
 };
 
 type PdfFontStyle = "bold" | "italic" | "regular";

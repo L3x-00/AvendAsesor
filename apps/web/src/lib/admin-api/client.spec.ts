@@ -54,6 +54,8 @@ const documentDetails = {
     {
       fileSizeBytes: 128,
       id: documentRecord.currentVersionId,
+      ingestionStatus: "indexed" as const,
+      ingestionUpdatedAt: "2026-08-10T00:00:00.000Z",
       originalFileName: "norma.pdf",
       pageCount: 1,
       uploadedAt: "2026-08-09T00:00:00.000Z",

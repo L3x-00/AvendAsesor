@@ -77,6 +77,25 @@ export default async function ModulesPage() {
                           name="code"
                           required
                         />
+                        <label className="block text-base font-medium" htmlFor={`module-description-${module.id}`}>
+                          Descripción (opcional)
+                        </label>
+                        <textarea
+                          aria-describedby={`module-description-help-${module.id}`}
+                          className="mt-1 min-h-20 w-full rounded-md border border-avend-border px-3 py-2"
+                          defaultValue={module.description ?? ''}
+                          id={`module-description-${module.id}`}
+                          maxLength={500}
+                          minLength={2}
+                          name="description"
+                        />
+                        <p
+                          className="mt-1 text-base text-avend-text-muted"
+                          id={`module-description-help-${module.id}`}
+                        >
+                          Déjala vacía para quitarla; si escribes una descripción,
+                          usa entre 2 y 500 caracteres.
+                        </p>
                         <label className="block text-base font-medium" htmlFor={`module-order-${module.id}`}>
                           Orden
                         </label>
@@ -180,10 +199,19 @@ export default async function ModulesPage() {
             <label className="block text-base font-medium" htmlFor="new-module-description">
               Descripción (opcional)
               <textarea
+                aria-describedby="new-module-description-help"
                 className="mt-1 min-h-20 w-full rounded-md border border-avend-border px-3 py-2"
                 id="new-module-description"
+                maxLength={500}
+                minLength={2}
                 name="description"
               />
+              <span
+                className="mt-1 block text-base text-avend-text-muted"
+                id="new-module-description-help"
+              >
+                Opcional; si la completas, usa entre 2 y 500 caracteres.
+              </span>
             </label>
             <label className="block text-base font-medium" htmlFor="new-module-order">
               Orden (opcional)

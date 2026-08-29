@@ -45,13 +45,14 @@
   box-shadow: 0 8px 18px rgb(22 119 255 / 24%);
 }
 
-.avend-button--primary:hover {
+.avend-button--primary:not(:disabled):hover {
   box-shadow: 0 12px 22px rgb(13 27 61 / 20%);
 }
 
-.avend-button:active,
-.avend-chat-module:active,
-.avend-teacher-navigation-link:active,
+.avend-button:not(:disabled):active,
+.avend-chat-module:not(:disabled):active,
+.avend-teacher-navigation-link:not(:disabled):active,
+.avend-teacher-new-chat:not(:disabled):active,
 .avend-admin-navigation-link:active {
   transform: translateY(0) scale(0.985);
 }
@@ -229,7 +230,7 @@ button.avend-teacher-new-chat {
     transform 180ms var(--avend-ease-interaction);
 }
 
-.avend-chat-module:hover,
+.avend-chat-module:not(:disabled):hover,
 .avend-chat-module[aria-pressed="true"] {
   box-shadow: 0 10px 20px rgb(13 27 61 / 9%);
   transform: translateY(-2px);
@@ -295,6 +296,32 @@ button.avend-teacher-new-chat {
   box-shadow: var(--avend-shadow-card);
 }
 
+.avend-button:disabled,
+.avend-chat-module:disabled,
+.avend-chat-context button:disabled,
+.avend-chat-clarification-options button:disabled,
+.avend-chat-mic:disabled,
+button.avend-teacher-navigation-link:disabled,
+button.avend-teacher-new-chat:disabled,
+.avend-teacher-sidebar button.avend-teacher-navigation-link:disabled,
+.avend-teacher-sidebar button.avend-teacher-new-chat:disabled {
+  background: var(--avend-surface-muted);
+  background-image: none;
+  border-color: var(--avend-border);
+  box-shadow: none;
+  color: var(--avend-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+
+.avend-chat-composer textarea:disabled {
+  background: var(--avend-surface-muted);
+  color: var(--avend-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .avend-auth-layout,
   .avend-content-page,
@@ -305,5 +332,18 @@ button.avend-teacher-new-chat {
   .avend-route-loading-lines span,
   .avend-button-spinner {
     animation: none;
+  }
+
+  .avend-button:hover,
+  .avend-button:active,
+  .avend-chat-module:hover,
+  .avend-chat-module:active,
+  .avend-teacher-navigation-link:hover,
+  .avend-teacher-navigation-link:active,
+  .avend-teacher-new-chat:hover,
+  .avend-teacher-new-chat:active,
+  .avend-admin-navigation-link:hover,
+  .avend-admin-navigation-link:active {
+    transform: none;
   }
 }
