@@ -311,4 +311,42 @@ describe('DocumentPdfUploadForm', () => {
     expect(payload.has('issuanceYear')).toBe(false);
     expect(payload.has('metadata')).toBe(false);
   });
+
+  it('surfaces a message and does not upload when a required field is invalid', async () => {
+    const user = userEvent.setup();
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: 'verified-token' } },
+      error: null,
+    });
+    render(
+      <DocumentPdfUploadForm
+        apiBaseUrl="https://api.avend.example"
+        endpoint="/admin/documents"
+        submitLabel="Cargar PDF"
+        successMessage="Documento PDF creado."
+      >
+        <label htmlFor="req-file">
+          Archivo
+          <input id="req-file" name="file" type="file" />
+        </label>
+        <label htmlFor="req-title">
+          Título
+          <input id="req-title" name="title" required />
+        </label>
+      </DocumentPdfUploadForm>,
+    );
+
+    await user.upload(
+      screen.getByLabelText('Archivo'),
+      new File(['%PDF-1.7'], 'norma.pdf', { type: 'application/pdf' }),
+    );
+    // Leave the required "Título" empty on purpose.
+    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Revisa los campos',
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
 });
