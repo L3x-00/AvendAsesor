@@ -10,19 +10,20 @@
 
 ## Fecha de referencia
 
-24 de agosto de 2026.
+28 de agosto de 2026.
 
 ## Estado verificado vigente
 
-- Hitos 1 y 2: esquema, backend y frontend publicados previamente; la
-  aceptación contractual por correo real continúa separada.
-- Hitos 3 y 4: las 23 migraciones acumulativas ya están aplicadas en Supabase
-  producción desde un checkout limpio y el historial coincide en 29 versiones.
-- Aplicación: el lote visual/UI responsive y las pantallas operativas están
-  verificados localmente. La fase actual prepara su release API/Web y las
-  cuentas QA de datos ficticios.
-- Límites intencionales: no se habilitan worker RAG, proveedor IA, corpus,
-  HMAC de memoria FAQ ni correo transaccional durante estas pruebas visuales.
+- Primera etapa CU-01…CU-15: código integrado en `main`, con los cierres API
+  (`5872065`) y Web (`ba4e881`) publicados mediante PR #8 y PR #9.
+- Producción: Vercel `dpl_FkCcjj3EdSDDq4uB49peEA1AZzkM` está `Ready`; web,
+  API readiness, chat autenticado responsive e historial QA de lectura pasan.
+- Supabase: historial local/remoto 31/31. Las dos migraciones de contexto seguro
+  y vínculos de respuesta requeridas por la primera etapa están aplicadas.
+- Calidad: API 261 pruebas + 26 E2E; web 173; pgTAP 292; builds, cobertura,
+  trazado CU-14 y auditoría Claude Code Opus 4.8 en verde sin BLOCKER/HIGH/MEDIUM.
+- Límites intencionales: producción no tiene corpus normativo, fuentes, chunks
+  ni vectores reales. PI-01…PI-06 y la aceptación del cliente siguen pendientes.
 - Recuperación: el plan Free no aporta PITR; antes de una futura migración se
   repite el respaldo lógico privado y la validación en staging.
 
@@ -36,14 +37,15 @@
 
 **Estado contractual:** Cerrado / inicio de ejecución.
 
-**Estado técnico:** Esquema Hitos 1–4 en producción; despliegue de aplicación y
-QA autenticada en curso.
+**Estado técnico:** Primera etapa implementada, integrada y desplegada;
+validación funcional con corpus real y aprobación del cliente pendientes.
 
 ---
 
 ## Fase actual
 
-Hito 4 / Fase 2 de release: integración y despliegue de API/Web.
+Cierre técnico de la primera etapa y preparación del corpus autorizado para
+PI-01…PI-06.
 
 ---
 
