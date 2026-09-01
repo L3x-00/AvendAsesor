@@ -30,15 +30,18 @@ describe("TeacherShell mobile navigation", () => {
 
     expect(details).not.toBeNull();
     const mobileNavigation = within(details as HTMLDetailsElement);
-    const summary = mobileNavigation.getByText("Menú");
-    expect(summary).toHaveAttribute("aria-label", "Abrir navegación principal");
+    const summary = details?.querySelector("summary") as HTMLElement;
+    expect(summary).toHaveAttribute(
+      "aria-label",
+      "Menú: abrir navegación principal",
+    );
 
     await user.click(summary);
 
     await waitFor(() =>
       expect(summary).toHaveAttribute(
         "aria-label",
-        "Cerrar navegación principal",
+        "Menú: cerrar navegación principal",
       ),
     );
     await user.click(
@@ -50,7 +53,7 @@ describe("TeacherShell mobile navigation", () => {
       expect(details).not.toHaveAttribute("open");
       expect(summary).toHaveAttribute(
         "aria-label",
-        "Abrir navegación principal",
+        "Menú: abrir navegación principal",
       );
       expect(summary).toHaveFocus();
     });
@@ -77,5 +80,102 @@ describe("TeacherShell mobile navigation", () => {
 
     expect(onModuleSelect).toHaveBeenCalledWith(modules[0].id);
     expect(desktopButton).toHaveFocus();
+  });
+
+  it("closes the mobile menu with Escape and restores focus", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <TeacherShell activeSection="chat" modules={modules}>
+        <h1>Consulta</h1>
+      </TeacherShell>,
+    );
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    const summary = details.querySelector("summary") as HTMLElement;
+
+    await user.click(summary);
+    await waitFor(() => expect(details).toHaveAttribute("open"));
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(details).not.toHaveAttribute("open");
+      expect(summary).toHaveFocus();
+    });
+  });
+
+  it("closes the mobile menu after starting a new chat", async () => {
+    const user = userEvent.setup();
+    const onNewChat = vi.fn();
+    const { container } = render(
+      <TeacherShell
+        activeSection="chat"
+        modules={modules}
+        onNewChat={onNewChat}
+      >
+        <h1>Consulta</h1>
+      </TeacherShell>,
+    );
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    const mobileNavigation = within(details);
+    const summary = details.querySelector("summary") as HTMLElement;
+
+    await user.click(summary);
+    await user.click(
+      mobileNavigation.getByRole("button", { name: "Nuevo chat" }),
+    );
+
+    expect(onNewChat).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(details).not.toHaveAttribute("open");
+      expect(summary).toHaveFocus();
+    });
+  });
+
+  it("orders only root modules and exposes the selected and administrative states", () => {
+    const childModule = {
+      ...modules[0],
+      id: "7c8b56af-6d0c-4fef-881e-7c00907540dd",
+      name: "Licencia por salud",
+      parentModuleId: modules[0].id,
+    };
+    const firstModule = {
+      ...modules[0],
+      id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+      name: "Evaluación docente",
+      sortOrder: 0,
+    };
+    const lastModule = { ...modules[0], sortOrder: 2 };
+    const { container } = render(
+      <TeacherShell
+        activeSection="chat"
+        modules={[lastModule, childModule, firstModule]}
+        onModuleSelect={vi.fn()}
+        role="admin"
+        selectedModuleId={firstModule.id}
+      >
+        <h1>Consulta</h1>
+      </TeacherShell>,
+    );
+    const desktopNavigation = within(
+      container.querySelector("aside") as HTMLElement,
+    );
+    const moduleButtons = desktopNavigation.getAllByRole("button").filter(
+      (button) =>
+        button.textContent === "Evaluación docente" ||
+        button.textContent === "Licencias",
+    );
+
+    expect(moduleButtons.map((button) => button.textContent)).toEqual([
+      "Evaluación docente",
+      "Licencias",
+    ]);
+    expect(
+      desktopNavigation.queryByRole("button", { name: "Licencia por salud" }),
+    ).not.toBeInTheDocument();
+    expect(moduleButtons[0]).toHaveAttribute("aria-pressed", "true");
+    expect(
+      desktopNavigation.getByRole("link", {
+        name: "Panel de administración",
+      }),
+    ).toHaveAttribute("href", "/admin");
   });
 });

@@ -29,6 +29,24 @@ export default defineConfig({
       ],
       provider: "v8",
       thresholds: {
+        "src/components/chat/chat-panel.tsx": {
+          branches: 80,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
+        "src/components/chat/chat-sources.tsx": {
+          branches: 80,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
+        "src/components/teacher/teacher-shell.tsx": {
+          branches: 80,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
         branches: 80,
         functions: 90,
         lines: 90,

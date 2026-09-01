@@ -124,19 +124,67 @@ function renderInline(text: string): ReactNode[] {
     );
 }
 
+const unorderedListItemPattern = /^\s*[-*•]\s+(.+)$/;
+const orderedListItemPattern = /^\s*\d+[.)]\s+(.+)$/;
+
 function renderRichContent(content: string): ReactNode[] {
-  const paragraphs = content
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph.length > 0);
+  const blocks: ReactNode[] = [];
+  let paragraphLines: string[] = [];
+  let listItems: string[] = [];
+  let listOrdered = false;
 
-  const source = paragraphs.length > 0 ? paragraphs : [content];
+  function flushParagraph() {
+    if (paragraphLines.length === 0) return;
+    const paragraph = paragraphLines.join(" ");
+    blocks.push(
+      <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
+        {renderInline(paragraph)}
+      </p>,
+    );
+    paragraphLines = [];
+  }
 
-  return source.map((paragraph, index) => (
-    <p className="avend-chat-paragraph" key={index}>
-      {renderInline(paragraph)}
-    </p>
-  ));
+  function flushList() {
+    if (listItems.length === 0) return;
+    const List = listOrdered ? "ol" : "ul";
+    blocks.push(
+      <List className="avend-chat-list" key={`list-${blocks.length}`}>
+        {listItems.map((item, index) => (
+          <li key={`${index}-${item}`}>{renderInline(item)}</li>
+        ))}
+      </List>,
+    );
+    listItems = [];
+  }
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const unorderedMatch = line.match(unorderedListItemPattern);
+    const orderedMatch = line.match(orderedListItemPattern);
+    const nextListOrdered = Boolean(orderedMatch);
+    const listItem = orderedMatch?.[1] ?? unorderedMatch?.[1];
+
+    if (listItem) {
+      flushParagraph();
+      if (listItems.length > 0 && nextListOrdered !== listOrdered) flushList();
+      listOrdered = nextListOrdered;
+      listItems.push(listItem);
+      continue;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks;
 }
 
 interface SpeechRecognitionResultLike {
@@ -290,7 +338,13 @@ export function ChatPanel({
 
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        recognition.onend = null;
+        recognition.onerror = null;
+        recognition.onresult = null;
+        recognition.stop();
+      }
       recognitionRef.current = null;
     };
   }, []);
@@ -299,6 +353,7 @@ export function ChatPanel({
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setIsDictating(false);
+    setStatus("Dictado detenido. Revisa el texto antes de enviarlo.");
   }
 
   function toggleDictation() {
@@ -324,17 +379,38 @@ export function ChatPanel({
         .trim();
       if (clean) {
         setQuestion((current) => (current ? `${current} ${clean}` : clean));
+        setStatus("Dictado añadido. Revisa el texto antes de enviarlo.");
       }
     };
-    recognition.onerror = () => stopDictation();
+    let recognitionFailed = false;
+    recognition.onerror = () => {
+      recognitionFailed = true;
+      recognitionRef.current = null;
+      setIsDictating(false);
+      setStatus(
+        "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
+      );
+    };
     recognition.onend = () => {
       recognitionRef.current = null;
       setIsDictating(false);
+      if (!recognitionFailed) {
+        setStatus("Dictado finalizado. Revisa el texto antes de enviarlo.");
+      }
     };
 
     recognitionRef.current = recognition;
     setIsDictating(true);
-    recognition.start();
+    setStatus("Escuchando el dictado…");
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setIsDictating(false);
+      setStatus(
+        "No se pudo iniciar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
+      );
+    }
   }
 
   function replaceStreamingMessage(
@@ -347,8 +423,20 @@ export function ChatPanel({
     });
   }
 
-  function discardStreamingMessage(message: string) {
-    setMessages((current) => current.filter((item) => item.id !== "streaming"));
+  function discardStreamingMessage(
+    message: string,
+    retryQuestion?: string,
+    unpersistedQuestionId?: string,
+  ) {
+    setMessages((current) =>
+      current.filter(
+        (item) =>
+          item.id !== "streaming" && item.id !== unpersistedQuestionId,
+      ),
+    );
+    if (retryQuestion) {
+      setQuestion((current) => current || retryQuestion);
+    }
     setError(message);
     setStatus(null);
   }
@@ -360,11 +448,14 @@ export function ChatPanel({
     if (isDictating) stopDictation();
 
     const abortController = new AbortController();
+    const localQuestionId = nextLocalId("local-question");
+    const discardCurrentRequest = (message: string) =>
+      discardStreamingMessage(message, normalizedQuestion, localQuestionId);
     setMessages((current) => [
       ...current,
       {
         content: normalizedQuestion,
-        id: nextLocalId("local-question"),
+        id: localQuestionId,
         inReplyToMessageId: null,
         role: "user",
         sources: [],
@@ -378,6 +469,7 @@ export function ChatPanel({
     try {
       let currentSources: ChatSource[] = [];
       let currentUserMessageId: string | null = null;
+      let completionStatus = "Respuesta lista.";
       const response = await fetch("/api/chat/stream", {
         body: JSON.stringify({
           ...(conversationId ? { conversationId } : {}),
@@ -390,7 +482,7 @@ export function ChatPanel({
       });
 
       if (!response.ok || !response.body) {
-        discardStreamingMessage(requestError(response));
+        discardCurrentRequest(requestError(response));
         return;
       }
 
@@ -410,7 +502,7 @@ export function ChatPanel({
           try {
             payload = JSON.parse(frame.data);
           } catch {
-            discardStreamingMessage(
+            discardCurrentRequest(
               "La respuesta recibida no tiene un formato válido.",
             );
             return;
@@ -420,7 +512,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.conversation.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "La conversación recibida no tiene un formato válido.",
               );
               return;
@@ -452,7 +544,7 @@ export function ChatPanel({
           if (frame.event === "sources") {
             const result = chatStreamPayloadSchemas.sources.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "Las referencias recibidas no tienen un formato válido.",
               );
               return;
@@ -465,7 +557,7 @@ export function ChatPanel({
           if (frame.event === "token") {
             const result = chatStreamPayloadSchemas.token.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "La respuesta recibida no tiene un formato válido.",
               );
               return;
@@ -500,7 +592,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.clarification.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "La aclaración recibida no tiene un formato válido.",
               );
               return;
@@ -516,7 +608,8 @@ export function ChatPanel({
                 sources: currentSources,
               },
             ]);
-            setStatus(null);
+            completionStatus = "Se necesita una aclaración para continuar.";
+            setStatus(completionStatus);
             continue;
           }
 
@@ -524,7 +617,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.no_evidence.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "El resultado recibido no tiene un formato válido.",
               );
               return;
@@ -539,13 +632,15 @@ export function ChatPanel({
                 sources: [],
               },
             ]);
-            setStatus(null);
+            completionStatus =
+              "No se encontró sustento suficiente en los documentos disponibles.";
+            setStatus(completionStatus);
             continue;
           }
 
           if (frame.event === "error") {
             const result = chatStreamPayloadSchemas.error.safeParse(payload);
-            discardStreamingMessage(
+            discardCurrentRequest(
               result.success && result.data.code === "CHAT_STREAM_FAILED"
                 ? "No se pudo completar la respuesta. No se guardó contenido parcial."
                 : "La consulta no se pudo completar.",
@@ -556,7 +651,7 @@ export function ChatPanel({
           if (frame.event === "done") {
             const result = chatStreamPayloadSchemas.done.safeParse(payload);
             if (!result.success) {
-              discardStreamingMessage(
+              discardCurrentRequest(
                 "El cierre de la respuesta no tiene un formato válido.",
               );
               return;
@@ -566,20 +661,20 @@ export function ChatPanel({
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
             }));
-            setStatus(null);
+            setStatus(completionStatus);
             completed = true;
           }
         }
 
         if (done && !completed) {
-          discardStreamingMessage(
+          discardCurrentRequest(
             "Se interrumpió la conexión. No se guardó contenido parcial.",
           );
           return;
         }
       }
     } catch {
-      discardStreamingMessage(
+      discardCurrentRequest(
         "Se interrumpió la conexión. No se guardó contenido parcial.",
       );
     } finally {
@@ -613,10 +708,12 @@ export function ChatPanel({
                   {activeParent.description}
                 </p>
               ) : null}
-              <p>
-                Selecciona el tema relacionado si lo deseas. También puedes
-                escribir directamente tu consulta.
-              </p>
+              {activeParent && submodules.length > 0 ? (
+                <p>
+                  Selecciona el tema relacionado si lo deseas. También puedes
+                  escribir directamente tu consulta.
+                </p>
+              ) : null}
             </div>
           </header>
 
@@ -653,13 +750,23 @@ export function ChatPanel({
 
           {selectedSubmodule ? (
             <div className="avend-chat-context" role="status">
-              <span>Tema: {selectedSubmodule.name}</span>
+              <span>
+                <strong>Tema:</strong> {selectedSubmodule.name}
+              </span>
               <button
+                aria-label={`Quitar el tema ${selectedSubmodule.name}`}
                 disabled={isStreaming}
                 onClick={clearSubmodule}
                 type="button"
               >
-                Quitar tema
+                <span>Quitar</span>
+                <svg
+                  aria-hidden="true"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="m7 7 10 10M17 7 7 17" />
+                </svg>
               </button>
             </div>
           ) : null}
@@ -733,29 +840,33 @@ export function ChatPanel({
         </section>
 
         {error ? (
-          <p className="avend-chat-error" role="alert">
-            {error}
-          </p>
+          <div className="avend-chat-error" role="alert">
+            <strong>No pudimos completar la consulta.</strong>
+            <p>{error}</p>
+            <p>Tu texto se conserva para que puedas intentarlo nuevamente.</p>
+          </div>
         ) : null}
 
         <form className="avend-chat-composer" onSubmit={handleSubmit}>
           <label htmlFor="chat-question">Escribe tu consulta</label>
-          <textarea
-            disabled={isStreaming}
-            id="chat-question"
-            maxLength={8_000}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Escribe tu consulta aquí…"
-            ref={questionInputRef}
-            required
-            rows={3}
-            value={question}
-          />
-          <div className="avend-chat-composer-actions">
-            <p aria-live="polite" className="avend-chat-status">
-              {status ??
-                "La respuesta se sustentará en los documentos disponibles."}
-            </p>
+          <div className="avend-chat-input-shell">
+            <span aria-hidden="true" className="avend-chat-input-icon">
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="10.75" cy="10.75" r="6.75" />
+                <path d="m16 16 4 4" />
+              </svg>
+            </span>
+            <textarea
+              disabled={isStreaming}
+              id="chat-question"
+              maxLength={8_000}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Escribe tu consulta aquí…"
+              ref={questionInputRef}
+              required
+              rows={2}
+              value={question}
+            />
             <div className="avend-chat-composer-buttons">
               {micSupported ? (
                 <button
@@ -791,10 +902,27 @@ export function ChatPanel({
                 disabled={isStreaming || !question.trim()}
                 type="submit"
               >
+                <svg
+                  aria-hidden="true"
+                  className="avend-chat-send-icon"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="m4 4 17 8-17 8 3-8-3-8Z" />
+                  <path d="M7 12h14" />
+                </svg>
                 {isStreaming ? "Consultando…" : "Enviar consulta"}
               </button>
             </div>
           </div>
+          <p
+            aria-atomic="true"
+            aria-live="polite"
+            className="avend-chat-status"
+          >
+            {status ??
+              "La respuesta se sustentará en los documentos disponibles."}
+          </p>
         </form>
       </section>
     </TeacherShell>

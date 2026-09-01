@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -184,8 +185,115 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("muestra el dictado por voz solo cuando el navegador lo soporta", async () => {
+  it("renders paragraphs, emphasis and lists with semantic structure", () => {
+    const { container } = render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "**Requisitos principales**\n\n- Solicitud firmada\n- Certificado médico\n\n1. Presenta los documentos\n2. Conserva el cargo",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    const answer = container.querySelector(".avend-chat-message--assistant");
+
+    expect(answer).not.toBeNull();
+    expect(within(answer as HTMLElement).getByText("Requisitos principales").tagName).toBe(
+      "STRONG",
+    );
+    expect(within(answer as HTMLElement).getAllByRole("list")).toHaveLength(2);
+    expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
+  });
+
+  it("dicta, detiene y comunica errores de voz cuando el navegador lo soporta", async () => {
+    const user = userEvent.setup();
+    const instances: SpeechRecognitionMock[] = [];
+
     class SpeechRecognitionMock {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onresult:
+        | ((event: {
+            resultIndex: number;
+            results: ArrayLike<{
+              0: { transcript: string };
+              isFinal: boolean;
+            }>;
+          }) => void)
+        | null = null;
+      start = vi.fn();
+      stop = vi.fn();
+
+      constructor() {
+        instances.push(this);
+      }
+    }
+
+    vi.stubGlobal("SpeechRecognition", SpeechRecognitionMock);
+
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Dictar la consulta por voz",
+      }),
+    );
+    expect(instances[0].start).toHaveBeenCalledOnce();
+    expect(instances[0]).toMatchObject({
+      continuous: false,
+      interimResults: false,
+      lang: "es-PE",
+    });
+    expect(
+      screen.getByRole("button", { name: "Detener el dictado por voz" }),
+    ).toBeVisible();
+
+    act(() => {
+      instances[0].onresult?.({
+        resultIndex: 0,
+        results: [{ 0: { transcript: "licencia médica" }, isFinal: true }],
+      });
+      instances[0].onend?.();
+    });
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toHaveValue("licencia médica");
+    expect(screen.getByText("Dictado finalizado. Revisa el texto antes de enviarlo.")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Dictar la consulta por voz" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Detener el dictado por voz" }),
+    );
+    expect(instances[1].stop).toHaveBeenCalledOnce();
+    expect(screen.getByText("Dictado detenido. Revisa el texto antes de enviarlo.")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Dictar la consulta por voz" }),
+    );
+    act(() => instances[2].onerror?.());
+    expect(
+      screen.getByText(
+        "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("recupera el control si el navegador rechaza iniciar el dictado", async () => {
+    const user = userEvent.setup();
+
+    class SpeechRecognitionStartErrorMock {
       continuous = false;
       interimResults = false;
       lang = "";
@@ -193,17 +301,30 @@ describe("ChatPanel", () => {
       onerror = null;
       onresult = null;
 
-      start() {}
+      start() {
+        throw new Error("permission denied");
+      }
+
       stop() {}
     }
 
-    vi.stubGlobal("SpeechRecognition", SpeechRecognitionMock);
-
+    vi.stubGlobal("SpeechRecognition", SpeechRecognitionStartErrorMock);
     render(<ChatPanel modules={[chatModule]} />);
 
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Dictar la consulta por voz",
+      }),
+    );
+
     expect(
-      await screen.findByRole("button", { name: "Dictar la consulta por voz" }),
+      screen.getByText(
+        "No se pudo iniciar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
+      ),
     ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Dictar la consulta por voz" }),
+    ).toBeEnabled();
   });
 
   it("muestra los submódulos del módulo activo en la zona principal y permite quitar el subtema", async () => {
@@ -221,12 +342,16 @@ describe("ChatPanel", () => {
     await user.click(
       screen.getByRole("button", { name: /licencia por salud/i }),
     );
-    expect(screen.getByText("Tema: Licencia por salud")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Tema: Licencia por salud",
+    );
 
-    await user.click(screen.getByRole("button", { name: "Quitar tema" }));
-    expect(
-      screen.queryByText("Tema: Licencia por salud"),
-    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Quitar el tema Licencia por salud",
+      }),
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("restarts the workspace transition between sibling submodules", async () => {
@@ -251,7 +376,9 @@ describe("ChatPanel", () => {
         container.querySelector(".avend-chat-workspace-transition"),
       ).not.toBe(initialWorkspace),
     );
-    expect(screen.getByText("Tema: Licencia por estudios")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Tema: Licencia por estudios",
+    );
     expect(screen.getByRole("textbox", { name: "Escribe tu consulta" })).toHaveFocus();
   });
 
@@ -307,10 +434,18 @@ describe("ChatPanel", () => {
       question: "¿Cómo solicito una licencia?",
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Quitar tema" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", {
+          name: "Quitar el tema Licencia por salud",
+        }),
+      ).toBeEnabled(),
     );
 
-    await user.click(screen.getByRole("button", { name: "Quitar tema" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Quitar el tema Licencia por salud",
+      }),
+    );
     await submitQuestion(user);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(requestBody(fetchMock.mock.calls[1])).toEqual({
@@ -344,6 +479,7 @@ describe("ChatPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("Respuesta sustentada. [1]")).toBeVisible();
     });
+    expect(await screen.findByText("Respuesta lista.")).toBeVisible();
     expect(screen.getByText("Norma de licencias")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
@@ -363,6 +499,27 @@ describe("ChatPanel", () => {
     expect(
       screen.getByText(/Escribe una consulta para recibir/i),
     ).toBeVisible();
+    expect(
+      screen.queryByText(/Selecciona el tema relacionado/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the approved guidance only before an available subtopic group", () => {
+    const { rerender } = render(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+
+    expect(
+      screen.queryByText(/Selecciona el tema relacionado/i),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ChatPanel
+        initialModuleId={chatModule.id}
+        modules={[chatModule, childModule]}
+      />,
+    );
+    expect(screen.getByText(/Selecciona el tema relacionado/i)).toBeVisible();
   });
 
   it("enables source links only after the sourced answer is persisted", async () => {
@@ -431,6 +588,13 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
 
     expect(await screen.findByText(message)).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveClass("avend-chat-error");
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toHaveValue("¿Cómo solicito una licencia?");
+    expect(
+      document.querySelector(".avend-chat-message--user"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not retain a partial reply if the stream emits a controlled error", async () => {
@@ -455,6 +619,9 @@ describe("ChatPanel", () => {
         "No se pudo completar la respuesta. No se guardó contenido parcial.",
       ),
     ).toBeVisible();
+    expect(document.querySelectorAll(".avend-chat-message--user")).toHaveLength(
+      1,
+    );
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
   });
 
@@ -499,6 +666,9 @@ describe("ChatPanel", () => {
 
     await submitQuestion(user);
     expect(await screen.findByText("Precisa el tema.")).toBeVisible();
+    expect(
+      screen.getByText("Se necesita una aclaración para continuar."),
+    ).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: "Consultar Licencias" }),
@@ -525,6 +695,11 @@ describe("ChatPanel", () => {
 
     expect(
       await screen.findByText("No hay sustento suficiente."),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "No se encontró sustento suficiente en los documentos disponibles.",
+      ),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
   });
