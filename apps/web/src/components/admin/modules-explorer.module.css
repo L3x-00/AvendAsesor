@@ -1,0 +1,257 @@
+.explorer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.toolbarHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.count {
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.search {
+  min-height: 2.75rem;
+  min-width: min(18rem, 100%);
+  flex: 1 1 14rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.search:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.empty {
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px dashed var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.25rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.badgeActive,
+.badgeInactive {
+  flex: none;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.badgeActive {
+  background: var(--avend-soft-blue);
+  color: var(--avend-accent-strong);
+}
+
+.badgeInactive {
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+}
+
+.cardMeta {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--avend-text-muted);
+}
+
+.cardDescription {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--avend-text);
+}
+
+.cardStat {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.cardLink {
+  align-self: flex-start;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.15rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--avend-accent);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  color: var(--avend-accent-strong);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cardLink:hover {
+  background: var(--avend-soft-blue);
+}
+
+.cardLink:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.manage {
+  margin-top: 0.35rem;
+  border-top: 1px solid var(--avend-border);
+  padding-top: 0.5rem;
+}
+
+.manageSummary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--avend-accent-strong);
+}
+
+.manageSummary:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.manageGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 48rem) {
+  .manageGrid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+.manageSide {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.fieldLabel {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.input,
+.textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.input {
+  min-height: 2.75rem;
+}
+
+.textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.createPanel {
+  padding: 1.5rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+}
+
+.createTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.presetParent {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.presetParent strong {
+  color: var(--avend-text);
+}
