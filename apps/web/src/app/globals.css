@@ -1104,13 +1104,21 @@ body {
 }
 
 .avend-navigation-icon {
+  display: block;
   flex: 0 0 auto;
   height: 1.35rem;
+  object-fit: contain;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
   width: 1.35rem;
+}
+
+.avend-teacher-module-icon {
+  background-color: currentColor;
+  mask: var(--avend-teacher-module-icon) center / contain no-repeat;
+  -webkit-mask: var(--avend-teacher-module-icon) center / contain no-repeat;
 }
 
 .avend-chat-page {

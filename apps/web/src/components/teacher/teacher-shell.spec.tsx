@@ -178,4 +178,55 @@ describe("TeacherShell mobile navigation", () => {
       }),
     ).toHaveAttribute("href", "/admin");
   });
+
+  it("uses the supplied SVGs for every matching module and retains the situations icon", () => {
+    const iconModules = [
+      { name: "Contrato y desplazamiento", source: "/icons/contrato.svg" },
+      { name: "Evaluación docente", source: "/icons/evaluacion.svg" },
+      { name: "Auxiliar de educación", source: "/icons/auxiliar.svg" },
+      { name: "Ley y reglamento", source: "/icons/ley.svg" },
+      { name: "Cargos y plazas", source: "/icons/plaza.svg" },
+      { name: "Remuneraciones", source: "/icons/renumeracion.svg" },
+    ].map((module, index) => ({
+      ...modules[0],
+      id: `module-${index}`,
+      name: module.name,
+      sortOrder: index,
+      source: module.source,
+    }));
+    const situationsModule = {
+      ...modules[0],
+      id: "situaciones",
+      name: "Situaciones administrativas",
+      sortOrder: iconModules.length,
+    };
+    const { container } = render(
+      <TeacherShell
+        activeSection="chat"
+        modules={[...iconModules, situationsModule]}
+        onModuleSelect={vi.fn()}
+      >
+        <h1>Consulta</h1>
+      </TeacherShell>,
+    );
+    const desktopNavigation = within(
+      container.querySelector("aside") as HTMLElement,
+    );
+
+    iconModules.forEach(({ name, source }) => {
+      const item = desktopNavigation.getByRole("button", { name });
+      const icon = item.querySelector(".avend-teacher-module-icon");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon).toHaveClass("avend-navigation-icon");
+      expect(icon).toHaveAttribute("style", expect.stringContaining(source));
+    });
+
+    const situationsItem = desktopNavigation.getByRole("button", {
+      name: "Situaciones administrativas",
+    });
+    expect(situationsItem.querySelector(".avend-teacher-module-icon")).toBeNull();
+    expect(
+      situationsItem.querySelector("svg.avend-navigation-icon"),
+    ).toBeInTheDocument();
+  });
 });
