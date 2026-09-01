@@ -1,6 +1,6 @@
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
+import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import { reviewUnansweredQuestionAction } from "../actions";
 
 const reasonLabel: Record<
@@ -12,7 +12,7 @@ const reasonLabel: Record<
 };
 
 export default async function OperationsPage() {
-  const client = await createAuthorizedAdminApiClient();
+  const { access, client } = await createAuthorizedAdminApiContext();
   const [metrics, unansweredQuestions] = await Promise.all([
     client.getOperationalMetrics(),
     client.listUnansweredQuestions("pending_review"),
@@ -22,7 +22,9 @@ export default async function OperationsPage() {
     <AdminShell
       activeSection="operations"
       description="Revisa indicadores agregados y atiende las consultas que necesitan intervención humana. La administración no modifica el contenido del chat."
-      title="Operación y consultas pendientes"
+      title="Consultas y reportes"
+      userName={access.fullName}
+      userRole={access.role}
     >
       <section aria-labelledby="operations-metrics-title">
         <h2 className="avend-section-title" id="operations-metrics-title">

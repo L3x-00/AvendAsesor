@@ -23,7 +23,10 @@ vi.mock('@/lib/authorization/resolve-admin-access', () => ({
   resolveAdminAccess: mocks.resolveAdminAccess,
 }));
 
-import { createAuthorizedAdminApiClient } from './authorized-client';
+import {
+  createAuthorizedAdminApiClient,
+  createAuthorizedAdminApiContext,
+} from './authorized-client';
 
 describe('authorized administrative API client', () => {
   beforeEach(() => {
@@ -34,8 +37,30 @@ describe('authorized administrative API client', () => {
     mocks.getSession.mockClear();
   });
 
-  it('creates a server-side API client only after an authorized profile and session token', async () => {
+  it('creates a context with the authorized identity and API client', async () => {
+    const access = {
+      fullName: 'María Administradora',
+      role: 'admin' as const,
+      status: 'authorized' as const,
+      userId: 'user-1',
+    };
+    mocks.resolveAdminAccess.mockResolvedValue(access);
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: 'verified-token' } },
+      error: null,
+    });
+
+    const context = await createAuthorizedAdminApiContext();
+
+    expect(context.access).toEqual(access);
+    expect(context.client).toBeDefined();
+    expect(mocks.resolveAdminAccess).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the client-only helper compatible for existing server actions', async () => {
     mocks.resolveAdminAccess.mockResolvedValue({
+      fullName: 'María Administradora',
       role: 'admin',
       status: 'authorized',
       userId: 'user-1',
@@ -65,6 +90,7 @@ describe('authorized administrative API client', () => {
 
   it('redirects when an otherwise-authorized caller has no usable session', async () => {
     mocks.resolveAdminAccess.mockResolvedValue({
+      fullName: 'Juan Superadministrador',
       role: 'superadmin',
       status: 'authorized',
       userId: 'user-1',

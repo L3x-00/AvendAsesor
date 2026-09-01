@@ -1,38 +1,19 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AdminShell } from "@/components/admin/admin-shell";
-import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
+import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import { formatUserRole } from "@/lib/admin-api/labels";
-import {
-  resolveAdminAccess,
-  type AuthorizationSupabaseClient,
-} from "@/lib/authorization/resolve-admin-access";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export default async function AdminPage() {
-  const supabase = await createServerSupabaseClient();
-  const access = await resolveAdminAccess(
-    supabase as unknown as AuthorizationSupabaseClient,
-  );
-
-  if (access.status === "unauthenticated") {
-    redirect("/auth/sign-in");
-  }
-
-  if (access.status !== "authorized") {
-    redirect("/access-denied");
-  }
-
-  const metrics = await (
-    await createAuthorizedAdminApiClient()
-  ).getOperationalMetrics();
+  const { access, client } = await createAuthorizedAdminApiContext();
+  const metrics = await client.getOperationalMetrics();
 
   return (
     <AdminShell
       activeSection="home"
       description="Consulta el estado operativo y accede a las herramientas autorizadas para tu rol. Cada cambio se vuelve a validar en la API."
-      isSuperadmin={access.role === "superadmin"}
       title="Panel administrativo"
+      userName={access.fullName}
+      userRole={access.role}
     >
       <section
         aria-labelledby="admin-entry-title"
@@ -70,7 +51,7 @@ export default async function AdminPage() {
           className="avend-admin-entry-nav"
         >
           <Link className="avend-admin-entry-link" href="/admin/operations">
-            Revisar operación
+            Revisar consultas y reportes
           </Link>
           <Link className="avend-admin-entry-link" href="/admin/modules">
             Gestionar módulos
