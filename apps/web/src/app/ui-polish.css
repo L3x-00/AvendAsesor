@@ -41,7 +41,7 @@
 }
 
 .avend-button--primary {
-  background-image: linear-gradient(135deg, #1677ff 0%, #115eca 100%);
+  background-image: linear-gradient(135deg, #115eca 0%, #0d4f9e 100%);
   box-shadow: 0 8px 18px rgb(22 119 255 / 24%);
 }
 
@@ -59,7 +59,9 @@
 
 .avend-button:focus-visible,
 .avend-chat-module:focus-visible,
+.avend-chat-mic:focus-visible,
 .avend-teacher-navigation-link:focus-visible,
+.avend-teacher-new-chat:focus-visible,
 .avend-admin-navigation-link:focus-visible {
   outline-offset: 3px;
 }
@@ -210,7 +212,8 @@ button.avend-teacher-new-chat {
 }
 
 .avend-teacher-sidebar .avend-teacher-navigation-link[aria-pressed="true"] {
-  background: rgb(232 241 255 / 16%);
+  background: rgb(232 241 255 / 28%);
+  border-left-color: var(--avend-accent);
   color: #ffffff;
 }
 
@@ -266,8 +269,7 @@ button.avend-teacher-new-chat {
 }
 
 .avend-chat-composer:focus-within {
-  border-color: rgb(22 119 255 / 50%);
-  box-shadow: 0 0 0 4px rgb(232 241 255 / 88%), var(--avend-shadow-card);
+  box-shadow: var(--avend-shadow-card);
 }
 
 .avend-admin-sidebar,
@@ -313,6 +315,20 @@ button.avend-teacher-new-chat:disabled,
   cursor: not-allowed;
   opacity: 0.7;
   transform: none;
+}
+
+.avend-teacher-sidebar button.avend-teacher-navigation-link:disabled,
+.avend-teacher-sidebar button.avend-teacher-new-chat:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: rgb(255 255 255 / 72%);
+  opacity: 0.72;
+}
+
+.avend-teacher-sidebar button.avend-teacher-navigation-link[aria-pressed="true"]:disabled {
+  background: rgb(232 241 255 / 28%);
+  border-left-color: var(--avend-accent);
+  color: #ffffff;
 }
 
 .avend-chat-composer textarea:disabled {

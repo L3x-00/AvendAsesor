@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ChatSources } from "./chat-sources";
 
@@ -25,10 +25,20 @@ describe("ChatSources", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    expect(
+      screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: "Documento" })).toBeVisible();
+    expect(screen.getByText("1 fuente")).toBeVisible();
     expect(screen.getByText("Ley de Reforma Magisterial")).toBeVisible();
     expect(screen.getByText("Artículo 5")).toBeVisible();
     expect(screen.getByText("5.1")).toBeVisible();
     expect(screen.getByText("Coincidencia documental: 92%")).toBeVisible();
+    expect(screen.getByText("Fuente número:")).toBeInTheDocument();
+    expect(screen.getByText("Página:")).toBeInTheDocument();
+    expect(screen.getByText("Versión:")).toBeInTheDocument();
     expect(
       screen.getByRole("link", {
         name: /Abrir fuente \[1\]: Ley de Reforma Magisterial/i,
@@ -65,10 +75,18 @@ describe("ChatSources", () => {
       />,
     );
 
-    expect(screen.getByText("Páginas")).toBeVisible();
-    expect(screen.getByText("10–12")).toBeVisible();
+    expect(screen.getByText("10–12").closest("td")).toHaveAttribute(
+      "data-label",
+      "Páginas",
+    );
     expect(screen.getByText("Coincidencia documental: 50%")).toBeVisible();
-    expect(screen.getAllByText("No especificado")).toHaveLength(3);
-    expect(screen.getByText("No especificada")).toBeVisible();
+    const sourceRow = screen.getByText("Reglamento").closest("tr");
+    expect(sourceRow).not.toBeNull();
+    expect(within(sourceRow as HTMLTableRowElement).getByText(/Proceso:/)).toHaveTextContent(
+      "Proceso: No especificado",
+    );
+    expect(sourceRow).toHaveTextContent("Sección: No especificada");
+    expect(sourceRow).toHaveTextContent("Artículo: No especificado");
+    expect(sourceRow).toHaveTextContent("Numeral: No especificado");
   });
 });

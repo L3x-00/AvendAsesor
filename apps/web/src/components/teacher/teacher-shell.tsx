@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
@@ -238,11 +238,36 @@ export function TeacherShell({
   selectedModuleId,
 }: TeacherShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuDetailsRef = useRef<HTMLDetailsElement>(null);
   const mobileMenuSummaryRef = useRef<HTMLElement>(null);
 
+  useEffect(() => {
+    const details = mobileMenuDetailsRef.current;
+    if (!details) return;
+    const detailsElement = details;
+
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape" || !detailsElement.open) return;
+      event.preventDefault();
+      detailsElement.open = false;
+      setMobileMenuOpen(false);
+      globalThis.setTimeout(() => {
+        mobileMenuSummaryRef.current?.focus();
+      }, 0);
+    }
+
+    detailsElement.addEventListener("keydown", handleEscape);
+    return () => detailsElement.removeEventListener("keydown", handleEscape);
+  }, []);
+
   function closeMobileMenuAndRestoreFocus() {
+    if (mobileMenuDetailsRef.current) {
+      mobileMenuDetailsRef.current.open = false;
+    }
     setMobileMenuOpen(false);
-    mobileMenuSummaryRef.current?.focus();
+    globalThis.setTimeout(() => {
+      mobileMenuSummaryRef.current?.focus();
+    }, 0);
   }
 
   function handleMobileModuleSelect(moduleId: string) {
@@ -283,17 +308,25 @@ export function TeacherShell({
           <details
             className="avend-teacher-mobile-menu"
             onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
-            open={mobileMenuOpen}
+            ref={mobileMenuDetailsRef}
           >
             <summary
               aria-label={
                 mobileMenuOpen
-                  ? "Cerrar navegación principal"
-                  : "Abrir navegación principal"
+                  ? "Menú: cerrar navegación principal"
+                  : "Menú: abrir navegación principal"
               }
               ref={mobileMenuSummaryRef}
             >
-              Menú
+              <svg
+                aria-hidden="true"
+                className="avend-teacher-mobile-menu-icon"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+              <span>Menú</span>
             </summary>
             <TeacherNavigation
               activeSection={activeSection}
