@@ -1,0 +1,224 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.roleTag {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.roleTag strong {
+  color: var(--avend-text);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+}
+
+.metricCardAttention {
+  border-color: var(--avend-accent);
+  border-left-width: 4px;
+  background: var(--avend-soft-blue);
+}
+
+/* Muted text does not reach WCAG AA on the soft-blue surface, so the hint uses
+   the strong text color on attention cards. */
+.metricCardAttention .metricHint {
+  color: var(--avend-text);
+}
+
+.metricValue {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--avend-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricLabel {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.metricHint {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--avend-text-muted);
+}
+
+.metricFlag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--avend-accent-strong);
+}
+
+.metricFlag::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--avend-accent-strong);
+}
+
+.panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 60rem) {
+  .panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.panel {
+  padding: 1.5rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+}
+
+.healthList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.healthRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--avend-border);
+}
+
+.healthRow:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.healthTerm {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.healthValue {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--avend-text-muted);
+}
+
+.quickGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 3rem;
+  height: 100%;
+  padding: 1rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.quickCard:hover {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+}
+
+/* Keep the description readable (WCAG AA) once the card background turns
+   soft-blue on hover, where the muted color would fall below 4.5:1. */
+.quickCard:hover .quickDescription {
+  color: var(--avend-text);
+}
+
+.quickCard:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.quickTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.quickDescription {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--avend-text-muted);
+}
+
+.quickBadge {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--avend-navy);
+  color: var(--avend-surface);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickCard {
+    transition: none;
+  }
+}
