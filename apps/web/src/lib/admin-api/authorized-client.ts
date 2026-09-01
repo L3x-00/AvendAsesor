@@ -7,6 +7,16 @@ import {
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { AdminApiClient } from './client';
 
+type AuthorizedAdminAccess = Extract<
+  Awaited<ReturnType<typeof resolveAdminAccess>>,
+  { status: 'authorized' }
+>;
+
+export interface AuthorizedAdminApiContext {
+  access: AuthorizedAdminAccess;
+  client: AdminApiClient;
+}
+
 interface SessionSupabaseClient extends AuthorizationSupabaseClient {
   auth: AuthorizationSupabaseClient['auth'] & {
     getSession(): Promise<{
@@ -16,7 +26,7 @@ interface SessionSupabaseClient extends AuthorizationSupabaseClient {
   };
 }
 
-export async function createAuthorizedAdminApiClient(): Promise<AdminApiClient> {
+export async function createAuthorizedAdminApiContext(): Promise<AuthorizedAdminApiContext> {
   const supabase = (await createServerSupabaseClient()) as unknown as SessionSupabaseClient;
   const access = await resolveAdminAccess(supabase);
 
@@ -34,5 +44,12 @@ export async function createAuthorizedAdminApiClient(): Promise<AdminApiClient> 
     redirect('/auth/sign-in');
   }
 
-  return new AdminApiClient(data.session.access_token);
+  return {
+    access,
+    client: new AdminApiClient(data.session.access_token),
+  };
+}
+
+export async function createAuthorizedAdminApiClient(): Promise<AdminApiClient> {
+  return (await createAuthorizedAdminApiContext()).client;
 }

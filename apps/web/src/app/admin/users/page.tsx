@@ -2,18 +2,13 @@ import { redirect } from "next/navigation";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { updateAdministrativeUserAction } from "../actions";
-import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
+import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatAccountStatus,
   formatOperationalAuditAction,
   formatOperationalAuditResourceType,
   formatUserRole,
 } from "@/lib/admin-api/labels";
-import {
-  resolveAdminAccess,
-  type AuthorizationSupabaseClient,
-} from "@/lib/authorization/resolve-admin-access";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function formatDate(value: string | null): string {
   if (!value) return "Sin acceso registrado";
@@ -24,16 +19,8 @@ function formatDate(value: string | null): string {
 }
 
 export default async function UsersPage() {
-  const supabase = await createServerSupabaseClient();
-  const access = await resolveAdminAccess(
-    supabase as unknown as AuthorizationSupabaseClient,
-  );
-
-  if (access.status === "unauthenticated") redirect("/auth/sign-in");
-  if (access.status !== "authorized" || access.role !== "superadmin")
-    redirect("/access-denied");
-
-  const client = await createAuthorizedAdminApiClient();
+  const { access, client } = await createAuthorizedAdminApiContext();
+  if (access.role !== "superadmin") redirect("/access-denied");
   const [users, events] = await Promise.all([
     client.listAdministrativeUsers(),
     client.listOperationalAuditEvents(),
@@ -43,8 +30,9 @@ export default async function UsersPage() {
     <AdminShell
       activeSection="users"
       description="Solo el superadministrador puede actualizar roles y estados de cuenta. Cada cambio exige un motivo y queda auditado."
-      isSuperadmin
       title="Usuarios y auditoría"
+      userName={access.fullName}
+      userRole={access.role}
     >
       <section aria-labelledby="users-title">
         <h2 className="avend-section-title" id="users-title">

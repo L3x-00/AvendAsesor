@@ -1,6 +1,6 @@
 import { AdminActionForm } from '@/components/admin/admin-action-form';
 import { AdminShell } from '@/components/admin/admin-shell';
-import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { createAuthorizedAdminApiContext } from '@/lib/admin-api/authorized-client';
 import {
   createModuleAction,
   deleteModuleAction,
@@ -9,7 +9,7 @@ import {
 } from '../actions';
 
 export default async function ModulesPage() {
-  const client = await createAuthorizedAdminApiClient();
+  const { access, client } = await createAuthorizedAdminApiContext();
   const modules = await client.listModules('all');
   const availableParents = modules.filter((module) => !module.isDeleted);
 
@@ -18,6 +18,8 @@ export default async function ModulesPage() {
       activeSection="modules"
       description="Crea y administra la jerarquía de módulos. Todas las acciones se validan nuevamente en la API."
       title="Módulos"
+      userName={access.fullName}
+      userRole={access.role}
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section aria-labelledby="module-list-title" className="space-y-4">

@@ -13,7 +13,11 @@ function createClient(
   const maybeSingle =
     overrides.maybeSingle ??
     (async () => ({
-      data: { account_status: "active", role: "admin" },
+      data: {
+        account_status: "active",
+        full_name: "María Administradora",
+        role: "admin",
+      },
       error: null,
     }));
   const eq = vi.fn(() => ({ maybeSingle }));
@@ -112,6 +116,26 @@ describe("resolveAdminAccess", () => {
     });
   });
 
+  it.each(["   ", 42, null])(
+    "fails closed when the administrative profile name is invalid: %s",
+    async (fullName) => {
+      const client = createClient({
+        maybeSingle: async () => ({
+          data: {
+            account_status: "active",
+            full_name: fullName,
+            role: "superadmin",
+          },
+          error: null,
+        }),
+      });
+
+      await expect(resolveAdminAccess(client)).resolves.toEqual({
+        status: "unauthorized",
+      });
+    },
+  );
+
   it("is unauthorized for the docente role", async () => {
     const client = createClient({
       maybeSingle: async () => ({
@@ -128,12 +152,17 @@ describe("resolveAdminAccess", () => {
   it("is authorized for admin and superadmin roles and scopes the lookup to the user", async () => {
     const adminClient = createClient({
       maybeSingle: async () => ({
-        data: { account_status: "active", role: "admin" },
+        data: {
+          account_status: "active",
+          full_name: "  María Administradora  ",
+          role: "admin",
+        },
         error: null,
       }),
     });
 
     await expect(resolveAdminAccess(adminClient)).resolves.toEqual({
+      fullName: "María Administradora",
       role: "admin",
       status: "authorized",
       userId: "user-1",
@@ -142,12 +171,17 @@ describe("resolveAdminAccess", () => {
 
     const superadminClient = createClient({
       maybeSingle: async () => ({
-        data: { account_status: "active", role: "superadmin" },
+        data: {
+          account_status: "active",
+          full_name: "Juan Superadministrador",
+          role: "superadmin",
+        },
         error: null,
       }),
     });
 
     await expect(resolveAdminAccess(superadminClient)).resolves.toEqual({
+      fullName: "Juan Superadministrador",
       role: "superadmin",
       status: "authorized",
       userId: "user-1",

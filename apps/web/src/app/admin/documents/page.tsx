@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { DocumentPdfUploadForm } from '@/components/admin/document-pdf-upload-form';
-import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { createAuthorizedAdminApiContext } from '@/lib/admin-api/authorized-client';
 import { getAdminApiUrl } from '@/lib/admin-api/config';
 
 export default async function DocumentsPage() {
-  const client = await createAuthorizedAdminApiClient();
+  const { access, client } = await createAuthorizedAdminApiContext();
   const apiBaseUrl = getAdminApiUrl();
   const [documents, modules] = await Promise.all([
     client.listDocuments('all'),
@@ -17,6 +17,8 @@ export default async function DocumentsPage() {
       activeSection="documents"
       description="Carga PDFs y consulta su estado. El backend valida el archivo, conserva el historial y controla todas las descargas."
       title="Documentos PDF"
+      userName={access.fullName}
+      userRole={access.role}
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
         <section aria-labelledby="document-list-title" className="space-y-4">

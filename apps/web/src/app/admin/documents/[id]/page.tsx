@@ -3,7 +3,7 @@ import { AdminActionForm } from '@/components/admin/admin-action-form';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { DocumentPdfUploadForm } from '@/components/admin/document-pdf-upload-form';
 import { AdminApiError } from '@/lib/admin-api/client';
-import { createAuthorizedAdminApiClient } from '@/lib/admin-api/authorized-client';
+import { createAuthorizedAdminApiContext } from '@/lib/admin-api/authorized-client';
 import { getAdminApiUrl } from '@/lib/admin-api/config';
 import { getDocumentIngestionStatusContent } from '@/lib/admin-api/labels';
 import type {
@@ -31,7 +31,7 @@ const ingestionTimestampFormatter = new Intl.DateTimeFormat('es-PE', {
 
 export default async function DocumentDetailPage({ params }: DocumentDetailPageProps) {
   const { id } = await params;
-  const client = await createAuthorizedAdminApiClient();
+  const { access, client } = await createAuthorizedAdminApiContext();
   const apiBaseUrl = getAdminApiUrl();
   let document: ManagedDocumentDetails;
   let modules: ManagedModule[];
@@ -59,6 +59,8 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
       activeSection="documents"
       description="Gestiona versiones, asociaciones, estado y descarga sin exponer la ubicación privada del archivo."
       title={document.title}
+      userName={access.fullName}
+      userRole={access.role}
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-5">
