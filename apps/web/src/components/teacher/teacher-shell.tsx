@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
 
@@ -15,6 +21,24 @@ type NavigationIconName =
   | "module"
   | "profile"
   | "signout";
+
+const teacherModuleIconSources: Record<string, string> = {
+  "auxiliar de educacion": "/icons/auxiliar.svg",
+  "cargos y plazas": "/icons/plaza.svg",
+  "contrato y desplazamiento": "/icons/contrato.svg",
+  "evaluacion docente": "/icons/evaluacion.svg",
+  "ley y reglamento": "/icons/ley.svg",
+  remuneracion: "/icons/renumeracion.svg",
+  remuneraciones: "/icons/renumeracion.svg",
+};
+
+function normalizedModuleName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("es-PE");
+}
 
 function isAdministrative(role: TeacherRole | undefined): boolean {
   return role === "admin" || role === "superadmin";
@@ -89,6 +113,26 @@ function NavigationIcon({ name }: { name: NavigationIconName }) {
   );
 }
 
+function TeacherModuleIcon({ moduleName }: { moduleName: string }) {
+  const source = teacherModuleIconSources[normalizedModuleName(moduleName)];
+
+  if (!source) {
+    return <NavigationIcon name="module" />;
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className="avend-navigation-icon avend-teacher-module-icon"
+      style={
+        {
+          "--avend-teacher-module-icon": `url(${source})`,
+        } as CSSProperties
+      }
+    />
+  );
+}
+
 function TeacherNavigation({
   activeSection,
   moduleNavigationDisabled,
@@ -156,7 +200,7 @@ function TeacherNavigation({
                 onClick={() => onModuleSelect(module.id)}
                 type="button"
               >
-                <NavigationIcon name="module" />
+                <TeacherModuleIcon moduleName={module.name} />
                 <span>{module.name}</span>
               </button>
             ) : (
@@ -166,7 +210,7 @@ function TeacherNavigation({
                 href={`/chat?module=${encodeURIComponent(module.id)}`}
                 key={module.id}
               >
-                <NavigationIcon name="module" />
+                <TeacherModuleIcon moduleName={module.name} />
                 <span>{module.name}</span>
               </Link>
             ),
