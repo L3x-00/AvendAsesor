@@ -110,7 +110,7 @@ export function AdminDashboard({ metrics, role }: AdminDashboardProps) {
 
   return (
     <div className={styles.dashboard}>
-      <section aria-labelledby="dashboard-metrics-title" className={styles.section}>
+      <section aria-labelledby="dashboard-metrics-title">
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle} id="dashboard-metrics-title">
             Resumen operativo
@@ -143,7 +143,7 @@ export function AdminDashboard({ metrics, role }: AdminDashboardProps) {
       <div className={styles.panels}>
         <section
           aria-labelledby="dashboard-health-title"
-          className={`${styles.section} ${styles.panel}`}
+          className={styles.panel}
         >
           <h2 className={styles.sectionTitle} id="dashboard-health-title">
             Estado del sistema
@@ -174,7 +174,7 @@ export function AdminDashboard({ metrics, role }: AdminDashboardProps) {
 
         <section
           aria-labelledby="dashboard-actions-title"
-          className={`${styles.section} ${styles.panel}`}
+          className={styles.panel}
         >
           <h2 className={styles.sectionTitle} id="dashboard-actions-title">
             Accesos rápidos

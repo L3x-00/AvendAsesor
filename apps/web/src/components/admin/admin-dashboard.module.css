@@ -55,6 +55,12 @@
   background: var(--avend-soft-blue);
 }
 
+/* Muted text does not reach WCAG AA on the soft-blue surface, so the hint uses
+   the strong text color on attention cards. */
+.metricCardAttention .metricHint {
+  color: var(--avend-text);
+}
+
 .metricValue {
   margin: 0;
   font-size: 2rem;
@@ -175,6 +181,12 @@
 .quickCard:hover {
   background: var(--avend-soft-blue);
   border-color: var(--avend-accent);
+}
+
+/* Keep the description readable (WCAG AA) once the card background turns
+   soft-blue on hover, where the muted color would fall below 4.5:1. */
+.quickCard:hover .quickDescription {
+  color: var(--avend-text);
 }
 
 .quickCard:focus-visible {
