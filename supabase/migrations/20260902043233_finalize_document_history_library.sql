@@ -1,83 +1,145 @@
 -- TSK-0031: constraints, indexes and RPCs for the document library.
 -- Kept in a separate transaction because the compatibility UPDATE in the
 -- previous migration can leave pending foreign-key trigger events.
+-- Object guards also support environments where the original monolithic
+-- migration was already applied before this transactional split.
 
 alter table public.documents
-  alter column situation set not null,
-  add constraint documents_replacement_document_fkey
-    foreign key (replacement_document_id)
-    references public.documents (id)
-    on delete restrict,
-  add constraint documents_replacement_not_self_check check (
-    replacement_document_id is null or replacement_document_id <> id
-  ),
-  add constraint documents_replacement_year_check check (
-    replacement_year is null or replacement_year between 1800 and 2200
-  ),
-  add constraint documents_replacement_reason_check check (
-    replacement_reason is null
-    or char_length(btrim(replacement_reason)) between 2 and 500
-  ),
-  add constraint documents_replacement_observation_check check (
-    replacement_observation is null
-    or char_length(btrim(replacement_observation)) between 2 and 1000
-  ),
-  add constraint documents_replacement_date_year_check check (
-    replacement_date is null
-    or replacement_year is null
-    or extract(year from replacement_date)::integer = replacement_year
-  ),
-  add constraint documents_situation_publication_check check (
-    (
-      situation = 'current'
-      and publication_status = 'active'
-      and replacement_document_id is null
-      and replacement_date is null
-      and replacement_year is null
-      and replacement_reason is null
-      and replacement_observation is null
-    )
-    or (
-      situation = 'archived'
-      and publication_status = 'inactive'
-      and replacement_document_id is null
-      and replacement_date is null
-      and replacement_year is null
-      and replacement_reason is null
-      and replacement_observation is null
-    )
-    or (
-      situation = 'replaced'
-      and publication_status = 'inactive'
-      and replacement_reason is not null
-      and (replacement_date is not null or replacement_year is not null)
-    )
-  );
+  alter column situation set not null;
 
-create index documents_replacement_document_idx
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_document_fkey'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_document_fkey
+      foreign key (replacement_document_id)
+      references public.documents (id)
+      on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_not_self_check'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_not_self_check check (
+        replacement_document_id is null or replacement_document_id <> id
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_year_check'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_year_check check (
+        replacement_year is null or replacement_year between 1800 and 2200
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_reason_check'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_reason_check check (
+        replacement_reason is null
+        or char_length(btrim(replacement_reason)) between 2 and 500
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_observation_check'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_observation_check check (
+        replacement_observation is null
+        or char_length(btrim(replacement_observation)) between 2 and 1000
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_replacement_date_year_check'
+  ) then
+    alter table public.documents
+      add constraint documents_replacement_date_year_check check (
+        replacement_date is null
+        or replacement_year is null
+        or extract(year from replacement_date)::integer = replacement_year
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_situation_publication_check'
+  ) then
+    alter table public.documents
+      add constraint documents_situation_publication_check check (
+        (
+          situation = 'current'
+          and publication_status = 'active'
+          and replacement_document_id is null
+          and replacement_date is null
+          and replacement_year is null
+          and replacement_reason is null
+          and replacement_observation is null
+        )
+        or (
+          situation = 'archived'
+          and publication_status = 'inactive'
+          and replacement_document_id is null
+          and replacement_date is null
+          and replacement_year is null
+          and replacement_reason is null
+          and replacement_observation is null
+        )
+        or (
+          situation = 'replaced'
+          and publication_status = 'inactive'
+          and replacement_reason is not null
+          and (replacement_date is not null or replacement_year is not null)
+        )
+      );
+  end if;
+end;
+$$;
+
+create index if not exists documents_replacement_document_idx
   on public.documents (replacement_document_id)
   where replacement_document_id is not null;
 
-create index documents_library_situation_created_idx
+create index if not exists documents_library_situation_created_idx
   on public.documents (situation, created_at desc, id)
   where not is_deleted;
 
-create index documents_library_year_created_idx
+create index if not exists documents_library_year_created_idx
   on public.documents (issuance_year desc, created_at desc, id)
   where not is_deleted;
 
-create index documents_library_type_created_idx
+create index if not exists documents_library_type_created_idx
   on public.documents (document_type, created_at desc, id)
   where not is_deleted;
 
-create index documents_library_entity_idx
+create index if not exists documents_library_entity_idx
   on public.documents (lower(issuing_entity), id)
   where not is_deleted and issuing_entity is not null;
 
-create index documents_library_search_idx
+create index if not exists documents_library_search_idx
   on public.documents using gin (search_vector);
 
-create function private.prevent_document_replacement_cycle()
+create or replace function private.prevent_document_replacement_cycle()
 returns trigger
 language plpgsql
 set search_path = ''
@@ -121,11 +183,22 @@ $$;
 
 revoke all on function private.prevent_document_replacement_cycle() from public;
 
-create trigger documents_prevent_replacement_cycles
-before insert or update of replacement_document_id on public.documents
-for each row execute procedure private.prevent_document_replacement_cycle();
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_trigger
+    where tgrelid = 'public.documents'::regclass
+      and tgname = 'documents_prevent_replacement_cycles'
+      and not tgisinternal
+  ) then
+    create trigger documents_prevent_replacement_cycles
+    before insert or update of replacement_document_id on public.documents
+    for each row execute procedure private.prevent_document_replacement_cycle();
+  end if;
+end;
+$$;
 
-create function public.set_document_situation(
+create or replace function public.set_document_situation(
   p_document_id uuid,
   p_situation public.document_situation,
   p_actor_id uuid,
@@ -379,7 +452,7 @@ begin
 end;
 $$;
 
-create function public.list_document_library(
+create or replace function public.list_document_library(
   p_query text default null,
   p_issuance_year smallint default null,
   p_document_type text default null,
