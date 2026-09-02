@@ -29,8 +29,7 @@ export interface ModuleParentOption {
 }
 
 export type ExplorerContext =
-  | { kind: "root" }
-  | { kind: "module"; moduleId: string; moduleName: string };
+  { kind: "root" } | { kind: "module"; moduleId: string; moduleName: string };
 
 interface ModulesExplorerProps {
   context: ExplorerContext;
@@ -62,7 +61,10 @@ export function ModuleManageDetails({
     <details className={styles.manage}>
       <summary className={styles.manageSummary}>{summary}</summary>
       <div className={styles.manageGrid}>
-        <AdminActionForm action={updateModuleAction} submitLabel="Guardar cambios">
+        <AdminActionForm
+          action={updateModuleAction}
+          submitLabel="Guardar cambios"
+        >
           <input name="moduleId" type="hidden" value={module.id} />
           <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
             Nombre
@@ -86,7 +88,10 @@ export function ModuleManageDetails({
             required
             title={CODE_TITLE}
           />
-          <label className={styles.fieldLabel} htmlFor={`${fieldId}-description`}>
+          <label
+            className={styles.fieldLabel}
+            htmlFor={`${fieldId}-description`}
+          >
             Descripción (opcional)
           </label>
           <textarea
@@ -137,7 +142,11 @@ export function ModuleManageDetails({
             submitLabel={module.isActive ? "Desactivar" : "Activar"}
           >
             <input name="moduleId" type="hidden" value={module.id} />
-            <input name="isActive" type="hidden" value={String(!module.isActive)} />
+            <input
+              name="isActive"
+              type="hidden"
+              value={String(!module.isActive)}
+            />
             {module.isActive ? (
               <label
                 className={styles.fieldLabel}
@@ -238,12 +247,10 @@ export function ModulesExplorer({
         <ul className={styles.grid} role="list">
           {filtered.map((module) => {
             const hasSubmodules = module.submoduleCount > 0;
-            const primaryHref = hasSubmodules
-              ? `/admin/modules/${module.id}`
-              : "/admin/documents";
+            const primaryHref = `/admin/modules/${module.id}`;
             const primaryLabel = hasSubmodules
               ? "Ver submódulos"
-              : "Ver documentos";
+              : "Gestionar documentos";
 
             return (
               <li className={styles.card} key={module.id}>
@@ -251,7 +258,9 @@ export function ModulesExplorer({
                   <h3 className={styles.cardTitle}>{module.name}</h3>
                   <span
                     className={
-                      module.isActive ? styles.badgeActive : styles.badgeInactive
+                      module.isActive
+                        ? styles.badgeActive
+                        : styles.badgeInactive
                     }
                   >
                     {module.isActive ? "Activo" : "Inactivo"}
@@ -332,7 +341,10 @@ export function ModulesExplorer({
             minLength={2}
             name="description"
           />
-          <label className={styles.fieldLabel} htmlFor={`${searchId}-new-order`}>
+          <label
+            className={styles.fieldLabel}
+            htmlFor={`${searchId}-new-order`}
+          >
             Orden (opcional)
           </label>
           <input

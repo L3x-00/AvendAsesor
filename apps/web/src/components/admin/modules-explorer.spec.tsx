@@ -66,8 +66,8 @@ describe("ModulesExplorer", () => {
     expect(within(contrato).getByText("Sin submódulos")).toBeVisible();
     expect(within(contrato).getByText("Inactivo")).toBeVisible();
     expect(
-      within(contrato).getByRole("link", { name: "Ver documentos" }),
-    ).toHaveAttribute("href", "/admin/documents");
+      within(contrato).getByRole("link", { name: "Gestionar documentos" }),
+    ).toHaveAttribute("href", "/admin/modules/m2");
   });
 
   it("filters cards by the search box", async () => {
@@ -128,7 +128,11 @@ describe("ModulesExplorer", () => {
 
     const { container } = render(
       <ModulesExplorer
-        context={{ kind: "module", moduleId: "m1", moduleName: "Evaluación docente" }}
+        context={{
+          kind: "module",
+          moduleId: "m1",
+          moduleName: "Evaluación docente",
+        }}
         modules={child}
         parents={parents}
       />,

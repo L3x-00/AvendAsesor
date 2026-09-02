@@ -1,9 +1,27 @@
 import type {
   DocumentMetadata,
+  DocumentLibraryPage,
+  DocumentLibrarySort,
   DocumentPublicationFilter,
+  DocumentSituation,
+  DocumentTechnicalStatus,
   ManagedDocument,
   StoredDocumentVersion,
 } from './domain/document';
+
+export interface DocumentLibraryQuery {
+  documentType?: string;
+  issuanceYear?: number;
+  issuingEntity?: string;
+  limit: number;
+  moduleId?: string;
+  offset: number;
+  q?: string;
+  situation?: DocumentSituation;
+  sort: DocumentLibrarySort;
+  submoduleId?: string;
+  technicalStatus?: DocumentTechnicalStatus;
+}
 
 export interface CreateDocumentRecord {
   actorId: string;
@@ -51,6 +69,7 @@ export interface DocumentsGateway {
   createDownloadUrl(
     storagePath: string,
     expiresInSeconds: number,
+    disposition?: 'attachment' | 'inline',
   ): Promise<string>;
   findById(documentId: string): Promise<ManagedDocument | null>;
   findVersion(
@@ -67,6 +86,8 @@ export interface DocumentsGateway {
     offset: number;
     status: DocumentPublicationFilter;
   }): Promise<ManagedDocument[]>;
+  listActorNames(actorIds: string[]): Promise<Record<string, string>>;
+  listLibrary(options: DocumentLibraryQuery): Promise<DocumentLibraryPage>;
   listModuleIds(documentId: string): Promise<string[]>;
   listVersions(documentId: string): Promise<StoredDocumentVersion[]>;
   logicalDelete(
@@ -85,6 +106,18 @@ export interface DocumentsGateway {
     isActive: boolean,
     reason: string | undefined,
     actorId: string,
+  ): Promise<ManagedDocument>;
+  setSituation(
+    documentId: string,
+    situation: DocumentSituation,
+    actorId: string,
+    options: {
+      observation?: string;
+      reason?: string;
+      replacementDate?: string;
+      replacementDocumentId?: string;
+      replacementYear?: number;
+    },
   ): Promise<ManagedDocument>;
   unlinkModule(
     documentId: string,

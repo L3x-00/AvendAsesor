@@ -3,8 +3,12 @@ import { z } from 'zod';
 export type DocumentMetadata = Record<string, unknown>;
 export type DocumentPublicationFilter = 'active' | 'all' | 'inactive';
 export type DocumentPublicationStatus = 'active' | 'inactive';
+export type DocumentSituation = 'archived' | 'current' | 'replaced';
 export type DocumentIngestionStatus =
   'failed' | 'indexed' | 'pending' | 'processing';
+export type DocumentTechnicalStatus = 'error' | 'pending_approval' | 'ready';
+export type DocumentLibrarySort =
+  'newest' | 'oldest' | 'title' | 'upload_date' | 'year';
 
 export interface ManagedDocument {
   articleReference: string | null;
@@ -24,7 +28,13 @@ export interface ManagedDocument {
   issuingEntity: string | null;
   metadata: DocumentMetadata;
   publicationStatus: DocumentPublicationStatus;
+  replacementDate: string | null;
+  replacementDocumentId: string | null;
+  replacementObservation: string | null;
+  replacementReason: string | null;
+  replacementYear: number | null;
   resolutionNumber: string | null;
+  situation: DocumentSituation;
   title: string;
   updatedAt: string;
   updatedBy: string | null;
@@ -39,10 +49,14 @@ export interface ManagedDocumentVersion {
   pageCount: number;
   uploadedAt: string;
   uploadedBy: string | null;
+  uploadedByName: string | null;
   versionNumber: number;
 }
 
-export interface StoredDocumentVersion extends ManagedDocumentVersion {
+export interface StoredDocumentVersion extends Omit<
+  ManagedDocumentVersion,
+  'uploadedByName'
+> {
   mimeType: 'application/pdf';
   sha256: string;
   storageBucket: 'normative-documents';
@@ -50,8 +64,52 @@ export interface StoredDocumentVersion extends ManagedDocumentVersion {
 }
 
 export interface ManagedDocumentDetails extends ManagedDocument {
+  createdByName: string | null;
   moduleIds: string[];
   versions: ManagedDocumentVersion[];
+}
+
+export interface DocumentModuleAssociation {
+  linkedModuleId: string;
+  linkedModuleName: string;
+  moduleId: string;
+  moduleName: string;
+  submoduleId: string | null;
+  submoduleName: string | null;
+}
+
+export interface DocumentLibraryItem {
+  articleReference: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  currentVersionId: string | null;
+  currentVersionUploadedAt: string | null;
+  documentType: string;
+  id: string;
+  issuanceYear: number | null;
+  issuingEntity: string | null;
+  metadata: DocumentMetadata;
+  moduleAssociations: DocumentModuleAssociation[];
+  publicationStatus: DocumentPublicationStatus;
+  replacementDate: string | null;
+  replacementDocumentId: string | null;
+  replacementObservation: string | null;
+  replacementReason: string | null;
+  replacementYear: number | null;
+  resolutionNumber: string | null;
+  situation: DocumentSituation;
+  technicalStatus: DocumentTechnicalStatus;
+  title: string;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+export interface DocumentLibraryPage {
+  items: DocumentLibraryItem[];
+  limit: number;
+  offset: number;
+  total: number;
 }
 
 const metadataSchema = z
@@ -64,6 +122,8 @@ const timestampSchema = z
     (value) => !Number.isNaN(Date.parse(value)),
     'Expected an ISO-compatible timestamp.',
   );
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const documentRowSchema = z.object({
   article_reference: z.string().nullable(),
@@ -83,7 +143,13 @@ const documentRowSchema = z.object({
   issuing_entity: z.string().nullable(),
   metadata: metadataSchema,
   publication_status: z.enum(['active', 'inactive']),
+  replacement_date: dateSchema.nullable(),
+  replacement_document_id: z.string().uuid().nullable(),
+  replacement_observation: z.string().nullable(),
+  replacement_reason: z.string().nullable(),
+  replacement_year: z.number().int().nullable(),
   resolution_number: z.string().nullable(),
+  situation: z.enum(['archived', 'current', 'replaced']),
   title: z.string(),
   updated_at: timestampSchema,
   updated_by: z.string().uuid().nullable(),
@@ -131,7 +197,13 @@ export function toManagedDocument(value: unknown): ManagedDocument {
     issuingEntity: result.data.issuing_entity,
     metadata: result.data.metadata,
     publicationStatus: result.data.publication_status,
+    replacementDate: result.data.replacement_date,
+    replacementDocumentId: result.data.replacement_document_id,
+    replacementObservation: result.data.replacement_observation,
+    replacementReason: result.data.replacement_reason,
+    replacementYear: result.data.replacement_year,
     resolutionNumber: result.data.resolution_number,
+    situation: result.data.situation,
     title: result.data.title,
     updatedAt: result.data.updated_at,
     updatedBy: result.data.updated_by,
@@ -164,6 +236,7 @@ export function toStoredDocumentVersion(value: unknown): StoredDocumentVersion {
 
 export function toManagedDocumentVersion(
   version: StoredDocumentVersion,
+  uploadedByName: string | null = null,
 ): ManagedDocumentVersion {
   return {
     fileSizeBytes: version.fileSizeBytes,
@@ -174,6 +247,106 @@ export function toManagedDocumentVersion(
     pageCount: version.pageCount,
     uploadedAt: version.uploadedAt,
     uploadedBy: version.uploadedBy,
+    uploadedByName,
     versionNumber: version.versionNumber,
+  };
+}
+
+const moduleAssociationRowSchema = z.object({
+  linked_module_id: z.string().uuid(),
+  linked_module_name: z.string().min(1),
+  module_id: z.string().uuid(),
+  module_name: z.string().min(1),
+  submodule_id: z.string().uuid().nullable(),
+  submodule_name: z.string().nullable(),
+});
+
+const libraryRowSchema = z.object({
+  article_reference: z.string().nullable(),
+  created_at: timestampSchema,
+  created_by: z.string().uuid().nullable(),
+  created_by_name: z.string().nullable(),
+  current_version_id: z.string().uuid().nullable(),
+  current_version_ingestion_status: z
+    .enum(['failed', 'indexed', 'pending', 'processing'])
+    .nullable(),
+  current_version_uploaded_at: timestampSchema.nullable(),
+  document_type: z.string().regex(/^[A-Z][A-Z0-9_]{1,63}$/),
+  id: z.string().uuid(),
+  issuance_year: z.number().int().nullable(),
+  issuing_entity: z.string().nullable(),
+  metadata: metadataSchema,
+  module_associations: z.array(moduleAssociationRowSchema),
+  publication_status: z.enum(['active', 'inactive']),
+  replacement_date: dateSchema.nullable(),
+  replacement_document_id: z.string().uuid().nullable(),
+  replacement_observation: z.string().nullable(),
+  replacement_reason: z.string().nullable(),
+  replacement_year: z.number().int().nullable(),
+  resolution_number: z.string().nullable(),
+  situation: z.enum(['archived', 'current', 'replaced']),
+  title: z.string(),
+  total_count: z.union([z.number().int(), z.string().regex(/^\d+$/)]),
+  updated_at: timestampSchema,
+  updated_by: z.string().uuid().nullable(),
+});
+
+export interface ParsedDocumentLibraryRow {
+  item: DocumentLibraryItem;
+  total: number;
+}
+
+export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
+  const result = libraryRowSchema.safeParse(value);
+
+  if (!result.success) {
+    throw new Error('Document library data returned by the store is invalid.');
+  }
+
+  const ingestionStatus = result.data.current_version_ingestion_status;
+  const technicalStatus: DocumentTechnicalStatus =
+    ingestionStatus === 'indexed'
+      ? 'ready'
+      : ingestionStatus === 'failed' || ingestionStatus === null
+        ? 'error'
+        : 'pending_approval';
+
+  return {
+    item: {
+      articleReference: result.data.article_reference,
+      createdAt: result.data.created_at,
+      createdBy: result.data.created_by,
+      createdByName: result.data.created_by_name,
+      currentVersionId: result.data.current_version_id,
+      currentVersionUploadedAt: result.data.current_version_uploaded_at,
+      documentType: result.data.document_type,
+      id: result.data.id,
+      issuanceYear: result.data.issuance_year,
+      issuingEntity: result.data.issuing_entity,
+      metadata: result.data.metadata,
+      moduleAssociations: result.data.module_associations.map(
+        (association) => ({
+          linkedModuleId: association.linked_module_id,
+          linkedModuleName: association.linked_module_name,
+          moduleId: association.module_id,
+          moduleName: association.module_name,
+          submoduleId: association.submodule_id,
+          submoduleName: association.submodule_name,
+        }),
+      ),
+      publicationStatus: result.data.publication_status,
+      replacementDate: result.data.replacement_date,
+      replacementDocumentId: result.data.replacement_document_id,
+      replacementObservation: result.data.replacement_observation,
+      replacementReason: result.data.replacement_reason,
+      replacementYear: result.data.replacement_year,
+      resolutionNumber: result.data.resolution_number,
+      situation: result.data.situation,
+      technicalStatus,
+      title: result.data.title,
+      updatedAt: result.data.updated_at,
+      updatedBy: result.data.updated_by,
+    },
+    total: Number(result.data.total_count),
   };
 }

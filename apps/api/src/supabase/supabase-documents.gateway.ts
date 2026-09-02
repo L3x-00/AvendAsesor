@@ -8,7 +8,9 @@ import {
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
   toManagedDocument,
+  toDocumentLibraryRow,
   toStoredDocumentVersion,
+  type DocumentLibraryPage,
   type ManagedDocument,
   type StoredDocumentVersion,
 } from '../documents/domain/document';
@@ -16,21 +18,16 @@ import type {
   AddDocumentVersionRecord,
   CreateDocumentRecord,
   DocumentMetadataPatch,
+  DocumentLibraryQuery,
   DocumentsGateway,
 } from '../documents/documents.gateway';
-import type {
-  Json,
-  SupabaseDatabase,
-  SupabaseServerClient,
-} from './supabase.server-client';
+import type { Json, SupabaseServerClient } from './supabase.server-client';
 
 const DOCUMENT_COLUMNS =
-  'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
+  'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,situation,replacement_document_id,replacement_date,replacement_year,replacement_reason,replacement_observation,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
 const DOCUMENT_VERSION_COLUMNS =
   'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by';
 const NORMATIVE_DOCUMENTS_BUCKET = 'normative-documents';
-
-type DocumentRow = SupabaseDatabase['public']['Tables']['documents']['Row'];
 
 function toJson(value: Record<string, unknown>): Json {
   return value as Json;
@@ -130,10 +127,17 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
   async createDownloadUrl(
     storagePath: string,
     expiresInSeconds: number,
+    disposition: 'attachment' | 'inline' = 'attachment',
   ): Promise<string> {
-    const { data, error } = await this.requireClient()
-      .storage.from(NORMATIVE_DOCUMENTS_BUCKET)
-      .createSignedUrl(storagePath, expiresInSeconds, { download: true });
+    const bucket = this.requireClient().storage.from(
+      NORMATIVE_DOCUMENTS_BUCKET,
+    );
+    const { data, error } =
+      disposition === 'attachment'
+        ? await bucket.createSignedUrl(storagePath, expiresInSeconds, {
+            download: true,
+          })
+        : await bucket.createSignedUrl(storagePath, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
       storageError(error ?? {});
@@ -231,6 +235,62 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     return (data ?? []).map((row) => row.module_id);
   }
 
+  async listActorNames(actorIds: string[]): Promise<Record<string, string>> {
+    if (actorIds.length === 0) return {};
+
+    const { data, error } = await this.requireClient()
+      .from('profiles')
+      .select('id,full_name')
+      .in('id', actorIds);
+
+    if (error) {
+      databaseError(error);
+    }
+
+    return Object.fromEntries(
+      (data ?? []).map((profile) => [profile.id, profile.full_name]),
+    );
+  }
+
+  async listLibrary(
+    options: DocumentLibraryQuery,
+  ): Promise<DocumentLibraryPage> {
+    const { data, error } = await this.requireClient().rpc(
+      'list_document_library',
+      {
+        p_document_type: options.documentType ?? null,
+        p_issuance_year: options.issuanceYear ?? null,
+        p_issuing_entity: options.issuingEntity ?? null,
+        p_limit: options.limit,
+        p_module_id: options.moduleId ?? null,
+        p_offset: options.offset,
+        p_query: options.q ?? null,
+        p_situation: options.situation ?? null,
+        p_sort: options.sort,
+        p_submodule_id: options.submoduleId ?? null,
+        p_technical_status: options.technicalStatus ?? null,
+      },
+    );
+
+    if (error) {
+      databaseError(error);
+    }
+
+    try {
+      const parsed = (data ?? []).map((row) => toDocumentLibraryRow(row));
+      return {
+        items: parsed.map((row) => row.item),
+        limit: options.limit,
+        offset: options.offset,
+        total: parsed.at(0)?.total ?? 0,
+      };
+    } catch {
+      throw new InternalServerErrorException(
+        'Document library data is invalid.',
+      );
+    }
+  }
+
   async listVersions(documentId: string): Promise<StoredDocumentVersion[]> {
     const { data, error } = await this.requireClient()
       .from('document_versions')
@@ -314,6 +374,39 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     return this.parseDocument(data);
   }
 
+  async setSituation(
+    documentId: string,
+    situation: 'archived' | 'current' | 'replaced',
+    actorId: string,
+    options: {
+      observation?: string;
+      reason?: string;
+      replacementDate?: string;
+      replacementDocumentId?: string;
+      replacementYear?: number;
+    },
+  ): Promise<ManagedDocument> {
+    const { data, error } = await this.requireClient().rpc(
+      'set_document_situation',
+      {
+        p_actor_id: actorId,
+        p_document_id: documentId,
+        p_observation: options.observation ?? null,
+        p_reason: options.reason ?? null,
+        p_replacement_date: options.replacementDate ?? null,
+        p_replacement_document_id: options.replacementDocumentId ?? null,
+        p_replacement_year: options.replacementYear ?? null,
+        p_situation: situation,
+      },
+    );
+
+    if (error) {
+      databaseError(error);
+    }
+
+    return this.parseDocument(data);
+  }
+
   async unlinkModule(
     documentId: string,
     moduleId: string,
@@ -365,7 +458,7 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     }
   }
 
-  private parseDocument(row: DocumentRow | null): ManagedDocument {
+  private parseDocument(row: unknown): ManagedDocument {
     try {
       return toManagedDocument(row);
     } catch {

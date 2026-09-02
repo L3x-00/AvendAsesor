@@ -136,7 +136,14 @@ export interface SupabaseDatabase {
           issuing_entity: string | null;
           metadata: Json;
           publication_status: 'active' | 'inactive';
+          replacement_date: string | null;
+          replacement_document_id: string | null;
+          replacement_observation: string | null;
+          replacement_reason: string | null;
+          replacement_year: number | null;
           resolution_number: string | null;
+          search_vector: string;
+          situation: 'archived' | 'current' | 'replaced';
           title: string;
           updated_at: string;
           updated_by: string | null;
@@ -292,6 +299,49 @@ export interface SupabaseDatabase {
         Args: { p_actor_id: string; p_document_id: string; p_reason: string };
         Returns: null;
       };
+      list_document_library: {
+        Args: {
+          p_document_type: string | null;
+          p_issuance_year: number | null;
+          p_issuing_entity: string | null;
+          p_limit: number;
+          p_module_id: string | null;
+          p_offset: number;
+          p_query: string | null;
+          p_situation: 'archived' | 'current' | 'replaced' | null;
+          p_sort: 'newest' | 'oldest' | 'title' | 'upload_date' | 'year';
+          p_submodule_id: string | null;
+          p_technical_status: 'error' | 'pending_approval' | 'ready' | null;
+        };
+        Returns: {
+          article_reference: string | null;
+          created_at: string;
+          created_by: string | null;
+          created_by_name: string | null;
+          current_version_id: string | null;
+          current_version_ingestion_status:
+            'failed' | 'indexed' | 'pending' | 'processing' | null;
+          current_version_uploaded_at: string | null;
+          document_type: string;
+          id: string;
+          issuance_year: number | null;
+          issuing_entity: string | null;
+          metadata: Json;
+          module_associations: Json;
+          publication_status: 'active' | 'inactive';
+          replacement_date: string | null;
+          replacement_document_id: string | null;
+          replacement_observation: string | null;
+          replacement_reason: string | null;
+          replacement_year: number | null;
+          resolution_number: string | null;
+          situation: 'archived' | 'current' | 'replaced';
+          title: string;
+          total_count: number;
+          updated_at: string;
+          updated_by: string | null;
+        }[];
+      };
       record_document_download_url: {
         Args: {
           p_actor_id: string;
@@ -306,6 +356,19 @@ export interface SupabaseDatabase {
           p_document_id: string;
           p_is_active: boolean;
           p_reason: string | null;
+        };
+        Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
+      };
+      set_document_situation: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_observation: string | null;
+          p_reason: string | null;
+          p_replacement_date: string | null;
+          p_replacement_document_id: string | null;
+          p_replacement_year: number | null;
+          p_situation: 'archived' | 'current' | 'replaced';
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
@@ -701,6 +764,7 @@ export interface SupabaseDatabase {
       document_ingestion_status:
         'failed' | 'indexed' | 'pending' | 'processing';
       document_publication_status: 'active' | 'inactive';
+      document_situation: 'archived' | 'current' | 'replaced';
       chat_message_role: 'assistant' | 'clarification' | 'no_evidence' | 'user';
       unanswered_question_reason: 'ambiguous_request' | 'insufficient_evidence';
       unanswered_question_status: 'pending_review' | 'resolved' | 'dismissed';

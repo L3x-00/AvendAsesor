@@ -32,7 +32,13 @@ const documentRecord: ManagedDocument = {
   issuingEntity: null,
   metadata: {},
   publicationStatus: 'active',
+  replacementDate: null,
+  replacementDocumentId: null,
+  replacementObservation: null,
+  replacementReason: null,
+  replacementYear: null,
   resolutionNumber: null,
+  situation: 'current',
   title: 'Documento de prueba',
   updatedAt: '2026-08-09T00:00:00.000Z',
   updatedBy: authorization.userId,
@@ -46,8 +52,10 @@ function createDocumentsService(): jest.Mocked<DocumentsService> {
     findOne: jest.fn(),
     linkModule: jest.fn(),
     list: jest.fn(),
+    listLibrary: jest.fn(),
     logicalDelete: jest.fn(),
     setStatus: jest.fn(),
+    setSituation: jest.fn(),
     unlinkModule: jest.fn(),
     updateMetadata: jest.fn(),
   } as unknown as jest.Mocked<DocumentsService>;
@@ -60,6 +68,7 @@ describe('DocumentsController', () => {
     const file = { originalname: 'documento.pdf' } as Express.Multer.File;
     const details: ManagedDocumentDetails = {
       ...documentRecord,
+      createdByName: 'Administrador de prueba',
       moduleIds: [],
       versions: [],
     };
@@ -72,7 +81,19 @@ describe('DocumentsController', () => {
     });
     documentsService.findOne.mockResolvedValue(details);
     documentsService.list.mockResolvedValue([documentRecord]);
+    documentsService.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 25,
+      offset: 0,
+      total: 0,
+    });
     documentsService.setStatus.mockResolvedValue(documentRecord);
+    documentsService.setSituation.mockResolvedValue({
+      ...documentRecord,
+      publicationStatus: 'inactive',
+      replacementReason: null,
+      situation: 'archived',
+    });
     documentsService.updateMetadata.mockResolvedValue(documentRecord);
     documentsService.linkModule.mockResolvedValue(undefined);
     documentsService.unlinkModule.mockResolvedValue(undefined);
@@ -88,6 +109,12 @@ describe('DocumentsController', () => {
     await expect(controller.list({ status: 'active' })).resolves.toEqual([
       documentRecord,
     ]);
+    await expect(controller.listLibrary({ q: 'licencia' })).resolves.toEqual({
+      items: [],
+      limit: 25,
+      offset: 0,
+      total: 0,
+    });
     await expect(controller.findOne(documentRecord.id)).resolves.toEqual(
       details,
     );
@@ -111,6 +138,13 @@ describe('DocumentsController', () => {
         authorization,
       ),
     ).resolves.toEqual(documentRecord);
+    await expect(
+      controller.setSituation(
+        documentRecord.id,
+        { reason: 'Documento archivado', situation: 'archived' },
+        authorization,
+      ),
+    ).resolves.toMatchObject({ situation: 'archived' });
     await expect(
       controller.updateMetadata(
         documentRecord.id,
