@@ -20,13 +20,21 @@ describe('UserAdministrationController', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('forwards authenticated superadministrator context to each protected action', async () => {
-    service.listUsers.mockResolvedValue([]);
+    service.listUsers.mockResolvedValue({
+      items: [],
+      limit: 10,
+      offset: 0,
+      total: 0,
+    });
     service.listAuditEvents.mockResolvedValue([]);
     service.updateUser.mockResolvedValue({ id: 'target-id' });
 
     await expect(
       controller.listUsers({ limit: 10 }, authorization),
     ).resolves.toEqual([]);
+    await expect(
+      controller.listUsersPage({ limit: 10 }, authorization),
+    ).resolves.toEqual({ items: [], limit: 10, offset: 0, total: 0 });
     await expect(
       controller.listAuditEvents({ limit: 20 }, authorization),
     ).resolves.toEqual([]);

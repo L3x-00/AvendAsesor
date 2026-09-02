@@ -12,6 +12,9 @@ import {
   operationalMetricsSchema,
   unansweredQuestionSchema,
   type AdministrativeUser,
+  type AdministrativeUserPage,
+  type AdministrativeUserQuery,
+  administrativeUserPageSchema,
   type DownloadUrl,
   type DocumentLibraryPage,
   type DocumentLibraryQuery,
@@ -171,16 +174,21 @@ export class AdminApiClient {
   }
 
   async listAdministrativeUsers(
-    search?: string,
-  ): Promise<AdministrativeUser[]> {
-    const query = new URLSearchParams({ limit: "100" });
+    filters: AdministrativeUserQuery = {},
+  ): Promise<AdministrativeUserPage> {
+    const query = new URLSearchParams({
+      limit: String(filters.limit ?? 25),
+      offset: String(filters.offset ?? 0),
+    });
 
-    if (search?.trim()) query.set("search", search.trim());
+    if (filters.group) query.set("group", filters.group);
+    if (filters.search?.trim()) query.set("search", filters.search.trim());
+    if (filters.status) query.set("status", filters.status);
 
     return this.send(
-      `/admin/users?${query.toString()}`,
+      `/admin/users/page?${query.toString()}`,
       { method: "GET" },
-      administrativeUserSchema.array(),
+      administrativeUserPageSchema,
     );
   }
 

@@ -648,6 +648,20 @@ export interface SupabaseDatabase {
           role: UserRole;
         }[];
       };
+      list_administrative_users_page: {
+        Args: {
+          p_account_status?: AccountStatus | null;
+          p_actor_id: string;
+          p_group?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+          p_search?: string | null;
+        };
+        Returns: {
+          items: Json;
+          total_count: number;
+        }[];
+      };
       update_administrative_user: {
         Args: {
           p_account_status?: AccountStatus | null;

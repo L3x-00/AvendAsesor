@@ -39,8 +39,8 @@ const userRoleLabels = {
 } as const satisfies Record<AdministrativeUser["role"], string>;
 
 const accountStatusLabels = {
-  active: "Activa",
-  suspended: "Suspendida",
+  active: "Activo",
+  suspended: "Pausado",
 } as const satisfies Record<AdministrativeUser["accountStatus"], string>;
 
 const documentIngestionStatusContent = {

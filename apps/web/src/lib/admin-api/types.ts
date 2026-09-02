@@ -224,6 +224,25 @@ export const administrativeUserSchema = z.object({
 
 export type AdministrativeUser = z.infer<typeof administrativeUserSchema>;
 
+export const administrativeUserPageSchema = z.object({
+  items: administrativeUserSchema.array(),
+  limit: z.number().int().min(1).max(100),
+  offset: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+
+export type AdministrativeUserPage = z.infer<
+  typeof administrativeUserPageSchema
+>;
+
+export interface AdministrativeUserQuery {
+  group?: "docente" | "staff";
+  limit?: number;
+  offset?: number;
+  search?: string;
+  status?: AdministrativeUser["accountStatus"];
+}
+
 export const operationalAuditEventSchema = z.object({
   action: z.enum([
     "chat_history_deleted",

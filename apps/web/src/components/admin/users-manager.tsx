@@ -1,22 +1,25 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import Link from "next/link";
+import { useId } from "react";
 import { updateAdministrativeUserAction } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
-import { formatUserRole } from "@/lib/admin-api/labels";
-import type { AdministrativeUser } from "@/lib/admin-api/types";
+import { formatAccountStatus, formatUserRole } from "@/lib/admin-api/labels";
+import type {
+  AdministrativeUser,
+  AdministrativeUserPage,
+} from "@/lib/admin-api/types";
 import {
-  accountStatusLabel,
-  filterUsers,
-  statusCounts,
-  userGroup,
+  userDirectoryHref,
+  type ParsedUserDirectoryQuery,
   type UserGroup,
   type UserStatusFilter,
 } from "@/lib/admin-api/user-directory";
 import styles from "./users-manager.module.css";
 
 interface UsersManagerProps {
-  users: AdministrativeUser[];
+  page: AdministrativeUserPage;
+  query: ParsedUserDirectoryQuery;
 }
 
 const accessDateFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -101,95 +104,118 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
 }
 
 /**
- * Administrative users directory. Reuses the existing update action; the server
- * remains the authority for roles and states. Access windows (vigencias) and
- * per-module permissions are not part of the current API — see ADR-0017.
+ * Server-filtered and paginated administrative user directory. The browser
+ * receives only the requested page; the API remains the authority for data,
+ * role changes and account-state changes.
  */
-export function UsersManager({ users }: UsersManagerProps) {
-  const [group, setGroup] = useState<UserGroup>("docente");
-  const [status, setStatus] = useState<UserStatusFilter>("all");
-  const [query, setQuery] = useState("");
+export function UsersManager({ page, query }: UsersManagerProps) {
   const searchId = useId();
-
-  const groupCounts = useMemo(
-    () => ({
-      docente: users.filter((user) => userGroup(user.role) === "docente").length,
-      staff: users.filter((user) => userGroup(user.role) === "staff").length,
-    }),
-    [users],
-  );
-  const counts = useMemo(() => statusCounts(users, group), [users, group]);
-  const visible = useMemo(
-    () => filterUsers(users, { group, query, status }),
-    [users, group, query, status],
-  );
+  const totalPages = Math.max(1, Math.ceil(page.total / page.limit));
+  const firstVisible = page.total === 0 ? 0 : page.offset + 1;
+  const lastVisible =
+    page.items.length === 0 ? 0 : page.offset + page.items.length;
 
   return (
     <div className={styles.manager}>
       <p className={styles.notice} role="note">
-        <strong>Vista de superadministrador.</strong> Puedes ver todos los
-        usuarios, sus accesos y la trazabilidad de cada cambio.
+        <strong>Vista de superadministrador.</strong> Puedes consultar todos los
+        usuarios y gestionar sus accesos; cada cambio queda auditado.
       </p>
 
       <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
         {GROUPS.map((item) => (
-          <button
-            aria-pressed={group === item.group}
+          <Link
+            aria-current={query.group === item.group ? "page" : undefined}
             className={
-              group === item.group ? `${styles.tab} ${styles.tabActive}` : styles.tab
+              query.group === item.group
+                ? `${styles.tab} ${styles.tabActive}`
+                : styles.tab
             }
+            href={userDirectoryHref({ ...query, group: item.group, page: 1 })}
             key={item.group}
-            onClick={() => setGroup(item.group)}
-            type="button"
           >
-            {item.label}{" "}
-            <span className={styles.tabCount}>{groupCounts[item.group]}</span>
-          </button>
+            {item.label}
+          </Link>
         ))}
       </div>
 
       <div className={styles.toolbar}>
-        <input
-          aria-label="Buscar usuario por nombre"
-          className={styles.search}
-          id={`${searchId}-search`}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar usuario por nombre…"
-          type="search"
-          value={query}
-        />
+        <form action="/admin/users" className={styles.searchForm} method="get">
+          {query.group !== "docente" ? (
+            <input name="group" type="hidden" value={query.group} />
+          ) : null}
+          {query.status !== "all" ? (
+            <input name="status" type="hidden" value={query.status} />
+          ) : null}
+          <label className={styles.searchLabel} htmlFor={`${searchId}-search`}>
+            Buscar usuario
+          </label>
+          <div className={styles.searchControls}>
+            <input
+              className={styles.search}
+              defaultValue={query.search ?? ""}
+              id={`${searchId}-search`}
+              key={`${query.group}:${query.status}:${query.page}:${query.search ?? ""}`}
+              maxLength={160}
+              name="search"
+              placeholder="Buscar usuario por nombre…"
+              type="search"
+            />
+            <button className={styles.searchButton} type="submit">
+              Buscar
+            </button>
+            {query.search ? (
+              <Link
+                className={styles.clearSearch}
+                href={userDirectoryHref({
+                  ...query,
+                  page: 1,
+                  search: undefined,
+                })}
+              >
+                Limpiar
+              </Link>
+            ) : null}
+          </div>
+        </form>
+
         <div
           aria-label="Filtrar por estado"
           className={styles.statusFilter}
           role="group"
         >
           {STATUS_FILTERS.map((item) => (
-            <button
-              aria-pressed={status === item.value}
+            <Link
+              aria-current={query.status === item.value ? "page" : undefined}
               className={
-                status === item.value
+                query.status === item.value
                   ? `${styles.statusButton} ${styles.statusButtonActive}`
                   : styles.statusButton
               }
+              href={userDirectoryHref({
+                ...query,
+                page: 1,
+                status: item.value,
+              })}
               key={item.value}
-              onClick={() => setStatus(item.value)}
-              type="button"
             >
-              {item.label} <span className={styles.tabCount}>{counts[item.value]}</span>
-            </button>
+              {item.label}
+            </Link>
           ))}
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      <p aria-live="polite" className={styles.resultSummary}>
+        Mostrando {firstVisible}–{lastVisible} de {page.total} usuarios.
+      </p>
+
+      {page.items.length === 0 ? (
         <p className={styles.empty}>
-          {users.length === 0
-            ? "Aún no hay usuarios registrados."
-            : "Ningún usuario coincide con los filtros."}
+          Ningún usuario coincide con la búsqueda y los filtros seleccionados.
         </p>
       ) : (
         <ul className={styles.list} role="list">
-          {visible.map((user) => (
+          {page.items.map((user) => (
             <li className={styles.row} key={user.id}>
               <div className={styles.rowMain}>
                 <h3 className={styles.rowName}>{user.fullName}</h3>
@@ -207,7 +233,7 @@ export function UsersManager({ users }: UsersManagerProps) {
                     : styles.badgePaused
                 }
               >
-                {accountStatusLabel(user.accountStatus)}
+                {formatAccountStatus(user.accountStatus)}
               </span>
               <div className={styles.rowActions}>
                 <UserEditForm user={user} />
@@ -216,6 +242,32 @@ export function UsersManager({ users }: UsersManagerProps) {
           ))}
         </ul>
       )}
+
+      {totalPages > 1 ? (
+        <nav aria-label="Paginación de usuarios" className={styles.pagination}>
+          <span className={styles.paginationCurrent}>
+            Página {query.page} de {totalPages}
+          </span>
+          <div className={styles.paginationActions}>
+            {query.page > 1 ? (
+              <Link
+                className={styles.paginationLink}
+                href={userDirectoryHref({ ...query, page: query.page - 1 })}
+              >
+                Anterior
+              </Link>
+            ) : null}
+            {query.page < totalPages ? (
+              <Link
+                className={styles.paginationLink}
+                href={userDirectoryHref({ ...query, page: query.page + 1 })}
+              >
+                Siguiente
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

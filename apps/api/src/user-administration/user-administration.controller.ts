@@ -22,6 +22,7 @@ import { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dt
 import { UserAdministrationService } from './user-administration.service';
 import type {
   AdministrativeUser,
+  AdministrativeUserPage,
   OperationalAuditEvent,
 } from './user-administration.gateway';
 
@@ -35,10 +36,22 @@ export class UserAdministrationController {
   ) {}
 
   @Get()
-  listUsers(
+  async listUsers(
     @Query() dto: ListAdministrativeUsersQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdministrativeUser[]> {
+    const page = await this.userAdministrationService.listUsers(
+      dto,
+      authorization,
+    );
+    return page.items;
+  }
+
+  @Get('page')
+  listUsersPage(
+    @Query() dto: ListAdministrativeUsersQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserPage> {
     return this.userAdministrationService.listUsers(dto, authorization);
   }
 

@@ -20,12 +20,16 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
       .mockResolvedValueOnce({
         data: [
           {
-            account_status: 'active',
-            created_at: '2026-08-23T00:00:00.000Z',
-            full_name: 'Administrador Demo',
-            id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
-            last_access_at: null,
-            role: 'admin',
+            items: [
+              {
+                account_status: 'active',
+                full_name: 'Administrador Demo',
+                id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+                last_access_at: null,
+                role: 'admin',
+              },
+            ],
+            total_count: 1,
           },
         ],
         error: null,
@@ -52,18 +56,34 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
     await expect(
       gateway.listUsers({
         actorId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        group: 'staff',
         limit: 10,
+        offset: 20,
         search: null,
+        status: 'active',
       }),
-    ).resolves.toEqual([
-      {
-        accountStatus: 'active',
-        fullName: 'Administrador Demo',
-        id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
-        lastAccessAt: null,
-        role: 'admin',
-      },
-    ]);
+    ).resolves.toEqual({
+      items: [
+        {
+          accountStatus: 'active',
+          fullName: 'Administrador Demo',
+          id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+          lastAccessAt: null,
+          role: 'admin',
+        },
+      ],
+      limit: 10,
+      offset: 20,
+      total: 1,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(1, 'list_administrative_users_page', {
+      p_account_status: 'active',
+      p_actor_id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+      p_group: 'staff',
+      p_limit: 10,
+      p_offset: 20,
+      p_search: null,
+    });
     await expect(
       gateway.listAuditEvents({
         actorId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
@@ -109,8 +129,11 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
     await expect(
       unavailable.listUsers({
         actorId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        group: null,
         limit: 10,
+        offset: 0,
         search: null,
+        status: null,
       }),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
@@ -128,8 +151,11 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
     await expect(
       gateway.listUsers({
         actorId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        group: null,
         limit: 10,
+        offset: 0,
         search: null,
+        status: null,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });

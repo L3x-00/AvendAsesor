@@ -6,6 +6,7 @@ import type { ListOperationalAuditEventsQueryDto } from './dto/list-operational-
 import type { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dto';
 import type {
   AdministrativeUser,
+  AdministrativeUserPage,
   OperationalAuditEvent,
   UserAdministrationGateway,
 } from './user-administration.gateway';
@@ -30,11 +31,14 @@ export class UserAdministrationService {
   listUsers(
     dto: ListAdministrativeUsersQueryDto,
     authorization: AuthorizationContext,
-  ): Promise<AdministrativeUser[]> {
+  ): Promise<AdministrativeUserPage> {
     return this.gateway.listUsers({
       actorId: authorization.userId,
+      group: dto.group ?? null,
       limit: dto.limit ?? 50,
+      offset: dto.offset ?? 0,
       search: dto.search?.trim() || null,
+      status: dto.status ?? null,
     });
   }
 

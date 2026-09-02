@@ -7,6 +7,12 @@ import {
   formatOperationalAuditResourceType,
   formatUserRole,
 } from "@/lib/admin-api/labels";
+import {
+  parseUserDirectoryQuery,
+  USER_DIRECTORY_PAGE_SIZE,
+  userDirectoryHref,
+  type UserDirectorySearchParams,
+} from "@/lib/admin-api/user-directory";
 
 const auditDateFormatter = new Intl.DateTimeFormat("es-PE", {
   dateStyle: "medium",
@@ -18,13 +24,33 @@ function formatAuditDate(value: string): string {
   return auditDateFormatter.format(new Date(value));
 }
 
-export default async function UsersPage() {
+interface UsersPageProps {
+  searchParams: Promise<UserDirectorySearchParams>;
+}
+
+export default async function UsersPage({ searchParams }: UsersPageProps) {
   const { access, client } = await createAuthorizedAdminApiContext();
   if (access.role !== "superadmin") redirect("/access-denied");
-  const [users, events] = await Promise.all([
-    client.listAdministrativeUsers(),
+  const query = parseUserDirectoryQuery(await searchParams);
+  const [userPage, events] = await Promise.all([
+    client.listAdministrativeUsers({
+      group: query.group,
+      limit: USER_DIRECTORY_PAGE_SIZE,
+      offset: (query.page - 1) * USER_DIRECTORY_PAGE_SIZE,
+      search: query.search,
+      status: query.status === "all" ? undefined : query.status,
+    }),
     client.listOperationalAuditEvents(),
   ]);
+
+  if (query.page > 1 && userPage.items.length === 0 && userPage.total > 0) {
+    redirect(
+      userDirectoryHref({
+        ...query,
+        page: Math.ceil(userPage.total / userPage.limit),
+      }),
+    );
+  }
 
   return (
     <AdminShell
@@ -35,7 +61,7 @@ export default async function UsersPage() {
       userRole={access.role}
     >
       <div className="flex flex-col gap-8">
-        <UsersManager users={users} />
+        <UsersManager page={userPage} query={query} />
 
         <section
           aria-labelledby="audit-title"

@@ -12,8 +12,8 @@ describe("administrative display labels", () => {
     expect(formatUserRole("docente")).toBe("Docente");
     expect(formatUserRole("admin")).toBe("Administrador");
     expect(formatUserRole("superadmin")).toBe("Superadministrador");
-    expect(formatAccountStatus("active")).toBe("Activa");
-    expect(formatAccountStatus("suspended")).toBe("Suspendida");
+    expect(formatAccountStatus("active")).toBe("Activo");
+    expect(formatAccountStatus("suspended")).toBe("Pausado");
   });
 
   it("does not expose technical audit enum values in the administrative table", () => {
