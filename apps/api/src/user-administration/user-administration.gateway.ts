@@ -8,6 +8,16 @@ export interface AdministrativeUser {
   role: UserRole;
 }
 
+export type AdministrativeUserGroup = 'docente' | 'staff';
+export type AdministrativeUserStatusFilter = AccountStatus;
+
+export interface AdministrativeUserPage {
+  items: AdministrativeUser[];
+  limit: number;
+  offset: number;
+  total: number;
+}
+
 export type OperationalAuditAction =
   | 'chat_history_deleted'
   | 'unanswered_question_reviewed'
@@ -32,9 +42,12 @@ export interface UserAdministrationGateway {
   }): Promise<OperationalAuditEvent[]>;
   listUsers(input: {
     actorId: string;
+    group: AdministrativeUserGroup | null;
     limit: number;
+    offset: number;
     search: string | null;
-  }): Promise<AdministrativeUser[]>;
+    status: AdministrativeUserStatusFilter | null;
+  }): Promise<AdministrativeUserPage>;
   updateUser(input: {
     accountStatus: AccountStatus | null;
     actorId: string;

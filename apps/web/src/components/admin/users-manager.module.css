@@ -22,7 +22,10 @@
 }
 
 .tab {
+  display: inline-flex;
   min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
   padding: 0 1rem;
   border: 1px solid var(--avend-border);
   border-radius: 999px;
@@ -31,6 +34,7 @@
   font-weight: 600;
   color: var(--avend-text);
   cursor: pointer;
+  text-decoration: none;
 }
 
 .tab:hover {
@@ -48,16 +52,30 @@
   color: var(--avend-surface);
 }
 
-.tabCount {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.75rem 1rem;
+}
+
+.searchForm {
+  display: flex;
+  flex: 1 1 28rem;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.searchLabel {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.searchControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .search {
@@ -77,6 +95,47 @@
   outline-offset: 2px;
 }
 
+.searchButton,
+.clearSearch {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.searchButton {
+  border: 1px solid var(--avend-accent-strong);
+  background: var(--avend-accent-strong);
+  color: var(--avend-surface);
+  cursor: pointer;
+}
+
+.clearSearch {
+  border: 1px solid var(--avend-border);
+  background: var(--avend-surface);
+  color: var(--avend-accent-strong);
+  text-decoration: none;
+}
+
+.searchButton:hover {
+  border-color: var(--avend-navy);
+  background: var(--avend-navy);
+}
+
+.clearSearch:hover {
+  background: var(--avend-surface-muted);
+}
+
+.searchButton:focus-visible,
+.clearSearch:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
 .statusFilter {
   display: flex;
   flex-wrap: wrap;
@@ -84,7 +143,10 @@
 }
 
 .statusButton {
+  display: inline-flex;
   min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
   padding: 0 0.9rem;
   border: 1px solid var(--avend-border);
   border-radius: 0.5rem;
@@ -93,6 +155,7 @@
   font-weight: 600;
   color: var(--avend-text);
   cursor: pointer;
+  text-decoration: none;
 }
 
 .statusButton:hover {
@@ -108,6 +171,13 @@
   border-color: var(--avend-accent);
   background: var(--avend-soft-blue);
   color: var(--avend-accent-strong);
+}
+
+.resultSummary {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .empty {
@@ -164,7 +234,7 @@
   flex: none;
   padding: 0.15rem 0.7rem;
   border-radius: 999px;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -240,4 +310,69 @@
 .textarea:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+}
+
+.paginationCurrent {
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.paginationActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.paginationLink {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.paginationLink:hover {
+  background: var(--avend-surface-muted);
+}
+
+.paginationLink:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .searchControls,
+  .search,
+  .searchButton,
+  .clearSearch {
+    width: 100%;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .badgeActive,
+  .badgePaused {
+    justify-self: start;
+  }
 }

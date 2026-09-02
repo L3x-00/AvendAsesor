@@ -375,8 +375,13 @@ describe("AdminApiClient", () => {
       if (url.includes("/operations/unanswered-questions?"))
         return successfulJson([unansweredQuestion]);
       if (url.includes("/audit-events")) return successfulJson([auditEvent]);
-      if (url.includes("/admin/users?"))
-        return successfulJson([administrativeUser]);
+      if (url.includes("/admin/users/page?"))
+        return successfulJson({
+          items: [administrativeUser],
+          limit: 25,
+          offset: 25,
+          total: 1,
+        });
       if (url.includes("/admin/users/"))
         return successfulJson(administrativeUser);
       return successfulJson({});
@@ -396,9 +401,20 @@ describe("AdminApiClient", () => {
       decision: "resolved",
       reviewNote: "Se requiere revisar el documento fuente.",
     });
-    await expect(client.listAdministrativeUsers("prueba")).resolves.toEqual([
-      administrativeUser,
-    ]);
+    await expect(
+      client.listAdministrativeUsers({
+        group: "staff",
+        limit: 25,
+        offset: 25,
+        search: "prueba",
+        status: "active",
+      }),
+    ).resolves.toEqual({
+      items: [administrativeUser],
+      limit: 25,
+      offset: 25,
+      total: 1,
+    });
     await expect(client.listOperationalAuditEvents()).resolves.toEqual([
       auditEvent,
     ]);
@@ -414,7 +430,7 @@ describe("AdminApiClient", () => {
         "http://localhost:3001/admin/operations/metrics",
         "http://localhost:3001/admin/operations/unanswered-questions?limit=100&status=pending_review",
         `http://localhost:3001/admin/operations/unanswered-questions/${unansweredQuestion.id}/review`,
-        "http://localhost:3001/admin/users?limit=100&search=prueba",
+        "http://localhost:3001/admin/users/page?limit=25&offset=25&group=staff&search=prueba&status=active",
         "http://localhost:3001/admin/users/audit-events?limit=100",
         `http://localhost:3001/admin/users/${administrativeUser.id}`,
       ]),

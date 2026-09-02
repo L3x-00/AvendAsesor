@@ -18,23 +18,65 @@ describe('UserAdministrationService', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('uses bounded server-side listings and a null search by default', async () => {
-    gateway.listUsers.mockResolvedValue([]);
+  it('preserves the bounded 50-user legacy default and a null search', async () => {
+    gateway.listUsers.mockResolvedValue({
+      items: [],
+      limit: 50,
+      offset: 0,
+      total: 0,
+    });
     gateway.listAuditEvents.mockResolvedValue([]);
 
-    await expect(service.listUsers({}, authorization)).resolves.toEqual([]);
+    await expect(service.listUsers({}, authorization)).resolves.toEqual({
+      items: [],
+      limit: 50,
+      offset: 0,
+      total: 0,
+    });
     await expect(service.listAuditEvents({}, authorization)).resolves.toEqual(
       [],
     );
 
     expect(gateway.listUsers).toHaveBeenCalledWith({
       actorId: authorization.userId,
+      group: null,
       limit: 50,
+      offset: 0,
       search: null,
+      status: null,
     });
     expect(gateway.listAuditEvents).toHaveBeenCalledWith({
       actorId: authorization.userId,
       limit: 50,
+    });
+  });
+
+  it('forwards global directory filters and pagination to the gateway', async () => {
+    gateway.listUsers.mockResolvedValue({
+      items: [],
+      limit: 20,
+      offset: 40,
+      total: 0,
+    });
+
+    await service.listUsers(
+      {
+        group: 'staff',
+        limit: 20,
+        offset: 40,
+        search: '  Ana  ',
+        status: 'suspended',
+      },
+      authorization,
+    );
+
+    expect(gateway.listUsers).toHaveBeenCalledWith({
+      actorId: authorization.userId,
+      group: 'staff',
+      limit: 20,
+      offset: 40,
+      search: 'Ana',
+      status: 'suspended',
     });
   });
 

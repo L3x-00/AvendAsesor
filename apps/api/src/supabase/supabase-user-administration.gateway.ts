@@ -10,6 +10,7 @@ import {
 import type { PostgrestError } from '@supabase/supabase-js';
 import type {
   AdministrativeUser,
+  AdministrativeUserPage,
   OperationalAuditEvent,
   UserAdministrationGateway,
 } from '../user-administration/user-administration.gateway';
@@ -83,18 +84,40 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
 
   async listUsers(
     input: Parameters<UserAdministrationGateway['listUsers']>[0],
-  ): Promise<AdministrativeUser[]> {
+  ): Promise<AdministrativeUserPage> {
     const { data, error } = await this.requireClient().rpc(
-      'list_administrative_users',
+      'list_administrative_users_page',
       {
+        p_account_status: input.status,
         p_actor_id: input.actorId,
+        p_group: input.group,
         p_limit: input.limit,
+        p_offset: input.offset,
         p_search: input.search,
       },
     );
     if (error) databaseError(error);
 
-    return (data ?? []).map((user) => this.toAdministrativeUser(user));
+    const page = requireSingle(
+      data,
+      'The administrative user listing did not complete.',
+    );
+    if (
+      !Array.isArray(page.items) ||
+      !Number.isSafeInteger(page.total_count) ||
+      page.total_count < 0
+    ) {
+      throw new InternalServerErrorException(
+        'Administrative user data is invalid.',
+      );
+    }
+
+    return {
+      items: page.items.map((user) => this.toAdministrativeUserJson(user)),
+      limit: input.limit,
+      offset: input.offset,
+      total: page.total_count,
+    };
   }
 
   async updateUser(
@@ -140,5 +163,38 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       lastAccessAt: user.last_access_at,
       role: user.role,
     };
+  }
+
+  private toAdministrativeUserJson(user: Json): AdministrativeUser {
+    if (!user || Array.isArray(user) || typeof user !== 'object') {
+      throw new InternalServerErrorException(
+        'Administrative user data is invalid.',
+      );
+    }
+
+    const accountStatus = user.account_status;
+    const fullName = user.full_name;
+    const id = user.id;
+    const lastAccessAt = user.last_access_at;
+    const role = user.role;
+    if (
+      (accountStatus !== 'active' && accountStatus !== 'suspended') ||
+      typeof fullName !== 'string' ||
+      typeof id !== 'string' ||
+      (lastAccessAt !== null && typeof lastAccessAt !== 'string') ||
+      (role !== 'admin' && role !== 'docente' && role !== 'superadmin')
+    ) {
+      throw new InternalServerErrorException(
+        'Administrative user data is invalid.',
+      );
+    }
+
+    return this.toAdministrativeUser({
+      account_status: accountStatus,
+      full_name: fullName,
+      id,
+      last_access_at: lastAccessAt,
+      role,
+    });
   }
 }

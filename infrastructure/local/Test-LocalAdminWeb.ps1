@@ -48,7 +48,7 @@ function Set-ProcessEnvironment {
     $env:NEXT_PUBLIC_SUPABASE_ANON_KEY = $LocalStatus.ANON_KEY
     $env:ADMIN_API_URL = "http://localhost:$apiPort"
     $env:APP_URL = "http://localhost:$webPort"
-    $env:NODE_ENV = 'production'
+    $env:NODE_ENV = 'development'
     $env:AVEND_LOCAL_STATUS_BASE64 = [Convert]::ToBase64String(
         [Text.Encoding]::UTF8.GetBytes($LocalStatusJson)
     )
@@ -86,15 +86,12 @@ function Wait-ForUrl {
     )
 
     for ($attempt = 0; $attempt -lt 60; $attempt += 1) {
-        try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
-            if ($response.StatusCode -eq 200) {
-                return
-            }
+        & curl.exe --silent --fail --noproxy '*' --max-time 2 --output NUL $Url
+        if ($LASTEXITCODE -eq 0) {
+            return
         }
-        catch {
-            Start-Sleep -Milliseconds 500
-        }
+
+        Start-Sleep -Milliseconds 500
     }
 
     throw "LOCAL_$Name`_START_TIMEOUT"
@@ -129,6 +126,7 @@ try {
     $apiProcess = Start-Process -FilePath 'node' -ArgumentList 'dist/main.js' -WorkingDirectory $apiDirectory -WindowStyle Hidden -PassThru -RedirectStandardOutput $apiStdout -RedirectStandardError $apiStderr
     Wait-ForUrl -Url "http://localhost:$apiPort/health" -Name 'API'
 
+    $env:NODE_ENV = 'production'
     $env:PORT = $webPort
     $webStdout = Join-Path ([IO.Path]::GetTempPath()) "avend-admin-web-web-$PID.out.log"
     $webStderr = Join-Path ([IO.Path]::GetTempPath()) "avend-admin-web-web-$PID.err.log"
@@ -148,6 +146,7 @@ const password = 'AvendLocal!2026AdminWeb';
 const emails = {
   admin: `${emailPrefix}admin-${suffix}@avend.local`,
   docente: `${emailPrefix}docente-${suffix}@avend.local`,
+  superadmin: `${emailPrefix}superadmin-${suffix}@avend.local`,
 };
 let stage = 'bootstrap';
 
@@ -247,7 +246,15 @@ async function assertRoute(path, cookie, expectedStatus, expectedLocation = null
     headers: cookie ? { Cookie: cookie } : {},
     redirect: 'manual',
   });
-  if (result.status !== expectedStatus) throw new Error(`${path}_STATUS_${result.status}`);
+  const body = await result.text();
+  const streamedRedirect = result.status === 200
+    && expectedLocation
+    && body.includes(expectedLocation)
+    && (body.includes('__next-page-redirect') || body.includes('NEXT_REDIRECT'));
+  if (result.status !== expectedStatus && !streamedRedirect) {
+    throw new Error(`${path}_STATUS_${result.status}`);
+  }
+  if (streamedRedirect) return;
   if (expectedLocation && result.headers.get('location') !== expectedLocation) {
     throw new Error(`${path}_LOCATION_${result.headers.get('location') ?? 'NONE'}`);
   }
@@ -273,8 +280,10 @@ async function cleanTemporaryUsers() {
     stage = 'temporary-identities';
     const adminSession = await createConfirmedUser(emails.admin, 'admin');
     const docenteSession = await createConfirmedUser(emails.docente, 'docente');
+    const superadminSession = await createConfirmedUser(emails.superadmin, 'superadmin');
     const adminCookie = await createSessionCookie(adminSession);
     const docenteCookie = await createSessionCookie(docenteSession);
+    const superadminCookie = await createSessionCookie(superadminSession);
 
     stage = 'unauthenticated-guard';
     await assertRoute('/admin/modules', null, 307, '/auth/sign-in');
@@ -283,6 +292,11 @@ async function cleanTemporaryUsers() {
     await assertRoute('/admin', adminCookie, 200);
     await assertRoute('/admin/modules', adminCookie, 200);
     await assertRoute('/admin/documents', adminCookie, 200);
+    await assertRoute('/admin/users', adminCookie, 307, '/access-denied');
+
+    stage = 'superadmin-users-page';
+    await assertRoute('/admin/users', superadminCookie, 200);
+    await assertRoute('/admin/users?group=staff&status=active&search=Local&page=1', superadminCookie, 200);
 
     stage = 'docente-guard';
     await assertRoute('/admin/modules', docenteCookie, 307, '/access-denied');

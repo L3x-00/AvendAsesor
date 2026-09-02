@@ -20,6 +20,7 @@ import type {
 import { ChatService } from './../src/chat/chat.service';
 import { OperationsService } from './../src/operations/operations.service';
 import { UserAdministrationService } from './../src/user-administration/user-administration.service';
+import type { AdministrativeUserPage } from './../src/user-administration/user-administration.gateway';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -78,7 +79,7 @@ describe('API endpoints (e2e)', () => {
       [Record<string, unknown>, AuthorizationContext]
     >(),
     listUsers: jest.fn<
-      Promise<unknown[]>,
+      Promise<AdministrativeUserPage>,
       [Record<string, unknown>, AuthorizationContext]
     >(),
     updateUser: jest.fn<
@@ -318,29 +319,53 @@ describe('API endpoints (e2e)', () => {
     );
   });
 
-  it('/admin/users accepts numeric query parameters for SUPERADMIN listings and audit events', async () => {
+  it('/admin/users preserves the legacy list and exposes paginated SUPERADMIN results', async () => {
     resolveContext.mockResolvedValue({
       email: 'superadmin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
       role: 'superadmin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
-    userAdministrationService.listUsers.mockResolvedValue([]);
+    userAdministrationService.listUsers.mockResolvedValue({
+      items: [],
+      limit: 25,
+      offset: 25,
+      total: 0,
+    });
     userAdministrationService.listAuditEvents.mockResolvedValue([]);
 
     await request(app.getHttpServer())
-      .get('/admin/users?limit=100')
+      .get('/admin/users')
       .set('Authorization', 'Bearer superadmin-token')
       .expect(200)
       .expect([]);
+    await request(app.getHttpServer())
+      .get(
+        '/admin/users/page?group=staff&status=active&search=Ana&limit=25&offset=25',
+      )
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(200)
+      .expect({ items: [], limit: 25, offset: 25, total: 0 });
     await request(app.getHttpServer())
       .get('/admin/users/audit-events?limit=100')
       .set('Authorization', 'Bearer superadmin-token')
       .expect(200)
       .expect([]);
 
-    expect(userAdministrationService.listUsers).toHaveBeenCalledWith(
-      { limit: 100 },
+    expect(userAdministrationService.listUsers).toHaveBeenNthCalledWith(
+      1,
+      {},
+      expect.objectContaining({ role: 'superadmin' }),
+    );
+    expect(userAdministrationService.listUsers).toHaveBeenNthCalledWith(
+      2,
+      {
+        group: 'staff',
+        limit: 25,
+        offset: 25,
+        search: 'Ana',
+        status: 'active',
+      },
       expect.objectContaining({ role: 'superadmin' }),
     );
     expect(userAdministrationService.listAuditEvents).toHaveBeenCalledWith(
@@ -359,6 +384,10 @@ describe('API endpoints (e2e)', () => {
 
     await request(app.getHttpServer())
       .get('/admin/users?limit=101')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/admin/users?group=unknown&offset=-1')
       .set('Authorization', 'Bearer superadmin-token')
       .expect(400);
     await request(app.getHttpServer())
