@@ -1,0 +1,243 @@
+.manager {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.notice {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--avend-border);
+  border-left: 4px solid var(--avend-accent);
+  border-radius: 0.5rem;
+  background: var(--avend-surface-muted);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tab {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+  cursor: pointer;
+}
+
+.tab:hover {
+  background: var(--avend-surface-muted);
+}
+
+.tab:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.tabActive {
+  border-color: var(--avend-navy);
+  background: var(--avend-navy);
+  color: var(--avend-surface);
+}
+
+.tabCount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.search {
+  flex: 1 1 16rem;
+  min-width: min(18rem, 100%);
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.search:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.statusFilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.statusButton {
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+  cursor: pointer;
+}
+
+.statusButton:hover {
+  background: var(--avend-surface-muted);
+}
+
+.statusButton:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.statusButtonActive {
+  border-color: var(--avend-accent);
+  background: var(--avend-soft-blue);
+  color: var(--avend-accent-strong);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px dashed var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem 1rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+}
+
+.rowName {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.rowMeta {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+.rowMeta strong {
+  color: var(--avend-text);
+}
+
+.badgeActive,
+.badgePaused {
+  justify-self: end;
+  flex: none;
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.badgeActive {
+  background: var(--avend-soft-blue);
+  color: var(--avend-accent-strong);
+}
+
+.badgePaused {
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+}
+
+.rowActions {
+  grid-column: 1 / -1;
+}
+
+.manage {
+  border-top: 1px solid var(--avend-border);
+  padding-top: 0.5rem;
+}
+
+.manageSummary {
+  cursor: pointer;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--avend-accent-strong);
+}
+
+.manageSummary:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.form {
+  margin-top: 0.75rem;
+  max-width: 32rem;
+}
+
+.fieldLabel {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.input,
+.textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.input {
+  min-height: 2.75rem;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
