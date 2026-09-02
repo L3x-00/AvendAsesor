@@ -26,7 +26,13 @@ const documentRow = {
   issuing_entity: 'AVEND',
   metadata: { scope: 'local' },
   publication_status: 'active' as const,
+  replacement_date: null,
+  replacement_document_id: null,
+  replacement_observation: null,
+  replacement_reason: null,
+  replacement_year: null,
   resolution_number: null,
+  situation: 'current' as const,
   title: 'Documento de prueba',
   updated_at: '2026-08-09T00:00:00+00:00',
   updated_by: '4814398e-8d0a-49a0-ac18-4fa3cffb063f',
@@ -58,6 +64,7 @@ function createBuilder(result: { data?: unknown; error?: unknown }) {
     data: result.data ?? null,
     error: result.error ?? null,
     eq: jest.fn(),
+    in: jest.fn(),
     maybeSingle: jest.fn(),
     order: jest.fn(),
     range: jest.fn(),
@@ -65,6 +72,7 @@ function createBuilder(result: { data?: unknown; error?: unknown }) {
   };
 
   builder.eq.mockReturnValue(builder);
+  builder.in.mockReturnValue(builder);
   builder.order.mockReturnValue(builder);
   builder.range.mockImplementation(() =>
     Promise.resolve({ data: builder.data, error: builder.error }),
@@ -288,6 +296,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
         documentRow.created_by,
       ),
     ).resolves.toMatchObject({ id: documentRow.id });
+    await expect(
+      gateway.setSituation(documentRow.id, 'replaced', documentRow.created_by, {
+        reason: 'Nueva norma aplicable',
+        replacementYear: 2026,
+      }),
+    ).resolves.toMatchObject({ id: documentRow.id });
     await gateway.linkModule(
       documentRow.id,
       'f3fbec69-2b7f-4c9e-bddd-8c72c7a9cc51',
@@ -311,6 +325,14 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     expect(rpc).toHaveBeenCalledWith(
       'set_document_publication_status',
       expect.objectContaining({ p_document_id: documentRow.id }),
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'set_document_situation',
+      expect.objectContaining({
+        p_document_id: documentRow.id,
+        p_replacement_year: 2026,
+        p_situation: 'replaced',
+      }),
     );
     expect(rpc).toHaveBeenCalledWith(
       'link_document_module',
@@ -357,6 +379,82 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     expect(storageBucket.remove).toHaveBeenCalledWith([
       versionRow.storage_path,
     ]);
+
+    await gateway.createDownloadUrl(versionRow.storage_path, 60, 'inline');
+    expect(storageBucket.createSignedUrl).toHaveBeenLastCalledWith(
+      versionRow.storage_path,
+      60,
+    );
+  });
+
+  it('maps the enriched document library and resolves only requested actor names', async () => {
+    const associationId = 'f3fbec69-2b7f-4c9e-bddd-8c72c7a9cc51';
+    const libraryRow = {
+      article_reference: null,
+      created_at: documentRow.created_at,
+      created_by: documentRow.created_by,
+      created_by_name: 'Administrador de prueba',
+      current_version_id: documentRow.current_version_id,
+      current_version_ingestion_status: 'indexed',
+      current_version_uploaded_at: versionRow.uploaded_at,
+      document_type: documentRow.document_type,
+      id: documentRow.id,
+      issuance_year: documentRow.issuance_year,
+      issuing_entity: documentRow.issuing_entity,
+      metadata: documentRow.metadata,
+      module_associations: [
+        {
+          linked_module_id: associationId,
+          linked_module_name: 'Nombramiento docente',
+          module_id: associationId,
+          module_name: 'Evaluación docente',
+          submodule_id: null,
+          submodule_name: null,
+        },
+      ],
+      publication_status: documentRow.publication_status,
+      replacement_date: null,
+      replacement_document_id: null,
+      replacement_observation: null,
+      replacement_reason: null,
+      replacement_year: null,
+      resolution_number: null,
+      situation: 'current',
+      title: documentRow.title,
+      total_count: 3,
+      updated_at: documentRow.updated_at,
+      updated_by: documentRow.updated_by,
+    };
+    const { builder, client, rpc } = createClient({
+      data: [
+        { full_name: 'Administrador de prueba', id: documentRow.created_by },
+      ],
+      rpcData: [libraryRow],
+    });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+
+    await expect(
+      gateway.listLibrary({ limit: 25, offset: 0, sort: 'newest' }),
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          technicalStatus: 'ready',
+          title: documentRow.title,
+        }),
+      ],
+      total: 3,
+    });
+    await expect(
+      gateway.listActorNames([documentRow.created_by]),
+    ).resolves.toEqual({
+      [documentRow.created_by]: 'Administrador de prueba',
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'list_document_library',
+      expect.objectContaining({ p_limit: 25, p_sort: 'newest' }),
+    );
+    expect(builder.in).toHaveBeenCalledWith('id', [documentRow.created_by]);
   });
 
   it('fails safely on Storage errors and failed signed URL generation', async () => {

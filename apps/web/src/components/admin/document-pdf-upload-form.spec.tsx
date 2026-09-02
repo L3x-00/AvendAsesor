@@ -1,30 +1,27 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DocumentPdfUploadForm,
   MAX_ADMIN_PDF_BYTES,
-} from './document-pdf-upload-form';
+} from "./document-pdf-upload-form";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   refresh: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({
+vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
 
-vi.mock('@/lib/supabase/client', () => ({
+vi.mock("@/lib/supabase/client", () => ({
   createBrowserSupabaseClient: () => ({
     auth: { getSession: mocks.getSession },
   }),
 }));
 
-function renderUploadForm(
-  endpoint = '/admin/documents',
-  includeModule = true,
-) {
+function renderUploadForm(endpoint = "/admin/documents", includeModule = true) {
   render(
     <DocumentPdfUploadForm
       apiBaseUrl="https://api.avend.example"
@@ -55,83 +52,83 @@ function renderUploadForm(
   );
 }
 
-describe('DocumentPdfUploadForm', () => {
+describe("DocumentPdfUploadForm", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mocks.getSession.mockReset();
     mocks.refresh.mockReset();
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal("fetch", vi.fn());
   });
 
-  it('uploads directly to the API with the bearer and preserves multipart boundaries', async () => {
+  it("uploads directly to the API with the bearer and preserves multipart boundaries", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ id: 'document-id' }), { status: 201 }),
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
     );
     renderUploadForm();
-    const file = new File(['%PDF-1.7'], 'norma.pdf', {
-      type: 'application/pdf',
+    const file = new File(["%PDF-1.7"], "norma.pdf", {
+      type: "application/pdf",
     });
 
-    await user.upload(screen.getByLabelText('Archivo'), file);
-    await user.type(screen.getByLabelText('Título'), 'Norma educativa');
-    await user.click(screen.getByLabelText('Módulo'));
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.upload(screen.getByLabelText("Archivo"), file);
+    await user.type(screen.getByLabelText("Título"), "Norma educativa");
+    await user.click(screen.getByLabelText("Módulo"));
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
     expect(
-      await screen.findByText('Documento PDF creado.'),
+      await screen.findByText("Documento PDF creado."),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, options] = vi.mocked(fetch).mock.calls[0] ?? [];
     const headers = options?.headers as Record<string, string>;
 
-    expect(String(url)).toBe('https://api.avend.example/admin/documents');
-    expect(headers.Authorization).toBe('Bearer verified-token');
-    expect(headers).not.toHaveProperty('Content-Type');
+    expect(String(url)).toBe("https://api.avend.example/admin/documents");
+    expect(headers.Authorization).toBe("Bearer verified-token");
+    expect(headers).not.toHaveProperty("Content-Type");
     expect(options?.body).toBeInstanceOf(window.FormData);
     const payload = options?.body as FormData;
-    expect(payload.get('title')).toBe('Norma educativa');
-    expect(payload.get('moduleIds')).toBe('["module-id"]');
-    expect(payload.has('moduleId')).toBe(false);
+    expect(payload.get("title")).toBe("Norma educativa");
+    expect(payload.get("moduleIds")).toBe('["module-id"]');
+    expect(payload.has("moduleId")).toBe(false);
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText('Título')).toHaveValue('');
+    expect(screen.getByLabelText("Título")).toHaveValue("");
   });
 
-  it('keeps the PDF and entered fields when the API rejects the upload', async () => {
+  it("keeps the PDF and entered fields when the API rejects the upload", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ message: 'too large' }), { status: 413 }),
+      new Response(JSON.stringify({ message: "too large" }), { status: 413 }),
     );
     renderUploadForm();
-    const file = new File(['%PDF-1.7'], 'norma.pdf', {
-      type: 'application/pdf',
+    const file = new File(["%PDF-1.7"], "norma.pdf", {
+      type: "application/pdf",
     });
-    const fileInput = screen.getByLabelText<HTMLInputElement>('Archivo');
-    const titleInput = screen.getByLabelText('Título');
+    const fileInput = screen.getByLabelText<HTMLInputElement>("Archivo");
+    const titleInput = screen.getByLabelText("Título");
 
     await user.upload(fileInput, file);
-    await user.type(titleInput, 'Norma que debe conservarse');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.type(titleInput, "Norma que debe conservarse");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('20 MiB');
-    expect(titleInput).toHaveValue('Norma que debe conservarse');
-    expect(fileInput.files?.[0]?.name).toBe('norma.pdf');
+    expect(await screen.findByRole("alert")).toHaveTextContent("20 MiB");
+    expect(titleInput).toHaveValue("Norma que debe conservarse");
+    expect(fileInput.files?.[0]?.name).toBe("norma.pdf");
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it('shows visible progress and blocks a duplicate submission while uploading', async () => {
+  it("shows visible progress and blocks a duplicate submission while uploading", async () => {
     const user = userEvent.setup();
     let finishUpload: ((response: Response) => void) | undefined;
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockImplementation(
@@ -143,129 +140,135 @@ describe('DocumentPdfUploadForm', () => {
     renderUploadForm();
 
     await user.upload(
-      screen.getByLabelText('Archivo'),
-      new File(['%PDF-1.7'], 'norma.pdf', { type: 'application/pdf' }),
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
     );
-    await user.type(screen.getByLabelText('Título'), 'Norma en carga');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.type(screen.getByLabelText("Título"), "Norma en carga");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    const pendingButton = screen.getByRole('button', {
-      name: 'Cargando PDF…',
+    const pendingButton = screen.getByRole("button", {
+      name: "Cargando PDF…",
     });
-    expect(pendingButton).toBeDisabled();
-    expect(pendingButton.closest('form')).toHaveAttribute('aria-busy', 'true');
+    expect(pendingButton).toHaveAttribute("aria-disabled", "true");
+    expect(pendingButton).toHaveFocus();
+    expect(pendingButton.closest("form")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Cargando PDF. Espera mientras se valida y registra el documento.",
+    );
+    await user.click(pendingButton);
+    expect(fetch).toHaveBeenCalledTimes(1);
 
     finishUpload?.(
-      new Response(JSON.stringify({ id: 'document-id' }), { status: 201 }),
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
     );
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Documento PDF creado.',
-    );
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Documento PDF creado.",
+      );
+    });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the form when the session is missing and never calls the API', async () => {
+  it("keeps the form when the session is missing and never calls the API", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
       data: { session: null },
       error: null,
     });
     renderUploadForm();
-    const file = new File(['%PDF-1.7'], 'norma.pdf', {
-      type: 'application/pdf',
+    const file = new File(["%PDF-1.7"], "norma.pdf", {
+      type: "application/pdf",
     });
 
-    await user.upload(screen.getByLabelText('Archivo'), file);
-    await user.type(screen.getByLabelText('Título'), 'Norma pendiente');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.upload(screen.getByLabelText("Archivo"), file);
+    await user.type(screen.getByLabelText("Título"), "Norma pendiente");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('sesión expiró');
-    expect(screen.getByLabelText('Título')).toHaveValue('Norma pendiente');
+    expect(await screen.findByRole("alert")).toHaveTextContent("sesión expiró");
+    expect(screen.getByLabelText("Título")).toHaveValue("Norma pendiente");
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
-  it('rejects an oversized file before making a network request', async () => {
+  it("rejects an oversized file before making a network request", async () => {
     const user = userEvent.setup();
     renderUploadForm();
     const file = new File(
       [new Uint8Array(MAX_ADMIN_PDF_BYTES + 1)],
-      'grande.pdf',
-      { type: 'application/pdf' },
+      "grande.pdf",
+      { type: "application/pdf" },
     );
 
-    await user.upload(screen.getByLabelText('Archivo'), file);
-    await user.type(screen.getByLabelText('Título'), 'Documento grande');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.upload(screen.getByLabelText("Archivo"), file);
+    await user.type(screen.getByLabelText("Título"), "Documento grande");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('20 MiB');
+      expect(screen.getByRole("alert")).toHaveTextContent("20 MiB");
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
-  it('accepts a PDF from devices that report a generic MIME type', async () => {
+  it("accepts a PDF from devices that report a generic MIME type", async () => {
     const user = userEvent.setup({ applyAccept: false });
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ id: 'document-id' }), { status: 201 }),
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
     );
     renderUploadForm();
 
     await user.upload(
-      screen.getByLabelText('Archivo'),
-      new File(['%PDF-1.7'], 'dispositivo.pdf', {
-        type: 'application/octet-stream',
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "dispositivo.pdf", {
+        type: "application/octet-stream",
       }),
     );
-    await user.type(screen.getByLabelText('Título'), 'PDF desde dispositivo');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.type(screen.getByLabelText("Título"), "PDF desde dispositivo");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Documento PDF creado.',
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Documento PDF creado.",
     );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the requested version endpoint without a page navigation', async () => {
+  it("uses the requested version endpoint without a page navigation", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ id: 'document-id' }), { status: 201 }),
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
     );
-    renderUploadForm('/admin/documents/document-id/versions', false);
+    renderUploadForm("/admin/documents/document-id/versions", false);
 
     await user.upload(
-      screen.getByLabelText('Archivo'),
-      new File(['%PDF-1.7'], 'version.pdf', { type: 'application/pdf' }),
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "version.pdf", { type: "application/pdf" }),
     );
-    await user.type(screen.getByLabelText('Título'), 'Nueva versión');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.type(screen.getByLabelText("Título"), "Nueva versión");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    await screen.findByRole('status');
+    await screen.findByRole("status");
     expect(fetch).toHaveBeenCalledWith(
-      new URL(
-        'https://api.avend.example/admin/documents/document-id/versions',
-      ),
+      new URL("https://api.avend.example/admin/documents/document-id/versions"),
       expect.any(Object),
     );
   });
 
-  it('omits blank optional fields so the API does not reject them with 400', async () => {
+  it("omits blank optional fields so the API does not reject them with 400", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ id: 'document-id' }), { status: 201 }),
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
     );
     render(
       <DocumentPdfUploadForm
@@ -298,24 +301,24 @@ describe('DocumentPdfUploadForm', () => {
     );
 
     await user.upload(
-      screen.getByLabelText('Archivo'),
-      new File(['%PDF-1.7'], 'norma.pdf', { type: 'application/pdf' }),
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
     );
-    await user.type(screen.getByLabelText('Título'), 'Norma sin opcionales');
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.type(screen.getByLabelText("Título"), "Norma sin opcionales");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    await screen.findByRole('status');
+    await screen.findByRole("status");
     const payload = vi.mocked(fetch).mock.calls[0]?.[1]?.body as FormData;
-    expect(payload.get('title')).toBe('Norma sin opcionales');
-    expect(payload.has('issuingEntity')).toBe(false);
-    expect(payload.has('issuanceYear')).toBe(false);
-    expect(payload.has('metadata')).toBe(false);
+    expect(payload.get("title")).toBe("Norma sin opcionales");
+    expect(payload.has("issuingEntity")).toBe(false);
+    expect(payload.has("issuanceYear")).toBe(false);
+    expect(payload.has("metadata")).toBe(false);
   });
 
-  it('surfaces a message and does not upload when a required field is invalid', async () => {
+  it("surfaces a message and does not upload when a required field is invalid", async () => {
     const user = userEvent.setup();
     mocks.getSession.mockResolvedValue({
-      data: { session: { access_token: 'verified-token' } },
+      data: { session: { access_token: "verified-token" } },
       error: null,
     });
     render(
@@ -337,14 +340,14 @@ describe('DocumentPdfUploadForm', () => {
     );
 
     await user.upload(
-      screen.getByLabelText('Archivo'),
-      new File(['%PDF-1.7'], 'norma.pdf', { type: 'application/pdf' }),
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
     );
     // Leave the required "Título" empty on purpose.
-    await user.click(screen.getByRole('button', { name: 'Cargar PDF' }));
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Revisa los campos',
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Revisa los campos",
     );
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.getSession).not.toHaveBeenCalled();

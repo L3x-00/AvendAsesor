@@ -333,6 +333,68 @@ export async function setDocumentStatusAction(
   });
 }
 
+export async function setDocumentSituationAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const documentId = requiredText(formData, "documentId", "El documento");
+    const situation = requiredText(formData, "situation", "La situación");
+    const allowedSituations = ["archived", "current", "replaced"] as const;
+
+    if (
+      !allowedSituations.includes(
+        situation as (typeof allowedSituations)[number],
+      )
+    ) {
+      throw new FormValidationError("Selecciona una situación válida.");
+    }
+
+    const reason = optionalText(formData, "reason");
+    const replacementDate = optionalText(formData, "replacementDate");
+    const replacementDocumentId = optionalText(
+      formData,
+      "replacementDocumentId",
+    );
+    const replacementYear = optionalInteger(
+      formData,
+      "replacementYear",
+      "El año de reemplazo",
+    );
+    const observation = optionalText(formData, "observation");
+
+    if (situation === "archived" && !reason) {
+      throw new FormValidationError("Indica el motivo del archivo.");
+    }
+
+    if (
+      situation === "replaced" &&
+      (!reason || (!replacementDate && replacementYear === undefined))
+    ) {
+      throw new FormValidationError(
+        "Indica el motivo y la fecha o año del reemplazo.",
+      );
+    }
+
+    await client.setDocumentSituation(documentId, {
+      ...(observation ? { observation } : {}),
+      ...(reason ? { reason } : {}),
+      ...(replacementDate ? { replacementDate } : {}),
+      ...(replacementDocumentId ? { replacementDocumentId } : {}),
+      ...(replacementYear === undefined ? {} : { replacementYear }),
+      situation: situation as (typeof allowedSituations)[number],
+    });
+    revalidatePath("/admin/documents");
+    revalidatePath(`/admin/documents/${documentId}`);
+    revalidatePath("/admin/modules");
+
+    return {
+      message: "Situación del documento actualizada.",
+      status: "success",
+    };
+  });
+}
+
 export async function deleteDocumentAction(
   _previousState: AdminActionState,
   formData: FormData,

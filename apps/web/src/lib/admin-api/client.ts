@@ -3,6 +3,7 @@ import { ZodError, type ZodType } from "zod";
 import { getAdminApiUrl } from "./config";
 import {
   downloadUrlSchema,
+  documentLibraryPageSchema,
   administrativeUserSchema,
   managedDocumentDetailsSchema,
   managedDocumentSchema,
@@ -12,6 +13,9 @@ import {
   unansweredQuestionSchema,
   type AdministrativeUser,
   type DownloadUrl,
+  type DocumentLibraryPage,
+  type DocumentLibraryQuery,
+  type DocumentSituation,
   type ManagedDocument,
   type ManagedDocumentDetails,
   type ManagedModule,
@@ -93,11 +97,15 @@ export class AdminApiClient {
   async getDownloadUrl(
     documentId: string,
     versionId?: string,
+    disposition: "attachment" | "inline" = "attachment",
   ): Promise<DownloadUrl> {
     return this.send(
       `/admin/documents/${documentId}/download-url`,
       {
-        body: JSON.stringify(versionId ? { versionId } : {}),
+        body: JSON.stringify({
+          disposition,
+          ...(versionId ? { versionId } : {}),
+        }),
         method: "POST",
       },
       downloadUrlSchema,
@@ -129,6 +137,36 @@ export class AdminApiClient {
       `/admin/documents?${query.toString()}`,
       { method: "GET" },
       managedDocumentSchema.array(),
+    );
+  }
+
+  async listDocumentLibrary(
+    filters: DocumentLibraryQuery = {},
+  ): Promise<DocumentLibraryPage> {
+    const query = new URLSearchParams({
+      limit: String(filters.limit ?? 25),
+      offset: String(filters.offset ?? 0),
+      sort: filters.sort ?? "newest",
+    });
+
+    if (filters.q) query.set("q", filters.q);
+    if (filters.issuanceYear !== undefined) {
+      query.set("issuanceYear", String(filters.issuanceYear));
+    }
+    if (filters.documentType) query.set("documentType", filters.documentType);
+    if (filters.issuingEntity)
+      query.set("issuingEntity", filters.issuingEntity);
+    if (filters.moduleId) query.set("moduleId", filters.moduleId);
+    if (filters.submoduleId) query.set("submoduleId", filters.submoduleId);
+    if (filters.situation) query.set("situation", filters.situation);
+    if (filters.technicalStatus) {
+      query.set("technicalStatus", filters.technicalStatus);
+    }
+
+    return this.send(
+      `/admin/documents/library?${query.toString()}`,
+      { method: "GET" },
+      documentLibraryPageSchema,
     );
   }
 
@@ -186,6 +224,24 @@ export class AdminApiClient {
     return this.send(
       `/admin/documents/${documentId}/status`,
       { body: JSON.stringify({ isActive, reason }), method: "PATCH" },
+      managedDocumentSchema,
+    );
+  }
+
+  async setDocumentSituation(
+    documentId: string,
+    payload: {
+      observation?: string;
+      reason?: string;
+      replacementDate?: string;
+      replacementDocumentId?: string;
+      replacementYear?: number;
+      situation: DocumentSituation;
+    },
+  ): Promise<ManagedDocument> {
+    return this.send(
+      `/admin/documents/${documentId}/situation`,
+      { body: JSON.stringify(payload), method: "PATCH" },
       managedDocumentSchema,
     );
   }

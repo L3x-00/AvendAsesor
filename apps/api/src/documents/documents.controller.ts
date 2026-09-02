@@ -27,13 +27,16 @@ import {
 import { CreateDocumentUploadDto } from './dto/create-document-upload.dto';
 import { DocumentDownloadUrlDto } from './dto/document-download-url.dto';
 import { DocumentModuleDto } from './dto/document-module.dto';
+import { ListDocumentLibraryQueryDto } from './dto/list-document-library-query.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { LogicalDeleteDocumentDto } from './dto/logical-delete-document.dto';
 import { SetDocumentStatusDto } from './dto/set-document-status.dto';
+import { SetDocumentSituationDto } from './dto/set-document-situation.dto';
 import { UpdateDocumentMetadataDto } from './dto/update-document-metadata.dto';
 import type {
   ManagedDocument,
   ManagedDocumentDetails,
+  DocumentLibraryPage,
 } from './domain/document';
 import { DocumentsService } from './documents.service';
 import { MulterExceptionFilter } from './multer-exception.filter';
@@ -66,6 +69,13 @@ export class DocumentsController {
   @Get()
   list(@Query() dto: ListDocumentsQueryDto): Promise<ManagedDocument[]> {
     return this.documentsService.list(dto);
+  }
+
+  @Get('library')
+  listLibrary(
+    @Query() dto: ListDocumentLibraryQueryDto,
+  ): Promise<DocumentLibraryPage> {
+    return this.documentsService.listLibrary(dto);
   }
 
   @Get(':id')
@@ -121,6 +131,15 @@ export class DocumentsController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     return this.documentsService.setStatus(documentId, dto, authorization);
+  }
+
+  @Patch(':id/situation')
+  setSituation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Body() dto: SetDocumentSituationDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<ManagedDocument> {
+    return this.documentsService.setSituation(documentId, dto, authorization);
   }
 
   @Patch(':id')

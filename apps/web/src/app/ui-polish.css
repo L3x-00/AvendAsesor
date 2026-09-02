@@ -299,6 +299,7 @@ button.avend-teacher-new-chat {
 }
 
 .avend-button:disabled,
+.avend-button[aria-disabled="true"],
 .avend-chat-module:disabled,
 .avend-chat-context button:disabled,
 .avend-chat-clarification-options button:disabled,
@@ -325,7 +326,8 @@ button.avend-teacher-new-chat:disabled,
   opacity: 0.72;
 }
 
-.avend-teacher-sidebar button.avend-teacher-navigation-link[aria-pressed="true"]:disabled {
+.avend-teacher-sidebar
+  button.avend-teacher-navigation-link[aria-pressed="true"]:disabled {
   background: rgb(232 241 255 / 28%);
   border-left-color: var(--avend-accent);
   color: #ffffff;

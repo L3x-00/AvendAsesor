@@ -1,8 +1,36 @@
 import type {
   AdministrativeUser,
+  DocumentSituation,
+  DocumentTechnicalStatus,
   ManagedDocumentVersion,
   OperationalAuditEvent,
 } from "./types";
+
+const documentSituationLabels = {
+  archived: "Archivado",
+  current: "Vigente",
+  replaced: "Reemplazado / Sin vigencia",
+} as const satisfies Record<DocumentSituation, string>;
+
+const documentTechnicalStatusContent = {
+  error: {
+    description:
+      "El sistema detectó un problema de lectura, procesamiento o indexación.",
+    label: "Error",
+  },
+  pending_approval: {
+    description:
+      "El documento está en procesamiento automático antes de quedar listo; no requiere una aprobación manual.",
+    label: "Pendiente de aprobación",
+  },
+  ready: {
+    description: "El documento fue procesado y está listo para consulta.",
+    label: "Listo",
+  },
+} as const satisfies Record<
+  DocumentTechnicalStatus,
+  { description: string; label: string }
+>;
 
 const userRoleLabels = {
   admin: "Administrador",
@@ -68,6 +96,25 @@ export function getDocumentIngestionStatusContent(
   status: ManagedDocumentVersion["ingestionStatus"],
 ): { description: string; label: string } {
   return documentIngestionStatusContent[status];
+}
+
+export function formatDocumentSituation(situation: DocumentSituation): string {
+  return documentSituationLabels[situation];
+}
+
+export function getDocumentTechnicalStatusContent(
+  status: DocumentTechnicalStatus,
+): { description: string; label: string } {
+  return documentTechnicalStatusContent[status];
+}
+
+export function formatDocumentType(documentType: string): string {
+  return documentType
+    .toLocaleLowerCase("es")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase("es") + part.slice(1))
+    .join(" ");
 }
 
 export function formatOperationalAuditAction(

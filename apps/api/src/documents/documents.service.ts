@@ -13,13 +13,16 @@ import { SUPABASE_DOCUMENTS_GATEWAY } from '../supabase/supabase.constants';
 import { CreateDocumentUploadDto } from './dto/create-document-upload.dto';
 import { type DocumentDownloadUrlDto } from './dto/document-download-url.dto';
 import { type DocumentModuleDto } from './dto/document-module.dto';
+import { type ListDocumentLibraryQueryDto } from './dto/list-document-library-query.dto';
 import { type ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { type LogicalDeleteDocumentDto } from './dto/logical-delete-document.dto';
 import { type SetDocumentStatusDto } from './dto/set-document-status.dto';
+import { type SetDocumentSituationDto } from './dto/set-document-situation.dto';
 import { type UpdateDocumentMetadataDto } from './dto/update-document-metadata.dto';
 import {
   toManagedDocumentVersion,
   type DocumentMetadata,
+  type DocumentLibraryPage,
   type ManagedDocument,
   type ManagedDocumentDetails,
 } from './domain/document';
@@ -185,6 +188,7 @@ export class DocumentsService {
     const url = await this.documentsGateway.createDownloadUrl(
       version.storagePath,
       DOWNLOAD_URL_TTL_SECONDS,
+      dto.disposition ?? 'attachment',
     );
 
     await this.documentsGateway.recordDownloadUrl(
@@ -206,11 +210,26 @@ export class DocumentsService {
       this.documentsGateway.listVersions(documentId),
       this.documentsGateway.listModuleIds(documentId),
     ]);
+    const actorIds = [
+      document.createdBy,
+      ...versions.map((version) => version.uploadedBy),
+    ].filter((actorId): actorId is string => actorId !== null);
+    const actorNames = await this.documentsGateway.listActorNames([
+      ...new Set(actorIds),
+    ]);
 
     return {
       ...document,
+      createdByName: document.createdBy
+        ? (actorNames[document.createdBy] ?? null)
+        : null,
       moduleIds,
-      versions: versions.map(toManagedDocumentVersion),
+      versions: versions.map((version) =>
+        toManagedDocumentVersion(
+          version,
+          version.uploadedBy ? (actorNames[version.uploadedBy] ?? null) : null,
+        ),
+      ),
     };
   }
 
@@ -232,6 +251,22 @@ export class DocumentsService {
       limit: dto.limit ?? 25,
       offset: dto.offset ?? 0,
       status: dto.status ?? 'all',
+    });
+  }
+
+  listLibrary(dto: ListDocumentLibraryQueryDto): Promise<DocumentLibraryPage> {
+    return this.documentsGateway.listLibrary({
+      documentType: dto.documentType,
+      issuanceYear: dto.issuanceYear,
+      issuingEntity: dto.issuingEntity,
+      limit: dto.limit ?? 25,
+      moduleId: dto.moduleId,
+      offset: dto.offset ?? 0,
+      q: dto.q,
+      situation: dto.situation,
+      sort: dto.sort ?? 'newest',
+      submoduleId: dto.submoduleId,
+      technicalStatus: dto.technicalStatus,
     });
   }
 
@@ -275,6 +310,87 @@ export class DocumentsService {
       dto.isActive,
       dto.reason,
       authorization.userId,
+    );
+  }
+
+  async setSituation(
+    documentId: string,
+    dto: SetDocumentSituationDto,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedDocument> {
+    const document = await this.requireLiveDocument(documentId);
+
+    if (document.situation === dto.situation) {
+      throw new BadRequestException('Document situation is unchanged.');
+    }
+
+    const hasReplacementData =
+      dto.observation !== undefined ||
+      dto.replacementDate !== undefined ||
+      dto.replacementDocumentId !== undefined ||
+      dto.replacementYear !== undefined;
+
+    if (dto.situation === 'current') {
+      if (dto.reason !== undefined || hasReplacementData) {
+        throw new BadRequestException(
+          'A current document cannot contain replacement data.',
+        );
+      }
+    } else if (dto.situation === 'archived') {
+      if (!dto.reason) {
+        throw new BadRequestException(
+          'An archived document requires a reason.',
+        );
+      }
+
+      if (hasReplacementData) {
+        throw new BadRequestException(
+          'An archived document cannot contain replacement data.',
+        );
+      }
+    } else {
+      if (!dto.reason || (!dto.replacementDate && !dto.replacementYear)) {
+        throw new BadRequestException(
+          'A replaced document requires a reason and a replacement date or year.',
+        );
+      }
+
+      if (dto.replacementDocumentId === documentId) {
+        throw new BadRequestException('A document cannot replace itself.');
+      }
+
+      if (dto.replacementDate) {
+        const parsedDate = new Date(`${dto.replacementDate}T00:00:00.000Z`);
+
+        if (
+          Number.isNaN(parsedDate.getTime()) ||
+          parsedDate.toISOString().slice(0, 10) !== dto.replacementDate
+        ) {
+          throw new BadRequestException('Replacement date is invalid.');
+        }
+
+        if (
+          dto.replacementYear !== undefined &&
+          parsedDate.getUTCFullYear() !== dto.replacementYear
+        ) {
+          throw new BadRequestException(
+            'Replacement date and year must match.',
+          );
+        }
+      }
+    }
+
+    return this.documentsGateway.setSituation(
+      documentId,
+      dto.situation,
+      authorization.userId,
+      {
+        observation: dto.observation,
+        reason: dto.reason,
+        replacementDate: dto.replacementDate,
+        replacementDocumentId: dto.replacementDocumentId,
+        replacementYear: dto.replacementYear,
+      },
     );
   }
 

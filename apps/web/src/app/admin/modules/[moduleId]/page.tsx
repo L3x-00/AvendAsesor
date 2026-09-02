@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
   ModuleManageDetails,
   ModulesExplorer,
 } from "@/components/admin/modules-explorer";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
+import { getAdminApiUrl } from "@/lib/admin-api/config";
+import {
+  formatDocumentSituation,
+  getDocumentTechnicalStatusContent,
+} from "@/lib/admin-api/labels";
 import {
   childModuleViews,
   findVisibleModule,
@@ -32,11 +38,21 @@ export default async function ModuleDetailPage({
   const currentView = toModuleView(current, modules);
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
+  const library = await client.listDocumentLibrary({
+    limit: 10,
+    ...(current.parentModuleId
+      ? { submoduleId: current.id }
+      : { moduleId: current.id }),
+  });
+  const canUpload = current.isActive && children.length === 0;
+  const libraryHref = current.parentModuleId
+    ? `/admin/documents?submoduleId=${encodeURIComponent(current.id)}`
+    : `/admin/documents?moduleId=${encodeURIComponent(current.id)}`;
 
   return (
     <AdminShell
       activeSection="modules"
-      description="Revisa y organiza los submódulos de este módulo. Los documentos se cargan y consultan en Historial de documentos."
+      description="Organiza la estructura y carga documentos en el módulo o submódulo correspondiente. El Historial conserva la consulta general."
       title={current.name}
       userName={access.fullName}
       userRole={access.role}
@@ -56,10 +72,10 @@ export default async function ModuleDetailPage({
           </ol>
         </nav>
 
-        <section className="avend-elevated rounded-lg border border-avend-border bg-avend-surface p-5">
+        <section className="avend-elevated rounded-xl border border-avend-border bg-avend-surface p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold">{current.name}</h2>
+              <h2 className="text-xl font-bold">{current.name}</h2>
               <p className="mt-1 text-base text-avend-text-muted">
                 Código {current.code} · Orden {current.sortOrder} ·{" "}
                 {current.isActive ? "Activo" : "Inactivo"}
@@ -70,7 +86,7 @@ export default async function ModuleDetailPage({
                 </p>
               ) : null}
             </div>
-            <span className="flex-none rounded-full bg-avend-surface-muted px-2 py-1 text-base font-semibold text-avend-text">
+            <span className="flex-none rounded-full bg-avend-surface-muted px-3 py-1 text-base font-semibold text-avend-text">
               {current.parentModuleId ? "Submódulo" : "Módulo principal"}
             </span>
           </div>
@@ -83,17 +99,9 @@ export default async function ModuleDetailPage({
             />
           </div>
 
-          {children.length === 0 ? (
-            <p className="mt-4 rounded-md border border-dashed border-avend-border p-4 text-base text-avend-text-muted">
-              Este módulo no tiene submódulos: sus documentos se asocian
-              directamente al módulo.{" "}
-              <Link
-                className="font-semibold text-avend-accent-strong hover:underline"
-                href="/admin/documents"
-              >
-                Ver documentos
-              </Link>
-              .
+          {!current.isActive ? (
+            <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-base text-amber-900">
+              Este módulo está inactivo. Actívalo antes de cargar un documento.
             </p>
           ) : null}
         </section>
@@ -107,6 +115,68 @@ export default async function ModuleDetailPage({
           modules={children}
           parents={parents}
         />
+
+        {canUpload ? (
+          <DocumentUploadPanel
+            apiBaseUrl={getAdminApiUrl()}
+            moduleId={current.id}
+            moduleName={current.name}
+          />
+        ) : children.length > 0 ? (
+          <p className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
+            Selecciona uno de los submódulos para agregar el documento en la
+            ubicación correcta.
+          </p>
+        ) : null}
+
+        <section
+          aria-labelledby="module-documents-title"
+          className="rounded-xl border border-avend-border bg-avend-surface p-5"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-xl font-bold" id="module-documents-title">
+              Documentos asociados
+            </h2>
+            <Link
+              className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
+              href={libraryHref}
+            >
+              Ver en Historial
+            </Link>
+          </div>
+          {library.items.length === 0 ? (
+            <p className="mt-4 rounded-md border border-dashed border-avend-border p-4 text-base text-avend-text-muted">
+              No hay documentos asociados a esta ubicación.
+            </p>
+          ) : (
+            <ul className="mt-4 divide-y divide-avend-border" role="list">
+              {library.items.map((document) => (
+                <li
+                  className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  key={document.id}
+                >
+                  <div>
+                    <h3 className="text-base font-bold">{document.title}</h3>
+                    <p className="mt-1 text-base text-avend-text-muted">
+                      {formatDocumentSituation(document.situation)} ·{" "}
+                      {
+                        getDocumentTechnicalStatusContent(
+                          document.technicalStatus,
+                        ).label
+                      }
+                    </p>
+                  </div>
+                  <Link
+                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
+                    href={`/admin/documents/${document.id}`}
+                  >
+                    Ver detalle
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </AdminShell>
   );

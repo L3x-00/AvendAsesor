@@ -7,6 +7,7 @@ import {
   createDownloadUrlAction,
   deleteModuleAction,
   reviewUnansweredQuestionAction,
+  setDocumentSituationAction,
   setModuleStatusAction,
   updateAdministrativeUserAction,
   updateModuleAction,
@@ -26,6 +27,7 @@ const client = {
   deleteModule: vi.fn(),
   getDownloadUrl: vi.fn(),
   reviewUnansweredQuestion: vi.fn(),
+  setDocumentSituation: vi.fn(),
   setModuleStatus: vi.fn(),
   updateAdministrativeUser: vi.fn(),
   updateModule: vi.fn(),
@@ -222,6 +224,39 @@ describe("admin server actions", () => {
       message: "Enlace temporal generado por 60 segundos.",
       status: "success",
     });
+  });
+
+  it("validates and submits a traceable document replacement", async () => {
+    client.setDocumentSituation.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("documentId", "document-id");
+    formData.set("situation", "replaced");
+    formData.set("reason", "Nueva norma aplicable");
+    formData.set("replacementYear", "2027");
+    formData.set("observation", "Conservar para trazabilidad");
+
+    const state = await setDocumentSituationAction(initialState, formData);
+
+    expect(client.setDocumentSituation).toHaveBeenCalledWith("document-id", {
+      observation: "Conservar para trazabilidad",
+      reason: "Nueva norma aplicable",
+      replacementYear: 2027,
+      situation: "replaced",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/documents");
+    expect(state.status).toBe("success");
+  });
+
+  it("rejects a replacement without a date or year", async () => {
+    const formData = new FormData();
+    formData.set("documentId", "document-id");
+    formData.set("situation", "replaced");
+    formData.set("reason", "Nueva norma aplicable");
+
+    const state = await setDocumentSituationAction(initialState, formData);
+
+    expect(state.status).toBe("error");
+    expect(client.setDocumentSituation).not.toHaveBeenCalled();
   });
 
   it("validates and routes an unanswered-question review through the protected BFF client", async () => {

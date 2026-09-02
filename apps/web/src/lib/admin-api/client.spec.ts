@@ -41,7 +41,13 @@ const documentRecord = {
   issuingEntity: "AVEND",
   metadata: {},
   publicationStatus: "active" as const,
+  replacementDate: null,
+  replacementDocumentId: null,
+  replacementObservation: null,
+  replacementReason: null,
+  replacementYear: null,
   resolutionNumber: null,
+  situation: "current" as const,
   title: "Norma de prueba",
   updatedAt: "2026-08-09T00:00:00.000Z",
   updatedBy: null,
@@ -49,6 +55,7 @@ const documentRecord = {
 
 const documentDetails = {
   ...documentRecord,
+  createdByName: null,
   moduleIds: [moduleRecord.id],
   versions: [
     {
@@ -60,9 +67,46 @@ const documentDetails = {
       pageCount: 1,
       uploadedAt: "2026-08-09T00:00:00.000Z",
       uploadedBy: null,
+      uploadedByName: null,
       versionNumber: 1,
     },
   ],
+};
+
+const documentLibraryItem = {
+  articleReference: documentRecord.articleReference,
+  createdAt: documentRecord.createdAt,
+  createdBy: documentRecord.createdBy,
+  createdByName: null,
+  currentVersionId: documentRecord.currentVersionId,
+  currentVersionUploadedAt: documentRecord.createdAt,
+  documentType: documentRecord.documentType,
+  id: documentRecord.id,
+  issuanceYear: documentRecord.issuanceYear,
+  issuingEntity: documentRecord.issuingEntity,
+  metadata: documentRecord.metadata,
+  moduleAssociations: [
+    {
+      linkedModuleId: moduleRecord.id,
+      linkedModuleName: moduleRecord.name,
+      moduleId: moduleRecord.id,
+      moduleName: moduleRecord.name,
+      submoduleId: null,
+      submoduleName: null,
+    },
+  ],
+  publicationStatus: documentRecord.publicationStatus,
+  replacementDate: null,
+  replacementDocumentId: null,
+  replacementObservation: null,
+  replacementReason: null,
+  replacementYear: null,
+  resolutionNumber: null,
+  situation: "current" as const,
+  technicalStatus: "ready" as const,
+  title: documentRecord.title,
+  updatedAt: documentRecord.updatedAt,
+  updatedBy: documentRecord.updatedBy,
 };
 
 const hito4Metrics = {
@@ -189,6 +233,55 @@ describe("AdminApiClient", () => {
       new AdminApiError(503),
     );
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses bounded server-side document library filters and explicit PDF disposition", async () => {
+    const request = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) =>
+      String(input).includes("/library?")
+        ? successfulJson({
+            items: [documentLibraryItem],
+            limit: 20,
+            offset: 20,
+            total: 42,
+          })
+        : successfulJson({
+            expiresAt: "2026-08-09T00:01:00.000Z",
+            url: "http://localhost:55321/storage/v1/object/sign/normative-documents/test",
+            versionId: documentRecord.currentVersionId,
+          }),
+    );
+    const client = new AdminApiClient(
+      "server-session-token",
+      "http://localhost:3001",
+      request,
+    );
+
+    await expect(
+      client.listDocumentLibrary({
+        limit: 20,
+        offset: 20,
+        q: "licencia",
+        situation: "current",
+        sort: "title",
+      }),
+    ).resolves.toMatchObject({ total: 42 });
+    await client.getDownloadUrl(
+      documentRecord.id,
+      documentRecord.currentVersionId,
+      "inline",
+    );
+
+    expect(String(request.mock.calls[0]?.[0])).toContain(
+      "/admin/documents/library?limit=20&offset=20&sort=title&q=licencia&situation=current",
+    );
+    expect(request.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({
+        disposition: "inline",
+        versionId: documentRecord.currentVersionId,
+      }),
+    );
   });
 
   it("maps each administrative resource operation to the protected backend contract", async () => {

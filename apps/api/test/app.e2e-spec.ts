@@ -13,6 +13,7 @@ import { ModulesService } from './../src/modules/modules.service';
 import type { ManagedModule } from './../src/modules/domain/module';
 import { DocumentsService } from './../src/documents/documents.service';
 import type {
+  DocumentLibraryPage,
   ManagedDocument,
   ManagedDocumentDetails,
 } from './../src/documents/domain/document';
@@ -41,8 +42,10 @@ describe('API endpoints (e2e)', () => {
     findOne: jest.fn<Promise<ManagedDocumentDetails>, [string]>(),
     linkModule: jest.fn<Promise<void>, never[]>(),
     list: jest.fn<Promise<ManagedDocument[]>, never[]>(),
+    listLibrary: jest.fn<Promise<DocumentLibraryPage>, never[]>(),
     logicalDelete: jest.fn<Promise<void>, never[]>(),
     setStatus: jest.fn<Promise<ManagedDocument>, never[]>(),
+    setSituation: jest.fn<Promise<ManagedDocument>, never[]>(),
     unlinkModule: jest.fn<Promise<void>, never[]>(),
     updateMetadata: jest.fn<Promise<ManagedDocument>, never[]>(),
   };
@@ -123,7 +126,13 @@ describe('API endpoints (e2e)', () => {
     issuingEntity: 'AVEND',
     metadata: {},
     publicationStatus: 'active',
+    replacementDate: null,
+    replacementDocumentId: null,
+    replacementObservation: null,
+    replacementReason: null,
+    replacementYear: null,
     resolutionNumber: null,
+    situation: 'current',
     title: 'Documento de prueba',
     updatedAt: '2026-08-09T00:00:00.000Z',
     updatedBy: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
@@ -446,6 +455,44 @@ describe('API endpoints (e2e)', () => {
     return request(app.getHttpServer()).get('/admin/documents').expect(401);
   });
 
+  it('/admin/documents/library validates and delegates server-side filters', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    documentsService.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 20,
+      offset: 20,
+      total: 0,
+    });
+
+    await request(app.getHttpServer())
+      .get(
+        '/admin/documents/library?q=licencia&documentType=ley&issuanceYear=2026&situation=current&technicalStatus=ready&sort=title&limit=20&offset=20',
+      )
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+      .expect({ items: [], limit: 20, offset: 20, total: 0 });
+
+    expect(documentsService.listLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentType: 'LEY',
+        issuanceYear: 2026,
+        q: 'licencia',
+        sort: 'title',
+        technicalStatus: 'ready',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .get('/admin/documents/library?sort=unsafe&limit=101')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(400);
+  });
+
   it('/admin/documents accepts validated PDF upload requests for an administrator', async () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
@@ -513,6 +560,13 @@ describe('API endpoints (e2e)', () => {
       ...documentRecord,
       publicationStatus: 'inactive',
     });
+    documentsService.setSituation.mockResolvedValue({
+      ...documentRecord,
+      publicationStatus: 'inactive',
+      replacementReason: 'Nueva norma aplicable',
+      replacementYear: 2027,
+      situation: 'replaced',
+    });
     documentsService.updateMetadata.mockResolvedValue(documentRecord);
     documentsService.logicalDelete.mockResolvedValue(undefined);
     documentsService.linkModule.mockResolvedValue(undefined);
@@ -526,7 +580,7 @@ describe('API endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post(`/admin/documents/${documentRecord.id}/download-url`)
       .set('Authorization', 'Bearer superadmin-token')
-      .send({})
+      .send({ disposition: 'inline' })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/admin/documents/${documentRecord.id}/modules`)
@@ -537,6 +591,15 @@ describe('API endpoints (e2e)', () => {
       .patch(`/admin/documents/${documentRecord.id}/status`)
       .set('Authorization', 'Bearer superadmin-token')
       .send({ isActive: false, reason: 'Revisión normativa' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/admin/documents/${documentRecord.id}/situation`)
+      .set('Authorization', 'Bearer superadmin-token')
+      .send({
+        reason: 'Nueva norma aplicable',
+        replacementYear: 2027,
+        situation: 'replaced',
+      })
       .expect(200);
     await request(app.getHttpServer())
       .patch(`/admin/documents/${documentRecord.id}`)
@@ -559,6 +622,7 @@ describe('API endpoints (e2e)', () => {
     expect(documentsService.createDownloadUrl).toHaveBeenCalled();
     expect(documentsService.linkModule).toHaveBeenCalled();
     expect(documentsService.setStatus).toHaveBeenCalled();
+    expect(documentsService.setSituation).toHaveBeenCalled();
     expect(documentsService.updateMetadata).toHaveBeenCalled();
     expect(documentsService.unlinkModule).toHaveBeenCalled();
     expect(documentsService.logicalDelete).toHaveBeenCalled();

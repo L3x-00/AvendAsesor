@@ -38,7 +38,13 @@ const documentRecord: ManagedDocument = {
   issuingEntity: 'AVEND',
   metadata: { scope: 'local' },
   publicationStatus: 'active',
+  replacementDate: null,
+  replacementDocumentId: null,
+  replacementObservation: null,
+  replacementReason: null,
+  replacementYear: null,
   resolutionNumber: null,
+  situation: 'current',
   title: 'Documento de prueba',
   updatedAt: '2026-08-09T00:00:00.000Z',
   updatedBy: authorization.userId,
@@ -84,12 +90,15 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
     findVersion: jest.fn(),
     linkModule: jest.fn(),
     list: jest.fn(),
+    listActorNames: jest.fn(),
+    listLibrary: jest.fn(),
     listModuleIds: jest.fn(),
     listVersions: jest.fn(),
     logicalDelete: jest.fn(),
     removePdf: jest.fn(),
     recordDownloadUrl: jest.fn(),
     setStatus: jest.fn(),
+    setSituation: jest.fn(),
     unlinkModule: jest.fn(),
     updateMetadata: jest.fn(),
     uploadPdf: jest.fn(),
@@ -266,9 +275,13 @@ describe('DocumentsService', () => {
     documentsGateway.listModuleIds.mockResolvedValue([
       '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
     ]);
+    documentsGateway.listActorNames.mockResolvedValue({
+      [authorization.userId]: 'Administrador de prueba',
+    });
 
     await expect(service.findOne(documentRecord.id)).resolves.toEqual({
       ...documentRecord,
+      createdByName: 'Administrador de prueba',
       moduleIds: ['8d4b660b-9e94-4d34-a3d2-2548a83587e1'],
       versions: [
         {
@@ -280,6 +293,7 @@ describe('DocumentsService', () => {
           pageCount: versionRecord.pageCount,
           uploadedAt: versionRecord.uploadedAt,
           uploadedBy: versionRecord.uploadedBy,
+          uploadedByName: 'Administrador de prueba',
           versionNumber: versionRecord.versionNumber,
         },
       ],
@@ -304,6 +318,7 @@ describe('DocumentsService', () => {
     expect(documentsGateway.createDownloadUrl).toHaveBeenCalledWith(
       versionRecord.storagePath,
       60,
+      'attachment',
     );
     expect(documentsGateway.recordDownloadUrl).toHaveBeenCalledWith(
       documentRecord.id,
@@ -334,6 +349,232 @@ describe('DocumentsService', () => {
     await expect(
       service.setStatus(documentRecord.id, { isActive: true }, authorization),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('validates document situations before delegating the atomic transition', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.setSituation.mockResolvedValue({
+      ...documentRecord,
+      publicationStatus: 'inactive',
+      replacementReason: 'Nueva norma aplicable',
+      replacementYear: 2027,
+      situation: 'replaced',
+    });
+
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { situation: 'archived' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { reason: 'Nueva norma aplicable', situation: 'replaced' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { situation: 'current' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementYear: 2027,
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).resolves.toMatchObject({ situation: 'replaced' });
+
+    expect(documentsGateway.setSituation).toHaveBeenCalledWith(
+      documentRecord.id,
+      'replaced',
+      authorization.userId,
+      expect.objectContaining({
+        reason: 'Nueva norma aplicable',
+        replacementYear: 2027,
+      }),
+    );
+  });
+
+  it('enforces current and archived situation payload invariants', async () => {
+    const archivedDocument: ManagedDocument = {
+      ...documentRecord,
+      deactivatedAt: '2027-01-01T00:00:00.000Z',
+      deactivatedBy: authorization.userId,
+      deactivationReason: 'Archivo administrativo',
+      publicationStatus: 'inactive',
+      situation: 'archived',
+    };
+    documentsGateway.findById.mockResolvedValue(archivedDocument);
+    documentsGateway.setSituation.mockResolvedValue(documentRecord);
+
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { reason: 'No corresponde', situation: 'current' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { observation: 'No corresponde', situation: 'current' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { situation: 'current' },
+        authorization,
+      ),
+    ).resolves.toEqual(documentRecord);
+
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.setSituation.mockResolvedValue({
+      ...documentRecord,
+      publicationStatus: 'inactive',
+      situation: 'archived',
+    });
+
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          observation: 'Dato exclusivo de reemplazo',
+          reason: 'Archivo administrativo',
+          situation: 'archived',
+        },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { reason: 'Archivo administrativo', situation: 'archived' },
+        authorization,
+      ),
+    ).resolves.toMatchObject({ situation: 'archived' });
+  });
+
+  it('rejects inconsistent replacement targets and dates before delegation', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.setSituation.mockResolvedValue({
+      ...documentRecord,
+      publicationStatus: 'inactive',
+      replacementDate: '2027-03-15',
+      replacementReason: 'Nueva norma aplicable',
+      replacementYear: 2027,
+      situation: 'replaced',
+    });
+
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        { replacementYear: 2027, situation: 'replaced' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementDocumentId: documentRecord.id,
+          replacementYear: 2027,
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementDate: 'invalid',
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementDate: '2027-02-30',
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementDate: '2027-03-15',
+          replacementYear: 2026,
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setSituation(
+        documentRecord.id,
+        {
+          reason: 'Nueva norma aplicable',
+          replacementDate: '2027-03-15',
+          replacementYear: 2027,
+          situation: 'replaced',
+        },
+        authorization,
+      ),
+    ).resolves.toMatchObject({ situation: 'replaced' });
+  });
+
+  it('delegates normalized server-side library filters and real pagination', async () => {
+    documentsGateway.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 25,
+      offset: 25,
+      total: 0,
+    });
+
+    await expect(
+      service.listLibrary({
+        moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+        offset: 25,
+        q: 'licencia docente',
+        sort: 'title',
+      }),
+    ).resolves.toMatchObject({ limit: 25, offset: 25 });
+
+    expect(documentsGateway.listLibrary).toHaveBeenCalledWith({
+      documentType: undefined,
+      issuanceYear: undefined,
+      issuingEntity: undefined,
+      limit: 25,
+      moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+      offset: 25,
+      q: 'licencia docente',
+      situation: undefined,
+      sort: 'title',
+      submoduleId: undefined,
+      technicalStatus: undefined,
+    });
   });
 
   it('updates only defined metadata values and rejects empty or oversized patches', async () => {
