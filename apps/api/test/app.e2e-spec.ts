@@ -21,6 +21,7 @@ import { ChatService } from './../src/chat/chat.service';
 import { OperationsService } from './../src/operations/operations.service';
 import { UserAdministrationService } from './../src/user-administration/user-administration.service';
 import type { AdministrativeUserPage } from './../src/user-administration/user-administration.gateway';
+import { AdministrationService } from './../src/administration/administration.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -86,6 +87,9 @@ describe('API endpoints (e2e)', () => {
       Promise<unknown>,
       [string, Record<string, unknown>, AuthorizationContext]
     >(),
+  };
+  const administrationService = {
+    getDashboard: jest.fn<Promise<unknown>, [AuthorizationContext]>(),
   };
 
   const moduleRecord: ManagedModule = {
@@ -156,6 +160,8 @@ describe('API endpoints (e2e)', () => {
       .useValue(operationsService)
       .overrideProvider(UserAdministrationService)
       .useValue(userAdministrationService)
+      .overrideProvider(AdministrationService)
+      .useValue(administrationService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -219,6 +225,56 @@ describe('API endpoints (e2e)', () => {
       .set('Authorization', 'Bearer admin-token')
       .expect(200)
       .expect({ role: 'admin', status: 'authorized' });
+  });
+
+  it('/admin/dashboard denies a docente before executing dashboard queries', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'docente@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'docente',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+
+    await request(app.getHttpServer())
+      .get('/admin/dashboard')
+      .set('Authorization', 'Bearer docente-token')
+      .expect(403);
+
+    expect(administrationService.getDashboard).not.toHaveBeenCalled();
+  });
+
+  it('/admin/dashboard returns the aggregate for an administrator', async () => {
+    const authorization: AuthorizationContext = {
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    };
+    const dashboard = {
+      activeModules: 7,
+      activeSubmodules: 14,
+      activeUsers: 21,
+      aiQueriesProcessed: 93,
+      expiredUsers: 2,
+      expiringSoonUsers: 3,
+      expiryWindowDays: 7,
+      moduleSummaries: [],
+      totalDocuments: 47,
+      totalQueries: 125,
+      totalUsers: 26,
+    };
+    resolveContext.mockResolvedValue(authorization);
+    administrationService.getDashboard.mockResolvedValue(dashboard);
+
+    await request(app.getHttpServer())
+      .get('/admin/dashboard')
+      .set('Authorization', 'Bearer admin-token')
+      .expect(200)
+      .expect(dashboard);
+
+    expect(administrationService.getDashboard).toHaveBeenCalledWith(
+      authorization,
+    );
   });
 
   it('/admin/system admits only a superadmin token', async () => {

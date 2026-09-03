@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  SUPABASE_ADMIN_DASHBOARD_GATEWAY,
   SUPABASE_AUTH_GATEWAY,
   SUPABASE_CHAT_GATEWAY,
   SUPABASE_DOCUMENTS_GATEWAY,
@@ -14,6 +15,7 @@ import {
   SUPABASE_SERVER_CLIENT,
   SUPABASE_USER_ADMINISTRATION_GATEWAY,
 } from './supabase.constants';
+import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
 import { SupabaseAuthGatewayAdapter } from './supabase-auth.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
@@ -40,6 +42,12 @@ import {
           configService.get<string>('SUPABASE_URL'),
           configService.get<string>('SUPABASE_SERVICE_ROLE_KEY'),
         ),
+    },
+    {
+      provide: SUPABASE_ADMIN_DASHBOARD_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseAdminDashboardGatewayAdapter(client),
     },
     {
       provide: SUPABASE_HEALTH_GATEWAY,
@@ -125,6 +133,7 @@ import {
     },
   ],
   exports: [
+    SUPABASE_ADMIN_DASHBOARD_GATEWAY,
     SUPABASE_AUTH_GATEWAY,
     SUPABASE_CHAT_GATEWAY,
     SUPABASE_DOCUMENTS_GATEWAY,

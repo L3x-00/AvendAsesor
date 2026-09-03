@@ -7,11 +7,23 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import type { AdminHomeDashboard } from './admin-dashboard.gateway';
+import { AdministrationService } from './administration.service';
 
 @Controller('admin')
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
 @Throttle({ default: { limit: 10, ttl: 60_000 } })
 export class AdministrationController {
+  constructor(private readonly administrationService: AdministrationService) {}
+
+  @Get('dashboard')
+  @RequireRoles('admin', 'superadmin')
+  getDashboard(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdminHomeDashboard> {
+    return this.administrationService.getDashboard(authorization);
+  }
+
   @Get('access')
   @RequireRoles('admin', 'superadmin')
   getAccess(@CurrentAuthorization() authorization: AuthorizationContext): {

@@ -31,6 +31,13 @@ export class AuthorizationService {
       throw new ForbiddenException('Account access is suspended.');
     }
 
+    if (
+      profile.accessExpiresAt !== null &&
+      Date.parse(profile.accessExpiresAt) < Date.now()
+    ) {
+      throw new ForbiddenException('Account access has expired.');
+    }
+
     // Access telemetry is useful to superadministrators but must never weaken
     // the authorization boundary when its optional persistence path is down.
     void this.usersService.touchLastAccess(profile.id).catch(() => undefined);

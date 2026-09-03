@@ -28,6 +28,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     const gateway = new SupabaseProfilesGatewayAdapter(
       createProfilesClient({
         data: {
+          access_expires_at: null,
           account_status: 'active',
           full_name: 'Docente Demo',
           id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
@@ -40,6 +41,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     await expect(
       gateway.findById('70a15a92-9899-4ee2-81e0-30d7c3f7677c'),
     ).resolves.toEqual({
+      accessExpiresAt: null,
       accountStatus: 'active',
       fullName: 'Docente Demo',
       id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
@@ -61,6 +63,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
     const gateway = new SupabaseProfilesGatewayAdapter(
       createProfilesClient({
         data: {
+          access_expires_at: null,
           account_status: 'active',
           full_name: 'Docente Demo',
           id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',

@@ -25,6 +25,7 @@ describe('AuthorizationService', () => {
     const profilesGateway: SupabaseProfilesGateway = {
       findById: () =>
         Promise.resolve({
+          accessExpiresAt: null,
           accountStatus: 'active',
           fullName: 'Administrador Demo',
           id: userId,
@@ -64,6 +65,7 @@ describe('AuthorizationService', () => {
     const profilesGateway: SupabaseProfilesGateway = {
       findById: () =>
         Promise.resolve({
+          accessExpiresAt: null,
           accountStatus: 'suspended',
           fullName: 'Cuenta Suspendida',
           id: userId,
@@ -81,6 +83,33 @@ describe('AuthorizationService', () => {
     );
   });
 
+  it('denies an account whose access period has expired', async () => {
+    const touchLastAccess = jest.fn(() => Promise.resolve());
+    const profilesGateway: SupabaseProfilesGateway = {
+      findById: () =>
+        Promise.resolve({
+          accessExpiresAt: '2026-08-31T23:59:59.999Z',
+          accountStatus: 'active',
+          fullName: 'Cuenta Expirada',
+          id: userId,
+          role: 'admin',
+        }),
+      touchLastAccess,
+    };
+    const service = new AuthorizationService(
+      createAuthService(),
+      new UsersService(profilesGateway),
+    );
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-01T00:00:00.000Z'));
+    await expect(service.resolveContext('valid-token')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(touchLastAccess).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
   it('keeps authorization available when best-effort access telemetry is unavailable', async () => {
     const touchLastAccess = jest
       .fn()
@@ -88,6 +117,7 @@ describe('AuthorizationService', () => {
     const profilesGateway: SupabaseProfilesGateway = {
       findById: () =>
         Promise.resolve({
+          accessExpiresAt: null,
           accountStatus: 'active',
           fullName: 'Administrador Demo',
           id: userId,
