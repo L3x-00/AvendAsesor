@@ -148,6 +148,16 @@ const emails = {
   docente: `${emailPrefix}docente-${suffix}@avend.local`,
   superadmin: `${emailPrefix}superadmin-${suffix}@avend.local`,
 };
+const dashboardModules = [
+  'Contratación y desplazamientos',
+  'Evaluación docente',
+  'Situaciones administrativas',
+  'Auxiliar de educación',
+  'Ley y reglamento',
+  'Cargos y plazas',
+  'Remuneraciones',
+];
+const createdModuleIds = [];
 let stage = 'bootstrap';
 
 async function response(url, options = {}) {
@@ -260,6 +270,51 @@ async function assertRoute(path, cookie, expectedStatus, expectedLocation = null
   }
 }
 
+async function ensureDashboardModules() {
+  const headers = {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+  };
+  const existing = await request(
+    `${supabaseUrl}/rest/v1/modules?parent_module_id=is.null&is_deleted=eq.false&select=id,name`,
+    { headers },
+  );
+  const existingNames = new Set((existing.body ?? []).map((module) => module.name));
+
+  for (const [index, name] of dashboardModules.entries()) {
+    if (existingNames.has(name)) continue;
+    const inserted = await request(`${supabaseUrl}/rest/v1/modules?select=id`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        code: `LOCAL_ADMIN_HOME_${suffix}_${index + 1}`,
+        name,
+        sort_order: (index + 1) * 10,
+      }),
+    });
+    const id = inserted.body?.[0]?.id;
+    if (!id) throw new Error('LOCAL_DASHBOARD_MODULE_NOT_CREATED');
+    createdModuleIds.push(id);
+  }
+}
+
+async function cleanTemporaryModules() {
+  for (const id of createdModuleIds) {
+    const deleted = await fetch(`${supabaseUrl}/rest/v1/modules?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+    });
+    if (!deleted.ok) throw new Error('LOCAL_TEST_MODULE_CLEANUP_FAILED');
+  }
+}
+
 async function cleanTemporaryUsers() {
   const { body } = await request(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=100`, {
     headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
@@ -285,6 +340,9 @@ async function cleanTemporaryUsers() {
     const docenteCookie = await createSessionCookie(docenteSession);
     const superadminCookie = await createSessionCookie(superadminSession);
 
+    stage = 'dashboard-modules';
+    await ensureDashboardModules();
+
     stage = 'unauthenticated-guard';
     await assertRoute('/admin/modules', null, 307, '/auth/sign-in');
 
@@ -306,6 +364,7 @@ async function cleanTemporaryUsers() {
     detail = ` STAGE=${stage} CODE=${error.message}`;
   } finally {
     try {
+      await cleanTemporaryModules();
       await cleanTemporaryUsers();
       console.log('LOCAL_ADMIN_WEB_CLEANUP=PASS');
     } catch {

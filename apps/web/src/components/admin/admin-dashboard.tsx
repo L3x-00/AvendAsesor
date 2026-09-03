@@ -1,201 +1,230 @@
 import Link from "next/link";
-import { formatUserRole } from "@/lib/admin-api/labels";
-import type { OperationalMetrics } from "@/lib/admin-api/types";
-import type { AdministrativeRole } from "@/lib/authorization/policy";
+import type { AdminHomeDashboard } from "@/lib/admin-api/types";
 import styles from "./admin-dashboard.module.css";
 
 interface AdminDashboardProps {
-  metrics: OperationalMetrics;
-  role: AdministrativeRole;
+  dashboard: AdminHomeDashboard;
 }
 
-const numberFormatter = new Intl.NumberFormat("es-PE");
-
-function formatCount(value: number): string {
-  return numberFormatter.format(value);
-}
+type UserMetricTone = "active" | "expired" | "expiring" | "registered";
 
 interface MetricCard {
-  attention?: boolean;
   hint: string;
   key: string;
   label: string;
+  tone?: UserMetricTone;
   value: number;
 }
 
 interface QuickLink {
-  badge?: string;
   description: string;
   href: string;
   title: string;
 }
 
+const numberFormatter = new Intl.NumberFormat("es-PE");
+
+const quickLinks: ReadonlyArray<QuickLink> = [
+  {
+    description: "Gestionar usuarios, roles y accesos.",
+    href: "/admin/users",
+    title: "Usuarios",
+  },
+  {
+    description: "Administrar módulos, submódulos y organización documental.",
+    href: "/admin/modules",
+    title: "Módulos",
+  },
+  {
+    description:
+      "Consultar, buscar, visualizar y descargar el historial documental.",
+    href: "/admin/documents",
+    title: "Documentos",
+  },
+  {
+    description: "Revisar consultas, incidencias, reportes y métricas.",
+    href: "/admin/operations",
+    title: "Consultas y reportes",
+  },
+  {
+    description: "Abrir AVEND ASESOR tal como lo utiliza el docente.",
+    href: "/chat",
+    title: "Ver como docente",
+  },
+];
+
+function formatCount(value: number): string {
+  return numberFormatter.format(value);
+}
+
+function metricToneClass(tone?: UserMetricTone): string {
+  if (!tone) return styles.metricCard;
+
+  const toneClass: Record<UserMetricTone, string> = {
+    active: styles.metricCardActive,
+    expired: styles.metricCardExpired,
+    expiring: styles.metricCardExpiring,
+    registered: styles.metricCardRegistered,
+  };
+
+  return `${styles.metricCard} ${toneClass[tone]}`;
+}
+
+function MetricCards({
+  cards,
+  className,
+}: {
+  cards: MetricCard[];
+  className: string;
+}) {
+  return (
+    <ul className={className} role="list">
+      {cards.map((card) => (
+        <li className={metricToneClass(card.tone)} key={card.key}>
+          <p className={styles.metricLabel}>{card.label}</p>
+          <p className={styles.metricValue}>{formatCount(card.value)}</p>
+          <p className={styles.metricHint}>{card.hint}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
- * Read-only administrative home dashboard. It summarizes the operational
- * metrics returned by the API and links to the sections that perform the
- * actual management; it never mutates state or grants permissions.
+ * Read-only administrative home. Operational incidents intentionally remain in
+ * Consultas y reportes; this view only presents aggregate database facts and
+ * direct navigation to the areas where administrators work.
  */
-export function AdminDashboard({ metrics, role }: AdminDashboardProps) {
-  const metricCards: MetricCard[] = [
+export function AdminDashboard({ dashboard }: AdminDashboardProps) {
+  const userCards: MetricCard[] = [
     {
-      hint: "Cuentas con acceso al sistema",
-      key: "users",
+      hint: "Total de usuarios registrados.",
+      key: "registered",
       label: "Usuarios registrados",
-      value: metrics.totalUsers,
+      tone: "registered",
+      value: dashboard.totalUsers,
     },
     {
-      hint: "Disponibles para el chat",
-      key: "modules",
-      label: "Módulos activos",
-      value: metrics.activeModules,
+      hint: "Usuarios con acceso vigente.",
+      key: "active",
+      label: "Usuarios activos",
+      tone: "active",
+      value: dashboard.activeUsers,
     },
     {
-      hint: "PDFs vigentes e indexables",
-      key: "documents",
-      label: "Documentos activos",
-      value: metrics.activeDocuments,
+      hint: `Accesos que vencen en los próximos ${dashboard.expiryWindowDays} días.`,
+      key: "expiring",
+      label: "Por vencer",
+      tone: "expiring",
+      value: dashboard.expiringSoonUsers,
     },
     {
-      hint: "Conversaciones registradas",
-      key: "conversations",
-      label: "Conversaciones",
-      value: metrics.totalConversations,
-    },
-    {
-      attention: metrics.pendingUnansweredQuestions > 0,
-      hint: "En la cola sin resolver",
-      key: "pending-questions",
-      label: "Consultas por revisar",
-      value: metrics.pendingUnansweredQuestions,
-    },
-    {
-      attention: metrics.pendingIngestionJobs > 0,
-      hint: "Documentos procesándose",
-      key: "pending-ingestion",
-      label: "Ingestas en proceso",
-      value: metrics.pendingIngestionJobs,
+      hint: "Usuarios con acceso vencido.",
+      key: "expired",
+      label: "Expirados",
+      tone: "expired",
+      value: dashboard.expiredUsers,
     },
   ];
 
-  const quickLinks: QuickLink[] = [
+  const generalCards: MetricCard[] = [
     {
-      badge:
-        metrics.pendingUnansweredQuestions > 0
-          ? `${formatCount(metrics.pendingUnansweredQuestions)} por revisar`
-          : undefined,
-      description: "Revisa las preguntas sin resolver y el estado operativo.",
-      href: "/admin/operations",
-      title: "Consultas y reportes",
+      hint: "Módulos principales disponibles.",
+      key: "modules",
+      label: "Módulos activos",
+      value: dashboard.activeModules,
     },
     {
-      description: "Carga PDFs y consulta sus versiones y su ingesta.",
-      href: "/admin/documents",
-      title: "Historial de documentos",
+      hint: "Submódulos disponibles en el sistema.",
+      key: "submodules",
+      label: "Submódulos activos",
+      value: dashboard.activeSubmodules,
     },
     {
-      description: "Organiza los temas disponibles para el chat docente.",
-      href: "/admin/modules",
-      title: "Módulos",
+      hint: "Total de documentos en la biblioteca, sin filtrar su vigencia.",
+      key: "documents",
+      label: "Documentos cargados",
+      value: dashboard.totalDocuments,
     },
-    ...(role === "superadmin"
-      ? [
-          {
-            description: "Gestiona roles y estados y revisa la auditoría.",
-            href: "/admin/users",
-            title: "Usuarios y auditoría",
-          },
-        ]
-      : []),
+    {
+      hint: "Total de consultas realizadas por docentes.",
+      key: "queries",
+      label: "Consultas realizadas",
+      value: dashboard.totalQueries,
+    },
+    {
+      hint: "Consultas respondidas por el servicio de inteligencia artificial.",
+      key: "ai",
+      label: "Consumo IA",
+      value: dashboard.aiQueriesProcessed,
+    },
   ];
 
   return (
     <div className={styles.dashboard}>
-      <section aria-labelledby="dashboard-metrics-title">
-        <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle} id="dashboard-metrics-title">
-            Resumen operativo
-          </h2>
-          <p className={styles.roleTag}>
-            Acceso: <strong>{formatUserRole(role)}</strong>
-          </p>
-        </div>
-        <ul className={styles.metricsGrid} role="list">
-          {metricCards.map((card) => (
-            <li
-              className={
-                card.attention
-                  ? `${styles.metricCard} ${styles.metricCardAttention}`
-                  : styles.metricCard
-              }
-              key={card.key}
-            >
-              <p className={styles.metricValue}>{formatCount(card.value)}</p>
-              <p className={styles.metricLabel}>{card.label}</p>
-              <p className={styles.metricHint}>{card.hint}</p>
-              {card.attention ? (
-                <p className={styles.metricFlag}>Requiere atención</p>
-              ) : null}
+      <section aria-labelledby="user-status-title" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="user-status-title">
+          Estado de usuarios
+        </h2>
+        <MetricCards cards={userCards} className={styles.userMetricsGrid} />
+      </section>
+
+      <section aria-labelledby="general-info-title" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="general-info-title">
+          Información general de AVEND ASESOR
+        </h2>
+        <MetricCards cards={generalCards} className={styles.generalMetricsGrid} />
+      </section>
+
+      <section aria-labelledby="quick-access-title" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="quick-access-title">
+          Accesos rápidos
+        </h2>
+        <ul className={styles.quickGrid} role="list">
+          {quickLinks.map((link) => (
+            <li key={link.href}>
+              <Link className={styles.quickCard} href={link.href}>
+                <span className={styles.quickTitle}>{link.title}</span>
+                <span className={styles.quickDescription}>
+                  {link.description}
+                </span>
+                <span aria-hidden="true" className={styles.cardArrow}>
+                  →
+                </span>
+              </Link>
             </li>
           ))}
         </ul>
       </section>
 
-      <div className={styles.panels}>
-        <section
-          aria-labelledby="dashboard-health-title"
-          className={styles.panel}
-        >
-          <h2 className={styles.sectionTitle} id="dashboard-health-title">
-            Estado del sistema
-          </h2>
-          <dl className={styles.healthList}>
-            <div className={styles.healthRow}>
-              <dt className={styles.healthTerm}>Consultas sin resolver</dt>
-              <dd className={styles.healthValue}>
-                {formatCount(metrics.pendingUnansweredQuestions)} por revisar ·{" "}
-                {formatCount(metrics.resolvedUnansweredQuestions)} resueltas ·{" "}
-                {formatCount(metrics.dismissedUnansweredQuestions)} descartadas
-              </dd>
-            </div>
-            <div className={styles.healthRow}>
-              <dt className={styles.healthTerm}>Ingesta de documentos</dt>
-              <dd className={styles.healthValue}>
-                {metrics.pendingIngestionJobs > 0
-                  ? `${formatCount(metrics.pendingIngestionJobs)} en proceso`
-                  : "Al día"}
-              </dd>
-            </div>
-            <div className={styles.healthRow}>
-              <dt className={styles.healthTerm}>Costo del proveedor de IA</dt>
-              <dd className={styles.healthValue}>No configurado</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section
-          aria-labelledby="dashboard-actions-title"
-          className={styles.panel}
-        >
-          <h2 className={styles.sectionTitle} id="dashboard-actions-title">
-            Accesos rápidos
-          </h2>
-          <ul className={styles.quickGrid} role="list">
-            {quickLinks.map((link) => (
-              <li key={link.href}>
-                <Link className={styles.quickCard} href={link.href}>
-                  <span className={styles.quickTitle}>{link.title}</span>
-                  <span className={styles.quickDescription}>
-                    {link.description}
+      <section aria-labelledby="avend-modules-title" className={styles.section}>
+        <h2 className={styles.sectionTitle} id="avend-modules-title">
+          Módulos de AVEND ASESOR
+        </h2>
+        <ul className={styles.modulesGrid} role="list">
+          {dashboard.moduleSummaries.map((module) => (
+            <li key={module.id}>
+              <Link
+                className={styles.moduleCard}
+                href={`/admin/modules/${module.id}`}
+              >
+                <span className={styles.moduleTitle}>{module.name}</span>
+                <span className={styles.moduleMetrics}>
+                  <span>
+                    <strong>{formatCount(module.submoduleCount)}</strong>
+                    <span>Submódulos</span>
                   </span>
-                  {link.badge ? (
-                    <span className={styles.quickBadge}>{link.badge}</span>
-                  ) : null}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+                  <span>
+                    <strong>{formatCount(module.documentCount)}</strong>
+                    <span>Documentos</span>
+                  </span>
+                </span>
+                <span className={styles.moduleAction}>Administrar módulo →</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

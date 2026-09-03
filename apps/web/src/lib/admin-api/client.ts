@@ -4,6 +4,7 @@ import { getAdminApiUrl } from "./config";
 import {
   downloadUrlSchema,
   documentLibraryPageSchema,
+  adminHomeDashboardSchema,
   administrativeUserSchema,
   managedDocumentDetailsSchema,
   managedDocumentSchema,
@@ -12,6 +13,7 @@ import {
   operationalMetricsSchema,
   unansweredQuestionSchema,
   type AdministrativeUser,
+  type AdminHomeDashboard,
   type AdministrativeUserPage,
   type AdministrativeUserQuery,
   administrativeUserPageSchema,
@@ -112,6 +114,14 @@ export class AdminApiClient {
         method: "POST",
       },
       downloadUrlSchema,
+    );
+  }
+
+  async getHomeDashboard(): Promise<AdminHomeDashboard> {
+    return this.send(
+      "/admin/dashboard",
+      { method: "GET" },
+      adminHomeDashboardSchema,
     );
   }
 

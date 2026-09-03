@@ -5,9 +5,15 @@ import { resolveChatAccess } from "./resolve-chat-access";
 function clientFor(
   role: unknown,
   accountStatus: unknown = "active",
+  accessExpiresAt: unknown = null,
 ): AuthorizationSupabaseClient {
   const maybeSingle = vi.fn(async () => ({
-    data: { account_status: accountStatus, full_name: "María Pérez", role },
+    data: {
+      access_expires_at: accessExpiresAt,
+      account_status: accountStatus,
+      full_name: "María Pérez",
+      role,
+    },
     error: null,
   }));
   const eq = vi.fn(() => ({ maybeSingle }));
@@ -53,10 +59,20 @@ describe("resolveChatAccess", () => {
     await expect(
       resolveChatAccess(clientFor("docente", "suspended")),
     ).resolves.toEqual({ status: "unauthorized" });
+    await expect(
+      resolveChatAccess(
+        clientFor("docente", "active", "2020-01-01T00:00:00.000Z"),
+      ),
+    ).resolves.toEqual({ status: "unauthorized" });
 
     const invalidName = clientFor("docente");
     const maybeSingle = vi.fn(async () => ({
-      data: { account_status: "active", full_name: "   ", role: "docente" },
+      data: {
+        access_expires_at: null,
+        account_status: "active",
+        full_name: "   ",
+        role: "docente",
+      },
       error: null,
     }));
     invalidName.from = vi.fn(() => ({

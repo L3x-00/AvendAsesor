@@ -1,11 +1,12 @@
 import {
+  hasCurrentAccess,
   isActiveAccountStatus,
   isAdministrativeRole,
   type AdministrativeRole,
 } from "./policy";
 
 interface ProfileRoleQuery {
-  select(columns: "role, account_status" | "role, account_status, full_name"): {
+  select(columns: "role, account_status, full_name, access_expires_at"): {
     eq(
       column: "id",
       value: string,
@@ -59,7 +60,7 @@ export async function resolveAdminAccess(
   try {
     ({ data, error } = await client
       .from("profiles")
-      .select("role, account_status, full_name")
+      .select("role, account_status, full_name, access_expires_at")
       .eq("id", user.id)
       .maybeSingle());
   } catch {
@@ -73,10 +74,14 @@ export async function resolveAdminAccess(
     !("role" in data) ||
     !("account_status" in data) ||
     !("full_name" in data) ||
+    !("access_expires_at" in data) ||
     typeof (data as { full_name: unknown }).full_name !== "string" ||
     !(data as { full_name: string }).full_name.trim() ||
     !isActiveAccountStatus(
       (data as { account_status: unknown }).account_status,
+    ) ||
+    !hasCurrentAccess(
+      (data as { access_expires_at: unknown }).access_expires_at,
     ) ||
     !isAdministrativeRole((data as { role: unknown }).role)
   ) {

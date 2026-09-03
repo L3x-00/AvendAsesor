@@ -23,3 +23,14 @@ export function isChatRole(role: unknown): role is ChatRole {
 export function isActiveAccountStatus(status: unknown): boolean {
   return status === activeAccountStatus;
 }
+
+export function hasCurrentAccess(
+  accessExpiresAt: unknown,
+  now = Date.now(),
+): boolean {
+  if (accessExpiresAt === null) return true;
+  if (typeof accessExpiresAt !== "string") return false;
+
+  const expiry = Date.parse(accessExpiresAt);
+  return Number.isFinite(expiry) && expiry >= now;
+}

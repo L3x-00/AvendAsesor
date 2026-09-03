@@ -188,6 +188,70 @@ export const operationalMetricsSchema = z.object({
 
 export type OperationalMetrics = z.infer<typeof operationalMetricsSchema>;
 
+export const adminHomeModuleNames = [
+  "Contratación y desplazamientos",
+  "Evaluación docente",
+  "Situaciones administrativas",
+  "Auxiliar de educación",
+  "Ley y reglamento",
+  "Cargos y plazas",
+  "Remuneraciones",
+] as const;
+
+export const adminHomeModuleSummarySchema = z.object({
+  documentCount: z.number().int().nonnegative(),
+  id: z.uuid(),
+  name: z.enum(adminHomeModuleNames),
+  submoduleCount: z.number().int().nonnegative(),
+});
+
+export const adminHomeDashboardSchema = z
+  .object({
+    activeModules: z.number().int().nonnegative(),
+    activeSubmodules: z.number().int().nonnegative(),
+    activeUsers: z.number().int().nonnegative(),
+    aiQueriesProcessed: z.number().int().nonnegative(),
+    expiredUsers: z.number().int().nonnegative(),
+    expiringSoonUsers: z.number().int().nonnegative(),
+    expiryWindowDays: z.literal(7),
+    moduleSummaries: z.array(adminHomeModuleSummarySchema).length(7),
+    totalDocuments: z.number().int().nonnegative(),
+    totalQueries: z.number().int().nonnegative(),
+    totalUsers: z.number().int().nonnegative(),
+  })
+  .superRefine((dashboard, context) => {
+    dashboard.moduleSummaries.forEach((module, index) => {
+      if (module.name !== adminHomeModuleNames[index]) {
+        context.addIssue({
+          code: "custom",
+          message: "Administrative home modules are not in canonical order.",
+          path: ["moduleSummaries", index, "name"],
+        });
+      }
+    });
+
+    if (dashboard.activeUsers > dashboard.totalUsers) {
+      context.addIssue({
+        code: "custom",
+        message: "Active users cannot exceed registered users.",
+        path: ["activeUsers"],
+      });
+    }
+
+    if (dashboard.expiringSoonUsers > dashboard.activeUsers) {
+      context.addIssue({
+        code: "custom",
+        message: "Expiring users must be a subset of active users.",
+        path: ["expiringSoonUsers"],
+      });
+    }
+  });
+
+export type AdminHomeDashboard = z.infer<typeof adminHomeDashboardSchema>;
+export type AdminHomeModuleSummary = z.infer<
+  typeof adminHomeModuleSummarySchema
+>;
+
 export const unansweredQuestionSchema = z.object({
   category: z
     .enum([

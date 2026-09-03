@@ -14,6 +14,7 @@ export interface SupabaseDatabase {
     Tables: {
       profiles: {
         Row: {
+          access_expires_at: string | null;
           account_status: AccountStatus;
           created_at: string;
           full_name: string;
@@ -26,6 +27,7 @@ export interface SupabaseDatabase {
           updated_at: string;
         };
         Insert: {
+          access_expires_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
           full_name: string;
@@ -38,6 +40,7 @@ export interface SupabaseDatabase {
           updated_at?: string;
         };
         Update: {
+          access_expires_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
           full_name?: string;
@@ -493,6 +496,25 @@ export interface SupabaseDatabase {
           suppressed_candidates: number;
           total_candidates: number;
           total_observations: number;
+        }[];
+      };
+      get_admin_home_dashboard_metrics: {
+        Args: {
+          p_administrator_id: string;
+          p_expiring_soon_days?: number;
+        };
+        Returns: {
+          active_modules: number;
+          active_submodules: number;
+          active_users: number;
+          ai_queries_processed: number;
+          expired_users: number;
+          expiring_soon_users: number;
+          expiry_window_days: number;
+          module_summaries: Json;
+          total_documents: number;
+          total_queries: number;
+          total_users: number;
         }[];
       };
       get_hito4_operational_metrics: {

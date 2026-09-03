@@ -8,7 +8,7 @@ import {
 } from '../users/domain/user-profile';
 
 interface SupabaseProfilesQuery {
-  select(columns: string): {
+  select(columns: 'id, full_name, role, account_status, access_expires_at'): {
     eq(
       column: 'id',
       value: string,
@@ -43,7 +43,7 @@ export class SupabaseProfilesGatewayAdapter implements SupabaseProfilesGateway {
 
     const { data, error } = await this.client
       .from('profiles')
-      .select('id, full_name, role, account_status')
+      .select('id, full_name, role, account_status, access_expires_at')
       .eq('id', userId)
       .maybeSingle();
 
@@ -64,6 +64,7 @@ export class SupabaseProfilesGatewayAdapter implements SupabaseProfilesGateway {
     }
 
     return {
+      accessExpiresAt: result.data.access_expires_at,
       accountStatus: result.data.account_status,
       fullName: result.data.full_name,
       id: result.data.id,
