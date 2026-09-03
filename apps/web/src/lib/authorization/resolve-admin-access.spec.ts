@@ -14,6 +14,7 @@ function createClient(
     overrides.maybeSingle ??
     (async () => ({
       data: {
+        access_expires_at: null,
         account_status: "active",
         full_name: "María Administradora",
         role: "admin",
@@ -122,6 +123,7 @@ describe("resolveAdminAccess", () => {
       const client = createClient({
         maybeSingle: async () => ({
           data: {
+            access_expires_at: null,
             account_status: "active",
             full_name: fullName,
             role: "superadmin",
@@ -153,6 +155,7 @@ describe("resolveAdminAccess", () => {
     const adminClient = createClient({
       maybeSingle: async () => ({
         data: {
+          access_expires_at: null,
           account_status: "active",
           full_name: "  María Administradora  ",
           role: "admin",
@@ -172,6 +175,7 @@ describe("resolveAdminAccess", () => {
     const superadminClient = createClient({
       maybeSingle: async () => ({
         data: {
+          access_expires_at: null,
           account_status: "active",
           full_name: "Juan Superadministrador",
           role: "superadmin",
@@ -185,6 +189,24 @@ describe("resolveAdminAccess", () => {
       role: "superadmin",
       status: "authorized",
       userId: "user-1",
+    });
+  });
+
+  it("fails closed when administrative access has expired", async () => {
+    const client = createClient({
+      maybeSingle: async () => ({
+        data: {
+          access_expires_at: "2020-01-01T00:00:00.000Z",
+          account_status: "active",
+          full_name: "María Administradora",
+          role: "admin",
+        },
+        error: null,
+      }),
+    });
+
+    await expect(resolveAdminAccess(client)).resolves.toEqual({
+      status: "unauthorized",
     });
   });
 

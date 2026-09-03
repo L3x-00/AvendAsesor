@@ -19,9 +19,12 @@ interface AdminShellProps {
   activeSection: AdminSection;
   children: ReactNode;
   description: string;
+  eyebrow?: string | null;
+  headerAside?: ReactNode;
   title: string;
   userName: string;
   userRole: AdministrativeRole;
+  welcome?: string;
 }
 
 const navigation: ReadonlyArray<{
@@ -212,12 +215,17 @@ export function AdminShell({
   activeSection,
   children,
   description,
+  eyebrow = "Administración",
+  headerAside,
   title,
   userName,
   userRole,
+  welcome,
 }: AdminShellProps) {
   return (
-    <div className="avend-admin-shell">
+    <div
+      className={`avend-admin-shell${activeSection === "home" ? " avend-admin-shell--home" : ""}`}
+    >
       <a className="avend-skip-link" href="#main-content">
         Saltar al contenido principal
       </a>
@@ -251,7 +259,9 @@ export function AdminShell({
       </aside>
 
       <main className="avend-admin-main" id="main-content">
-        <header className="avend-admin-header">
+        <header
+          className={`avend-admin-header${headerAside ? " avend-admin-header--with-aside" : ""}`}
+        >
           <div className="avend-admin-mobile-bar">
             <BrandLogo className="avend-admin-mobile-logo" />
             <details className="avend-admin-mobile-menu">
@@ -265,9 +275,19 @@ export function AdminShell({
               </div>
             </details>
           </div>
-          <p className="avend-eyebrow">Administración</p>
-          <h1>{title}</h1>
-          <p>{description}</p>
+          <div className="avend-admin-header-layout">
+            <div className="avend-admin-header-copy">
+              {eyebrow ? <p className="avend-eyebrow">{eyebrow}</p> : null}
+              <h1>{title}</h1>
+              {welcome ? (
+                <p className="avend-admin-header-welcome">{welcome}</p>
+              ) : null}
+              <p className="avend-admin-header-description">{description}</p>
+            </div>
+            {headerAside ? (
+              <div className="avend-admin-header-aside">{headerAside}</div>
+            ) : null}
+          </div>
         </header>
         <div className="avend-admin-content">{children}</div>
       </main>

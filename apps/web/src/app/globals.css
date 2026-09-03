@@ -472,6 +472,15 @@ body {
   padding: 0 0 1.5rem;
 }
 
+.avend-admin-header-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.avend-admin-header-copy {
+  min-width: 0;
+}
+
 .avend-admin-header h1 {
   color: var(--avend-text);
   font-size: clamp(1.75rem, 3vw, 2.25rem);
@@ -481,12 +490,31 @@ body {
   margin: 0;
 }
 
-.avend-admin-header > p:not(.avend-eyebrow) {
+.avend-admin-header-description,
+.avend-admin-header-welcome {
   color: var(--avend-text-muted);
   font-size: 1rem;
   line-height: 1.6;
   margin: 0.875rem 0 0;
   max-width: 48rem;
+}
+
+.avend-admin-header-welcome {
+  color: var(--avend-text);
+  font-weight: 700;
+  margin-top: 0.75rem;
+}
+
+.avend-admin-header-description {
+  margin-top: 0.125rem;
+}
+
+.avend-admin-header-aside {
+  min-width: 0;
+}
+
+.avend-admin-header--with-aside h1 {
+  font-size: 1.625rem;
 }
 
 .avend-admin-content {
@@ -954,6 +982,10 @@ body {
   width: 2.5rem;
 }
 
+.avend-admin-shell--home .avend-admin-account-avatar {
+  background: var(--avend-accent-strong);
+}
+
 .avend-chat-input-icon svg {
   height: 1.35rem;
   stroke: currentColor;
@@ -1037,6 +1069,15 @@ body {
 }
 
 @media (min-width: 48rem) {
+  .avend-admin-header--with-aside .avend-admin-header-layout {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .avend-admin-header--with-aside .avend-admin-header-aside {
+    justify-self: end;
+  }
+
   .avend-chat-modules {
     flex-wrap: wrap;
     overflow: visible;
@@ -1837,6 +1878,41 @@ body {
 
   .avend-admin-submit {
     width: auto;
+  }
+}
+
+@media (min-width: 48rem) and (max-width: 63.999rem) {
+  .avend-admin-shell--home {
+    display: block;
+  }
+
+  .avend-admin-shell--home .avend-admin-sidebar {
+    display: none;
+  }
+
+  .avend-admin-shell--home .avend-admin-main {
+    padding: 1rem;
+  }
+
+  .avend-admin-shell--home .avend-admin-mobile-bar {
+    display: flex;
+  }
+
+  .avend-admin-shell--home .avend-admin-content {
+    padding-top: 1.5rem;
+  }
+
+  .avend-admin-shell--home .avend-admin-header-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .avend-admin-shell--home .avend-admin-header-aside {
+    justify-self: start;
+  }
+
+  .avend-admin-shell--home .avend-admin-header-aside time {
+    align-items: flex-start;
+    text-align: left;
   }
 }
 

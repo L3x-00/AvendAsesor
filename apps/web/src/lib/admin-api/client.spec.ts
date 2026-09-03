@@ -121,6 +121,33 @@ const hito4Metrics = {
   totalUsers: 3,
 };
 
+const homeDashboard = {
+  activeModules: 7,
+  activeSubmodules: 8,
+  activeUsers: 19,
+  aiQueriesProcessed: 85,
+  expiredUsers: 3,
+  expiringSoonUsers: 2,
+  expiryWindowDays: 7 as const,
+  moduleSummaries: [
+    "Contratación y desplazamientos",
+    "Evaluación docente",
+    "Situaciones administrativas",
+    "Auxiliar de educación",
+    "Ley y reglamento",
+    "Cargos y plazas",
+    "Remuneraciones",
+  ].map((name, index) => ({
+    documentCount: index + 3,
+    id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+    name,
+    submoduleCount: index + 1,
+  })),
+  totalDocuments: 41,
+  totalQueries: 128,
+  totalUsers: 25,
+};
+
 const unansweredQuestion = {
   category: null,
   conversationId: null,
@@ -370,6 +397,8 @@ describe("AdminApiClient", () => {
       (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
     >(async (input) => {
       const url = String(input);
+      if (url.endsWith("/admin/dashboard"))
+        return successfulJson(homeDashboard);
       if (url.includes("/operations/metrics"))
         return successfulJson(hito4Metrics);
       if (url.includes("/operations/unanswered-questions?"))
@@ -393,6 +422,7 @@ describe("AdminApiClient", () => {
     );
 
     await expect(client.getOperationalMetrics()).resolves.toEqual(hito4Metrics);
+    await expect(client.getHomeDashboard()).resolves.toEqual(homeDashboard);
     await expect(client.listUnansweredQuestions()).resolves.toEqual([
       unansweredQuestion,
     ]);
@@ -428,6 +458,7 @@ describe("AdminApiClient", () => {
     expect(request.mock.calls.map(([url]) => String(url))).toEqual(
       expect.arrayContaining([
         "http://localhost:3001/admin/operations/metrics",
+        "http://localhost:3001/admin/dashboard",
         "http://localhost:3001/admin/operations/unanswered-questions?limit=100&status=pending_review",
         `http://localhost:3001/admin/operations/unanswered-questions/${unansweredQuestion.id}/review`,
         "http://localhost:3001/admin/users/page?limit=25&offset=25&group=staff&search=prueba&status=active",

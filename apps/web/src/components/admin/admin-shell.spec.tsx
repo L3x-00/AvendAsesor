@@ -86,6 +86,37 @@ describe("AdminShell", () => {
     expect(sidebar.getByText("US")).toHaveAttribute("aria-hidden", "true");
   });
 
+  it("supports the exact dashboard heading, welcome and live-time slot", () => {
+    const { container } = render(
+      <AdminShell
+        activeSection="home"
+        description="Resumen general del sistema y accesos principales."
+        eyebrow={null}
+        headerAside={<time>12:45:32 a. m. | Lunes, 31 de agosto de 2026</time>}
+        title="PANEL DE ADMINISTRACIÓN AVEND ASESOR"
+        userName="Juan Avend"
+        userRole="superadmin"
+        welcome="¡Bienvenido de nuevo, Administrador!"
+      >
+        <p>Contenido administrativo</p>
+      </AdminShell>,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "PANEL DE ADMINISTRACIÓN AVEND ASESOR",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("¡Bienvenido de nuevo, Administrador!")).toBeVisible();
+    expect(
+      screen.getByText("Resumen general del sistema y accesos principales."),
+    ).toBeVisible();
+    expect(screen.queryByText("Administración", { selector: "p" })).toBeNull();
+    expect(screen.getByRole("time")).toBeVisible();
+    expect(container.firstElementChild).toHaveClass("avend-admin-shell--home");
+  });
+
   it("keeps the current section explicit and hides Usuarios from ADMIN", () => {
     const { container } = render(
       <AdminShell

@@ -1,20 +1,25 @@
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
+import { AdminCurrentTime } from "@/components/admin/admin-current-time";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 
 export default async function AdminPage() {
   const { access, client } = await createAuthorizedAdminApiContext();
-  const metrics = await client.getOperationalMetrics();
+  const dashboard = await client.getHomeDashboard();
+  const initialNow = new Date().toISOString();
 
   return (
     <AdminShell
       activeSection="home"
-      description="Consulta el estado operativo y accede a las herramientas autorizadas para tu rol. Cada cambio se vuelve a validar en la API."
-      title="Inicio"
+      description="Resumen general del sistema y accesos principales."
+      eyebrow={null}
+      headerAside={<AdminCurrentTime initialNow={initialNow} />}
+      title="PANEL DE ADMINISTRACIÓN AVEND ASESOR"
       userName={access.fullName}
       userRole={access.role}
+      welcome="¡Bienvenido de nuevo, Administrador!"
     >
-      <AdminDashboard metrics={metrics} role={access.role} />
+      <AdminDashboard dashboard={dashboard} />
     </AdminShell>
   );
 }

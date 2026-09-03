@@ -14,7 +14,8 @@ export default function AdminError({
         </h1>
         <p className="mt-2 text-base leading-6 text-avend-text-muted">
           Verifica tu sesión y que el servicio de administración esté
-          disponible. Reintentar esta lectura no repite ninguna carga de PDF.
+          disponible. Reintentar esta lectura no repite acciones ni modifica
+          información.
         </p>
         <button
           className="avend-button avend-button--primary mt-5"
