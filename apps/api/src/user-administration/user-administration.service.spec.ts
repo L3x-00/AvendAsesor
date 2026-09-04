@@ -10,8 +10,10 @@ const authorization = {
 
 describe('UserAdministrationService', () => {
   const gateway = {
+    countUsers: jest.fn(),
     listAuditEvents: jest.fn(),
     listUsers: jest.fn(),
+    updateAccessWindow: jest.fn(),
     updateUser: jest.fn(),
   };
   const service = new UserAdministrationService(gateway);
@@ -38,6 +40,7 @@ describe('UserAdministrationService', () => {
     );
 
     expect(gateway.listUsers).toHaveBeenCalledWith({
+      accessState: null,
       actorId: authorization.userId,
       group: null,
       limit: 50,
@@ -61,6 +64,7 @@ describe('UserAdministrationService', () => {
 
     await service.listUsers(
       {
+        accessState: 'por_vencer',
         group: 'staff',
         limit: 20,
         offset: 40,
@@ -71,6 +75,7 @@ describe('UserAdministrationService', () => {
     );
 
     expect(gateway.listUsers).toHaveBeenCalledWith({
+      accessState: 'por_vencer',
       actorId: authorization.userId,
       group: 'staff',
       limit: 20,
@@ -114,6 +119,91 @@ describe('UserAdministrationService', () => {
       service.updateUser(
         '7c8b56af-6d0c-4fef-881e-7c00907540dd',
         { reason: '   ', role: 'admin' },
+        authorization,
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('scopes directory counts to the current group and search', async () => {
+    gateway.countUsers.mockResolvedValue({
+      active: 3,
+      expired: 1,
+      expiringSoon: 2,
+      suspended: 0,
+      total: 4,
+    });
+
+    await service.countUsers(
+      { group: 'docente', search: '  Ana  ' },
+      authorization,
+    );
+
+    expect(gateway.countUsers).toHaveBeenCalledWith({
+      actorId: authorization.userId,
+      group: 'docente',
+      search: 'Ana',
+    });
+  });
+
+  it('normalizes access-window dates and forwards the change with a reason', async () => {
+    gateway.updateAccessWindow.mockResolvedValue({ id: 'target-id' });
+
+    await service.updateAccessWindow(
+      '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+      {
+        accessExpiresAt: '2027-01-31T00:00:00.000Z',
+        accessStartAt: '2027-01-01T00:00:00.000Z',
+        reason: '  Extensión de vigencia autorizada.  ',
+      },
+      authorization,
+    );
+
+    expect(gateway.updateAccessWindow).toHaveBeenCalledWith({
+      accessExpiresAt: '2027-01-31T00:00:00.000Z',
+      accessStartAt: '2027-01-01T00:00:00.000Z',
+      actorId: authorization.userId,
+      reason: 'Extensión de vigencia autorizada.',
+      targetUserId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+  });
+
+  it('treats blank access-window dates as an indefinite (null) window', async () => {
+    gateway.updateAccessWindow.mockResolvedValue({ id: 'target-id' });
+
+    await service.updateAccessWindow(
+      '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+      { accessExpiresAt: '', accessStartAt: '', reason: 'Sin vigencia fija.' },
+      authorization,
+    );
+
+    expect(gateway.updateAccessWindow).toHaveBeenCalledWith({
+      accessExpiresAt: null,
+      accessStartAt: null,
+      actorId: authorization.userId,
+      reason: 'Sin vigencia fija.',
+      targetUserId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+  });
+
+  it('rejects an access window whose start is after its expiry', () => {
+    expect(() =>
+      service.updateAccessWindow(
+        '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+        {
+          accessExpiresAt: '2027-01-01T00:00:00.000Z',
+          accessStartAt: '2027-02-01T00:00:00.000Z',
+          reason: 'Rango inválido.',
+        },
+        authorization,
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects an access-window change without a valid reason', () => {
+    expect(() =>
+      service.updateAccessWindow(
+        '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+        { accessExpiresAt: '2027-01-01T00:00:00.000Z', reason: '  ' },
         authorization,
       ),
     ).toThrow(BadRequestException);

@@ -18,10 +18,13 @@ import {
 } from '../authorization';
 import { ListAdministrativeUsersQueryDto } from './dto/list-administrative-users-query.dto';
 import { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
+import { UpdateAccessWindowDto } from './dto/update-access-window.dto';
 import { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dto';
 import { UserAdministrationService } from './user-administration.service';
 import type {
   AdministrativeUser,
+  AdministrativeUserCounts,
+  AdministrativeUserDirectoryEntry,
   AdministrativeUserPage,
   OperationalAuditEvent,
 } from './user-administration.gateway';
@@ -55,12 +58,33 @@ export class UserAdministrationController {
     return this.userAdministrationService.listUsers(dto, authorization);
   }
 
+  @Get('counts')
+  countUsers(
+    @Query() dto: ListAdministrativeUsersQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserCounts> {
+    return this.userAdministrationService.countUsers(dto, authorization);
+  }
+
   @Get('audit-events')
   listAuditEvents(
     @Query() dto: ListOperationalAuditEventsQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<OperationalAuditEvent[]> {
     return this.userAdministrationService.listAuditEvents(dto, authorization);
+  }
+
+  @Patch(':id/access-window')
+  updateAccessWindow(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
+    @Body() dto: UpdateAccessWindowDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    return this.userAdministrationService.updateAccessWindow(
+      targetUserId,
+      dto,
+      authorization,
+    );
   }
 
   @Patch(':id')
