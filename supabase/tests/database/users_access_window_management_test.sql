@@ -1,6 +1,6 @@
 begin;
 
-select plan(25);
+select plan(26);
 
 -- Structure ----------------------------------------------------------------
 select has_column(
@@ -200,6 +200,9 @@ select is(
 );
 
 -- Access-window update -----------------------------------------------------
+-- Split into two assertions: Postgres does not guarantee that the profile read
+-- would run after the update-function call inside a single is(), so each side
+-- is compared to the same transaction-stable target instead of to each other.
 select is(
   (select access_expires_at
    from public.update_administrative_user_access_window(
@@ -207,9 +210,14 @@ select is(
      '30000000-0000-0000-0000-00000000000c',
      now(), now() + interval '60 days',
      'Extensión de vigencia autorizada.')),
+  now() + interval '60 days',
+  'An access-window update returns the new expiry'
+);
+select is(
   (select access_expires_at from public.profiles
    where id = '30000000-0000-0000-0000-00000000000c'),
-  'An access-window update persists the new expiry'
+  now() + interval '60 days',
+  'The new expiry is persisted on the target profile'
 );
 select is(
   (select count(*)::int from public.operational_audit_events
