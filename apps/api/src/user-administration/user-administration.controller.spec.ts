@@ -4,6 +4,7 @@ import type { UserAdministrationService } from './user-administration.service';
 describe('UserAdministrationController', () => {
   const service = {
     countUsers: jest.fn(),
+    createUser: jest.fn(),
     listAuditEvents: jest.fn(),
     listUsers: jest.fn(),
     updateAccessWindow: jest.fn(),
@@ -61,6 +62,16 @@ describe('UserAdministrationController', () => {
       { reason: 'Cambio autorizado.', role: 'admin' },
       authorization,
     );
+  });
+
+  it('forwards a user registration to the service', async () => {
+    service.createUser.mockResolvedValue({ id: 'created-id' });
+    const dto = { email: 'nueva@example.test', fullName: 'Nueva Docente' };
+
+    await expect(controller.createUser(dto, authorization)).resolves.toEqual({
+      id: 'created-id',
+    });
+    expect(service.createUser).toHaveBeenCalledWith(dto, authorization);
   });
 
   it('forwards directory counts and access-window changes', async () => {

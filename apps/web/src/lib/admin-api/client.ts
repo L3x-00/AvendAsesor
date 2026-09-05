@@ -20,6 +20,7 @@ import {
   type AdministrativeUser,
   type AdministrativeUserBase,
   type AdministrativeUserCounts,
+  type CreateAdministrativeUserInput,
   type AdminHomeDashboard,
   type AdministrativeUserPage,
   type AdministrativeUserQuery,
@@ -218,6 +219,16 @@ export class AdminApiClient {
       `/admin/users/page?${query.toString()}`,
       { method: "GET" },
       administrativeUserPageSchema,
+    );
+  }
+
+  async createAdministrativeUser(
+    payload: CreateAdministrativeUserInput,
+  ): Promise<AdministrativeUser> {
+    return this.send(
+      '/admin/users',
+      { body: JSON.stringify(payload), method: 'POST' },
+      administrativeUserSchema,
     );
   }
 

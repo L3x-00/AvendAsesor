@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Post,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -16,6 +17,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
 import { ListAdministrativeUsersQueryDto } from './dto/list-administrative-users-query.dto';
 import { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
 import { UpdateAccessWindowDto } from './dto/update-access-window.dto';
@@ -56,6 +58,14 @@ export class UserAdministrationController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdministrativeUserPage> {
     return this.userAdministrationService.listUsers(dto, authorization);
+  }
+
+  @Post()
+  createUser(
+    @Body() dto: CreateAdministrativeUserDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    return this.userAdministrationService.createUser(dto, authorization);
   }
 
   @Get('counts')

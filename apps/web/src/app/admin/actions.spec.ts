@@ -8,6 +8,7 @@ import {
   deleteModuleAction,
   reviewUnansweredQuestionAction,
   setDocumentSituationAction,
+  createAdministrativeUserAction,
   setModuleStatusAction,
   updateAccessWindowAction,
   updateAdministrativeUserAction,
@@ -30,6 +31,7 @@ const client = {
   reviewUnansweredQuestion: vi.fn(),
   setDocumentSituation: vi.fn(),
   setModuleStatus: vi.fn(),
+  createAdministrativeUser: vi.fn(),
   updateAdministrativeUser: vi.fn(),
   updateAdministrativeUserAccessWindow: vi.fn(),
   updateModule: vi.fn(),
@@ -350,6 +352,40 @@ describe("admin server actions", () => {
       status: "error",
     });
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
+  });
+
+  it("registers a user with the window converted to Lima day boundaries", async () => {
+    client.createAdministrativeUser.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("fullName", "  Nueva Docente  ");
+    formData.set("email", "  nueva@example.test  ");
+    formData.set("phone", "987654321");
+    formData.set("role", "docente");
+    formData.set("accessExpiresAt", "2027-12-31");
+
+    const state = await createAdministrativeUserAction(initialState, formData);
+
+    expect(state.status).toBe("success");
+    expect(state.message).toMatch(/contraseña/i);
+    expect(client.createAdministrativeUser).toHaveBeenCalledWith({
+      accessExpiresAt: "2028-01-01T04:59:59.999Z",
+      email: "nueva@example.test",
+      fullName: "Nueva Docente",
+      phone: "987654321",
+      role: "docente",
+    });
+  });
+
+  it("rejects an address that cannot be a login", async () => {
+    const formData = new FormData();
+    formData.set("fullName", "Nueva Docente");
+    formData.set("email", "sin-arroba");
+
+    const state = await createAdministrativeUserAction(initialState, formData);
+
+    expect(state.status).toBe("error");
+    expect(state.message).toMatch(/correo electrónico válido/i);
+    expect(client.createAdministrativeUser).not.toHaveBeenCalled();
   });
 
   it("explains a past expiry instead of letting the database reject it", async () => {

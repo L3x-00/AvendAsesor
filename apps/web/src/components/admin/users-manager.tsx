@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId } from "react";
 import {
+  createAdministrativeUserAction,
   updateAccessWindowAction,
   updateAdministrativeUserAction,
 } from "@/app/admin/actions";
@@ -205,6 +206,97 @@ function AccessWindowForm({
   );
 }
 
+
+/**
+ * Registration form. The email is the login and the person sets their own
+ * password from the invitation, so no password is ever typed here.
+ */
+function CreateUserForm({
+  role,
+  submitLabel,
+  title,
+  today,
+}: {
+  role: "admin" | "docente";
+  submitLabel: string;
+  title: string;
+  today: string;
+}) {
+  const fieldId = useId();
+
+  return (
+    <details className={styles.create}>
+      <summary className={styles.createSummary}>{title}</summary>
+      <AdminActionForm
+        action={createAdministrativeUserAction}
+        className={styles.form}
+        submitLabel={submitLabel}
+      >
+        <input name="role" type="hidden" value={role} />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
+          Nombre y apellidos
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-name`}
+          maxLength={160}
+          minLength={2}
+          name="fullName"
+          required
+          type="text"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-email`}>
+          Correo electrónico
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-email`}
+          maxLength={254}
+          name="email"
+          required
+          type="email"
+        />
+        <p className={styles.formHint}>
+          El correo es el usuario con el que iniciará sesión. Recibirá un
+          mensaje para crear su propia contraseña.
+        </p>
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-phone`}>
+          Celular (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-phone`}
+          maxLength={20}
+          name="phone"
+          type="tel"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
+          Inicio de vigencia (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-start`}
+          name="accessStartAt"
+          type="date"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
+          Fin de vigencia (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-expires`}
+          min={today}
+          name="accessExpiresAt"
+          type="date"
+        />
+        <p className={styles.formHint}>
+          Si dejas las fechas vacías, el acceso queda sin vencimiento.
+        </p>
+      </AdminActionForm>
+    </details>
+  );
+}
+
 /**
  * Server-filtered and paginated administrative user directory. The browser
  * receives only the requested page; the API remains the authority for data,
@@ -229,6 +321,21 @@ export function UsersManager({
         usuarios y gestionar sus accesos y vigencias; cada cambio queda
         auditado.
       </p>
+
+      <div className={styles.createBar}>
+        <CreateUserForm
+          role="docente"
+          submitLabel="Registrar usuario"
+          title="+ Agregar usuario"
+          today={today}
+        />
+        <CreateUserForm
+          role="admin"
+          submitLabel="Registrar administrador"
+          title="+ Agregar administrador"
+          today={today}
+        />
+      </div>
 
       <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
         {GROUPS.map((item) => (
@@ -266,7 +373,7 @@ export function UsersManager({
               key={`${query.group}:${query.status}:${query.page}:${query.search ?? ""}`}
               maxLength={160}
               name="search"
-              placeholder="Buscar usuario por nombre…"
+              placeholder="Buscar por nombre, correo o celular…"
               type="search"
             />
             <button className={styles.searchButton} type="submit">
@@ -342,8 +449,17 @@ export function UsersManager({
                   </strong>
                 </p>
                 <p className={styles.rowMeta}>
+                  Correo: <strong>{user.email ?? "Sin correo"}</strong> ·
+                  Celular: <strong>{user.phone ?? "Sin celular"}</strong>
+                </p>
+                <p className={styles.rowMeta}>
                   Último acceso: {formatAccess(user.lastAccessAt)}
                 </p>
+                {user.createdByName ? (
+                  <p className={styles.rowMeta}>
+                    Creado por: <strong>{user.createdByName}</strong>
+                  </p>
+                ) : null}
               </div>
               <span className={BADGE_CLASS[user.accessState]}>
                 {formatAccessState(user.accessState)}

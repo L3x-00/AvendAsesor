@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { AuthorizationContext } from '../authorization';
 import { SUPABASE_USER_ADMINISTRATION_GATEWAY } from '../supabase/supabase.constants';
+import type { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
 import type { ListAdministrativeUsersQueryDto } from './dto/list-administrative-users-query.dto';
 import type { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
 import type { UpdateAccessWindowDto } from './dto/update-access-window.dto';
@@ -53,6 +54,44 @@ export class UserAdministrationService {
       offset: dto.offset ?? 0,
       search: dto.search?.trim() || null,
       status: dto.status ?? null,
+    });
+  }
+
+  createUser(
+    dto: CreateAdministrativeUserDto,
+    authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    const fullName = dto.fullName.trim();
+    if (fullName.length < 2 || fullName.length > 160) {
+      throw new BadRequestException('A valid full name is required.');
+    }
+
+    const phone = dto.phone?.trim() || null;
+    if (phone !== null && (phone.length < 6 || phone.length > 20)) {
+      throw new BadRequestException('A valid phone number is required.');
+    }
+
+    const accessStartAt = normalizedTimestamp(dto.accessStartAt);
+    const accessExpiresAt = normalizedTimestamp(dto.accessExpiresAt);
+
+    if (
+      accessStartAt !== null &&
+      accessExpiresAt !== null &&
+      Date.parse(accessStartAt) > Date.parse(accessExpiresAt)
+    ) {
+      throw new BadRequestException(
+        'The access start must not be after the access expiry.',
+      );
+    }
+
+    return this.gateway.createUser({
+      accessExpiresAt,
+      accessStartAt,
+      actorId: authorization.userId,
+      email: dto.email.trim().toLowerCase(),
+      fullName,
+      phone,
+      role: dto.role ?? 'docente',
     });
   }
 

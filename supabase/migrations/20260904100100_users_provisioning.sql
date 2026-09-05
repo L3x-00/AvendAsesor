@@ -1,26 +1,13 @@
--- Fase 1 "Usuarios y accesos": vigencias editables sobre la línea base de
--- ADR-0018. Reusa `profiles.access_expires_at` y el umbral fijo de 7 días
--- (idéntico a Inicio) para el estado derivado y los conteos. Añade:
---   1) directorio paginado con vigencias, estado derivado y filtro por estado;
---   2) conteos por bucket consistentes con las tarjetas de Inicio;
---   3) extensión de vigencia auditada (`access_window_changed`).
+-- Fase 3 "Usuarios y accesos": alta de usuarios/administradores y directorio
+-- con correo, celular y trazabilidad.
 --
--- Estado derivado por fila (badge, excluyente y por prioridad):
---   expirado  = access_expires_at < now()
---   pausado   = account_status = 'suspended' (y no expirado)
---   por_vencer= activo con access_expires_at dentro de [now(), now()+7d)
---   activo    = resto con account_status = 'active'
--- Los CONTEOS de los filtros usan las mismas definiciones ACUMULATIVAS que
--- Inicio (por_vencer ⊂ activos) para que las cifras coincidan exactamente.
+-- El correo se lee de auth.users (no se duplica en profiles). La identidad la
+-- crea el API con la Auth Admin API y luego llama a provision_administrative_user
+-- para completar el perfil de forma atomica y auditada.
 
--- 1) Directorio paginado con vigencias + estado + filtro por estado.
-drop function if exists public.list_administrative_users_page(
-  uuid, text, text, public.account_status, integer, integer
-);
-
--- p_access_state is appended last to preserve the existing positional 6-arg
--- contract (older callers keep working; the new filter defaults to null).
-create function public.list_administrative_users_page(
+-- 1) Directorio: anade correo, celular y "creado por", y busca tambien por
+--    correo y celular. Firma sin cambios, asi que basta con reemplazar el cuerpo.
+create or replace function public.list_administrative_users_page(
   p_actor_id uuid,
   p_search text default null,
   p_group text default null,
@@ -85,6 +72,9 @@ begin
       profile.last_access_at,
       profile.access_start_at,
       profile.access_expires_at,
+      profile.phone,
+      identity.email,
+      creator.full_name as created_by_name,
       case
         when profile.access_expires_at is not null
           and profile.access_expires_at < now_ts then 'expirado'
@@ -94,9 +84,13 @@ begin
         else 'activo'
       end as access_state
     from public.profiles as profile
+    left join auth.users as identity on identity.id = profile.id
+    left join public.profiles as creator on creator.id = profile.created_by
     where (
         normalized_search is null
         or position(lower(normalized_search) in lower(profile.full_name)) > 0
+        or position(lower(normalized_search) in lower(coalesce(identity.email, ''))) > 0
+        or position(lower(normalized_search) in lower(coalesce(profile.phone, ''))) > 0
       )
       and (
         p_group is null
@@ -158,7 +152,10 @@ begin
             'role', page.role,
             'access_start_at', page.access_start_at,
             'access_expires_at', page.access_expires_at,
-            'access_state', page.access_state
+            'access_state', page.access_state,
+            'email', page.email,
+            'phone', page.phone,
+            'created_by_name', page.created_by_name
           )
           order by page.full_name, page.id
         )
@@ -170,19 +167,7 @@ begin
 end;
 $$;
 
-revoke all on function public.list_administrative_users_page(
-  uuid, text, text, public.account_status, integer, integer, text
-) from public, anon, authenticated;
-
-grant execute on function public.list_administrative_users_page(
-  uuid, text, text, public.account_status, integer, integer, text
-) to service_role;
-
-comment on function public.list_administrative_users_page(
-  uuid, text, text, public.account_status, integer, integer, text
-) is 'Returns a stable, filtered page of the SUPERADMIN user directory with access-window fields, a derived access state and its exact total.';
-
--- 2) Conteos por bucket (mismas definiciones que Inicio; por_vencer ⊂ activos).
+-- 2) Los conteos deben filtrar por los mismos campos que la busqueda.
 create or replace function public.count_administrative_users(
   p_actor_id uuid,
   p_search text default null,
@@ -224,9 +209,12 @@ begin
       profile.account_status,
       profile.access_expires_at
     from public.profiles as profile
+    left join auth.users as identity on identity.id = profile.id
     where (
         normalized_search is null
         or position(lower(normalized_search) in lower(profile.full_name)) > 0
+        or position(lower(normalized_search) in lower(coalesce(identity.email, ''))) > 0
+        or position(lower(normalized_search) in lower(coalesce(profile.phone, ''))) > 0
       )
       and (
         p_group is null
@@ -264,23 +252,17 @@ begin
 end;
 $$;
 
-revoke all on function public.count_administrative_users(uuid, text, text)
-  from public, anon, authenticated;
-
-grant execute on function public.count_administrative_users(uuid, text, text)
-  to service_role;
-
-comment on function public.count_administrative_users(uuid, text, text) is
-  'Returns SUPERADMIN directory bucket counts (total, active, expiring-soon, expired, suspended) using the same 7-day thresholds as the Inicio dashboard.';
-
--- 3) Extensión/edición de vigencia auditada. "Extender vigencia" es hacia
--- adelante: rechaza una expiración ya pasada (usar "Pausar" para bloquear ya).
-create or replace function public.update_administrative_user_access_window(
+-- 3) Alta: completa el perfil que el trigger de auth.users acaba de crear.
+-- El API ya creo la identidad con la Auth Admin API; aqui se fija el resto del
+-- registro, la trazabilidad y la auditoria en una sola transaccion.
+create or replace function public.provision_administrative_user(
   p_actor_id uuid,
   p_target_user_id uuid,
+  p_full_name text,
+  p_role public.app_role default 'docente',
+  p_phone text default null,
   p_access_start_at timestamptz default null,
-  p_access_expires_at timestamptz default null,
-  p_reason text default null
+  p_access_expires_at timestamptz default null
 )
 returns table (
   id uuid,
@@ -289,7 +271,8 @@ returns table (
   account_status public.account_status,
   last_access_at timestamptz,
   access_start_at timestamptz,
-  access_expires_at timestamptz
+  access_expires_at timestamptz,
+  phone text
 )
 language plpgsql
 security definer
@@ -297,31 +280,46 @@ set search_path = ''
 as $$
 declare
   target public.profiles%rowtype;
-  normalized_reason text := nullif(btrim(coalesce(p_reason, '')), '');
-  previous_start timestamptz;
-  previous_expires timestamptz;
+  normalized_name text := nullif(btrim(coalesce(p_full_name, '')), '');
+  normalized_phone text := nullif(btrim(coalesce(p_phone, '')), '');
 begin
   perform private.require_superadministrator(p_actor_id);
 
-  -- Mirrors update_administrative_user: an actor never edits their own access,
-  -- so a superadministrator cannot lock themselves out.
-  if p_target_user_id is null or p_target_user_id = p_actor_id then
+  if p_target_user_id is null then
     raise exception using
       errcode = '22023',
-      message = 'A superadministrator cannot change their own access window';
+      message = 'A target user is required';
   end if;
 
-  if normalized_reason is null
-    or char_length(normalized_reason) not between 4 and 500 then
+  if normalized_name is null
+    or char_length(normalized_name) not between 2 and 160 then
     raise exception using
       errcode = '22023',
-      message = 'An access-window change requires a reason';
+      message = 'A full name between 2 and 160 characters is required';
+  end if;
+
+  if normalized_phone is not null
+    and char_length(normalized_phone) not between 6 and 20 then
+    raise exception using
+      errcode = '22023',
+      message = 'The phone number must be between 6 and 20 characters';
+  end if;
+
+  if p_role is null
+    or p_role not in (
+      'docente'::public.app_role,
+      'admin'::public.app_role,
+      'superadmin'::public.app_role
+    ) then
+    raise exception using
+      errcode = '22023',
+      message = 'The administrative role is invalid';
   end if;
 
   if p_access_expires_at is not null and p_access_expires_at < now() then
     raise exception using
       errcode = '22023',
-      message = 'The access expiry must not be in the past; suspend the account to block access immediately';
+      message = 'The access expiry must not be in the past';
   end if;
 
   if p_access_start_at is not null
@@ -343,51 +341,36 @@ begin
       message = 'The administrative user was not found';
   end if;
 
-  -- The merged expiry enforcement is fail-closed across the whole API, so
-  -- giving the last active superadministrator an expiry would eventually lock
-  -- every administrator out with no in-app recovery. Same invariant the sibling
-  -- update_administrative_user protects for role and account status.
-  if target.role = 'superadmin'
-    and target.account_status = 'active'
-    and p_access_expires_at is not null
-    and not exists (
-      select 1
-      from public.profiles as profile
-      where profile.id <> target.id
-        and profile.role = 'superadmin'
-        and profile.account_status = 'active'
-        and (
-          profile.access_expires_at is null
-          or profile.access_expires_at >= now()
-        )
-    ) then
+  -- Solo se completa un registro recien creado. Si ya tiene autor, el alta ya
+  -- ocurrio y este llamado seria una edicion encubierta sin motivo auditado.
+  if target.created_by is not null then
     raise exception using
-      errcode = '23514',
-      message = 'At least one active superadministrator must keep unexpired access';
+      errcode = '23505',
+      message = 'The administrative user was already provisioned';
   end if;
-
-  previous_start := target.access_start_at;
-  previous_expires := target.access_expires_at;
 
   update public.profiles as profile
   set
+    full_name = normalized_name,
+    role = p_role,
+    phone = normalized_phone,
     access_start_at = p_access_start_at,
     access_expires_at = p_access_expires_at,
+    created_by = p_actor_id,
     updated_by = p_actor_id
   where profile.id = target.id
   returning * into target;
 
   perform private.record_operational_audit(
     p_actor_id,
-    'access_window_changed',
+    'user_created',
     'profile',
     target.id,
     jsonb_build_object(
-      'fromStartAt', previous_start,
-      'toStartAt', p_access_start_at,
-      'fromExpiresAt', previous_expires,
-      'toExpiresAt', p_access_expires_at,
-      'reason', normalized_reason
+      'role', p_role,
+      'hasPhone', normalized_phone is not null,
+      'accessStartAt', p_access_start_at,
+      'accessExpiresAt', p_access_expires_at
     )
   );
 
@@ -399,18 +382,19 @@ begin
     target.account_status,
     target.last_access_at,
     target.access_start_at,
-    target.access_expires_at;
+    target.access_expires_at,
+    target.phone;
 end;
 $$;
 
-revoke all on function public.update_administrative_user_access_window(
-  uuid, uuid, timestamptz, timestamptz, text
+revoke all on function public.provision_administrative_user(
+  uuid, uuid, text, public.app_role, text, timestamptz, timestamptz
 ) from public, anon, authenticated;
 
-grant execute on function public.update_administrative_user_access_window(
-  uuid, uuid, timestamptz, timestamptz, text
+grant execute on function public.provision_administrative_user(
+  uuid, uuid, text, public.app_role, text, timestamptz, timestamptz
 ) to service_role;
 
-comment on function public.update_administrative_user_access_window(
-  uuid, uuid, timestamptz, timestamptz, text
-) is 'Sets a user access window (start/expiry), forward-only, auditing the change as access_window_changed.';
+comment on function public.provision_administrative_user(
+  uuid, uuid, text, public.app_role, text, timestamptz, timestamptz
+) is 'Completes the profile of a freshly created auth identity, recording who created it and auditing it as user_created.';

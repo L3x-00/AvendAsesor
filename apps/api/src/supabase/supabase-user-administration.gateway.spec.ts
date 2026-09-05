@@ -13,6 +13,13 @@ function clientWith(rpc: jest.Mock): SupabaseServerClient {
   return { rpc } as unknown as SupabaseServerClient;
 }
 
+function clientWithAuth(
+  rpc: jest.Mock,
+  admin: Record<string, jest.Mock>,
+): SupabaseServerClient {
+  return { auth: { admin }, rpc } as unknown as SupabaseServerClient;
+}
+
 describe('SupabaseUserAdministrationGatewayAdapter', () => {
   it('maps the minimal safe administrative user and audit contracts', async () => {
     const rpc = jest
@@ -73,6 +80,9 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
           accessStartAt: null,
           accessState: 'activo',
           accountStatus: 'active',
+          createdByName: null,
+          email: null,
+          phone: null,
           fullName: 'Administrador Demo',
           id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
           lastAccessAt: null,
@@ -314,6 +324,9 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
       accessStartAt: null,
       accessState: 'por_vencer',
       accountStatus: 'active',
+      createdByName: null,
+      email: null,
+      phone: null,
       fullName: 'Docente Objetivo',
       id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
       lastAccessAt: null,
@@ -368,5 +381,120 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
         status: null,
       }),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('invites the identity and then completes the profile', async () => {
+    const inviteUserByEmail = jest.fn().mockResolvedValue({
+      data: { user: { id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c' } },
+      error: null,
+    });
+    const deleteUser = jest.fn();
+    const rpc = jest.fn().mockResolvedValue({
+      data: [
+        {
+          access_expires_at: null,
+          access_start_at: null,
+          account_status: 'active',
+          full_name: 'Nueva Docente',
+          id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+          last_access_at: null,
+          phone: '987654321',
+          role: 'docente',
+        },
+      ],
+      error: null,
+    });
+    const gateway = new SupabaseUserAdministrationGatewayAdapter(
+      clientWithAuth(rpc, { deleteUser, inviteUserByEmail }),
+    );
+
+    await expect(
+      gateway.createUser({
+        accessExpiresAt: null,
+        accessStartAt: null,
+        actorId: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        email: 'nueva@example.test',
+        fullName: 'Nueva Docente',
+        phone: '987654321',
+        role: 'docente',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        accessState: 'activo',
+        fullName: 'Nueva Docente',
+        phone: '987654321',
+        role: 'docente',
+      }),
+    );
+
+    expect(inviteUserByEmail).toHaveBeenCalledWith('nueva@example.test', {
+      data: { full_name: 'Nueva Docente' },
+    });
+    expect(rpc).toHaveBeenCalledWith('provision_administrative_user', {
+      p_access_expires_at: null,
+      p_access_start_at: null,
+      p_actor_id: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
+      p_full_name: 'Nueva Docente',
+      p_phone: '987654321',
+      p_role: 'docente',
+      p_target_user_id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('reports an address that already has an account as a conflict', async () => {
+    const gateway = new SupabaseUserAdministrationGatewayAdapter(
+      clientWithAuth(jest.fn(), {
+        deleteUser: jest.fn(),
+        inviteUserByEmail: jest
+          .fn()
+          .mockResolvedValue({ data: {}, error: { status: 422 } }),
+      }),
+    );
+
+    await expect(
+      gateway.createUser({
+        accessExpiresAt: null,
+        accessStartAt: null,
+        actorId: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        email: 'repetida@example.test',
+        fullName: 'Cuenta Repetida',
+        phone: null,
+        role: 'docente',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('removes the half-created identity when provisioning fails', async () => {
+    const deleteUser = jest.fn().mockResolvedValue({ error: null });
+    const gateway = new SupabaseUserAdministrationGatewayAdapter(
+      clientWithAuth(
+        jest.fn().mockResolvedValue({ data: null, error: { code: '22023' } }),
+        {
+          deleteUser,
+          inviteUserByEmail: jest.fn().mockResolvedValue({
+            data: { user: { id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c' } },
+            error: null,
+          }),
+        },
+      ),
+    );
+
+    await expect(
+      gateway.createUser({
+        accessExpiresAt: null,
+        accessStartAt: null,
+        actorId: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        email: 'fallida@example.test',
+        fullName: 'Alta Fallida',
+        phone: null,
+        role: 'docente',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    // Sin esto la direccion quedaria ocupada por una identidad invisible.
+    expect(deleteUser).toHaveBeenCalledWith(
+      '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    );
   });
 });

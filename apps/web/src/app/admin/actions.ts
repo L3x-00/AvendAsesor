@@ -655,6 +655,92 @@ export async function updateAdministrativeUserAction(
   });
 }
 
+export async function createAdministrativeUserAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const fullName = requiredText(formData, "fullName", "El nombre");
+    const email = requiredText(formData, "email", "El correo electrónico");
+    const phone = optionalText(formData, "phone");
+    const role = optionalText(formData, "role");
+    const startInput = optionalText(formData, "accessStartAt");
+    const expiresInput = optionalText(formData, "accessExpiresAt");
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new FormValidationError(
+        "Escribe un correo electrónico válido; es el usuario con el que iniciará sesión.",
+      );
+    }
+
+    const payload: {
+      accessExpiresAt?: string;
+      accessStartAt?: string;
+      email: string;
+      fullName: string;
+      phone?: string;
+      role?: "admin" | "docente" | "superadmin";
+    } = { email, fullName };
+
+    if (phone) {
+      if (phone.length < 6 || phone.length > 20) {
+        throw new FormValidationError(
+          "El celular debe tener entre 6 y 20 caracteres.",
+        );
+      }
+      payload.phone = phone;
+    }
+
+    if (role) {
+      if (role !== "admin" && role !== "docente" && role !== "superadmin") {
+        throw new FormValidationError("Selecciona un rol válido.");
+      }
+      payload.role = role;
+    }
+
+    if (startInput) {
+      const startInstant = accessStartInstant(startInput);
+      if (!startInstant) {
+        throw new FormValidationError("La fecha de inicio no es válida.");
+      }
+      payload.accessStartAt = startInstant;
+    }
+
+    if (expiresInput) {
+      const expiryInstant = accessExpiryInstant(expiresInput);
+      if (!expiryInstant) {
+        throw new FormValidationError("La fecha de fin no es válida.");
+      }
+      if (Date.parse(expiryInstant) < Date.now()) {
+        throw new FormValidationError(
+          "La fecha de fin ya pasó. Elige una fecha de hoy en adelante.",
+        );
+      }
+      payload.accessExpiresAt = expiryInstant;
+    }
+
+    if (
+      payload.accessStartAt &&
+      payload.accessExpiresAt &&
+      Date.parse(payload.accessStartAt) > Date.parse(payload.accessExpiresAt)
+    ) {
+      throw new FormValidationError(
+        "La fecha de inicio no puede ser posterior a la de fin.",
+      );
+    }
+
+    await client.createAdministrativeUser(payload);
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+
+    return {
+      message:
+        "Usuario registrado. Recibirá un correo para crear su contraseña; la acción quedó auditada.",
+      status: "success",
+    };
+  });
+}
+
 export async function updateAccessWindowAction(
   _previousState: AdminActionState,
   formData: FormData,

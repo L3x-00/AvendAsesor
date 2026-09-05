@@ -143,6 +143,63 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     };
   }
 
+  async createUser(
+    input: Parameters<UserAdministrationGateway['createUser']>[0],
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    const client = this.requireClient();
+    const invited = await client.auth.admin.inviteUserByEmail(input.email, {
+      data: { full_name: input.fullName },
+    });
+
+    if (invited.error) {
+      // 422 is Supabase's "already registered"; anything else is opaque on
+      // purpose so provider details never reach the panel.
+      if (invited.error.status === 400 || invited.error.status === 422) {
+        throw new ConflictException(
+          'That email address already has an account.',
+        );
+      }
+      throw new ServiceUnavailableException(
+        'The invitation could not be sent. Try again later.',
+      );
+    }
+
+    const createdId = invited.data.user?.id;
+    if (!createdId) {
+      throw new ServiceUnavailableException(
+        'The administrative user creation did not complete.',
+      );
+    }
+
+    try {
+      const { data, error } = await client.rpc(
+        'provision_administrative_user',
+        {
+          p_access_expires_at: input.accessExpiresAt,
+          p_access_start_at: input.accessStartAt,
+          p_actor_id: input.actorId,
+          p_full_name: input.fullName,
+          p_phone: input.phone,
+          p_role: input.role,
+          p_target_user_id: createdId,
+        },
+      );
+      if (error) databaseError(error);
+
+      return this.toDirectoryEntry(
+        requireSingle(
+          data,
+          'The administrative user creation did not complete.',
+        ),
+      );
+    } catch (failure) {
+      // Compensate: without this the address stays taken by a half-created
+      // identity that the panel cannot see or fix.
+      await client.auth.admin.deleteUser(createdId).catch(() => undefined);
+      throw failure;
+    }
+  }
+
   async countUsers(
     input: Parameters<UserAdministrationGateway['countUsers']>[0],
   ): Promise<AdministrativeUserCounts> {
@@ -255,9 +312,12 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     access_start_at: string | null;
     access_state?: AdministrativeUserAccessState;
     account_status: AdministrativeUser['accountStatus'];
+    created_by_name?: string | null;
+    email?: string | null;
     full_name: string;
     id: string;
     last_access_at: string | null;
+    phone?: string | null;
     role: AdministrativeUser['role'];
   }): AdministrativeUserDirectoryEntry {
     return {
@@ -265,6 +325,9 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       accessExpiresAt: user.access_expires_at,
       accessStartAt: user.access_start_at,
       accessState: user.access_state ?? this.deriveAccessState(user),
+      createdByName: user.created_by_name ?? null,
+      email: user.email ?? null,
+      phone: user.phone ?? null,
     };
   }
 
@@ -306,6 +369,9 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     const accessStartAt = user.access_start_at ?? null;
     const accessExpiresAt = user.access_expires_at ?? null;
     const accessState = user.access_state;
+    const email = user.email ?? null;
+    const phone = user.phone ?? null;
+    const createdByName = user.created_by_name ?? null;
     if (
       (accountStatus !== 'active' && accountStatus !== 'suspended') ||
       typeof fullName !== 'string' ||
@@ -315,7 +381,10 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       (accessStartAt !== null && typeof accessStartAt !== 'string') ||
       (accessExpiresAt !== null && typeof accessExpiresAt !== 'string') ||
       typeof accessState !== 'string' ||
-      !ACCESS_STATES.has(accessState as AdministrativeUserAccessState)
+      !ACCESS_STATES.has(accessState as AdministrativeUserAccessState) ||
+      (email !== null && typeof email !== 'string') ||
+      (phone !== null && typeof phone !== 'string') ||
+      (createdByName !== null && typeof createdByName !== 'string')
     ) {
       throw new InternalServerErrorException(
         'Administrative user data is invalid.',
@@ -327,9 +396,12 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       access_start_at: accessStartAt,
       access_state: accessState as AdministrativeUserAccessState,
       account_status: accountStatus,
+      created_by_name: createdByName,
+      email,
       full_name: fullName,
       id,
       last_access_at: lastAccessAt,
+      phone,
       role,
     });
   }

@@ -9,6 +9,7 @@ import type { ParsedUserDirectoryQuery } from "@/lib/admin-api/user-directory";
 import { UsersManager } from "./users-manager";
 
 vi.mock("@/app/admin/actions", () => ({
+  createAdministrativeUserAction: vi.fn(async () => ({ status: "idle" })),
   updateAccessWindowAction: vi.fn(async () => ({ status: "idle" })),
   updateAdministrativeUserAction: vi.fn(async () => ({ status: "idle" })),
 }));
@@ -19,6 +20,9 @@ const users: AdministrativeUser[] = [
     accessStartAt: "2026-01-01T05:00:00.000Z",
     accessState: "activo",
     accountStatus: "active",
+    createdByName: null,
+    email: "maria@example.test",
+    phone: "987654321",
     fullName: "María Docente",
     id: "u1",
     lastAccessAt: "2026-08-01T10:00:00.000Z",
@@ -29,6 +33,9 @@ const users: AdministrativeUser[] = [
     accessStartAt: null,
     accessState: "por_vencer",
     accountStatus: "active",
+    createdByName: "Superadministrador Demo",
+    email: "ana@example.test",
+    phone: null,
     fullName: "Ana PorVencer",
     id: "u2",
     lastAccessAt: null,
@@ -39,6 +46,9 @@ const users: AdministrativeUser[] = [
     accessStartAt: null,
     accessState: "expirado",
     accountStatus: "active",
+    createdByName: null,
+    email: null,
+    phone: null,
     fullName: "Luis Expirado",
     id: "u3",
     lastAccessAt: null,
@@ -49,6 +59,9 @@ const users: AdministrativeUser[] = [
     accessStartAt: null,
     accessState: "pausado",
     accountStatus: "suspended",
+    createdByName: null,
+    email: "pedro@example.test",
+    phone: "912345678",
     fullName: "Pedro Pausado",
     id: "u4",
     lastAccessAt: null,
@@ -196,6 +209,45 @@ describe("UsersManager", () => {
     // keeps the main flow of the "Expirados" filter actionable.
     expect(expiry).toHaveValue("2026-07-31");
     expect(expiry).toHaveAttribute("min", TODAY);
+  });
+
+  it("offers the two registration forms the spec asks for", () => {
+    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+
+    expect(screen.getByText("+ Agregar usuario")).toBeVisible();
+    expect(screen.getByText("+ Agregar administrador")).toBeVisible();
+
+    const emails = screen.getAllByLabelText("Correo electrónico");
+    expect(emails[0]).toHaveAttribute("name", "email");
+    expect(emails[0]).toHaveAttribute("type", "email");
+    expect(emails[0]).toBeRequired();
+    expect(screen.getAllByLabelText("Nombre y apellidos")[0]).toHaveAttribute(
+      "name",
+      "fullName",
+    );
+    expect(screen.getAllByLabelText("Celular (opcional)")[0]).toHaveAttribute(
+      "name",
+      "phone",
+    );
+    // El rol viaja oculto: distingue el alta de administrador de la de docente.
+    expect(screen.getByDisplayValue("docente")).toHaveAttribute("name", "role");
+    expect(screen.getByDisplayValue("admin")).toHaveAttribute("name", "role");
+  });
+
+  it("shows the contact details and who registered each user", () => {
+    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+
+    const maria = rowFor("María Docente");
+    expect(within(maria).getByText("maria@example.test")).toBeVisible();
+    expect(within(maria).getByText("987654321")).toBeVisible();
+
+    const ana = rowFor("Ana PorVencer");
+    expect(within(ana).getByText("Superadministrador Demo")).toBeVisible();
+
+    // Sin correo ni celular se dice explicitamente, no se deja en blanco.
+    const luis = rowFor("Luis Expirado");
+    expect(within(luis).getByText("Sin correo")).toBeVisible();
+    expect(within(luis).getByText("Sin celular")).toBeVisible();
   });
 
   it("submits server-side search while preserving active filters", () => {

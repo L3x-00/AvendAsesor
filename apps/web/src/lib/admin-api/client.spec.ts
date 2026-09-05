@@ -195,6 +195,9 @@ const administrativeDirectoryUser = {
   accessExpiresAt: "2026-12-31T04:59:59.999Z",
   accessStartAt: null,
   accessState: "activo" as const,
+  createdByName: null,
+  email: "cuenta@example.test",
+  phone: null,
 };
 
 const auditEvent = {

@@ -11,6 +11,7 @@ const authorization = {
 describe('UserAdministrationService', () => {
   const gateway = {
     countUsers: jest.fn(),
+    createUser: jest.fn(),
     listAuditEvents: jest.fn(),
     listUsers: jest.fn(),
     updateAccessWindow: jest.fn(),
@@ -122,6 +123,56 @@ describe('UserAdministrationService', () => {
         authorization,
       ),
     ).toThrow(BadRequestException);
+  });
+
+  it('normalizes a new user and defaults the role to docente', async () => {
+    gateway.createUser.mockResolvedValue({ id: 'created-id' });
+
+    await service.createUser(
+      {
+        accessExpiresAt: '2027-01-31T00:00:00.000Z',
+        accessStartAt: '',
+        email: '  Nueva.Docente@Example.TEST  ',
+        fullName: '  Nueva Docente  ',
+        phone: '  987654321  ',
+      },
+      authorization,
+    );
+
+    expect(gateway.createUser).toHaveBeenCalledWith({
+      accessExpiresAt: '2027-01-31T00:00:00.000Z',
+      accessStartAt: null,
+      actorId: authorization.userId,
+      email: 'nueva.docente@example.test',
+      fullName: 'Nueva Docente',
+      phone: '987654321',
+      role: 'docente',
+    });
+  });
+
+  it('rejects a phone number that cannot be a real contact', () => {
+    expect(() =>
+      service.createUser(
+        { email: 'a@example.test', fullName: 'Nombre Valido', phone: '123' },
+        authorization,
+      ),
+    ).toThrow(BadRequestException);
+    expect(gateway.createUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new user whose window starts after it ends', () => {
+    expect(() =>
+      service.createUser(
+        {
+          accessExpiresAt: '2027-01-01T00:00:00.000Z',
+          accessStartAt: '2027-02-01T00:00:00.000Z',
+          email: 'a@example.test',
+          fullName: 'Nombre Valido',
+        },
+        authorization,
+      ),
+    ).toThrow(BadRequestException);
+    expect(gateway.createUser).not.toHaveBeenCalled();
   });
 
   it('scopes directory counts to the current group and search', async () => {

@@ -391,7 +391,24 @@ export const administrativeUserSchema = administrativeUserBaseSchema.extend({
   accessExpiresAt: timestampSchema.nullable(),
   accessStartAt: timestampSchema.nullable(),
   accessState: administrativeUserAccessStateSchema,
+  /** Read from the identity provider; the directory never duplicates it. */
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  createdByName: z.string().nullable(),
 });
+
+/**
+ * Registration payload. The email is the login: there is no separate username
+ * and no PIN (ADR-0017). Dates travel as ISO instants.
+ */
+export interface CreateAdministrativeUserInput {
+  accessExpiresAt?: string;
+  accessStartAt?: string;
+  email: string;
+  fullName: string;
+  phone?: string;
+  role?: AdministrativeUser["role"];
+}
 
 export type AdministrativeUser = z.infer<typeof administrativeUserSchema>;
 
