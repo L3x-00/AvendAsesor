@@ -185,6 +185,34 @@ describe('UserAdministrationService', () => {
     });
   });
 
+  it('rejects an access-window date the server cannot parse', () => {
+    expect(() =>
+      service.updateAccessWindow(
+        '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+        { accessExpiresAt: 'no es una fecha', reason: 'Motivo válido.' },
+        authorization,
+      ),
+    ).toThrow(BadRequestException);
+    expect(gateway.updateAccessWindow).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a non-ISO but parseable date to an ISO instant', () => {
+    gateway.updateAccessWindow.mockResolvedValue({ id: 'target-id' });
+
+    void service.updateAccessWindow(
+      '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+      {
+        accessExpiresAt: '2027-01-31T00:00:00-05:00',
+        reason: 'Motivo válido.',
+      },
+      authorization,
+    );
+
+    expect(gateway.updateAccessWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ accessExpiresAt: '2027-01-31T05:00:00.000Z' }),
+    );
+  });
+
   it('rejects an access window whose start is after its expiry', () => {
     expect(() =>
       service.updateAccessWindow(

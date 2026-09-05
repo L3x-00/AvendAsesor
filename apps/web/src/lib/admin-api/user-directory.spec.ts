@@ -45,6 +45,18 @@ describe("user-directory", () => {
     }
   });
 
+  it("does not let inherited object keys escape the allowlist", () => {
+    for (const status of [
+      "toString",
+      "constructor",
+      "valueOf",
+      "hasOwnProperty",
+      "__proto__",
+    ]) {
+      expect(parseUserDirectoryQuery({ status }).status).toBe("all");
+    }
+  });
+
   it("keeps links created before vigencias working", () => {
     expect(parseUserDirectoryQuery({ status: "active" }).status).toBe("activo");
     expect(parseUserDirectoryQuery({ status: "suspended" }).status).toBe(

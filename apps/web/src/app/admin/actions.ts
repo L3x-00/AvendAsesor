@@ -683,6 +683,13 @@ export async function updateAccessWindowAction(
       if (!expiryInstant) {
         throw new FormValidationError("La fecha de fin no es válida.");
       }
+      // The database rejects a past expiry. Saying so here keeps the main flow
+      // of the "Expirados" filter actionable instead of a generic API error.
+      if (Date.parse(expiryInstant) < Date.now()) {
+        throw new FormValidationError(
+          "La fecha de fin ya pasó. Elige una fecha de hoy en adelante para extender la vigencia, o pausa la cuenta desde «Editar acceso» si quieres bloquear el acceso ahora.",
+        );
+      }
       payload.accessExpiresAt = expiryInstant;
     }
 

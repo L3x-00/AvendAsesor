@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(34);
 
 -- Structure ----------------------------------------------------------------
 select has_column(
@@ -270,6 +270,100 @@ select throws_ok(
   '42501',
   'Only an active superadministrator may perform this operation',
   'A non-superadministrator cannot change an access window'
+);
+
+-- The reason is not just validated: it has to survive in the audit trail.
+select is(
+  (select metadata ->> 'reason'
+   from public.operational_audit_events
+   where action = 'access_window_changed'
+     and resource_id = '30000000-0000-0000-0000-00000000000c'
+   order by occurred_at desc, id desc
+   limit 1),
+  'Extensión de vigencia autorizada.',
+  'The access-window audit records the reason that justified the change'
+);
+select isnt(
+  (select access_start_at from public.profiles
+   where id = '30000000-0000-0000-0000-00000000000c'),
+  null,
+  'The informational start date is persisted'
+);
+select isnt(
+  (select items -> 0 ->> 'access_start_at'
+   from public.list_administrative_users_page(
+     '30000000-0000-0000-0000-000000000000', 'Vigencia C', 'docente', null, 25, 0, null)),
+  null,
+  'The directory exposes the access start it stored'
+);
+
+-- Clearing both dates is how an access becomes indefinite again.
+select ok(
+  (select access_start_at is null and access_expires_at is null
+   from public.update_administrative_user_access_window(
+     '30000000-0000-0000-0000-000000000000',
+     '30000000-0000-0000-0000-00000000000c',
+     null, null, 'Vigencia indefinida autorizada.')),
+  'Clearing both dates leaves the access indefinite'
+);
+
+-- Exclusive priority of the row badge: an expired suspension reads as expirado.
+select is(
+  (select items -> 0 ->> 'access_state'
+   from public.list_administrative_users_page(
+     '30000000-0000-0000-0000-000000000000', 'Vigencia F', 'docente', null, 25, 0, null)),
+  'expirado',
+  'An expired and suspended account is labelled expirado, not pausado'
+);
+
+select throws_ok(
+  $self_target$
+    select * from public.update_administrative_user_access_window(
+      '30000000-0000-0000-0000-000000000000',
+      '30000000-0000-0000-0000-000000000000',
+      null, now() + interval '5 days', 'Motivo válido para vigencia.')
+  $self_target$,
+  '22023',
+  'A superadministrator cannot change their own access window',
+  'A superadministrator cannot change their own access window'
+);
+select throws_ok(
+  $count_denied$
+    select * from public.count_administrative_users(
+      '30000000-0000-0000-0000-000000000001', null, 'docente')
+  $count_denied$,
+  '42501',
+  'Only an active superadministrator may perform this operation',
+  'An administrator cannot count the directory'
+);
+
+-- Last-superadministrator invariant: expiry enforcement is fail-closed across
+-- the API, so the last unexpired superadministrator may not be given an expiry.
+insert into auth.users (
+  id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+)
+values (
+  '30000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated',
+  'aw-superadmin-2@example.test', '{}'::jsonb,
+  '{"full_name":"Superadministrador Suplente"}'::jsonb, now(), now()
+);
+update public.profiles
+set role = 'superadmin'::public.app_role
+where id = '30000000-0000-0000-0000-000000000002';
+update public.profiles
+set access_expires_at = now() - interval '1 day'
+where id = '30000000-0000-0000-0000-000000000000';
+
+select throws_ok(
+  $last_superadmin$
+    select * from public.update_administrative_user_access_window(
+      '30000000-0000-0000-0000-000000000000',
+      '30000000-0000-0000-0000-000000000002',
+      null, now() + interval '5 days', 'Motivo válido para vigencia.')
+  $last_superadmin$,
+  '23514',
+  'At least one active superadministrator must keep unexpired access',
+  'The last unexpired superadministrator cannot be given an expiry'
 );
 
 select * from finish();

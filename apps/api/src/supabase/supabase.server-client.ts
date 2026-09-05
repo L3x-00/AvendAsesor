@@ -15,6 +15,7 @@ export interface SupabaseDatabase {
       profiles: {
         Row: {
           access_expires_at: string | null;
+          access_start_at: string | null;
           account_status: AccountStatus;
           created_at: string;
           full_name: string;
@@ -28,6 +29,7 @@ export interface SupabaseDatabase {
         };
         Insert: {
           access_expires_at?: string | null;
+          access_start_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
           full_name: string;
@@ -41,6 +43,7 @@ export interface SupabaseDatabase {
         };
         Update: {
           access_expires_at?: string | null;
+          access_start_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
           full_name?: string;
@@ -1024,6 +1027,7 @@ export interface SupabaseDatabase {
       faq_memory_review_status:
         'pending_review' | 'approved' | 'rejected' | 'suppressed';
       operational_audit_action:
+        | 'access_window_changed'
         | 'chat_history_deleted'
         | 'unanswered_question_reviewed'
         | 'user_role_changed'

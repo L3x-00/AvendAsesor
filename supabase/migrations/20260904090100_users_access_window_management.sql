@@ -183,7 +183,7 @@ comment on function public.list_administrative_users_page(
 ) is 'Returns a stable, filtered page of the SUPERADMIN user directory with access-window fields, a derived access state and its exact total.';
 
 -- 2) Conteos por bucket (mismas definiciones que Inicio; por_vencer ⊂ activos).
-create function public.count_administrative_users(
+create or replace function public.count_administrative_users(
   p_actor_id uuid,
   p_search text default null,
   p_group text default null
@@ -275,7 +275,7 @@ comment on function public.count_administrative_users(uuid, text, text) is
 
 -- 3) Extensión/edición de vigencia auditada. "Extender vigencia" es hacia
 -- adelante: rechaza una expiración ya pasada (usar "Pausar" para bloquear ya).
-create function public.update_administrative_user_access_window(
+create or replace function public.update_administrative_user_access_window(
   p_actor_id uuid,
   p_target_user_id uuid,
   p_access_start_at timestamptz default null,
@@ -303,10 +303,12 @@ declare
 begin
   perform private.require_superadministrator(p_actor_id);
 
-  if p_target_user_id is null then
+  -- Mirrors update_administrative_user: an actor never edits their own access,
+  -- so a superadministrator cannot lock themselves out.
+  if p_target_user_id is null or p_target_user_id = p_actor_id then
     raise exception using
       errcode = '22023',
-      message = 'A target user is required';
+      message = 'A superadministrator cannot change their own access window';
   end if;
 
   if normalized_reason is null
@@ -341,6 +343,29 @@ begin
       message = 'The administrative user was not found';
   end if;
 
+  -- The merged expiry enforcement is fail-closed across the whole API, so
+  -- giving the last active superadministrator an expiry would eventually lock
+  -- every administrator out with no in-app recovery. Same invariant the sibling
+  -- update_administrative_user protects for role and account status.
+  if target.role = 'superadmin'
+    and target.account_status = 'active'
+    and p_access_expires_at is not null
+    and not exists (
+      select 1
+      from public.profiles as profile
+      where profile.id <> target.id
+        and profile.role = 'superadmin'
+        and profile.account_status = 'active'
+        and (
+          profile.access_expires_at is null
+          or profile.access_expires_at >= now()
+        )
+    ) then
+    raise exception using
+      errcode = '23514',
+      message = 'At least one active superadministrator must keep unexpired access';
+  end if;
+
   previous_start := target.access_start_at;
   previous_expires := target.access_expires_at;
 
@@ -360,7 +385,8 @@ begin
       'fromStartAt', previous_start,
       'toStartAt', p_access_start_at,
       'fromExpiresAt', previous_expires,
-      'toExpiresAt', p_access_expires_at
+      'toExpiresAt', p_access_expires_at,
+      'reason', normalized_reason
     )
   );
 

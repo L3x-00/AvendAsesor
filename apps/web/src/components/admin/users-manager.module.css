@@ -279,7 +279,7 @@
 
 .formHint {
   margin: 0 0 0.25rem;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.5;
   color: var(--avend-text-muted);
 }
@@ -301,7 +301,7 @@
   min-height: 2.75rem;
   display: flex;
   align-items: center;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--avend-accent-strong);
 }
@@ -411,6 +411,8 @@
   }
 
   .badgeActive,
+  .badgeExpiring,
+  .badgeExpired,
   .badgePaused {
     justify-self: start;
   }

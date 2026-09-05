@@ -44,7 +44,11 @@ function parseStatus(raw: string | undefined): UserStatusFilter {
   if ((ACCESS_STATE_FILTERS as readonly string[]).includes(raw)) {
     return raw as UserStatusFilter;
   }
-  return LEGACY_STATUS_ALIASES[raw] ?? "all";
+  // Own-property check only: otherwise "toString" or "constructor" would
+  // resolve through the prototype and escape the allowlist as a function.
+  return Object.hasOwn(LEGACY_STATUS_ALIASES, raw)
+    ? LEGACY_STATUS_ALIASES[raw]
+    : "all";
 }
 
 export function parseUserDirectoryQuery(

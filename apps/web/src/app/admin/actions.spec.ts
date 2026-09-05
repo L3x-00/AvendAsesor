@@ -352,12 +352,26 @@ describe("admin server actions", () => {
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
   });
 
+  it("explains a past expiry instead of letting the database reject it", async () => {
+    const formData = new FormData();
+    formData.set("userId", "user-id");
+    formData.set("reason", "Extensión tardía");
+    formData.set("accessExpiresAt", "2020-01-01");
+
+    const state = await updateAccessWindowAction(initialState, formData);
+
+    expect(state.status).toBe("error");
+    expect(state.message).toMatch(/ya pasó/);
+    expect(state.message).toMatch(/pausa la cuenta/i);
+    expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
+  });
+
   it("rejects a window that starts after it ends", async () => {
     const formData = new FormData();
     formData.set("userId", "user-id");
     formData.set("reason", "Rango invertido");
-    formData.set("accessStartAt", "2026-12-31");
-    formData.set("accessExpiresAt", "2026-01-01");
+    formData.set("accessStartAt", "2027-12-31");
+    formData.set("accessExpiresAt", "2027-01-01");
 
     const state = await updateAccessWindowAction(initialState, formData);
 

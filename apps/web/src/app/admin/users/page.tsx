@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { UsersManager } from "@/components/admin/users-manager";
 import { ModulePermissionsManager } from "@/components/admin/module-permissions-manager";
+import { toDateInputValue } from "@/lib/admin-api/access-window";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatOperationalAuditAction,
@@ -69,7 +70,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       userRole={access.role}
     >
       <div className="flex flex-col gap-8">
-        <UsersManager counts={counts} page={userPage} query={query} />
+        <UsersManager
+          counts={counts}
+          page={userPage}
+          query={query}
+          today={toDateInputValue(new Date().toISOString())}
+        />
         <ModulePermissionsManager permissions={modulePermissions} />
 
         <section

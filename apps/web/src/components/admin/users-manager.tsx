@@ -26,6 +26,8 @@ interface UsersManagerProps {
   counts: AdministrativeUserCounts;
   page: AdministrativeUserPage;
   query: ParsedUserDirectoryQuery;
+  /** Today in Lima (YYYY-MM-DD), resolved on the server so hydration matches. */
+  today: string;
 }
 
 const accessDateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -141,7 +143,13 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
   );
 }
 
-function AccessWindowForm({ user }: { user: AdministrativeUser }) {
+function AccessWindowForm({
+  today,
+  user,
+}: {
+  today: string;
+  user: AdministrativeUser;
+}) {
   const fieldId = useId();
 
   return (
@@ -154,9 +162,10 @@ function AccessWindowForm({ user }: { user: AdministrativeUser }) {
       >
         <input name="userId" type="hidden" value={user.id} />
         <p className={styles.formHint}>
-          Deja una fecha vacía para dejarla sin definir. Si borras ambas, el
-          acceso queda sin vencimiento. Para bloquear de inmediato usa
-          «Editar acceso» y pausa la cuenta.
+          El fin debe ser hoy o una fecha posterior. Deja una fecha vacía para
+          dejarla sin definir; si borras ambas, el acceso queda sin vencimiento.
+          Para bloquear el acceso de inmediato usa «Editar acceso» y pausa la
+          cuenta.
         </p>
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
           Inicio
@@ -175,6 +184,7 @@ function AccessWindowForm({ user }: { user: AdministrativeUser }) {
           className={styles.input}
           defaultValue={toDateInputValue(user.accessExpiresAt)}
           id={`${fieldId}-expires`}
+          min={today}
           name="accessExpiresAt"
           type="date"
         />
@@ -200,7 +210,12 @@ function AccessWindowForm({ user }: { user: AdministrativeUser }) {
  * receives only the requested page; the API remains the authority for data,
  * role changes, account state and access windows.
  */
-export function UsersManager({ counts, page, query }: UsersManagerProps) {
+export function UsersManager({
+  counts,
+  page,
+  query,
+  today,
+}: UsersManagerProps) {
   const searchId = useId();
   const totalPages = Math.max(1, Math.ceil(page.total / page.limit));
   const firstVisible = page.total === 0 ? 0 : page.offset + 1;
@@ -335,7 +350,7 @@ export function UsersManager({ counts, page, query }: UsersManagerProps) {
               </span>
               <div className={styles.rowActions}>
                 <UserEditForm user={user} />
-                <AccessWindowForm user={user} />
+                <AccessWindowForm today={today} user={user} />
               </div>
             </li>
           ))}
