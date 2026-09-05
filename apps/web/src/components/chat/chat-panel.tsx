@@ -303,7 +303,7 @@ export function ChatPanel({
     }
     const shouldMoveFocusToComposer = Boolean(
       document.activeElement instanceof HTMLElement &&
-        document.activeElement.closest(".avend-chat-page"),
+      document.activeElement.closest(".avend-chat-page"),
     );
     // Una conversación conserva el módulo con el que fue creada. Cambiar el
     // contexto inicia la siguiente consulta en una conversación nueva, sin
@@ -430,8 +430,7 @@ export function ChatPanel({
   ) {
     setMessages((current) =>
       current.filter(
-        (item) =>
-          item.id !== "streaming" && item.id !== unpersistedQuestionId,
+        (item) => item.id !== "streaming" && item.id !== unpersistedQuestionId,
       ),
     );
     if (retryQuestion) {
@@ -464,7 +463,7 @@ export function ChatPanel({
     setIsStreaming(true);
     setQuestion("");
     setError(null);
-    setStatus("Buscando sustento en los documentos vigentes…");
+    setStatus("Buscando sustento en los documentos aplicables…");
 
     try {
       let currentSources: ChatSource[] = [];
@@ -760,11 +759,7 @@ export function ChatPanel({
                 type="button"
               >
                 <span>Quitar</span>
-                <svg
-                  aria-hidden="true"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
                   <path d="m7 7 10 10M17 7 7 17" />
                 </svg>
               </button>
@@ -775,8 +770,9 @@ export function ChatPanel({
         <section aria-busy={isStreaming} className="avend-chat-conversation">
           {messages.length === 0 ? (
             <p className="avend-chat-empty-state">
-              Escribe una consulta para recibir una respuesta respaldada
-              únicamente por los documentos vigentes disponibles.
+              Escribe una consulta para recibir una respuesta respaldada por
+              documentos vigentes o, cuando lo solicites expresamente, por sus
+              antecedentes históricos identificados con claridad.
             </p>
           ) : (
             messages.map((message, messageIndex) => (

@@ -250,6 +250,7 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
       .select(CHAT_MODULE_COLUMNS)
       .eq('is_active', true)
       .eq('is_deleted', false)
+      .is('parent_module_id', null)
       .order('parent_module_id', { ascending: true, nullsFirst: true })
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });

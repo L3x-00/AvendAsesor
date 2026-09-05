@@ -52,7 +52,9 @@ export async function resolveAuthorizedAdminApiSession(): Promise<AuthorizedAdmi
   };
 }
 
-export async function createAuthorizedAdminApiContext(): Promise<AuthorizedAdminApiContext> {
+export async function createAuthorizedAdminApiContext(
+  options: { requireModulesAccess?: boolean } = {},
+): Promise<AuthorizedAdminApiContext> {
   const session = await resolveAuthorizedAdminApiSession();
 
   if (session.status === "unauthenticated") {
@@ -63,9 +65,15 @@ export async function createAuthorizedAdminApiContext(): Promise<AuthorizedAdmin
     redirect("/access-denied");
   }
 
+  if (options.requireModulesAccess && !session.access.modulesAccess) {
+    redirect("/access-denied");
+  }
+
   return { access: session.access, client: session.client };
 }
 
-export async function createAuthorizedAdminApiClient(): Promise<AdminApiClient> {
-  return (await createAuthorizedAdminApiContext()).client;
+export async function createAuthorizedAdminApiClient(
+  options: { requireModulesAccess?: boolean } = {},
+): Promise<AdminApiClient> {
+  return (await createAuthorizedAdminApiContext(options)).client;
 }

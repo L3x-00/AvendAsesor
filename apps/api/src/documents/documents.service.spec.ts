@@ -12,6 +12,7 @@ import type { UpdateDocumentMetadataDto } from './dto/update-document-metadata.d
 import type { ManagedDocument, StoredDocumentVersion } from './domain/document';
 import type { DocumentsGateway } from './documents.gateway';
 import { DocumentsService } from './documents.service';
+import { UnreadablePdfException } from './pdf-inspection.service';
 
 const authorization: AuthorizationContext = {
   email: 'admin@example.com',
@@ -21,7 +22,15 @@ const authorization: AuthorizationContext = {
 };
 
 const documentRecord: ManagedDocument = {
+  additionalDetail: null,
+  approvalStatus: 'ready',
+  approvalUpdatedAt: '2026-08-10T00:00:00.000Z',
+  approvalUpdatedBy: authorization.userId,
+  approvedVersionId: '70fe3e8e-5a9d-4c7d-8a86-303b49e4c2d6',
   articleReference: null,
+  archiveObservation: null,
+  archiveReasonCode: null,
+  archiveReasonDetail: null,
   createdAt: '2026-08-09T00:00:00.000Z',
   createdBy: authorization.userId,
   currentVersionId: '70fe3e8e-5a9d-4c7d-8a86-303b49e4c2d6',
@@ -31,12 +40,14 @@ const documentRecord: ManagedDocument = {
   deletedAt: null,
   deletedBy: null,
   deletionReason: null,
-  documentType: 'NORMATIVE',
+  documentType: 'LEY',
+  documentTypeOther: null,
   id: '411a0188-bb7c-4ef9-847d-8abf506e67c1',
   isDeleted: false,
   issuanceYear: 2026,
-  issuingEntity: 'AVEND',
-  metadata: { scope: 'local' },
+  issuingEntity: 'MINEDU',
+  issuingEntityOther: null,
+  metadata: { scope: 'local', specificDependency: 'Secretaría General' },
   publicationStatus: 'active',
   replacementDate: null,
   replacementDocumentId: null,
@@ -45,9 +56,20 @@ const documentRecord: ManagedDocument = {
   replacementYear: null,
   resolutionNumber: null,
   situation: 'current',
+  specificDependency: 'Secretaría General',
   title: 'Documento de prueba',
   updatedAt: '2026-08-09T00:00:00.000Z',
   updatedBy: authorization.userId,
+};
+
+const createDocumentDto: CreateDocumentUploadDto = {
+  documentType: 'LEY',
+  issuanceYear: 2026,
+  issuingEntity: 'MINEDU',
+  moduleIds: ['8d4b660b-9e94-4d34-a3d2-2548a83587e1'],
+  situation: 'current',
+  specificDependency: 'Secretaría General',
+  title: 'Documento de prueba',
 };
 
 const versionRecord: StoredDocumentVersion = {
@@ -88,17 +110,20 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
     createDownloadUrl: jest.fn(),
     findById: jest.fn(),
     findVersion: jest.fn(),
+    listAuditEvents: jest.fn(),
     linkModule: jest.fn(),
     list: jest.fn(),
     listActorNames: jest.fn(),
     listLibrary: jest.fn(),
     listModuleIds: jest.fn(),
+    listSuggestions: jest.fn(),
     listVersions: jest.fn(),
     logicalDelete: jest.fn(),
     removePdf: jest.fn(),
     recordDownloadUrl: jest.fn(),
     setStatus: jest.fn(),
     setSituation: jest.fn(),
+    setTechnicalStatus: jest.fn(),
     unlinkModule: jest.fn(),
     updateMetadata: jest.fn(),
     uploadPdf: jest.fn(),
@@ -107,12 +132,16 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
 
 describe('DocumentsService', () => {
   let documentsGateway: jest.Mocked<DocumentsGateway>;
-  let pdfInspectionService: { inspect: jest.Mock };
+  let pdfInspectionService: {
+    inspect: jest.Mock;
+    inspectUnreadable: jest.Mock;
+  };
   let service: DocumentsService;
 
   beforeEach(() => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     documentsGateway = createGateway();
+    documentsGateway.listAuditEvents.mockResolvedValue([]);
     pdfInspectionService = {
       inspect: jest.fn().mockResolvedValue({
         originalFileName: 'documento.pdf',
@@ -120,18 +149,25 @@ describe('DocumentsService', () => {
         sha256: 'a'.repeat(64),
         sizeBytes: 512,
       }),
+      inspectUnreadable: jest.fn().mockReturnValue({
+        originalFileName: 'documento.pdf',
+        pageCount: 1,
+        sha256: 'a'.repeat(64),
+        sizeBytes: 512,
+      }),
     };
-    service = new DocumentsService(documentsGateway, pdfInspectionService);
+    service = new DocumentsService(
+      documentsGateway,
+      pdfInspectionService as never,
+    );
   });
 
   it('validates, stores and persists a new PDF document without overwriting paths', async () => {
     documentsGateway.create.mockResolvedValue(documentRecord);
     const file = createFile();
     const dto: CreateDocumentUploadDto = {
-      documentType: 'NORMATIVE',
+      ...createDocumentDto,
       metadata: { scope: 'local' },
-      moduleIds: ['8d4b660b-9e94-4d34-a3d2-2548a83587e1'],
-      title: 'Documento de prueba',
     };
 
     await expect(service.create(dto, file, authorization)).resolves.toEqual(
@@ -147,10 +183,34 @@ describe('DocumentsService', () => {
     expect(documentsGateway.create).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: authorization.userId,
-        documentType: 'NORMATIVE',
+        documentType: 'LEY',
         moduleIds: dto.moduleIds,
         originalFileName: 'documento.pdf',
         pageCount: 1,
+      }),
+    );
+  });
+
+  it('retains an unreadable PDF and delegates automatic Error classification', async () => {
+    documentsGateway.create.mockResolvedValue(documentRecord);
+    pdfInspectionService.inspect.mockRejectedValue(
+      new UnreadablePdfException(),
+    );
+    const file = createFile();
+
+    await expect(
+      service.create(createDocumentDto, file, authorization),
+    ).resolves.toEqual(documentRecord);
+
+    expect(pdfInspectionService.inspectUnreadable).toHaveBeenCalledWith(file);
+    expect(documentsGateway.uploadPdf).toHaveBeenCalledWith(
+      expect.any(String),
+      file.buffer,
+    );
+    expect(documentsGateway.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processingError:
+          'El archivo tiene estructura PDF, pero la lectura o procesamiento automático falló.',
       }),
     );
   });
@@ -160,11 +220,7 @@ describe('DocumentsService', () => {
     documentsGateway.removePdf.mockResolvedValue(true);
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(documentsGateway.removePdf).toHaveBeenCalledTimes(1);
@@ -176,11 +232,7 @@ describe('DocumentsService', () => {
     documentsGateway.findById.mockResolvedValue(documentRecord);
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).resolves.toEqual(documentRecord);
 
     expect(documentsGateway.removePdf).not.toHaveBeenCalled();
@@ -193,11 +245,7 @@ describe('DocumentsService', () => {
     );
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(documentsGateway.removePdf).not.toHaveBeenCalled();
@@ -208,11 +256,7 @@ describe('DocumentsService', () => {
     documentsGateway.removePdf.mockResolvedValue(false);
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
@@ -223,11 +267,7 @@ describe('DocumentsService', () => {
     documentsGateway.removePdf.mockResolvedValue(true);
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -236,11 +276,7 @@ describe('DocumentsService', () => {
     documentsGateway.removePdf.mockRejectedValue(new Error('storage failure'));
 
     await expect(
-      service.create(
-        { documentType: 'NORMATIVE', title: 'Documento de prueba' },
-        createFile(),
-        authorization,
-      ),
+      service.create(createDocumentDto, createFile(), authorization),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
@@ -281,6 +317,7 @@ describe('DocumentsService', () => {
 
     await expect(service.findOne(documentRecord.id)).resolves.toEqual({
       ...documentRecord,
+      auditEvents: [],
       createdByName: 'Administrador de prueba',
       moduleIds: ['8d4b660b-9e94-4d34-a3d2-2548a83587e1'],
       versions: [
@@ -461,7 +498,7 @@ describe('DocumentsService', () => {
     await expect(
       service.setSituation(
         documentRecord.id,
-        { reason: 'Archivo administrativo', situation: 'archived' },
+        { archiveReasonCode: 'DUPLICATE', situation: 'archived' },
         authorization,
       ),
     ).resolves.toMatchObject({ situation: 'archived' });
@@ -602,9 +639,85 @@ describe('DocumentsService', () => {
 
     expect(documentsGateway.updateMetadata).toHaveBeenCalledWith(
       documentRecord.id,
-      { metadata: { scope: 'updated' }, title: 'Documento actualizado' },
+      {
+        metadata: {
+          scope: 'updated',
+          specificDependency: 'Secretaría General',
+        },
+        title: 'Documento actualizado',
+      },
       authorization.userId,
     );
+  });
+
+  it('replaces editable metadata and clears stale dynamic and optional values', async () => {
+    const customDocument: ManagedDocument = {
+      ...documentRecord,
+      additionalDetail: 'Detalle anterior',
+      articleReference: 'Artículo anterior',
+      documentType: 'OTRO',
+      documentTypeOther: 'Circular interna',
+      issuingEntity: 'OTRA_INSTITUCION',
+      issuingEntityOther: 'Entidad anterior',
+      metadata: {
+        additionalDetail: 'Detalle anterior',
+        documentTypeOther: 'Circular interna',
+        issuingEntityOther: 'Entidad anterior',
+        obsoleteKeyword: 'retirar',
+        specificDependency: 'Oficina anterior',
+      },
+      resolutionNumber: 'ANTERIOR-001',
+      specificDependency: 'Oficina anterior',
+    };
+    documentsGateway.findById.mockResolvedValue(customDocument);
+    documentsGateway.updateMetadata.mockResolvedValue(documentRecord);
+
+    await service.updateMetadata(
+      customDocument.id,
+      {
+        additionalDetail: null,
+        articleReference: null,
+        documentType: 'LEY',
+        issuanceYear: 2026,
+        issuingEntity: 'MINEDU',
+        metadata: { keywords: ['vigente'] },
+        resolutionNumber: null,
+        specificDependency: 'DIGEDD',
+        title: 'Documento actualizado',
+      },
+      authorization,
+    );
+
+    expect(documentsGateway.updateMetadata).toHaveBeenCalledWith(
+      customDocument.id,
+      expect.objectContaining({
+        articleReference: null,
+        documentType: 'LEY',
+        issuingEntity: 'MINEDU',
+        metadata: {
+          keywords: ['vigente'],
+          specificDependency: 'DIGEDD',
+        },
+        resolutionNumber: null,
+      }),
+      authorization.userId,
+    );
+  });
+
+  it('requires a fresh dependency when the issuing entity changes', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+
+    await expect(
+      service.updateMetadata(
+        documentRecord.id,
+        { issuingEntity: 'UGEL' },
+        authorization,
+      ),
+    ).rejects.toThrow(
+      'A new specific dependency is required when the issuing entity changes.',
+    );
+
+    expect(documentsGateway.updateMetadata).not.toHaveBeenCalled();
   });
 
   it('delegates links, unlinking, listing and logical deletion through the protected gateway', async () => {

@@ -51,6 +51,7 @@ function createGateway(): jest.Mocked<ModulesGateway> {
     findById: jest.fn<Promise<ManagedModule | null>, [string]>(),
     hasNonDeletedChildren: jest.fn<Promise<boolean>, [string]>(),
     list: jest.fn<Promise<ManagedModule[]>, [ListModulesOptions]>(),
+    listSummaries: jest.fn(),
     update: jest.fn<
       Promise<ManagedModule | null>,
       [string, UpdateModuleRecord]

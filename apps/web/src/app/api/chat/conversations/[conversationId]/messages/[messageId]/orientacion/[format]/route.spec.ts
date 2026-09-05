@@ -77,6 +77,7 @@ function conversation(
         sources: [
           {
             articleReference: "Artículo 5",
+            documentSituation: "current",
             documentTitle: "Norma oficial",
             id: sourceId,
             moduleName: "Licencias",

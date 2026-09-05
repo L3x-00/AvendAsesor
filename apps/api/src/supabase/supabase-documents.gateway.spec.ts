@@ -152,6 +152,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
         originalFileName: 'documento.pdf',
         pageCount: 1,
         sha256: 'a'.repeat(64),
+        situation: 'current',
         storagePath: versionRow.storage_path,
         title: documentRow.title,
         versionId: versionRow.id,
@@ -173,7 +174,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     expect(rpc.mock.calls).toEqual(
       expect.arrayContaining([
         [
-          'create_document_with_initial_version',
+          'create_governed_document_with_initial_version',
           expect.objectContaining({
             p_document_id: documentRow.id,
             p_metadata: { scope: 'local' },
@@ -181,7 +182,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
           }),
         ],
         [
-          'add_document_version',
+          'add_governed_document_version',
           expect.objectContaining({ p_document_id: documentRow.id }),
         ],
       ]),
@@ -190,9 +191,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
 
   it.each([
     ['P0002', NotFoundException],
+    ['PGRST116', NotFoundException],
     ['22023', BadRequestException],
+    ['23514', BadRequestException],
     ['23503', ConflictException],
     ['23505', ConflictException],
+    ['P0001', ConflictException],
     ['XX000', ServiceUnavailableException],
   ])('maps document database error %s safely', async (code, errorType) => {
     const { client } = createClient({ rpcError: postgrestError(code) });
@@ -327,7 +331,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       expect.objectContaining({ p_document_id: documentRow.id }),
     );
     expect(rpc).toHaveBeenCalledWith(
-      'set_document_situation',
+      'set_governed_document_situation',
       expect.objectContaining({
         p_document_id: documentRow.id,
         p_replacement_year: 2026,
@@ -473,5 +477,284 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     await expect(gateway.removePdf(versionRow.storage_path)).resolves.toBe(
       false,
     );
+  });
+
+  it('preserves ranked frequent values and rejects invalid suggestion responses', async () => {
+    const values = {
+      additionalDetails: ['Oficina recurrente', 'Oficina menos frecuente'],
+      specificDependencies: ['DIGEDD', 'UGEL 05'],
+    };
+    const { client, rpc } = createClient({ rpcData: values });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    await expect(gateway.listSuggestions()).resolves.toEqual(values);
+    expect(rpc).toHaveBeenCalledWith('list_document_value_suggestions');
+
+    for (const data of [
+      null,
+      [],
+      'invalid',
+      {},
+      { additionalDetails: [42], specificDependencies: [] },
+      { additionalDetails: [], specificDependencies: null },
+      { additionalDetails: [], specificDependencies: [false] },
+    ]) {
+      rpc.mockResolvedValueOnce({ data, error: null });
+      await expect(gateway.listSuggestions()).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+    }
+    rpc.mockResolvedValueOnce({ data: null, error: postgrestError('XX000') });
+    await expect(gateway.listSuggestions()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('returns only the requested document audit trail in reverse chronological order', async () => {
+    const event = {
+      id: '2e1460a0-e290-4c6e-9a0b-f122996ab006',
+      document_id: documentRow.id,
+      document_version_id: versionRow.id,
+      action: 'document_archived',
+      details: { archiveReasonCode: 'DUPLICATE' },
+      occurred_at: documentRow.updated_at,
+      actor_id: documentRow.created_by,
+    };
+    const { builder, client, from } = createClient({ data: [event] });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    await expect(gateway.listAuditEvents(documentRow.id)).resolves.toEqual([
+      {
+        id: event.id,
+        versionId: versionRow.id,
+        action: event.action,
+        details: event.details,
+        occurredAt: event.occurred_at,
+        actorId: event.actor_id,
+      },
+    ]);
+    expect(from).toHaveBeenCalledWith('document_audit_events');
+    expect(builder.eq).toHaveBeenCalledWith('document_id', documentRow.id);
+    expect(builder.order.mock.calls).toEqual([
+      ['occurred_at', { ascending: false }],
+      ['id', { ascending: false }],
+    ]);
+    builder.data = null;
+    await expect(gateway.listAuditEvents(documentRow.id)).resolves.toEqual([]);
+    builder.data = [{ ...event, action: '' }];
+    await expect(
+      gateway.listAuditEvents(documentRow.id),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('forwards every library filter and handles an empty or invalid page safely', async () => {
+    const { client, rpc } = createClient({});
+    rpc.mockResolvedValue({ data: null, error: null });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    const options = {
+      limit: 10,
+      offset: 20,
+      sort: 'year' as const,
+      q: 'nombramiento',
+      documentType: 'LEY',
+      issuanceYear: 2009,
+      issuingEntity: 'MINEDU',
+      situation: 'archived' as const,
+      technicalStatus: 'pending_approval' as const,
+      moduleId: documentRow.id,
+      submoduleId: versionRow.id,
+    };
+    await expect(gateway.listLibrary(options)).resolves.toEqual({
+      items: [],
+      limit: 10,
+      offset: 20,
+      total: 0,
+    });
+    expect(rpc).toHaveBeenCalledWith('list_document_library', {
+      p_limit: 10,
+      p_offset: 20,
+      p_sort: 'year',
+      p_query: 'nombramiento',
+      p_document_type: 'LEY',
+      p_issuance_year: 2009,
+      p_issuing_entity: 'MINEDU',
+      p_situation: 'archived',
+      p_technical_status: 'pending_approval',
+      p_module_id: documentRow.id,
+      p_submodule_id: versionRow.id,
+    });
+    rpc.mockResolvedValue({ data: [{ id: 'invalid' }], error: null });
+    await expect(gateway.listLibrary(options)).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+  });
+
+  it('keeps empty reads empty and avoids a profile query when no actors are requested', async () => {
+    const { client, builder, from } = createClient({ data: null });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    await expect(gateway.listActorNames([])).resolves.toEqual({});
+    expect(from).not.toHaveBeenCalled();
+    await expect(
+      gateway.listActorNames([documentRow.created_by]),
+    ).resolves.toEqual({});
+    await expect(
+      gateway.list({ limit: 25, offset: 0, status: 'all' }),
+    ).resolves.toEqual([]);
+    expect(builder.eq).not.toHaveBeenCalledWith(
+      'publication_status',
+      expect.anything(),
+    );
+    await expect(gateway.listVersions(documentRow.id)).resolves.toEqual([]);
+    await expect(gateway.listModuleIds(documentRow.id)).resolves.toEqual([]);
+  });
+
+  it('persists explicit approval and archive reasons without requiring a replacement for duplicate documents', async () => {
+    const { client, rpc } = createClient({});
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    await expect(
+      gateway.setTechnicalStatus(
+        documentRow.id,
+        'ready',
+        documentRow.created_by,
+      ),
+    ).resolves.toMatchObject({ id: documentRow.id });
+    expect(rpc).toHaveBeenLastCalledWith('set_document_technical_status', {
+      p_actor_id: documentRow.created_by,
+      p_document_id: documentRow.id,
+      p_technical_status: 'ready',
+    });
+    await gateway.setSituation(
+      documentRow.id,
+      'archived',
+      documentRow.created_by,
+      {
+        archiveReasonCode: 'DUPLICATE',
+        archiveReasonDetail: 'Duplicado verificado',
+        observation: 'Conservar historial',
+      },
+    );
+    expect(rpc).toHaveBeenLastCalledWith('set_governed_document_situation', {
+      p_actor_id: documentRow.created_by,
+      p_document_id: documentRow.id,
+      p_situation: 'archived',
+      p_archive_reason_code: 'DUPLICATE',
+      p_archive_reason_detail: 'Duplicado verificado',
+      p_observation: 'Conservar historial',
+      p_reason: null,
+      p_replacement_date: null,
+      p_replacement_document_id: null,
+      p_replacement_year: null,
+    });
+    await gateway.setSituation(
+      documentRow.id,
+      'replaced',
+      documentRow.created_by,
+      {
+        reason: 'Sustituido por norma nueva',
+        replacementDate: '2026-09-05',
+        replacementDocumentId: versionRow.id,
+        replacementYear: 2026,
+      },
+    );
+    expect(rpc).toHaveBeenLastCalledWith(
+      'set_governed_document_situation',
+      expect.objectContaining({
+        p_replacement_date: '2026-09-05',
+        p_replacement_document_id: versionRow.id,
+        p_replacement_year: 2026,
+      }),
+    );
+    await gateway.setStatus(
+      documentRow.id,
+      true,
+      undefined,
+      documentRow.created_by,
+    );
+    expect(rpc).toHaveBeenLastCalledWith(
+      'set_document_publication_status',
+      expect.objectContaining({ p_reason: null }),
+    );
+  });
+
+  it('does not claim lifecycle, relation, read or approval success after a database failure', async () => {
+    const { client } = createClient({
+      error: postgrestError('XX000'),
+      rpcError: postgrestError('XX000'),
+    });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    const operations: Array<() => Promise<unknown>> = [
+      () => gateway.findById(documentRow.id),
+      () => gateway.findVersion(documentRow.id, versionRow.id),
+      () => gateway.list({ limit: 25, offset: 0, status: 'all' }),
+      () => gateway.listVersions(documentRow.id),
+      () => gateway.listModuleIds(documentRow.id),
+      () => gateway.listActorNames([documentRow.created_by]),
+      () => gateway.listAuditEvents(documentRow.id),
+      () => gateway.listLibrary({ limit: 25, offset: 0, sort: 'newest' }),
+      () =>
+        gateway.linkModule(
+          documentRow.id,
+          versionRow.id,
+          documentRow.created_by,
+        ),
+      () =>
+        gateway.unlinkModule(
+          documentRow.id,
+          versionRow.id,
+          documentRow.created_by,
+        ),
+      () =>
+        gateway.recordDownloadUrl(
+          documentRow.id,
+          versionRow.id,
+          documentRow.created_by,
+        ),
+      () =>
+        gateway.updateMetadata(
+          documentRow.id,
+          { title: 'No debe guardarse' },
+          documentRow.created_by,
+        ),
+      () =>
+        gateway.setStatus(
+          documentRow.id,
+          true,
+          undefined,
+          documentRow.created_by,
+        ),
+      () =>
+        gateway.setSituation(
+          documentRow.id,
+          'archived',
+          documentRow.created_by,
+          { archiveReasonCode: 'DUPLICATE' },
+        ),
+      () =>
+        gateway.setTechnicalStatus(
+          documentRow.id,
+          'ready',
+          documentRow.created_by,
+        ),
+    ];
+    for (const operation of operations) {
+      await expect(operation()).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    }
+  });
+
+  it('distinguishes duplicate immutable files from a missing signed URL', async () => {
+    const { client, storageBucket } = createClient({
+      storageError: { message: 'The resource already exists' },
+    });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+    await expect(
+      gateway.uploadPdf(versionRow.storage_path, Buffer.from('%PDF-1.7')),
+    ).rejects.toBeInstanceOf(ConflictException);
+    storageBucket.createSignedUrl.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+    await expect(
+      gateway.createDownloadUrl(versionRow.storage_path, 60),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

@@ -240,10 +240,23 @@
 }
 
 .createTitle {
-  margin: 0 0 0.5rem;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
   font-size: 1.0625rem;
   font-weight: 700;
   color: var(--avend-navy);
+}
+
+.createTitle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.createForm {
+  margin-top: 0.75rem;
 }
 
 .presetParent {

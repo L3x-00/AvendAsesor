@@ -99,7 +99,7 @@ select lives_ok(
       'DS-200-2026',
       null,
       '{"keywords":["reglamento"]}'::jsonb,
-      array['00000000-0000-0000-0000-000000009101']::uuid[],
+                  array['00000000-0000-0000-0000-000000009102']::uuid[],
       'documents/00000000-0000-0000-0000-000000009202/versions/00000000-0000-0000-0000-000000009302.pdf',
       'reglamento.pdf',
       2048::bigint,
@@ -211,6 +211,11 @@ select lives_ok(
     select private.set_document_ingestion_status(
       '00000000-0000-0000-0000-000000009301',
       'indexed'
+    );
+    select public.set_document_technical_status(
+      '00000000-0000-0000-0000-000000009201',
+      'ready',
+      '00000000-0000-0000-0000-000000009401'
     );
   $$,
   'The established ingestion worker contract can complete indexing'

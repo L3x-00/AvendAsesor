@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import type {
+  ArchiveReasonCode,
+  DocumentApprovalStatus,
+} from '../document-governance.constants';
 
 export type DocumentMetadata = Record<string, unknown>;
 export type DocumentPublicationFilter = 'active' | 'all' | 'inactive';
@@ -8,10 +12,27 @@ export type DocumentIngestionStatus =
   'failed' | 'indexed' | 'pending' | 'processing';
 export type DocumentTechnicalStatus = 'error' | 'pending_approval' | 'ready';
 export type DocumentLibrarySort =
-  'newest' | 'oldest' | 'title' | 'upload_date' | 'year';
+  | 'document_type'
+  | 'issuing_entity'
+  | 'module'
+  | 'newest'
+  | 'oldest'
+  | 'situation'
+  | 'technical_status'
+  | 'title'
+  | 'upload_date'
+  | 'year';
 
 export interface ManagedDocument {
+  additionalDetail: string | null;
+  approvalStatus: DocumentApprovalStatus;
+  approvalUpdatedAt: string;
+  approvalUpdatedBy: string | null;
+  approvedVersionId: string | null;
   articleReference: string | null;
+  archiveObservation: string | null;
+  archiveReasonCode: ArchiveReasonCode | null;
+  archiveReasonDetail: string | null;
   createdAt: string;
   createdBy: string | null;
   currentVersionId: string | null;
@@ -22,10 +43,12 @@ export interface ManagedDocument {
   deletedBy: string | null;
   deletionReason: string | null;
   documentType: string;
+  documentTypeOther: string | null;
   id: string;
   isDeleted: boolean;
   issuanceYear: number | null;
   issuingEntity: string | null;
+  issuingEntityOther: string | null;
   metadata: DocumentMetadata;
   publicationStatus: DocumentPublicationStatus;
   replacementDate: string | null;
@@ -35,6 +58,7 @@ export interface ManagedDocument {
   replacementYear: number | null;
   resolutionNumber: string | null;
   situation: DocumentSituation;
+  specificDependency: string | null;
   title: string;
   updatedAt: string;
   updatedBy: string | null;
@@ -64,9 +88,26 @@ export interface StoredDocumentVersion extends Omit<
 }
 
 export interface ManagedDocumentDetails extends ManagedDocument {
+  auditEvents: DocumentAuditEvent[];
   createdByName: string | null;
   moduleIds: string[];
   versions: ManagedDocumentVersion[];
+}
+
+export interface DocumentAuditEvent {
+  action: string;
+  actorName: string | null;
+  details: DocumentMetadata;
+  id: string;
+  occurredAt: string;
+  versionId: string | null;
+}
+
+export interface StoredDocumentAuditEvent extends Omit<
+  DocumentAuditEvent,
+  'actorName'
+> {
+  actorId: string | null;
 }
 
 export interface DocumentModuleAssociation {
@@ -79,6 +120,7 @@ export interface DocumentModuleAssociation {
 }
 
 export interface DocumentLibraryItem {
+  additionalDetail: string | null;
   articleReference: string | null;
   createdAt: string;
   createdBy: string | null;
@@ -86,9 +128,11 @@ export interface DocumentLibraryItem {
   currentVersionId: string | null;
   currentVersionUploadedAt: string | null;
   documentType: string;
+  documentTypeOther: string | null;
   id: string;
   issuanceYear: number | null;
   issuingEntity: string | null;
+  issuingEntityOther: string | null;
   metadata: DocumentMetadata;
   moduleAssociations: DocumentModuleAssociation[];
   publicationStatus: DocumentPublicationStatus;
@@ -99,6 +143,7 @@ export interface DocumentLibraryItem {
   replacementYear: number | null;
   resolutionNumber: string | null;
   situation: DocumentSituation;
+  specificDependency: string | null;
   technicalStatus: DocumentTechnicalStatus;
   title: string;
   updatedAt: string;
@@ -126,7 +171,31 @@ const timestampSchema = z
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const documentRowSchema = z.object({
+  approval_status: z
+    .enum(['pending_approval', 'ready'])
+    .optional()
+    .default('pending_approval'),
+  approval_updated_at: timestampSchema.optional(),
+  approval_updated_by: z.string().uuid().nullable().optional().default(null),
+  approved_version_id: z.string().uuid().nullable().optional().default(null),
   article_reference: z.string().nullable(),
+  archive_observation: z.string().nullable().optional().default(null),
+  archive_reason_code: z
+    .enum([
+      'NOT_APPLICABLE',
+      'DEROGATED_OR_EXPIRED',
+      'DUPLICATE',
+      'UPLOADED_BY_ERROR',
+      'INCOMPLETE_INFORMATION',
+      'PENDING_VALIDATION',
+      'HISTORICAL_ANTECEDENT',
+      'REPLACED_BY_NEWER',
+      'OTHER',
+    ])
+    .nullable()
+    .optional()
+    .default(null),
+  archive_reason_detail: z.string().nullable().optional().default(null),
   created_at: timestampSchema,
   created_by: z.string().uuid().nullable(),
   current_version_id: z.string().uuid().nullable(),
@@ -180,7 +249,16 @@ export function toManagedDocument(value: unknown): ManagedDocument {
   }
 
   return {
+    additionalDetail: metadataText(result.data.metadata, 'additionalDetail'),
+    approvalStatus: result.data.approval_status,
+    approvalUpdatedAt:
+      result.data.approval_updated_at ?? result.data.updated_at,
+    approvalUpdatedBy: result.data.approval_updated_by,
+    approvedVersionId: result.data.approved_version_id,
     articleReference: result.data.article_reference,
+    archiveObservation: result.data.archive_observation,
+    archiveReasonCode: result.data.archive_reason_code,
+    archiveReasonDetail: result.data.archive_reason_detail,
     createdAt: result.data.created_at,
     createdBy: result.data.created_by,
     currentVersionId: result.data.current_version_id,
@@ -191,10 +269,15 @@ export function toManagedDocument(value: unknown): ManagedDocument {
     deletedBy: result.data.deleted_by,
     deletionReason: result.data.deletion_reason,
     documentType: result.data.document_type,
+    documentTypeOther: metadataText(result.data.metadata, 'documentTypeOther'),
     id: result.data.id,
     isDeleted: result.data.is_deleted,
     issuanceYear: result.data.issuance_year,
     issuingEntity: result.data.issuing_entity,
+    issuingEntityOther: metadataText(
+      result.data.metadata,
+      'issuingEntityOther',
+    ),
     metadata: result.data.metadata,
     publicationStatus: result.data.publication_status,
     replacementDate: result.data.replacement_date,
@@ -204,6 +287,10 @@ export function toManagedDocument(value: unknown): ManagedDocument {
     replacementYear: result.data.replacement_year,
     resolutionNumber: result.data.resolution_number,
     situation: result.data.situation,
+    specificDependency: metadataText(
+      result.data.metadata,
+      'specificDependency',
+    ),
     title: result.data.title,
     updatedAt: result.data.updated_at,
     updatedBy: result.data.updated_by,
@@ -249,6 +336,58 @@ export function toManagedDocumentVersion(
     uploadedBy: version.uploadedBy,
     uploadedByName,
     versionNumber: version.versionNumber,
+  };
+}
+
+const documentAuditEventRowSchema = z.object({
+  action: z.string().min(1),
+  actor_id: z.string().uuid().nullable(),
+  details: metadataSchema,
+  document_version_id: z.string().uuid().nullable(),
+  id: z.string().uuid(),
+  occurred_at: timestampSchema,
+});
+
+export function toDocumentAuditEvent(
+  value: unknown,
+  actorName: string | null,
+): DocumentAuditEvent {
+  const result = documentAuditEventRowSchema.safeParse(value);
+
+  if (!result.success) {
+    throw new Error(
+      'Document audit event data returned by the store is invalid.',
+    );
+  }
+
+  return {
+    action: result.data.action,
+    actorName,
+    details: result.data.details,
+    id: result.data.id,
+    occurredAt: result.data.occurred_at,
+    versionId: result.data.document_version_id,
+  };
+}
+
+export function toStoredDocumentAuditEvent(
+  value: unknown,
+): StoredDocumentAuditEvent {
+  const result = documentAuditEventRowSchema.safeParse(value);
+
+  if (!result.success) {
+    throw new Error(
+      'Document audit event data returned by the store is invalid.',
+    );
+  }
+
+  return {
+    action: result.data.action,
+    actorId: result.data.actor_id,
+    details: result.data.details,
+    id: result.data.id,
+    occurredAt: result.data.occurred_at,
+    versionId: result.data.document_version_id,
   };
 }
 
@@ -313,6 +452,7 @@ export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
 
   return {
     item: {
+      additionalDetail: metadataText(result.data.metadata, 'additionalDetail'),
       articleReference: result.data.article_reference,
       createdAt: result.data.created_at,
       createdBy: result.data.created_by,
@@ -320,9 +460,17 @@ export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
       currentVersionId: result.data.current_version_id,
       currentVersionUploadedAt: result.data.current_version_uploaded_at,
       documentType: result.data.document_type,
+      documentTypeOther: metadataText(
+        result.data.metadata,
+        'documentTypeOther',
+      ),
       id: result.data.id,
       issuanceYear: result.data.issuance_year,
       issuingEntity: result.data.issuing_entity,
+      issuingEntityOther: metadataText(
+        result.data.metadata,
+        'issuingEntityOther',
+      ),
       metadata: result.data.metadata,
       moduleAssociations: result.data.module_associations.map(
         (association) => ({
@@ -342,6 +490,10 @@ export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
       replacementYear: result.data.replacement_year,
       resolutionNumber: result.data.resolution_number,
       situation: result.data.situation,
+      specificDependency: metadataText(
+        result.data.metadata,
+        'specificDependency',
+      ),
       technicalStatus,
       title: result.data.title,
       updatedAt: result.data.updated_at,
@@ -349,4 +501,9 @@ export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
     },
     total: Number(result.data.total_count),
   };
+}
+
+function metadataText(metadata: DocumentMetadata, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }

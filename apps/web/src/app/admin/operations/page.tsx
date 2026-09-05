@@ -22,6 +22,7 @@ export default async function OperationsPage() {
     <AdminShell
       activeSection="operations"
       description="Revisa indicadores agregados y atiende las consultas que necesitan intervención humana. La administración no modifica el contenido del chat."
+      modulesAccess={access.modulesAccess}
       title="Consultas y reportes"
       userName={access.fullName}
       userRole={access.role}

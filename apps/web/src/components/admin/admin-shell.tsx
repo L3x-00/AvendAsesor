@@ -21,6 +21,7 @@ interface AdminShellProps {
   description: string;
   eyebrow?: string | null;
   headerAside?: ReactNode;
+  modulesAccess: boolean;
   title: string;
   userName: string;
   userRole: AdministrativeRole;
@@ -143,25 +144,29 @@ function getInitials(name: string): string {
     return parts[0].slice(0, 2).toLocaleUpperCase("es-PE");
   }
 
-  return `${parts[0][0]}${parts.at(-1)?.[0] ?? ""}`.toLocaleUpperCase(
-    "es-PE",
-  );
+  return `${parts[0][0]}${parts.at(-1)?.[0] ?? ""}`.toLocaleUpperCase("es-PE");
 }
 
 function AdminNavigation({
   activeSection,
+  modulesAccess,
   userRole,
-}: Pick<AdminShellProps, "activeSection" | "userRole">) {
+}: Pick<AdminShellProps, "activeSection" | "modulesAccess" | "userRole">) {
   return (
     <nav aria-label="Administración" className="avend-admin-navigation">
       {navigation
         .filter(
-          (item) => !item.requiresSuperadmin || userRole === "superadmin",
+          (item) =>
+            (!item.requiresSuperadmin || userRole === "superadmin") &&
+            (modulesAccess ||
+              (item.section !== "modules" && item.section !== "documents")),
         )
         .map((item) => (
           <Link
             aria-current={
-              item.section && item.section === activeSection ? "page" : undefined
+              item.section && item.section === activeSection
+                ? "page"
+                : undefined
             }
             className="avend-admin-navigation-link"
             href={item.href}
@@ -217,6 +222,7 @@ export function AdminShell({
   description,
   eyebrow = "Administración",
   headerAside,
+  modulesAccess,
   title,
   userName,
   userRole,
@@ -254,7 +260,11 @@ export function AdminShell({
             </p>
           </div>
         </div>
-        <AdminNavigation activeSection={activeSection} userRole={userRole} />
+        <AdminNavigation
+          activeSection={activeSection}
+          modulesAccess={modulesAccess}
+          userRole={userRole}
+        />
         <AdminAccount userName={userName} userRole={userRole} />
       </aside>
 
@@ -269,6 +279,7 @@ export function AdminShell({
               <div className="avend-admin-mobile-panel">
                 <AdminNavigation
                   activeSection={activeSection}
+                  modulesAccess={modulesAccess}
                   userRole={userRole}
                 />
                 <AdminAccount userName={userName} userRole={userRole} />

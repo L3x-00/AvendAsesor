@@ -192,11 +192,14 @@ function authHeaders(token, additional = {}) {
 
 function pdfForm(title, moduleIds = []) {
   const form = new FormData();
-  form.set('documentType', 'NORMATIVE');
+  form.set('documentType', 'LEY');
+  form.set('issuanceYear', String(new Date().getFullYear()));
+  form.set('issuingEntity', 'MINEDU');
+  form.set('specificDependency', 'DIGEDD');
   form.set('title', title);
   form.set('metadata', JSON.stringify({ regression: 'local' }));
   form.set('moduleIds', JSON.stringify(moduleIds));
-  form.set('file', new Blob([pdfBytes], { type: 'text/plain' }), 'norma.txt');
+  form.set('file', new Blob([pdfBytes], { type: 'application/pdf' }), 'norma.pdf');
   return form;
 }
 
@@ -287,7 +290,7 @@ async function cleanTemporaryUsersAndModules() {
 
     stage = 'document-version';
     const newVersionForm = new FormData();
-    newVersionForm.set('file', new Blob([pdfBytes], { type: 'application/octet-stream' }), 'norma-v2.bin');
+    newVersionForm.set('file', new Blob([pdfBytes], { type: 'application/pdf' }), 'norma-v2.pdf');
     const versioned = await request(`${backendUrl}/admin/documents/${documentId}/versions`, {
       method: 'POST',
       headers: authHeaders(adminToken),
@@ -310,17 +313,24 @@ async function cleanTemporaryUsersAndModules() {
     });
     if (unlinkedB.status !== 204) throw new Error(`UNLINK_B_STATUS_${unlinkedB.status}`);
 
-    stage = 'document-update-status';
+    stage = 'document-update-and-archive';
     await request(`${backendUrl}/admin/documents/${documentId}`, {
       method: 'PATCH',
       headers: authHeaders(adminToken, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({ title: 'Local document regression updated', metadata: { regression: 'updated' } }),
     });
-    await request(`${backendUrl}/admin/documents/${documentId}/status`, {
+    const archived = await request(`${backendUrl}/admin/documents/${documentId}/situation`, {
       method: 'PATCH',
       headers: authHeaders(adminToken, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ isActive: false, reason: 'Local regression deactivation' }),
+      body: JSON.stringify({
+        archiveReasonCode: 'DUPLICATE',
+        observation: 'Local regression deactivation',
+        situation: 'archived',
+      }),
     });
+    if (archived.body.situation !== 'archived' || archived.body.publicationStatus !== 'inactive') {
+      throw new Error('ARCHIVE_RESPONSE_INVALID');
+    }
 
     stage = 'document-signed-download';
     const signed = await request(`${backendUrl}/admin/documents/${documentId}/download-url`, {
@@ -352,11 +362,6 @@ async function cleanTemporaryUsersAndModules() {
     }
 
     stage = 'document-logical-delete';
-    const unlinkedA = await fetch(`${backendUrl}/admin/documents/${documentId}/modules/${moduleAId}`, {
-      method: 'DELETE',
-      headers: authHeaders(adminToken),
-    });
-    if (unlinkedA.status !== 204) throw new Error(`UNLINK_A_STATUS_${unlinkedA.status}`);
     const deleted = await fetch(`${backendUrl}/admin/documents/${documentId}`, {
       method: 'DELETE',
       headers: authHeaders(adminToken, { 'Content-Type': 'application/json' }),

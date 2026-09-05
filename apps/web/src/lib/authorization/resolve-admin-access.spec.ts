@@ -8,6 +8,7 @@ function createClient(
   overrides: {
     getUser?: AuthorizationSupabaseClient["auth"]["getUser"];
     maybeSingle?: () => PromiseLike<{ data: unknown; error: unknown }>;
+    permission?: () => PromiseLike<{ data: unknown; error: unknown }>;
   } = {},
 ): AuthorizationSupabaseClient {
   const maybeSingle =
@@ -32,6 +33,8 @@ function createClient(
         vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
     },
     from,
+    rpc:
+      overrides.permission ?? vi.fn(async () => ({ data: true, error: null })),
   } as unknown as AuthorizationSupabaseClient;
 }
 
@@ -166,6 +169,7 @@ describe("resolveAdminAccess", () => {
 
     await expect(resolveAdminAccess(adminClient)).resolves.toEqual({
       fullName: "María Administradora",
+      modulesAccess: true,
       role: "admin",
       status: "authorized",
       userId: "user-1",
@@ -186,9 +190,26 @@ describe("resolveAdminAccess", () => {
 
     await expect(resolveAdminAccess(superadminClient)).resolves.toEqual({
       fullName: "Juan Superadministrador",
+      modulesAccess: true,
       role: "superadmin",
       status: "authorized",
       userId: "user-1",
+    });
+  });
+
+  it("fails closed when the module permission lookup fails", async () => {
+    const unavailable = createClient({
+      permission: vi.fn(async () => ({ data: null, error: {} })),
+    });
+    const malformed = createClient({
+      permission: vi.fn(async () => ({ data: "yes", error: null })),
+    });
+
+    await expect(resolveAdminAccess(unavailable)).resolves.toEqual({
+      status: "unauthorized",
+    });
+    await expect(resolveAdminAccess(malformed)).resolves.toEqual({
+      status: "unauthorized",
     });
   });
 

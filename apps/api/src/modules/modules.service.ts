@@ -32,11 +32,18 @@ export class ModulesService {
       code: dto.code,
       createdBy: authorization.userId,
       description: dto.description,
+      isActive: dto.isActive,
       metadata: dto.metadata,
       name: dto.name,
       parentModuleId: dto.parentModuleId,
       sortOrder: dto.sortOrder,
       updatedBy: authorization.userId,
+    });
+  }
+
+  listSummaries(dto: ListModulesQueryDto) {
+    return this.modulesGateway.listSummaries({
+      status: dto.status ?? 'all',
     });
   }
 

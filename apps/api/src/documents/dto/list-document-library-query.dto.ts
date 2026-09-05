@@ -75,7 +75,18 @@ export class ListDocumentLibraryQueryDto {
   situation?: DocumentSituation;
 
   @IsOptional()
-  @IsIn(['newest', 'oldest', 'year', 'title', 'upload_date'])
+  @IsIn([
+    'newest',
+    'oldest',
+    'year',
+    'title',
+    'upload_date',
+    'document_type',
+    'issuing_entity',
+    'situation',
+    'technical_status',
+    'module',
+  ])
   sort?: DocumentLibrarySort;
 
   @IsOptional()

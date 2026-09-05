@@ -16,10 +16,12 @@ function moduleBuilder(result: { data?: unknown; error?: unknown }) {
     data: result.data ?? null,
     eq: jest.fn(),
     error: result.error ?? null,
+    is: jest.fn(),
     order: jest.fn(),
     select: jest.fn(),
   };
   builder.eq.mockReturnValue(builder);
+  builder.is.mockReturnValue(builder);
   builder.order.mockReturnValue(builder);
   builder.select.mockReturnValue(builder);
   return builder;
@@ -308,6 +310,7 @@ describe('SupabaseChatGatewayAdapter', () => {
     expect(from).toHaveBeenCalledWith('modules');
     expect(modules.eq).toHaveBeenCalledWith('is_active', true);
     expect(modules.eq).toHaveBeenCalledWith('is_deleted', false);
+    expect(modules.is).toHaveBeenCalledWith('parent_module_id', null);
 
     await expect(
       gateway.listConversations({ cursor: null, limit: 20, userId }),

@@ -19,6 +19,7 @@ export type ChatModule = z.infer<typeof chatModuleSchema>;
 
 export const chatSourceSchema = z.object({
   articleReference: z.string().max(500).nullable(),
+  documentSituation: z.enum(["current", "replaced", "archived"]),
   documentTitle: z.string().min(1).max(500),
   id: z.string().uuid(),
   moduleName: z.string().max(255).nullable(),

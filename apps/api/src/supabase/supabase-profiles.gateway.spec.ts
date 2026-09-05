@@ -19,7 +19,11 @@ function createProfilesClient(result: {
         }),
       }),
     }),
-    rpc: () => Promise.resolve({ error: null }),
+    rpc: (functionName) =>
+      Promise.resolve({
+        data: functionName === 'has_admin_module_access' ? false : undefined,
+        error: null,
+      }),
   };
 }
 
@@ -45,6 +49,7 @@ describe('SupabaseProfilesGatewayAdapter', () => {
       accountStatus: 'active',
       fullName: 'Docente Demo',
       id: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+      modulesAccess: false,
       role: 'docente',
     });
   });

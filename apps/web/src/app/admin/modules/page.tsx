@@ -7,22 +7,34 @@ import {
 } from "@/lib/admin-api/module-hierarchy";
 
 export default async function ModulesPage() {
-  const { access, client } = await createAuthorizedAdminApiContext();
-  const modules = await client.listModules("all");
+  const { access, client } = await createAuthorizedAdminApiContext({
+    requireModulesAccess: true,
+  });
+  const modules = await client.listModuleSummaries("all");
 
   return (
     <AdminShell
       activeSection="modules"
-      description="Organiza la biblioteca por módulos y submódulos. Entra a un módulo para ver sus submódulos; los documentos se gestionan en Historial de documentos."
+      description="Organiza la biblioteca por módulos y submódulos. La carga principal se realiza dentro del módulo o submódulo correspondiente."
       title="Módulos"
+      modulesAccess={access.modulesAccess}
       userName={access.fullName}
       userRole={access.role}
     >
-      <ModulesExplorer
-        context={{ kind: "root" }}
-        modules={rootModuleViews(modules)}
-        parents={parentOptions(modules)}
-      />
+      <div className="space-y-6">
+        <nav aria-label="Ruta de navegación" className="text-base">
+          <ol className="flex items-center text-avend-text-muted">
+            <li aria-current="page" className="font-semibold text-avend-text">
+              Módulos
+            </li>
+          </ol>
+        </nav>
+        <ModulesExplorer
+          context={{ kind: "root" }}
+          modules={rootModuleViews(modules)}
+          parents={parentOptions(modules)}
+        />
+      </div>
     </AdminShell>
   );
 }

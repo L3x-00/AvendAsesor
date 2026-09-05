@@ -13,7 +13,18 @@ export interface ParsedDocumentLibraryQuery extends DocumentLibraryQuery {
 const uuidSchema = z.string().uuid();
 const situations = new Set(["archived", "current", "replaced"]);
 const technicalStatuses = new Set(["error", "pending_approval", "ready"]);
-const sorts = new Set(["newest", "oldest", "title", "upload_date", "year"]);
+const sorts = new Set([
+  "document_type",
+  "issuing_entity",
+  "module",
+  "newest",
+  "oldest",
+  "situation",
+  "technical_status",
+  "title",
+  "upload_date",
+  "year",
+]);
 
 function first(value: SearchValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -89,6 +100,7 @@ export function countDocumentLibraryFilters(
 export function documentLibraryHref(
   query: ParsedDocumentLibraryQuery,
   page: number,
+  basePath = "/admin/documents",
 ): string {
   const params = new URLSearchParams();
 
@@ -108,5 +120,5 @@ export function documentLibraryHref(
   if (page > 1) params.set("page", String(page));
 
   const serialized = params.toString();
-  return serialized ? `/admin/documents?${serialized}` : "/admin/documents";
+  return serialized ? `${basePath}?${serialized}` : basePath;
 }

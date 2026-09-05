@@ -7,6 +7,7 @@ const input = {
   matchCount: 5,
   matchThreshold: 0.7,
   query: 'Consulta normativa',
+  retrievalScope: 'historical' as const,
   selectedModuleId: null,
 };
 
@@ -25,6 +26,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           chunk_content: 'Texto',
           chunk_id: 'chunk',
           document_id: 'document',
+          document_situation: 'replaced',
           document_title: 'Norma',
           document_version_id: 'version',
           lexical_score: 0.4,
@@ -46,13 +48,17 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
     await expect(gateway.search(input)).resolves.toEqual([
       expect.objectContaining({
         chunkId: 'chunk',
+        documentSituation: 'replaced',
         documentTitle: 'Norma',
         semanticScore: 0.9,
       }),
     ]);
     expect(rpc).toHaveBeenCalledWith(
-      'search_document_chunks',
-      expect.objectContaining({ p_query_text: input.query }),
+      'search_document_chunks_by_situation',
+      expect.objectContaining({
+        p_query_text: input.query,
+        p_retrieval_scope: 'historical',
+      }),
     );
   });
 

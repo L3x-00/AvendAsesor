@@ -122,7 +122,24 @@ export interface SupabaseDatabase {
       };
       documents: {
         Row: {
+          approval_status: 'pending_approval' | 'ready';
+          approval_updated_at: string;
+          approval_updated_by: string | null;
+          approved_version_id: string | null;
           article_reference: string | null;
+          archive_observation: string | null;
+          archive_reason_code:
+            | 'NOT_APPLICABLE'
+            | 'DEROGATED_OR_EXPIRED'
+            | 'DUPLICATE'
+            | 'UPLOADED_BY_ERROR'
+            | 'INCOMPLETE_INFORMATION'
+            | 'PENDING_VALIDATION'
+            | 'HISTORICAL_ANTECEDENT'
+            | 'REPLACED_BY_NEWER'
+            | 'OTHER'
+            | null;
+          archive_reason_detail: string | null;
           created_at: string;
           created_by: string | null;
           current_version_id: string | null;
@@ -182,6 +199,44 @@ export interface SupabaseDatabase {
           created_by: string | null;
           document_id: string;
           module_id: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      document_audit_events: {
+        Row: {
+          action: SupabaseDatabase['public']['Enums']['document_audit_action'];
+          actor_id: string | null;
+          details: Json;
+          document_id: string;
+          document_version_id: string | null;
+          id: string;
+          occurred_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      admin_module_permissions: {
+        Row: {
+          can_access: boolean;
+          updated_at: string;
+          updated_by: string;
+          user_id: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      admin_module_permission_events: {
+        Row: {
+          actor_id: string;
+          can_access: boolean;
+          id: string;
+          occurred_at: string;
+          reason: string;
+          user_id: string;
         };
         Insert: never;
         Update: never;
@@ -256,22 +311,27 @@ export interface SupabaseDatabase {
     };
     Views: Record<string, never>;
     Functions: {
-      add_document_version: {
+      add_governed_document_version: {
         Args: {
           p_actor_id: string;
           p_document_id: string;
           p_file_size_bytes: number;
           p_original_file_name: string;
           p_page_count: number;
+          p_processing_error: string | null;
           p_sha256: string;
           p_storage_path: string;
           p_version_id: string;
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
-      create_document_with_initial_version: {
+      create_governed_document_with_initial_version: {
         Args: {
           p_actor_id: string;
+          p_archive_reason_code:
+            | SupabaseDatabase['public']['Enums']['document_archive_reason']
+            | null;
+          p_archive_reason_detail: string | null;
           p_article_reference: string | null;
           p_document_id: string;
           p_document_type: string;
@@ -280,15 +340,70 @@ export interface SupabaseDatabase {
           p_issuing_entity: string | null;
           p_metadata: Json;
           p_module_ids: string[];
+          p_observation: string | null;
           p_original_file_name: string;
           p_page_count: number;
+          p_processing_error: string | null;
+          p_reason: string | null;
+          p_replacement_date: string | null;
+          p_replacement_document_id: string | null;
+          p_replacement_year: number | null;
           p_resolution_number: string | null;
           p_sha256: string;
           p_storage_path: string;
+          p_situation: 'archived' | 'current' | 'replaced';
           p_title: string;
           p_version_id: string;
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
+      };
+      current_user_has_admin_module_access: {
+        Args: Record<never, never>;
+        Returns: boolean;
+      };
+      has_admin_module_access: {
+        Args: { p_user_id: string };
+        Returns: boolean;
+      };
+      list_admin_module_permissions: {
+        Args: { p_actor_id: string };
+        Returns: {
+          can_access: boolean;
+          full_name: string;
+          role: 'admin' | 'superadmin';
+          updated_at: string | null;
+          updated_by: string | null;
+          user_id: string;
+        }[];
+      };
+      set_admin_module_permission: {
+        Args: {
+          p_actor_id: string;
+          p_can_access: boolean;
+          p_reason: string;
+          p_target_user_id: string;
+        };
+        Returns: {
+          can_access: boolean;
+          full_name: string;
+          role: 'admin' | 'superadmin';
+          updated_at: string | null;
+          updated_by: string | null;
+          user_id: string;
+        }[];
+      };
+      list_module_summaries: {
+        Args: { p_status: 'active' | 'all' | 'inactive' };
+        Returns: Array<
+          SupabaseDatabase['public']['Tables']['modules']['Row'] & {
+            document_count: number;
+            submodule_count: number;
+          }
+        >;
+      };
+      list_document_value_suggestions: {
+        Args: Record<never, never>;
+        Returns: Json;
       };
       link_document_module: {
         Args: {
@@ -312,7 +427,17 @@ export interface SupabaseDatabase {
           p_offset: number;
           p_query: string | null;
           p_situation: 'archived' | 'current' | 'replaced' | null;
-          p_sort: 'newest' | 'oldest' | 'title' | 'upload_date' | 'year';
+          p_sort:
+            | 'document_type'
+            | 'issuing_entity'
+            | 'module'
+            | 'newest'
+            | 'oldest'
+            | 'situation'
+            | 'technical_status'
+            | 'title'
+            | 'upload_date'
+            | 'year';
           p_submodule_id: string | null;
           p_technical_status: 'error' | 'pending_approval' | 'ready' | null;
         };
@@ -362,9 +487,13 @@ export interface SupabaseDatabase {
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
-      set_document_situation: {
+      set_governed_document_situation: {
         Args: {
           p_actor_id: string;
+          p_archive_reason_code:
+            | SupabaseDatabase['public']['Enums']['document_archive_reason']
+            | null;
+          p_archive_reason_detail: string | null;
           p_document_id: string;
           p_observation: string | null;
           p_reason: string | null;
@@ -372,6 +501,14 @@ export interface SupabaseDatabase {
           p_replacement_document_id: string | null;
           p_replacement_year: number | null;
           p_situation: 'archived' | 'current' | 'replaced';
+        };
+        Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
+      };
+      set_document_technical_status: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_technical_status: 'pending_approval' | 'ready';
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
@@ -782,6 +919,34 @@ export interface SupabaseDatabase {
           version_number: number;
         }[];
       };
+      search_document_chunks_by_situation: {
+        Args: {
+          p_match_count?: number;
+          p_match_threshold?: number;
+          p_query_embedding: number[];
+          p_query_text: string;
+          p_retrieval_scope?: 'archived_explicit' | 'current' | 'historical';
+          p_selected_module_id?: string | null;
+        };
+        Returns: {
+          article_reference: string | null;
+          chunk_content: string;
+          chunk_id: string;
+          document_id: string;
+          document_situation: 'archived' | 'current' | 'replaced';
+          document_title: string;
+          document_version_id: string;
+          lexical_score: number;
+          module_ids: string[];
+          module_names: string[];
+          numeral_reference: string | null;
+          page_end: number;
+          page_start: number;
+          section_title: string | null;
+          semantic_score: number;
+          version_number: number;
+        }[];
+      };
     };
     Enums: {
       app_role: UserRole;
@@ -801,6 +966,17 @@ export interface SupabaseDatabase {
         'failed' | 'indexed' | 'pending' | 'processing';
       document_publication_status: 'active' | 'inactive';
       document_situation: 'archived' | 'current' | 'replaced';
+      document_approval_status: 'pending_approval' | 'ready';
+      document_archive_reason:
+        | 'NOT_APPLICABLE'
+        | 'DEROGATED_OR_EXPIRED'
+        | 'DUPLICATE'
+        | 'UPLOADED_BY_ERROR'
+        | 'INCOMPLETE_INFORMATION'
+        | 'PENDING_VALIDATION'
+        | 'HISTORICAL_ANTECEDENT'
+        | 'REPLACED_BY_NEWER'
+        | 'OTHER';
       chat_message_role: 'assistant' | 'clarification' | 'no_evidence' | 'user';
       unanswered_question_reason: 'ambiguous_request' | 'insufficient_evidence';
       unanswered_question_status: 'pending_review' | 'resolved' | 'dismissed';

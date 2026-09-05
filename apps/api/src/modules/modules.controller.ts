@@ -16,6 +16,8 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AuthorizationGuard,
   CurrentAuthorization,
+  FeaturesGuard,
+  RequireFeatures,
   RequireRoles,
   RolesGuard,
   type AuthorizationContext,
@@ -27,12 +29,14 @@ import { SetModuleStatusDto } from './dto/set-module-status.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 import { UpdateModulePositionDto } from './dto/update-module-position.dto';
 import type { ManagedModule } from './domain/module';
+import type { ManagedModuleSummary } from './modules.gateway';
 import { ModulesService } from './modules.service';
 
 @Controller('admin/modules')
-@UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
+@UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard, FeaturesGuard)
 @Throttle({ default: { limit: 10, ttl: 60_000 } })
 @RequireRoles('admin', 'superadmin')
+@RequireFeatures('modules')
 export class ModulesController {
   constructor(private readonly modulesService: ModulesService) {}
 
@@ -48,6 +52,13 @@ export class ModulesController {
   @Get()
   list(@Query() dto: ListModulesQueryDto): Promise<ManagedModule[]> {
     return this.modulesService.list(dto);
+  }
+
+  @Get('summary')
+  listSummaries(
+    @Query() dto: ListModulesQueryDto,
+  ): Promise<ManagedModuleSummary[]> {
+    return this.modulesService.listSummaries(dto);
   }
 
   @Get(':id')

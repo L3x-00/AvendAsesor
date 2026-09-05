@@ -14,6 +14,7 @@ export default async function AdminPage() {
       description="Resumen general del sistema y accesos principales."
       eyebrow={null}
       headerAside={<AdminCurrentTime initialNow={initialNow} />}
+      modulesAccess={access.modulesAccess}
       title="PANEL DE ADMINISTRACIÓN AVEND ASESOR"
       userName={access.fullName}
       userRole={access.role}

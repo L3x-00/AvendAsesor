@@ -9,6 +9,7 @@ import { validateEnvironment } from './config/environment.validation';
 import { HealthModule } from './health/health.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ModulesModule } from './modules/modules.module';
+import { ModulePermissionsModule } from './module-permissions/module-permissions.module';
 import { UsersModule } from './users/users.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { RagModule } from './rag/rag.module';
@@ -38,6 +39,7 @@ import { UserAdministrationModule } from './user-administration/user-administrat
     HealthModule,
     IngestionModule,
     RagModule,
+    ModulePermissionsModule,
     ModulesModule,
     OperationsModule,
     UserAdministrationModule,

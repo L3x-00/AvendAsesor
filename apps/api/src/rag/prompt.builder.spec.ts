@@ -9,6 +9,7 @@ const source = {
   chunkContent: 'Texto válido.',
   chunkId: 'chunk-id',
   documentId: 'document-id',
+  documentSituation: 'current' as const,
   documentTitle: 'Norma docente',
   documentVersionId: 'version-id',
   lexicalScore: 0.1,

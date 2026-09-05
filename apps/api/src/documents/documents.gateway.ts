@@ -6,8 +6,13 @@ import type {
   DocumentSituation,
   DocumentTechnicalStatus,
   ManagedDocument,
+  StoredDocumentAuditEvent,
   StoredDocumentVersion,
 } from './domain/document';
+import type {
+  ArchiveReasonCode,
+  DocumentApprovalStatus,
+} from './document-governance.constants';
 
 export interface DocumentLibraryQuery {
   documentType?: string;
@@ -25,6 +30,8 @@ export interface DocumentLibraryQuery {
 
 export interface CreateDocumentRecord {
   actorId: string;
+  archiveReasonCode?: ArchiveReasonCode;
+  archiveReasonDetail?: string;
   articleReference?: string | null;
   documentId: string;
   documentType: string;
@@ -33,11 +40,18 @@ export interface CreateDocumentRecord {
   issuingEntity?: string | null;
   metadata: DocumentMetadata;
   moduleIds: string[];
+  observation?: string;
   originalFileName: string;
   pageCount: number;
+  processingError?: string;
   resolutionNumber?: string | null;
+  reason?: string;
+  replacementDate?: string;
+  replacementDocumentId?: string;
+  replacementYear?: number;
   sha256: string;
   storagePath: string;
+  situation: DocumentSituation;
   title: string;
   versionId: string;
 }
@@ -48,6 +62,7 @@ export interface AddDocumentVersionRecord {
   fileSizeBytes: number;
   originalFileName: string;
   pageCount: number;
+  processingError?: string;
   sha256: string;
   storagePath: string;
   versionId: string;
@@ -76,6 +91,7 @@ export interface DocumentsGateway {
     documentId: string,
     versionId: string,
   ): Promise<StoredDocumentVersion | null>;
+  listAuditEvents(documentId: string): Promise<StoredDocumentAuditEvent[]>;
   linkModule(
     documentId: string,
     moduleId: string,
@@ -90,6 +106,10 @@ export interface DocumentsGateway {
   listLibrary(options: DocumentLibraryQuery): Promise<DocumentLibraryPage>;
   listModuleIds(documentId: string): Promise<string[]>;
   listVersions(documentId: string): Promise<StoredDocumentVersion[]>;
+  listSuggestions(): Promise<{
+    additionalDetails: string[];
+    specificDependencies: string[];
+  }>;
   logicalDelete(
     documentId: string,
     reason: string,
@@ -112,12 +132,19 @@ export interface DocumentsGateway {
     situation: DocumentSituation,
     actorId: string,
     options: {
+      archiveReasonCode?: ArchiveReasonCode;
+      archiveReasonDetail?: string;
       observation?: string;
       reason?: string;
       replacementDate?: string;
       replacementDocumentId?: string;
       replacementYear?: number;
     },
+  ): Promise<ManagedDocument>;
+  setTechnicalStatus(
+    documentId: string,
+    technicalStatus: DocumentApprovalStatus,
+    actorId: string,
   ): Promise<ManagedDocument>;
   unlinkModule(
     documentId: string,

@@ -18,9 +18,15 @@ import { type ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { type LogicalDeleteDocumentDto } from './dto/logical-delete-document.dto';
 import { type SetDocumentStatusDto } from './dto/set-document-status.dto';
 import { type SetDocumentSituationDto } from './dto/set-document-situation.dto';
+import { type SetDocumentTechnicalStatusDto } from './dto/set-document-technical-status.dto';
 import { type UpdateDocumentMetadataDto } from './dto/update-document-metadata.dto';
 import {
+  currentDocumentYear,
+  type ArchiveReasonCode,
+} from './document-governance.constants';
+import {
   toManagedDocumentVersion,
+  toDocumentAuditEvent,
   type DocumentMetadata,
   type DocumentLibraryPage,
   type ManagedDocument,
@@ -30,7 +36,11 @@ import type {
   DocumentMetadataPatch,
   DocumentsGateway,
 } from './documents.gateway';
-import { PdfInspectionService } from './pdf-inspection.service';
+import {
+  PdfInspectionService,
+  UnreadablePdfException,
+  type InspectedPdf,
+} from './pdf-inspection.service';
 
 const DOWNLOAD_URL_TTL_SECONDS = 60;
 const MAX_METADATA_BYTES = 8 * 1024;
@@ -51,14 +61,174 @@ function ensureMetadataSize(metadata: DocumentMetadata): void {
 
 function hasMetadataUpdate(dto: UpdateDocumentMetadataDto): boolean {
   return (
+    dto.additionalDetail !== undefined ||
     dto.articleReference !== undefined ||
     dto.documentType !== undefined ||
+    dto.documentTypeOther !== undefined ||
     dto.issuanceYear !== undefined ||
     dto.issuingEntity !== undefined ||
+    dto.issuingEntityOther !== undefined ||
     dto.metadata !== undefined ||
     dto.resolutionNumber !== undefined ||
+    dto.specificDependency !== undefined ||
     dto.title !== undefined
   );
+}
+
+const RESERVED_METADATA_KEYS = [
+  'additionalDetail',
+  'documentTypeOther',
+  'issuingEntityOther',
+  'specificDependency',
+] as const;
+
+function optionalMetadataText(
+  metadata: DocumentMetadata,
+  key: (typeof RESERVED_METADATA_KEYS)[number],
+): string | undefined {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function governedMetadata(
+  base: DocumentMetadata,
+  values: {
+    additionalDetail?: string | null;
+    documentTypeOther?: string | null;
+    issuingEntityOther?: string | null;
+    specificDependency?: string | null;
+  },
+): DocumentMetadata {
+  const result: DocumentMetadata = { ...base };
+
+  for (const key of RESERVED_METADATA_KEYS) delete result[key];
+  for (const key of RESERVED_METADATA_KEYS) {
+    const value = values[key];
+    if (typeof value === 'string' && value.trim()) result[key] = value.trim();
+  }
+
+  return result;
+}
+
+function validateGovernedMetadata(input: {
+  documentType: string;
+  issuanceYear: number | null | undefined;
+  issuingEntity: string | null | undefined;
+  metadata: DocumentMetadata;
+}): void {
+  const documentTypeOther = optionalMetadataText(
+    input.metadata,
+    'documentTypeOther',
+  );
+  const issuingEntityOther = optionalMetadataText(
+    input.metadata,
+    'issuingEntityOther',
+  );
+  const specificDependency = optionalMetadataText(
+    input.metadata,
+    'specificDependency',
+  );
+
+  if ((input.documentType === 'OTRO') !== Boolean(documentTypeOther)) {
+    throw new BadRequestException(
+      'A custom document type is required only when document type is OTRO.',
+    );
+  }
+  if (
+    (input.issuingEntity === 'OTRA_INSTITUCION') !==
+    Boolean(issuingEntityOther)
+  ) {
+    throw new BadRequestException(
+      'A custom issuing entity is required only for OTRA_INSTITUCION.',
+    );
+  }
+  if (!specificDependency) {
+    throw new BadRequestException('A specific dependency is required.');
+  }
+  if (
+    input.issuanceYear === null ||
+    input.issuanceYear === undefined ||
+    input.issuanceYear < 1800 ||
+    input.issuanceYear > currentDocumentYear()
+  ) {
+    throw new BadRequestException('Document year is invalid.');
+  }
+}
+
+function effectiveSituation(dto: {
+  archiveReasonCode?: ArchiveReasonCode;
+  situation: 'archived' | 'current' | 'replaced';
+}): 'archived' | 'current' | 'replaced' {
+  return dto.situation === 'archived' &&
+    dto.archiveReasonCode === 'REPLACED_BY_NEWER'
+    ? 'replaced'
+    : dto.situation;
+}
+
+function validateSituationInput(dto: {
+  archiveReasonCode?: ArchiveReasonCode;
+  archiveReasonDetail?: string;
+  observation?: string;
+  reason?: string;
+  replacementDate?: string;
+  replacementDocumentId?: string;
+  replacementYear?: number;
+  situation: 'archived' | 'current' | 'replaced';
+}): 'archived' | 'current' | 'replaced' {
+  const situation = effectiveSituation(dto);
+  const hasReplacement = Boolean(
+    dto.replacementDate || dto.replacementDocumentId || dto.replacementYear,
+  );
+
+  if (situation === 'current') {
+    if (
+      dto.archiveReasonCode ||
+      dto.archiveReasonDetail ||
+      dto.observation ||
+      dto.reason ||
+      hasReplacement
+    ) {
+      throw new BadRequestException(
+        'A current document cannot contain archival or replacement data.',
+      );
+    }
+    return situation;
+  }
+
+  if (situation === 'archived') {
+    if (!dto.archiveReasonCode) {
+      throw new BadRequestException('An archive reason is required.');
+    }
+    if (
+      (dto.archiveReasonCode === 'OTHER') !==
+      Boolean(dto.archiveReasonDetail)
+    ) {
+      throw new BadRequestException(
+        'A custom archive reason is required only for OTHER.',
+      );
+    }
+    if (dto.reason || hasReplacement) {
+      throw new BadRequestException(
+        'Only replacement archival may contain replacement data.',
+      );
+    }
+    return situation;
+  }
+
+  if (!dto.reason || (!dto.replacementDate && !dto.replacementYear)) {
+    throw new BadRequestException(
+      'A replaced document requires a reason and a replacement date or year.',
+    );
+  }
+  if (dto.archiveReasonCode && dto.archiveReasonCode !== 'REPLACED_BY_NEWER') {
+    throw new BadRequestException('Replacement archive reason is invalid.');
+  }
+  if (dto.archiveReasonDetail) {
+    throw new BadRequestException(
+      'A replaced document cannot contain a custom archive reason.',
+    );
+  }
+  return situation;
 }
 
 @Injectable()
@@ -77,7 +247,8 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     await this.requireLiveDocument(documentId);
-    const inspectedPdf = await this.pdfInspectionService.inspect(file);
+    const { inspectedPdf, processingError } =
+      await this.inspectPdfForPersistence(file);
     const content = file?.buffer;
 
     if (!content) {
@@ -96,6 +267,7 @@ export class DocumentsService {
         fileSizeBytes: inspectedPdf.sizeBytes,
         originalFileName: inspectedPdf.originalFileName,
         pageCount: inspectedPdf.pageCount,
+        processingError,
         sha256: inspectedPdf.sha256,
         storagePath,
         versionId,
@@ -115,9 +287,22 @@ export class DocumentsService {
     file: Express.Multer.File | undefined,
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
-    const metadata = metadataOrEmpty(dto.metadata);
+    const metadata = governedMetadata(metadataOrEmpty(dto.metadata), {
+      additionalDetail: dto.additionalDetail,
+      documentTypeOther: dto.documentTypeOther,
+      issuingEntityOther: dto.issuingEntityOther,
+      specificDependency: dto.specificDependency,
+    });
     ensureMetadataSize(metadata);
-    const inspectedPdf = await this.pdfInspectionService.inspect(file);
+    validateGovernedMetadata({
+      documentType: dto.documentType,
+      issuanceYear: dto.issuanceYear,
+      issuingEntity: dto.issuingEntity,
+      metadata,
+    });
+    const situation = validateSituationInput(dto);
+    const { inspectedPdf, processingError } =
+      await this.inspectPdfForPersistence(file);
     const content = file?.buffer;
 
     if (!content) {
@@ -133,6 +318,8 @@ export class DocumentsService {
     try {
       return await this.documentsGateway.create({
         actorId: authorization.userId,
+        archiveReasonCode: dto.archiveReasonCode,
+        archiveReasonDetail: dto.archiveReasonDetail,
         articleReference: dto.articleReference,
         documentId,
         documentType: dto.documentType,
@@ -140,12 +327,19 @@ export class DocumentsService {
         issuanceYear: dto.issuanceYear,
         issuingEntity: dto.issuingEntity,
         metadata,
-        moduleIds: dto.moduleIds ?? [],
+        moduleIds: dto.moduleIds,
+        observation: dto.observation,
         originalFileName: inspectedPdf.originalFileName,
         pageCount: inspectedPdf.pageCount,
+        processingError,
         resolutionNumber: dto.resolutionNumber,
+        reason: dto.reason,
+        replacementDate: dto.replacementDate,
+        replacementDocumentId: dto.replacementDocumentId,
+        replacementYear: dto.replacementYear,
         sha256: inspectedPdf.sha256,
         storagePath,
+        situation,
         title: dto.title,
         versionId,
       });
@@ -206,13 +400,15 @@ export class DocumentsService {
 
   async findOne(documentId: string): Promise<ManagedDocumentDetails> {
     const document = await this.requireLiveDocument(documentId);
-    const [versions, moduleIds] = await Promise.all([
+    const [versions, moduleIds, auditEvents] = await Promise.all([
       this.documentsGateway.listVersions(documentId),
       this.documentsGateway.listModuleIds(documentId),
+      this.documentsGateway.listAuditEvents(documentId),
     ]);
     const actorIds = [
       document.createdBy,
       ...versions.map((version) => version.uploadedBy),
+      ...auditEvents.map((event) => event.actorId),
     ].filter((actorId): actorId is string => actorId !== null);
     const actorNames = await this.documentsGateway.listActorNames([
       ...new Set(actorIds),
@@ -220,6 +416,19 @@ export class DocumentsService {
 
     return {
       ...document,
+      auditEvents: auditEvents.map((event) =>
+        toDocumentAuditEvent(
+          {
+            action: event.action,
+            actor_id: event.actorId,
+            details: event.details,
+            document_version_id: event.versionId,
+            id: event.id,
+            occurred_at: event.occurredAt,
+          },
+          event.actorId ? (actorNames[event.actorId] ?? null) : null,
+        ),
+      ),
       createdByName: document.createdBy
         ? (actorNames[document.createdBy] ?? null)
         : null,
@@ -268,6 +477,13 @@ export class DocumentsService {
       submoduleId: dto.submoduleId,
       technicalStatus: dto.technicalStatus,
     });
+  }
+
+  listSuggestions(): Promise<{
+    additionalDetails: string[];
+    specificDependencies: string[];
+  }> {
+    return this.documentsGateway.listSuggestions();
   }
 
   async logicalDelete(
@@ -320,41 +536,13 @@ export class DocumentsService {
   ): Promise<ManagedDocument> {
     const document = await this.requireLiveDocument(documentId);
 
-    if (document.situation === dto.situation) {
+    const situation = validateSituationInput(dto);
+
+    if (document.situation === situation) {
       throw new BadRequestException('Document situation is unchanged.');
     }
 
-    const hasReplacementData =
-      dto.observation !== undefined ||
-      dto.replacementDate !== undefined ||
-      dto.replacementDocumentId !== undefined ||
-      dto.replacementYear !== undefined;
-
-    if (dto.situation === 'current') {
-      if (dto.reason !== undefined || hasReplacementData) {
-        throw new BadRequestException(
-          'A current document cannot contain replacement data.',
-        );
-      }
-    } else if (dto.situation === 'archived') {
-      if (!dto.reason) {
-        throw new BadRequestException(
-          'An archived document requires a reason.',
-        );
-      }
-
-      if (hasReplacementData) {
-        throw new BadRequestException(
-          'An archived document cannot contain replacement data.',
-        );
-      }
-    } else {
-      if (!dto.reason || (!dto.replacementDate && !dto.replacementYear)) {
-        throw new BadRequestException(
-          'A replaced document requires a reason and a replacement date or year.',
-        );
-      }
-
+    if (situation === 'replaced') {
       if (dto.replacementDocumentId === documentId) {
         throw new BadRequestException('A document cannot replace itself.');
       }
@@ -382,15 +570,33 @@ export class DocumentsService {
 
     return this.documentsGateway.setSituation(
       documentId,
-      dto.situation,
+      situation,
       authorization.userId,
       {
+        archiveReasonCode:
+          situation === 'replaced'
+            ? 'REPLACED_BY_NEWER'
+            : dto.archiveReasonCode,
+        archiveReasonDetail: dto.archiveReasonDetail,
         observation: dto.observation,
         reason: dto.reason,
         replacementDate: dto.replacementDate,
         replacementDocumentId: dto.replacementDocumentId,
         replacementYear: dto.replacementYear,
       },
+    );
+  }
+
+  async setTechnicalStatus(
+    documentId: string,
+    dto: SetDocumentTechnicalStatusDto,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedDocument> {
+    await this.requireLiveDocument(documentId);
+    return this.documentsGateway.setTechnicalStatus(
+      documentId,
+      dto.technicalStatus,
+      authorization.userId,
     );
   }
 
@@ -416,17 +622,62 @@ export class DocumentsService {
       throw new BadRequestException('At least one document field is required.');
     }
 
-    if (dto.metadata) {
-      ensureMetadataSize(dto.metadata);
+    const document = await this.requireLiveDocument(documentId);
+    const documentType = dto.documentType ?? document.documentType;
+    const issuingEntity = dto.issuingEntity ?? document.issuingEntity;
+
+    if (
+      dto.issuingEntity !== undefined &&
+      dto.issuingEntity !== document.issuingEntity &&
+      dto.specificDependency === undefined
+    ) {
+      throw new BadRequestException(
+        'A new specific dependency is required when the issuing entity changes.',
+      );
     }
 
-    await this.requireLiveDocument(documentId);
+    const metadata = governedMetadata(
+      dto.metadata === undefined ? document.metadata : dto.metadata,
+      {
+        additionalDetail:
+          dto.additionalDetail === undefined
+            ? optionalMetadataText(document.metadata, 'additionalDetail')
+            : dto.additionalDetail,
+        documentTypeOther:
+          dto.documentType !== undefined && dto.documentType !== 'OTRO'
+            ? null
+            : dto.documentTypeOther === undefined
+              ? optionalMetadataText(document.metadata, 'documentTypeOther')
+              : dto.documentTypeOther,
+        issuingEntityOther:
+          dto.issuingEntity !== undefined &&
+          dto.issuingEntity !== 'OTRA_INSTITUCION'
+            ? null
+            : dto.issuingEntityOther === undefined
+              ? optionalMetadataText(document.metadata, 'issuingEntityOther')
+              : dto.issuingEntityOther,
+        specificDependency:
+          dto.specificDependency === undefined
+            ? optionalMetadataText(document.metadata, 'specificDependency')
+            : dto.specificDependency,
+      },
+    );
+    ensureMetadataSize(metadata);
+    validateGovernedMetadata({
+      documentType,
+      issuanceYear:
+        dto.issuanceYear === undefined
+          ? document.issuanceYear
+          : dto.issuanceYear,
+      issuingEntity,
+      metadata,
+    });
     const patch: DocumentMetadataPatch = {
       articleReference: dto.articleReference,
       documentType: dto.documentType,
       issuanceYear: dto.issuanceYear,
       issuingEntity: dto.issuingEntity,
-      metadata: dto.metadata,
+      metadata,
       resolutionNumber: dto.resolutionNumber,
       title: dto.title,
     };
@@ -442,6 +693,22 @@ export class DocumentsService {
 
   private buildStoragePath(documentId: string, versionId: string): string {
     return `documents/${documentId}/versions/${versionId}.pdf`;
+  }
+
+  private async inspectPdfForPersistence(
+    file: Express.Multer.File | undefined,
+  ): Promise<{ inspectedPdf: InspectedPdf; processingError?: string }> {
+    try {
+      return { inspectedPdf: await this.pdfInspectionService.inspect(file) };
+    } catch (error) {
+      if (!(error instanceof UnreadablePdfException)) throw error;
+
+      return {
+        inspectedPdf: this.pdfInspectionService.inspectUnreadable(file),
+        processingError:
+          'El archivo tiene estructura PDF, pero la lectura o procesamiento automático falló.',
+      };
+    }
   }
 
   private async resolvePersistenceOrCompensate(

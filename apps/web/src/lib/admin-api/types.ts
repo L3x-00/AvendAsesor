@@ -36,8 +36,46 @@ export const managedModuleSchema = z.object({
 
 export type ManagedModule = z.infer<typeof managedModuleSchema>;
 
+export const managedModuleSummarySchema = managedModuleSchema.extend({
+  documentCount: z.number().int().nonnegative(),
+  submoduleCount: z.number().int().nonnegative(),
+});
+
+export type ManagedModuleSummary = z.infer<typeof managedModuleSummarySchema>;
+
+export const adminModulePermissionSchema = z.object({
+  canAccess: z.boolean(),
+  fullName: z.string(),
+  role: z.enum(["admin", "superadmin"]),
+  updatedAt: timestampSchema.nullable(),
+  updatedBy: z.string().uuid().nullable(),
+  userId: z.string().uuid(),
+});
+
+export type AdminModulePermission = z.infer<typeof adminModulePermissionSchema>;
+
 export const managedDocumentSchema = z.object({
+  additionalDetail: z.string().nullable(),
+  approvalStatus: z.enum(["pending_approval", "ready"]),
+  approvalUpdatedAt: timestampSchema,
+  approvalUpdatedBy: z.string().uuid().nullable(),
+  approvedVersionId: z.string().uuid().nullable(),
   articleReference: z.string().nullable(),
+  archiveObservation: z.string().nullable(),
+  archiveReasonCode: z
+    .enum([
+      "NOT_APPLICABLE",
+      "DEROGATED_OR_EXPIRED",
+      "DUPLICATE",
+      "UPLOADED_BY_ERROR",
+      "INCOMPLETE_INFORMATION",
+      "PENDING_VALIDATION",
+      "HISTORICAL_ANTECEDENT",
+      "REPLACED_BY_NEWER",
+      "OTHER",
+    ])
+    .nullable(),
+  archiveReasonDetail: z.string().nullable(),
   createdAt: timestampSchema,
   createdBy: z.string().uuid().nullable(),
   currentVersionId: z.string().uuid().nullable(),
@@ -48,10 +86,12 @@ export const managedDocumentSchema = z.object({
   deletedBy: z.string().uuid().nullable(),
   deletionReason: z.string().nullable(),
   documentType: z.string(),
+  documentTypeOther: z.string().nullable(),
   id: z.string().uuid(),
   isDeleted: z.boolean(),
   issuanceYear: z.number().int().nullable(),
   issuingEntity: z.string().nullable(),
+  issuingEntityOther: z.string().nullable(),
   metadata: jsonObjectSchema,
   publicationStatus: z.enum(["active", "inactive"]),
   replacementDate: z
@@ -64,6 +104,7 @@ export const managedDocumentSchema = z.object({
   replacementYear: z.number().int().nullable(),
   resolutionNumber: z.string().nullable(),
   situation: z.enum(["archived", "current", "replaced"]),
+  specificDependency: z.string().nullable(),
   title: z.string(),
   updatedAt: timestampSchema,
   updatedBy: z.string().uuid().nullable(),
@@ -88,7 +129,19 @@ export type ManagedDocumentVersion = z.infer<
   typeof managedDocumentVersionSchema
 >;
 
+export const documentAuditEventSchema = z.object({
+  action: z.string(),
+  actorName: z.string().nullable(),
+  details: jsonObjectSchema,
+  id: z.string().uuid(),
+  occurredAt: timestampSchema,
+  versionId: z.string().uuid().nullable(),
+});
+
+export type DocumentAuditEvent = z.infer<typeof documentAuditEventSchema>;
+
 export const managedDocumentDetailsSchema = managedDocumentSchema.extend({
+  auditEvents: z.array(documentAuditEventSchema),
   createdByName: z.string().nullable(),
   moduleIds: z.array(z.string().uuid()),
   versions: z.array(managedDocumentVersionSchema),
@@ -111,6 +164,7 @@ export type DocumentModuleAssociation = z.infer<
 >;
 
 export const documentLibraryItemSchema = z.object({
+  additionalDetail: z.string().nullable(),
   articleReference: z.string().nullable(),
   createdAt: timestampSchema,
   createdBy: z.string().uuid().nullable(),
@@ -118,9 +172,11 @@ export const documentLibraryItemSchema = z.object({
   currentVersionId: z.string().uuid().nullable(),
   currentVersionUploadedAt: timestampSchema.nullable(),
   documentType: z.string(),
+  documentTypeOther: z.string().nullable(),
   id: z.string().uuid(),
   issuanceYear: z.number().int().nullable(),
   issuingEntity: z.string().nullable(),
+  issuingEntityOther: z.string().nullable(),
   metadata: jsonObjectSchema,
   moduleAssociations: z.array(documentModuleAssociationSchema),
   publicationStatus: z.enum(["active", "inactive"]),
@@ -134,6 +190,7 @@ export const documentLibraryItemSchema = z.object({
   replacementYear: z.number().int().nullable(),
   resolutionNumber: z.string().nullable(),
   situation: z.enum(["archived", "current", "replaced"]),
+  specificDependency: z.string().nullable(),
   technicalStatus: z.enum(["error", "pending_approval", "ready"]),
   title: z.string(),
   updatedAt: timestampSchema,
@@ -161,10 +218,27 @@ export interface DocumentLibraryQuery {
   offset?: number;
   q?: string;
   situation?: DocumentSituation;
-  sort?: "newest" | "oldest" | "title" | "upload_date" | "year";
+  sort?:
+    | "document_type"
+    | "issuing_entity"
+    | "module"
+    | "newest"
+    | "oldest"
+    | "situation"
+    | "technical_status"
+    | "title"
+    | "upload_date"
+    | "year";
   submoduleId?: string;
   technicalStatus?: DocumentTechnicalStatus;
 }
+
+export const documentSuggestionsSchema = z.object({
+  additionalDetails: z.array(z.string()),
+  specificDependencies: z.array(z.string()),
+});
+
+export type DocumentSuggestions = z.infer<typeof documentSuggestionsSchema>;
 
 export const downloadUrlSchema = z.object({
   expiresAt: timestampSchema,

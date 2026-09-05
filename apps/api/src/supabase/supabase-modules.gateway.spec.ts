@@ -114,7 +114,7 @@ describe('SupabaseModulesGatewayAdapter', () => {
     ]);
   });
 
-  it.each(['23505', '23503', 'P0001'])(
+  it.each(['23505', '23503', '23514', 'P0001'])(
     'maps a known database error %s to a safe conflict',
     async (code) => {
       const builder = createBuilder({ error: postgrestError(code) });
@@ -208,5 +208,72 @@ describe('SupabaseModulesGatewayAdapter', () => {
     await expect(
       gateway.update(moduleRow.id, { updatedBy: moduleRow.updated_by }),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('gets structural counts from the summary RPC without losing inactive modules', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: [{ ...moduleRow, document_count: '73', submodule_count: '8' }],
+      error: null,
+    });
+    const gateway = new SupabaseModulesGatewayAdapter({
+      rpc,
+    } as unknown as SupabaseServerClient);
+    await expect(gateway.listSummaries({ status: 'all' })).resolves.toEqual([
+      expect.objectContaining({
+        id: moduleRow.id,
+        documentCount: 73,
+        submoduleCount: 8,
+      }),
+    ]);
+    expect(rpc).toHaveBeenCalledWith('list_module_summaries', {
+      p_status: 'all',
+    });
+    rpc.mockResolvedValue({ data: null, error: null });
+    await expect(gateway.listSummaries({ status: 'active' })).resolves.toEqual(
+      [],
+    );
+  });
+
+  it.each([
+    { document_count: 'invalid', submodule_count: '8' },
+    { document_count: '73', submodule_count: '1.5' },
+    { document_count: Number.MAX_SAFE_INTEGER + 1, submodule_count: '8' },
+  ])(
+    'rejects counts that cannot be represented accurately: %j',
+    async (counts) => {
+      const rpc = jest.fn().mockResolvedValue({
+        data: [{ ...moduleRow, ...counts }],
+        error: null,
+      });
+      const gateway = new SupabaseModulesGatewayAdapter({
+        rpc,
+      } as unknown as SupabaseServerClient);
+      await expect(
+        gateway.listSummaries({ status: 'all' }),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    },
+  );
+
+  it('fails closed when summary, children, list or update reads fail', async () => {
+    const builder = createBuilder({ error: postgrestError('XX000') });
+    const rpc = jest
+      .fn()
+      .mockResolvedValue({ data: null, error: postgrestError('XX000') });
+    const gateway = new SupabaseModulesGatewayAdapter({
+      from: jest.fn().mockReturnValue(builder),
+      rpc,
+    } as unknown as SupabaseServerClient);
+    await expect(
+      gateway.listSummaries({ status: 'all' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      gateway.hasNonDeletedChildren(moduleRow.id),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(gateway.list({ status: 'all' })).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    await expect(
+      gateway.update(moduleRow.id, { updatedBy: moduleRow.updated_by }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 });

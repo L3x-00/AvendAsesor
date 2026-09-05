@@ -35,6 +35,7 @@ import {
 
 export interface ChatSource {
   articleReference: string | null;
+  documentSituation: RetrievedChunk['documentSituation'];
   documentTitle: string;
   id: string;
   moduleName: string | null;
@@ -94,7 +95,10 @@ function selectCitationModule(
   source: RetrievedChunk,
   selectedModuleId: string | null,
 ): string | null {
-  if (selectedModuleId) return selectedModuleId;
+  if (selectedModuleId && source.moduleIds.includes(selectedModuleId)) {
+    return selectedModuleId;
+  }
+  if (selectedModuleId) return source.moduleIds[0] ?? null;
   return source.moduleIds.length === 1 ? (source.moduleIds[0] ?? null) : null;
 }
 
@@ -116,6 +120,7 @@ function toCitationBundle(
     });
     sources.push({
       articleReference: source.articleReference,
+      documentSituation: source.documentSituation,
       documentTitle: source.documentTitle,
       id: sourceId,
       moduleName:
@@ -168,7 +173,13 @@ function evidenceOrientation(sources: RetrievedChunk[]): string {
         source.numeralReference ??
         source.sectionTitle ??
         source.documentTitle;
-      return `Como orientación inicial, ${reference} señala: “${excerpt}” [${index + 1}].`;
+      const situation =
+        source.documentSituation === 'current'
+          ? 'vigente'
+          : source.documentSituation === 'replaced'
+            ? 'reemplazada o sin vigencia, conservada como antecedente histórico'
+            : 'archivada, conservada como antecedente histórico';
+      return `Como orientación inicial, la fuente ${situation} ${reference} señala: “${excerpt}” [${index + 1}].`;
     })
     .filter((orientation): orientation is string => Boolean(orientation))
     .join(' ');

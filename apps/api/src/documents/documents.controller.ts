@@ -20,6 +20,8 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AuthorizationGuard,
   CurrentAuthorization,
+  FeaturesGuard,
+  RequireFeatures,
   RequireRoles,
   RolesGuard,
   type AuthorizationContext,
@@ -32,6 +34,7 @@ import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { LogicalDeleteDocumentDto } from './dto/logical-delete-document.dto';
 import { SetDocumentStatusDto } from './dto/set-document-status.dto';
 import { SetDocumentSituationDto } from './dto/set-document-situation.dto';
+import { SetDocumentTechnicalStatusDto } from './dto/set-document-technical-status.dto';
 import { UpdateDocumentMetadataDto } from './dto/update-document-metadata.dto';
 import type {
   ManagedDocument,
@@ -43,10 +46,11 @@ import { MulterExceptionFilter } from './multer-exception.filter';
 import { MAX_PDF_BYTES } from './pdf-inspection.service';
 
 @Controller('admin/documents')
-@UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
+@UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard, FeaturesGuard)
 @UseFilters(MulterExceptionFilter)
 @Throttle({ default: { limit: 30, ttl: 60_000 } })
 @RequireRoles('admin', 'superadmin')
+@RequireFeatures('modules')
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
@@ -76,6 +80,14 @@ export class DocumentsController {
     @Query() dto: ListDocumentLibraryQueryDto,
   ): Promise<DocumentLibraryPage> {
     return this.documentsService.listLibrary(dto);
+  }
+
+  @Get('suggestions')
+  listSuggestions(): Promise<{
+    additionalDetails: string[];
+    specificDependencies: string[];
+  }> {
+    return this.documentsService.listSuggestions();
   }
 
   @Get(':id')
@@ -140,6 +152,19 @@ export class DocumentsController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     return this.documentsService.setSituation(documentId, dto, authorization);
+  }
+
+  @Patch(':id/technical-status')
+  setTechnicalStatus(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Body() dto: SetDocumentTechnicalStatusDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<ManagedDocument> {
+    return this.documentsService.setTechnicalStatus(
+      documentId,
+      dto,
+      authorization,
+    );
   }
 
   @Patch(':id')

@@ -23,6 +23,7 @@ const content: OrientationDocumentContent = {
   sources: [
     {
       articleReference: "Artículo 5",
+      documentSituation: "current",
       documentTitle: "Ley de Reforma Magisterial",
       id: "9c8b56af-6d0c-4fef-881e-7c00907540dd",
       moduleName: "Licencias",
@@ -89,7 +90,9 @@ describe("orientation binary builders", () => {
     expect([...binary.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
     expect(documentXml).toContain("FICHA DE ORIENTACIÓN AVEND");
     expect(documentXml).toContain("María Pérez");
-    expect(documentXml).toContain("La solicitud se presenta por mesa de partes.");
+    expect(documentXml).toContain(
+      "La solicitud se presenta por mesa de partes.",
+    );
     expect(() => new SaxesParser().write(documentXml).close()).not.toThrow();
   });
 

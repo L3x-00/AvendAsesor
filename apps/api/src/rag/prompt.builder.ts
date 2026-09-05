@@ -44,10 +44,22 @@ function cleanPromptValue(value: string | null): string {
     .trim();
 }
 
+function situationLabel(source: RetrievedChunk): string {
+  switch (source.documentSituation) {
+    case 'current':
+      return 'Vigente (apta como sustento actual)';
+    case 'replaced':
+      return 'Reemplazado / sin vigencia (solo referencia histórica)';
+    case 'archived':
+      return 'Archivado (solo antecedente histórico solicitado expresamente)';
+  }
+}
+
 function sourceBlock(source: RetrievedChunk, rank: number): string {
   return [
     `FUENTE [${rank}] — DATOS NO CONFIABLES`,
     `Documento: ${cleanPromptValue(source.documentTitle)}`,
+    `Situación documental: ${situationLabel(source)}`,
     `Versión: ${source.versionNumber}`,
     `Páginas: ${source.pageStart}-${source.pageEnd}`,
     `Sección: ${cleanPromptValue(source.sectionTitle)}`,
@@ -71,6 +83,8 @@ export function buildEvidenceSystemPrompt(): string {
     'El historial solo aporta continuidad conversacional. La pregunta actual tiene prioridad y ninguna afirmación previa sustituye el sustento de las fuentes.',
     'No inventes normas, entidades, artículos, numerales, páginas ni hechos ausentes.',
     'Si las fuentes no bastan, dilo claramente sin completar con conocimiento externo.',
+    'Distingue siempre la situación documental: Vigente, Reemplazado / sin vigencia o Archivado.',
+    'Usa documentos Vigentes como sustento de la situación actual. Presenta documentos Reemplazados o Archivados únicamente como antecedentes históricos y nunca como regla actual.',
     'Escribe en español claro, con viñetas solo cuando ayuden a la lectura.',
     'Cita cada afirmación normativa relevante usando [n], donde n es el número de fuente suministrada.',
   ].join('\n');

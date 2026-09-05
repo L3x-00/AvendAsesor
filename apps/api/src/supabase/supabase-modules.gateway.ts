@@ -8,6 +8,7 @@ import { toManagedModule, type ManagedModule } from '../modules/domain/module';
 import type {
   CreateModuleRecord,
   ListModulesOptions,
+  ManagedModuleSummary,
   ModulesGateway,
   UpdateModuleRecord,
 } from '../modules/modules.gateway';
@@ -32,7 +33,11 @@ function databaseError(error: PostgrestError): never {
     throw new ConflictException('A module with this code already exists.');
   }
 
-  if (error.code === '23503' || error.code === 'P0001') {
+  if (
+    error.code === '23503' ||
+    error.code === '23514' ||
+    error.code === 'P0001'
+  ) {
     throw new ConflictException('The requested module hierarchy is not valid.');
   }
 
@@ -50,6 +55,7 @@ export class SupabaseModulesGatewayAdapter implements ModulesGateway {
       code: input.code,
       created_by: input.createdBy,
       description: input.description ?? null,
+      is_active: input.isActive ?? true,
       metadata: input.metadata ? toJson(input.metadata) : undefined,
       name: input.name,
       parent_module_id: input.parentModuleId ?? null,
@@ -124,6 +130,34 @@ export class SupabaseModulesGatewayAdapter implements ModulesGateway {
     }
 
     return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  async listSummaries(
+    options: Pick<ListModulesOptions, 'status'>,
+  ): Promise<ManagedModuleSummary[]> {
+    const { data, error } = await this.requireClient().rpc(
+      'list_module_summaries',
+      { p_status: options.status },
+    );
+
+    if (error) databaseError(error);
+
+    return (data ?? []).map((row) => {
+      const module = this.parseRow(row);
+      const documentCount = Number(row.document_count);
+      const submoduleCount = Number(row.submodule_count);
+
+      if (
+        !Number.isSafeInteger(documentCount) ||
+        !Number.isSafeInteger(submoduleCount)
+      ) {
+        throw new InternalServerErrorException(
+          'Module summary data is invalid.',
+        );
+      }
+
+      return { ...module, documentCount, submoduleCount };
+    });
   }
 
   async update(

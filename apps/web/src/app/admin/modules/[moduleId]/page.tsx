@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
   ModuleManageDetails,
@@ -9,51 +10,67 @@ import {
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import { getAdminApiUrl } from "@/lib/admin-api/config";
 import {
-  formatDocumentSituation,
-  getDocumentTechnicalStatusContent,
-} from "@/lib/admin-api/labels";
+  countDocumentLibraryFilters,
+  parseDocumentLibraryQuery,
+  type DocumentLibrarySearchParams,
+} from "@/lib/admin-api/document-library-query";
 import {
   childModuleViews,
   findVisibleModule,
   parentOptions,
   toModuleView,
 } from "@/lib/admin-api/module-hierarchy";
+import { listReplacementDocumentCandidates } from "@/lib/admin-api/replacement-candidates";
 
 interface ModuleDetailPageProps {
   params: Promise<{ moduleId: string }>;
+  searchParams: Promise<DocumentLibrarySearchParams>;
 }
 
 export default async function ModuleDetailPage({
   params,
+  searchParams,
 }: ModuleDetailPageProps) {
   const { moduleId } = await params;
-  const { access, client } = await createAuthorizedAdminApiContext();
-  const modules = await client.listModules("all");
+  const { access, client } = await createAuthorizedAdminApiContext({
+    requireModulesAccess: true,
+  });
+  const modules = await client.listModuleSummaries("all");
   const current = findVisibleModule(modules, moduleId);
 
   if (!current) {
     notFound();
   }
 
-  const currentView = toModuleView(current, modules);
+  const currentView = toModuleView(current);
+  const parent = current.parentModuleId
+    ? findVisibleModule(modules, current.parentModuleId)
+    : undefined;
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
-  const library = await client.listDocumentLibrary({
-    limit: 10,
-    ...(current.parentModuleId
-      ? { submoduleId: current.id }
-      : { moduleId: current.id }),
-  });
+  const requestedQuery = parseDocumentLibraryQuery(await searchParams);
+  const scopedQuery = {
+    ...requestedQuery,
+    moduleId: current.parentModuleId ? undefined : current.id,
+    submoduleId: current.parentModuleId ? current.id : undefined,
+  };
+  const [library, suggestions, replacementCandidates] = await Promise.all([
+    client.listDocumentLibrary(scopedQuery),
+    client.getDocumentSuggestions(),
+    listReplacementDocumentCandidates(client),
+  ]);
   const canUpload = current.isActive && children.length === 0;
-  const libraryHref = current.parentModuleId
-    ? `/admin/documents?submoduleId=${encodeURIComponent(current.id)}`
-    : `/admin/documents?moduleId=${encodeURIComponent(current.id)}`;
+  const activeFilterCount = Math.max(
+    0,
+    countDocumentLibraryFilters(scopedQuery) - 1,
+  );
 
   return (
     <AdminShell
       activeSection="modules"
       description="Organiza la estructura y carga documentos en el módulo o submódulo correspondiente. El Historial conserva la consulta general."
       title={current.name}
+      modulesAccess={access.modulesAccess}
       userName={access.fullName}
       userRole={access.role}
     >
@@ -66,6 +83,19 @@ export default async function ModuleDetailPage({
               </Link>
             </li>
             <li aria-hidden="true">›</li>
+            {parent ? (
+              <>
+                <li>
+                  <Link
+                    className="hover:underline"
+                    href={`/admin/modules/${parent.id}`}
+                  >
+                    {parent.name}
+                  </Link>
+                </li>
+                <li aria-hidden="true">›</li>
+              </>
+            ) : null}
             <li aria-current="page" className="font-semibold text-avend-text">
               {current.name}
             </li>
@@ -106,21 +136,25 @@ export default async function ModuleDetailPage({
           ) : null}
         </section>
 
-        <ModulesExplorer
-          context={{
-            kind: "module",
-            moduleId: current.id,
-            moduleName: current.name,
-          }}
-          modules={children}
-          parents={parents}
-        />
+        {current.parentModuleId ? null : (
+          <ModulesExplorer
+            context={{
+              kind: "module",
+              moduleId: current.id,
+              moduleName: current.name,
+            }}
+            modules={children}
+            parents={parents}
+          />
+        )}
 
         {canUpload ? (
           <DocumentUploadPanel
             apiBaseUrl={getAdminApiUrl()}
             moduleId={current.id}
             moduleName={current.name}
+            replacementCandidates={replacementCandidates}
+            suggestions={suggestions}
           />
         ) : children.length > 0 ? (
           <p className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
@@ -129,54 +163,17 @@ export default async function ModuleDetailPage({
           </p>
         ) : null}
 
-        <section
-          aria-labelledby="module-documents-title"
-          className="rounded-xl border border-avend-border bg-avend-surface p-5"
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="text-xl font-bold" id="module-documents-title">
-              Documentos asociados
-            </h2>
-            <Link
-              className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
-              href={libraryHref}
-            >
-              Ver en Historial
-            </Link>
-          </div>
-          {library.items.length === 0 ? (
-            <p className="mt-4 rounded-md border border-dashed border-avend-border p-4 text-base text-avend-text-muted">
-              No hay documentos asociados a esta ubicación.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-avend-border" role="list">
-              {library.items.map((document) => (
-                <li
-                  className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-                  key={document.id}
-                >
-                  <div>
-                    <h3 className="text-base font-bold">{document.title}</h3>
-                    <p className="mt-1 text-base text-avend-text-muted">
-                      {formatDocumentSituation(document.situation)} ·{" "}
-                      {
-                        getDocumentTechnicalStatusContent(
-                          document.technicalStatus,
-                        ).label
-                      }
-                    </p>
-                  </div>
-                  <Link
-                    className="inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
-                    href={`/admin/documents/${document.id}`}
-                  >
-                    Ver detalle
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {children.length === 0 ? (
+          <DocumentLibraryView
+            activeFilterCount={activeFilterCount}
+            basePath={`/admin/modules/${current.id}`}
+            library={library}
+            lockLocation
+            modules={modules}
+            query={scopedQuery}
+            resultsTitle="Documentos cargados"
+          />
+        ) : null}
       </div>
     </AdminShell>
   );

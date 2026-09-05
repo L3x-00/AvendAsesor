@@ -2,6 +2,11 @@ begin;
 
 select plan(36);
 
+-- This suite validates its own deterministic module fixture. Product taxonomy
+-- seeds are covered separately by admin_module_permissions_test.sql.
+delete from public.modules where parent_module_id is not null;
+delete from public.modules;
+
 select has_column(
   'public',
   'profiles',
@@ -235,8 +240,8 @@ values
   ),
   (
     '00000000-0000-0000-0000-00000000e202',
-    '00000000-0000-0000-0000-00000000e201',
-    'Descendiente activo', 'DASHBOARD_GRANDCHILD_ACTIVE', 20
+    '00000000-0000-0000-0000-00000000e101',
+    'Segundo submódulo activo', 'DASHBOARD_CHILD_ACTIVE_2', 20
   ),
   (
     '00000000-0000-0000-0000-00000000e203',
@@ -344,7 +349,7 @@ insert into public.document_modules (document_id, module_id, created_by)
 values
   (
     '00000000-0000-0000-0000-00000000f101',
-    '00000000-0000-0000-0000-00000000e101',
+    '00000000-0000-0000-0000-00000000e202',
     '00000000-0000-0000-0000-00000000d001'
   ),
   (
@@ -359,12 +364,7 @@ values
   ),
   (
     '00000000-0000-0000-0000-00000000f103',
-    '00000000-0000-0000-0000-00000000e101',
-    '00000000-0000-0000-0000-00000000d001'
-  ),
-  (
-    '00000000-0000-0000-0000-00000000f104',
-    '00000000-0000-0000-0000-00000000e204',
+    '00000000-0000-0000-0000-00000000e201',
     '00000000-0000-0000-0000-00000000d001'
   );
 

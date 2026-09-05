@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsInt,
   IsObject,
   IsOptional,
@@ -8,6 +9,7 @@ import {
   Matches,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import type { ModuleMetadata } from '../domain/module';
 import { trimText, uppercaseCode } from './module.dto-helpers';
 
@@ -22,6 +24,13 @@ export class CreateModuleDto {
   @Length(2, 500)
   @trimText
   description?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  isActive?: boolean;
 
   @IsOptional()
   @IsObject()

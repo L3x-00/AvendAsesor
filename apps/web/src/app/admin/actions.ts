@@ -105,6 +105,17 @@ function optionalInteger(
   return parsed;
 }
 
+function optionalBoolean(
+  formData: FormData,
+  name: string,
+): boolean | undefined {
+  const value = optionalText(formData, name);
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new FormValidationError(`${name} no es válido.`);
+}
+
 function optionalJsonObject(
   formData: FormData,
   name: string,
@@ -142,6 +153,7 @@ function modulePayload(
   const metadata = optionalJsonObject(formData, "metadata");
   const parentModuleId = optionalText(formData, "parentModuleId");
   const description = optionalText(formData, "description");
+  const isActive = optionalBoolean(formData, "isActive");
   const descriptionPayload =
     description !== undefined
       ? { description }
@@ -161,6 +173,7 @@ function modulePayload(
       ? { code: optionalText(formData, "code") }
       : {}),
     ...descriptionPayload,
+    ...(isActive === undefined ? {} : { isActive }),
     ...(metadata ? { metadata } : {}),
     ...(optionalText(formData, "name")
       ? { name: optionalText(formData, "name") }
@@ -174,31 +187,48 @@ function documentMetadataPayload(formData: FormData): Record<string, unknown> {
   const metadata = optionalJsonObject(formData, "metadata");
   const issuanceYear = optionalInteger(formData, "issuanceYear", "El año");
 
+  if (issuanceYear === undefined) {
+    throw new FormValidationError("El año es obligatorio.");
+  }
+
   return {
-    ...(optionalText(formData, "articleReference")
-      ? { articleReference: optionalText(formData, "articleReference") }
+    additionalDetail: optionalText(formData, "additionalDetail") ?? null,
+    articleReference: optionalText(formData, "articleReference") ?? null,
+    documentType: requiredText(formData, "documentType", "El tipo documental"),
+    ...(formData.has("documentTypeOther")
+      ? {
+          documentTypeOther:
+            optionalText(formData, "documentTypeOther") ?? null,
+        }
       : {}),
-    ...(optionalText(formData, "documentType")
-      ? { documentType: optionalText(formData, "documentType") }
+    issuanceYear,
+    issuingEntity: requiredText(
+      formData,
+      "issuingEntity",
+      "La entidad emisora",
+    ),
+    ...(formData.has("issuingEntityOther")
+      ? {
+          issuingEntityOther:
+            optionalText(formData, "issuingEntityOther") ?? null,
+        }
       : {}),
-    ...(issuanceYear === undefined ? {} : { issuanceYear }),
-    ...(optionalText(formData, "issuingEntity")
-      ? { issuingEntity: optionalText(formData, "issuingEntity") }
-      : {}),
-    ...(metadata ? { metadata } : {}),
-    ...(optionalText(formData, "resolutionNumber")
-      ? { resolutionNumber: optionalText(formData, "resolutionNumber") }
-      : {}),
-    ...(optionalText(formData, "title")
-      ? { title: optionalText(formData, "title") }
-      : {}),
+    metadata: metadata ?? {},
+    resolutionNumber: optionalText(formData, "resolutionNumber") ?? null,
+    specificDependency: requiredText(
+      formData,
+      "specificDependency",
+      "La dependencia específica",
+    ),
+    title: requiredText(formData, "title", "El título"),
   };
 }
 
 async function withApi(
   action: (client: AdminApiClient) => Promise<AdminActionState>,
+  options: { requireModulesAccess?: boolean } = {},
 ): Promise<AdminActionState> {
-  const client = await createAuthorizedAdminApiClient();
+  const client = await createAuthorizedAdminApiClient(options);
 
   try {
     return await action(client);
@@ -211,248 +241,327 @@ export async function createModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const payload = modulePayload(formData);
-    payload.code = requiredText(formData, "code", "El código");
-    payload.name = requiredText(formData, "name", "El nombre");
-    await client.createModule(payload);
-    updateTag("chat-modules");
-    revalidatePath("/admin/modules");
-    revalidatePath("/admin/documents");
+  return withApi(
+    async (client) => {
+      const payload = modulePayload(formData);
+      payload.code = requiredText(formData, "code", "El código");
+      payload.name = requiredText(formData, "name", "El nombre");
+      await client.createModule(payload);
+      updateTag("chat-modules");
+      revalidatePath("/admin/modules", "layout");
+      revalidatePath("/admin/documents", "layout");
 
-    return { message: "Módulo creado.", status: "success" };
-  });
+      return { message: "Módulo creado.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function updateModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const moduleId = requiredText(formData, "moduleId", "El módulo");
-    const payload = modulePayload(formData, { allowClearingDescription: true });
+  return withApi(
+    async (client) => {
+      const moduleId = requiredText(formData, "moduleId", "El módulo");
+      const payload = modulePayload(formData, {
+        allowClearingDescription: true,
+      });
 
-    if (Object.keys(payload).length === 0) {
-      throw new FormValidationError(
-        "Ingresa al menos un campo para actualizar.",
-      );
-    }
+      if (Object.keys(payload).length === 0) {
+        throw new FormValidationError(
+          "Ingresa al menos un campo para actualizar.",
+        );
+      }
 
-    await client.updateModule(moduleId, payload);
-    updateTag("chat-modules");
-    revalidatePath("/admin/modules");
-    revalidatePath("/admin/documents");
+      await client.updateModule(moduleId, payload);
+      updateTag("chat-modules");
+      revalidatePath("/admin/modules", "layout");
+      revalidatePath("/admin/documents", "layout");
 
-    return { message: "Módulo actualizado.", status: "success" };
-  });
+      return { message: "Módulo actualizado.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function setModuleStatusAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const moduleId = requiredText(formData, "moduleId", "El módulo");
-    const isActive = formData.get("isActive") === "true";
-    const reason = optionalText(formData, "reason");
+  return withApi(
+    async (client) => {
+      const moduleId = requiredText(formData, "moduleId", "El módulo");
+      const isActive = formData.get("isActive") === "true";
+      const reason = optionalText(formData, "reason");
 
-    if (!isActive && !reason) {
-      throw new FormValidationError("Indica el motivo de la desactivación.");
-    }
+      if (!isActive && !reason) {
+        throw new FormValidationError("Indica el motivo de la desactivación.");
+      }
 
-    await client.setModuleStatus(moduleId, isActive, reason);
-    updateTag("chat-modules");
-    revalidatePath("/admin/modules");
+      await client.setModuleStatus(moduleId, isActive, reason);
+      updateTag("chat-modules");
+      revalidatePath("/admin/modules", "layout");
 
-    return {
-      message: isActive ? "Módulo activado." : "Módulo desactivado.",
-      status: "success",
-    };
-  });
+      return {
+        message: isActive ? "Módulo activado." : "Módulo desactivado.",
+        status: "success",
+      };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function deleteModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const moduleId = requiredText(formData, "moduleId", "El módulo");
-    const reason = requiredText(formData, "reason", "El motivo de baja");
-    await client.deleteModule(moduleId, reason);
-    updateTag("chat-modules");
-    revalidatePath("/admin/modules");
-    revalidatePath("/admin/documents");
+  return withApi(
+    async (client) => {
+      const moduleId = requiredText(formData, "moduleId", "El módulo");
+      const reason = requiredText(formData, "reason", "El motivo de baja");
+      await client.deleteModule(moduleId, reason);
+      updateTag("chat-modules");
+      revalidatePath("/admin/modules", "layout");
+      revalidatePath("/admin/documents", "layout");
 
-    return { message: "Módulo eliminado lógicamente.", status: "success" };
-  });
+      return { message: "Módulo eliminado lógicamente.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function updateDocumentAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const payload = documentMetadataPayload(formData);
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const payload = documentMetadataPayload(formData);
 
-    if (Object.keys(payload).length === 0) {
-      throw new FormValidationError(
-        "Ingresa al menos un campo para actualizar.",
-      );
-    }
+      if (Object.keys(payload).length === 0) {
+        throw new FormValidationError(
+          "Ingresa al menos un campo para actualizar.",
+        );
+      }
 
-    await client.updateDocument(documentId, payload);
-    revalidatePath("/admin/documents");
-    revalidatePath(`/admin/documents/${documentId}`);
+      await client.updateDocument(documentId, payload);
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: "Metadatos actualizados.", status: "success" };
-  });
+      return { message: "Metadatos actualizados.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function setDocumentStatusAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const isActive = formData.get("isActive") === "true";
-    const reason = optionalText(formData, "reason");
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const isActive = formData.get("isActive") === "true";
+      const reason = optionalText(formData, "reason");
 
-    if (!isActive && !reason) {
-      throw new FormValidationError("Indica el motivo de la desactivación.");
-    }
+      if (!isActive && !reason) {
+        throw new FormValidationError("Indica el motivo de la desactivación.");
+      }
 
-    await client.setDocumentStatus(documentId, isActive, reason);
-    revalidatePath("/admin/documents");
-    revalidatePath(`/admin/documents/${documentId}`);
+      await client.setDocumentStatus(documentId, isActive, reason);
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
 
-    return {
-      message: isActive ? "Documento activado." : "Documento desactivado.",
-      status: "success",
-    };
-  });
+      return {
+        message: isActive ? "Documento activado." : "Documento desactivado.",
+        status: "success",
+      };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function setDocumentSituationAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const situation = requiredText(formData, "situation", "La situación");
-    const allowedSituations = ["archived", "current", "replaced"] as const;
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const situation = requiredText(formData, "situation", "La situación");
+      const allowedSituations = ["archived", "current", "replaced"] as const;
 
-    if (
-      !allowedSituations.includes(
-        situation as (typeof allowedSituations)[number],
-      )
-    ) {
-      throw new FormValidationError("Selecciona una situación válida.");
-    }
+      if (
+        !allowedSituations.includes(
+          situation as (typeof allowedSituations)[number],
+        )
+      ) {
+        throw new FormValidationError("Selecciona una situación válida.");
+      }
 
-    const reason = optionalText(formData, "reason");
-    const replacementDate = optionalText(formData, "replacementDate");
-    const replacementDocumentId = optionalText(
-      formData,
-      "replacementDocumentId",
-    );
-    const replacementYear = optionalInteger(
-      formData,
-      "replacementYear",
-      "El año de reemplazo",
-    );
-    const observation = optionalText(formData, "observation");
-
-    if (situation === "archived" && !reason) {
-      throw new FormValidationError("Indica el motivo del archivo.");
-    }
-
-    if (
-      situation === "replaced" &&
-      (!reason || (!replacementDate && replacementYear === undefined))
-    ) {
-      throw new FormValidationError(
-        "Indica el motivo y la fecha o año del reemplazo.",
+      const reason = optionalText(formData, "reason");
+      const archiveReasonCode = optionalText(formData, "archiveReasonCode");
+      const archiveReasonDetail = optionalText(formData, "archiveReasonDetail");
+      const replacementDate = optionalText(formData, "replacementDate");
+      const replacementDocumentId = optionalText(
+        formData,
+        "replacementDocumentId",
       );
-    }
+      const replacementYear = optionalInteger(
+        formData,
+        "replacementYear",
+        "El año de reemplazo",
+      );
+      const observation = optionalText(formData, "observation");
+      const isReplacement =
+        situation === "replaced" ||
+        (situation === "archived" && archiveReasonCode === "REPLACED_BY_NEWER");
 
-    await client.setDocumentSituation(documentId, {
-      ...(observation ? { observation } : {}),
-      ...(reason ? { reason } : {}),
-      ...(replacementDate ? { replacementDate } : {}),
-      ...(replacementDocumentId ? { replacementDocumentId } : {}),
-      ...(replacementYear === undefined ? {} : { replacementYear }),
-      situation: situation as (typeof allowedSituations)[number],
-    });
-    revalidatePath("/admin/documents");
-    revalidatePath(`/admin/documents/${documentId}`);
-    revalidatePath("/admin/modules");
+      if (situation === "archived" && !archiveReasonCode) {
+        throw new FormValidationError("Selecciona el motivo del archivo.");
+      }
 
-    return {
-      message: "Situación del documento actualizada.",
-      status: "success",
-    };
-  });
+      if (archiveReasonCode === "OTHER" && !archiveReasonDetail) {
+        throw new FormValidationError("Especifica el motivo del archivo.");
+      }
+
+      if (
+        isReplacement &&
+        (!reason || (!replacementDate && replacementYear === undefined))
+      ) {
+        throw new FormValidationError(
+          "Indica el motivo y la fecha o año del reemplazo.",
+        );
+      }
+
+      await client.setDocumentSituation(documentId, {
+        ...(archiveReasonCode ? { archiveReasonCode } : {}),
+        ...(archiveReasonDetail ? { archiveReasonDetail } : {}),
+        ...(observation ? { observation } : {}),
+        ...(reason ? { reason } : {}),
+        ...(replacementDate ? { replacementDate } : {}),
+        ...(replacementDocumentId ? { replacementDocumentId } : {}),
+        ...(replacementYear === undefined ? {} : { replacementYear }),
+        situation: situation as (typeof allowedSituations)[number],
+      });
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
+      revalidatePath("/admin/modules", "layout");
+
+      return {
+        message: "Situación del documento actualizada.",
+        status: "success",
+      };
+    },
+    { requireModulesAccess: true },
+  );
+}
+
+export async function setDocumentTechnicalStatusAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const technicalStatus = requiredText(
+        formData,
+        "technicalStatus",
+        "El estado técnico",
+      );
+      if (
+        technicalStatus !== "ready" &&
+        technicalStatus !== "pending_approval"
+      ) {
+        throw new FormValidationError(
+          "El estado Error solo puede asignarlo el procesamiento automático.",
+        );
+      }
+
+      await client.setDocumentTechnicalStatus(documentId, technicalStatus);
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
+      revalidatePath("/admin/modules", "layout");
+      return { message: "Estado técnico actualizado.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function deleteDocumentAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const reason = requiredText(formData, "reason", "El motivo de baja");
-    await client.deleteDocument(documentId, reason);
-    revalidatePath("/admin/documents");
-    revalidatePath(`/admin/documents/${documentId}`);
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const reason = requiredText(formData, "reason", "El motivo de baja");
+      await client.deleteDocument(documentId, reason);
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
 
-    return { message: "Documento eliminado lógicamente.", status: "success" };
-  });
+      return { message: "Documento eliminado lógicamente.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function linkDocumentModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const moduleId = requiredText(formData, "moduleId", "El módulo");
-    await client.linkDocumentModule(documentId, moduleId);
-    revalidatePath(`/admin/documents/${documentId}`);
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const moduleId = requiredText(formData, "moduleId", "El módulo");
+      await client.linkDocumentModule(documentId, moduleId);
+      revalidatePath(`/admin/documents/${documentId}`);
+      revalidatePath("/admin/modules", "layout");
 
-    return { message: "Módulo asociado.", status: "success" };
-  });
+      return { message: "Módulo asociado.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function unlinkDocumentModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const moduleId = requiredText(formData, "moduleId", "El módulo");
-    await client.unlinkDocumentModule(documentId, moduleId);
-    revalidatePath(`/admin/documents/${documentId}`);
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const moduleId = requiredText(formData, "moduleId", "El módulo");
+      await client.unlinkDocumentModule(documentId, moduleId);
+      revalidatePath(`/admin/documents/${documentId}`);
+      revalidatePath("/admin/modules", "layout");
 
-    return { message: "Módulo desvinculado.", status: "success" };
-  });
+      return { message: "Módulo desvinculado.", status: "success" };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function createDownloadUrlAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(async (client) => {
-    const documentId = requiredText(formData, "documentId", "El documento");
-    const versionId = optionalText(formData, "versionId");
-    const download = await client.getDownloadUrl(documentId, versionId);
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      const versionId = optionalText(formData, "versionId");
+      const download = await client.getDownloadUrl(documentId, versionId);
 
-    return {
-      downloadUrl: download.url,
-      message: "Enlace temporal generado por 60 segundos.",
-      status: "success",
-    };
-  });
+      return {
+        downloadUrl: download.url,
+        message: "Enlace temporal generado por 60 segundos.",
+        status: "success",
+      };
+    },
+    { requireModulesAccess: true },
+  );
 }
 
 export async function reviewUnansweredQuestionAction(
@@ -537,6 +646,30 @@ export async function updateAdministrativeUserAction(
 
     return {
       message: "Usuario actualizado. La acción quedó registrada.",
+      status: "success",
+    };
+  });
+}
+
+export async function setAdminModulePermissionAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const userId = requiredText(formData, "userId", "El administrador");
+    const reason = requiredText(formData, "reason", "El motivo");
+    const rawAccess = requiredText(formData, "canAccess", "El permiso");
+    if (rawAccess !== "true" && rawAccess !== "false") {
+      throw new FormValidationError("Selecciona un permiso válido.");
+    }
+    const canAccess = rawAccess === "true";
+    await client.setAdminModulePermission(userId, canAccess, reason);
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+    return {
+      message: canAccess
+        ? "Acceso a Módulos habilitado."
+        : "Acceso a Módulos retirado.",
       status: "success",
     };
   });

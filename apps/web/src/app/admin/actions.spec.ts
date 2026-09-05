@@ -73,8 +73,8 @@ describe("admin server actions", () => {
       name: "Trámites",
       sortOrder: 2,
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/modules");
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/documents");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/modules", "layout");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/documents", "layout");
     expect(updateTag).toHaveBeenCalledWith("chat-modules");
     expect(client.createModule.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(updateTag).mock.invocationCallOrder[0],
@@ -232,7 +232,7 @@ describe("admin server actions", () => {
     formData.set("documentId", "document-id");
     formData.set("situation", "replaced");
     formData.set("reason", "Nueva norma aplicable");
-    formData.set("replacementYear", "2027");
+    formData.set("replacementYear", "2026");
     formData.set("observation", "Conservar para trazabilidad");
 
     const state = await setDocumentSituationAction(initialState, formData);
@@ -240,10 +240,10 @@ describe("admin server actions", () => {
     expect(client.setDocumentSituation).toHaveBeenCalledWith("document-id", {
       observation: "Conservar para trazabilidad",
       reason: "Nueva norma aplicable",
-      replacementYear: 2027,
+      replacementYear: 2026,
       situation: "replaced",
     });
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/documents");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/documents", "layout");
     expect(state.status).toBe("success");
   });
 

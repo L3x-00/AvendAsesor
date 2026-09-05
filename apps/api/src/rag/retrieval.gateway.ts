@@ -1,8 +1,13 @@
+import type { DocumentSituation } from '../documents/domain/document';
+
+export type RetrievalScope = 'archived_explicit' | 'current' | 'historical';
+
 export interface RetrievedChunk {
   articleReference: string | null;
   chunkContent: string;
   chunkId: string;
   documentId: string;
+  documentSituation: DocumentSituation;
   documentTitle: string;
   documentVersionId: string;
   lexicalScore: number;
@@ -22,6 +27,7 @@ export interface RetrievalGateway {
     matchCount: number;
     matchThreshold: number;
     query: string;
+    retrievalScope: RetrievalScope;
     selectedModuleId: string | null;
   }): Promise<RetrievedChunk[]>;
 }

@@ -9,6 +9,7 @@ import {
   SUPABASE_HEALTH_GATEWAY,
   SUPABASE_INGESTION_GATEWAY,
   SUPABASE_MODULES_GATEWAY,
+  SUPABASE_MODULE_PERMISSIONS_GATEWAY,
   SUPABASE_OPERATIONS_GATEWAY,
   SUPABASE_PROFILES_GATEWAY,
   SUPABASE_RETRIEVAL_GATEWAY,
@@ -23,6 +24,7 @@ import { SupabaseFaqMemoryGatewayAdapter } from './supabase-faq-memory.gateway';
 import { SupabaseHealthGatewayAdapter } from './supabase-health.gateway';
 import { SupabaseIngestionGatewayAdapter } from './supabase-ingestion.gateway';
 import { SupabaseModulesGatewayAdapter } from './supabase-modules.gateway';
+import { SupabaseModulePermissionsGatewayAdapter } from './supabase-module-permissions.gateway';
 import { SupabaseOperationsGatewayAdapter } from './supabase-operations.gateway';
 import { SupabaseProfilesGatewayAdapter } from './supabase-profiles.gateway';
 import { SupabaseRetrievalGatewayAdapter } from './supabase-retrieval.gateway';
@@ -76,9 +78,13 @@ import {
             ? {
                 from: (table: 'profiles') => client.from(table),
                 rpc: (
-                  functionName: 'touch_profile_last_access',
+                  functionName:
+                    'has_admin_module_access' | 'touch_profile_last_access',
                   args: { p_user_id: string },
-                ) => client.rpc(functionName, args),
+                ) =>
+                  functionName === 'has_admin_module_access'
+                    ? client.rpc(functionName, args)
+                    : client.rpc(functionName, args),
               }
             : null,
         ),
@@ -88,6 +94,12 @@ import {
       inject: [SUPABASE_SERVER_CLIENT],
       useFactory: (client: SupabaseServerClient | null) =>
         new SupabaseModulesGatewayAdapter(client),
+    },
+    {
+      provide: SUPABASE_MODULE_PERMISSIONS_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseModulePermissionsGatewayAdapter(client),
     },
     {
       provide: SUPABASE_DOCUMENTS_GATEWAY,
@@ -141,6 +153,7 @@ import {
     SUPABASE_HEALTH_GATEWAY,
     SUPABASE_INGESTION_GATEWAY,
     SUPABASE_MODULES_GATEWAY,
+    SUPABASE_MODULE_PERMISSIONS_GATEWAY,
     SUPABASE_OPERATIONS_GATEWAY,
     SUPABASE_PROFILES_GATEWAY,
     SUPABASE_RETRIEVAL_GATEWAY,
