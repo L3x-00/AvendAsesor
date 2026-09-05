@@ -1,6 +1,10 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import {
+  accessExpiryInstant,
+  accessStartInstant,
+} from "@/lib/admin-api/access-window";
 import { AdminApiError, type AdminApiClient } from "@/lib/admin-api/client";
 import { type AdminActionState } from "@/lib/admin-api/action-state";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
@@ -646,6 +650,58 @@ export async function updateAdministrativeUserAction(
 
     return {
       message: "Usuario actualizado. La acción quedó registrada.",
+      status: "success",
+    };
+  });
+}
+
+export async function updateAccessWindowAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const userId = requiredText(formData, "userId", "El usuario");
+    const reason = requiredText(formData, "reason", "El motivo");
+    const startInput = optionalText(formData, "accessStartAt");
+    const expiresInput = optionalText(formData, "accessExpiresAt");
+    const payload: {
+      accessExpiresAt?: string;
+      accessStartAt?: string;
+      reason: string;
+    } = { reason };
+
+    if (startInput) {
+      const startInstant = accessStartInstant(startInput);
+      if (!startInstant) {
+        throw new FormValidationError("La fecha de inicio no es válida.");
+      }
+      payload.accessStartAt = startInstant;
+    }
+
+    if (expiresInput) {
+      const expiryInstant = accessExpiryInstant(expiresInput);
+      if (!expiryInstant) {
+        throw new FormValidationError("La fecha de fin no es válida.");
+      }
+      payload.accessExpiresAt = expiryInstant;
+    }
+
+    if (
+      payload.accessStartAt &&
+      payload.accessExpiresAt &&
+      Date.parse(payload.accessStartAt) > Date.parse(payload.accessExpiresAt)
+    ) {
+      throw new FormValidationError(
+        "La fecha de inicio no puede ser posterior a la de fin.",
+      );
+    }
+
+    await client.updateAdministrativeUserAccessWindow(userId, payload);
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+
+    return {
+      message: "Vigencia actualizada. La acción quedó registrada.",
       status: "success",
     };
   });

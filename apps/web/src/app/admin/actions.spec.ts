@@ -9,6 +9,7 @@ import {
   reviewUnansweredQuestionAction,
   setDocumentSituationAction,
   setModuleStatusAction,
+  updateAccessWindowAction,
   updateAdministrativeUserAction,
   updateModuleAction,
 } from "./actions";
@@ -30,6 +31,7 @@ const client = {
   setDocumentSituation: vi.fn(),
   setModuleStatus: vi.fn(),
   updateAdministrativeUser: vi.fn(),
+  updateAdministrativeUserAccessWindow: vi.fn(),
   updateModule: vi.fn(),
 };
 
@@ -295,5 +297,74 @@ describe("admin server actions", () => {
       status: "error",
     });
     expect(client.updateAdministrativeUser).not.toHaveBeenCalled();
+  });
+
+  it("sends an access window as Lima day boundaries", async () => {
+    client.updateAdministrativeUserAccessWindow.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("userId", "user-id");
+    formData.set("reason", "Extensión autorizada");
+    formData.set("accessStartAt", "2026-01-01");
+    formData.set("accessExpiresAt", "2026-12-31");
+
+    const state = await updateAccessWindowAction(initialState, formData);
+
+    expect(state.status).toBe("success");
+    expect(client.updateAdministrativeUserAccessWindow).toHaveBeenCalledWith(
+      "user-id",
+      {
+        accessExpiresAt: "2027-01-01T04:59:59.999Z",
+        accessStartAt: "2026-01-01T05:00:00.000Z",
+        reason: "Extensión autorizada",
+      },
+    );
+  });
+
+  it("clears both dates when the window is left empty", async () => {
+    client.updateAdministrativeUserAccessWindow.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("userId", "user-id");
+    formData.set("reason", "Sin vigencia fija");
+    formData.set("accessStartAt", "");
+    formData.set("accessExpiresAt", "");
+
+    const state = await updateAccessWindowAction(initialState, formData);
+
+    expect(state.status).toBe("success");
+    expect(client.updateAdministrativeUserAccessWindow).toHaveBeenCalledWith(
+      "user-id",
+      { reason: "Sin vigencia fija" },
+    );
+  });
+
+  it("rejects an impossible calendar day before reaching the API", async () => {
+    const formData = new FormData();
+    formData.set("userId", "user-id");
+    formData.set("reason", "Fecha inválida");
+    formData.set("accessExpiresAt", "2026-02-30");
+
+    const state = await updateAccessWindowAction(initialState, formData);
+
+    expect(state).toEqual({
+      message: "La fecha de fin no es válida.",
+      status: "error",
+    });
+    expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a window that starts after it ends", async () => {
+    const formData = new FormData();
+    formData.set("userId", "user-id");
+    formData.set("reason", "Rango invertido");
+    formData.set("accessStartAt", "2026-12-31");
+    formData.set("accessExpiresAt", "2026-01-01");
+
+    const state = await updateAccessWindowAction(initialState, formData);
+
+    expect(state).toEqual({
+      message: "La fecha de inicio no puede ser posterior a la de fin.",
+      status: "error",
+    });
+    expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
   });
 });

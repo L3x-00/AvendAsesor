@@ -43,6 +43,19 @@ const accountStatusLabels = {
   suspended: "Pausado",
 } as const satisfies Record<AdministrativeUser["accountStatus"], string>;
 
+const accessStateLabels = {
+  activo: "Activo",
+  expirado: "Expirado",
+  pausado: "Pausado",
+  por_vencer: "Por vencer",
+} as const satisfies Record<AdministrativeUser["accessState"], string>;
+
+export function formatAccessState(
+  state: AdministrativeUser["accessState"],
+): string {
+  return accessStateLabels[state];
+}
+
 const documentIngestionStatusContent = {
   failed: {
     description:
@@ -70,6 +83,7 @@ const documentIngestionStatusContent = {
 >;
 
 const operationalAuditActionLabels = {
+  access_window_changed: "Vigencia de acceso actualizada",
   chat_history_deleted: "Historial de conversación eliminado",
   unanswered_question_reviewed: "Consulta no resuelta revisada",
   user_role_changed: "Rol de usuario actualizado",

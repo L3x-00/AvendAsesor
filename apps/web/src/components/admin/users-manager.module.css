@@ -228,14 +228,23 @@
   color: var(--avend-text);
 }
 
+/*
+ * Four mutually exclusive access states. Each one carries its own text, so the
+ * state never depends on colour alone; the colours only reinforce it. Filled
+ * vs outlined keeps "Expirado" and "Por vencer" apart at a glance.
+ */
 .badgeActive,
+.badgeExpiring,
+.badgeExpired,
 .badgePaused {
   justify-self: end;
   flex: none;
   padding: 0.15rem 0.7rem;
+  border: 1px solid transparent;
   border-radius: 999px;
   font-size: 1rem;
   font-weight: 700;
+  text-align: center;
 }
 
 .badgeActive {
@@ -243,12 +252,42 @@
   color: var(--avend-accent-strong);
 }
 
+.badgeExpiring {
+  border-color: var(--avend-danger);
+  background: var(--avend-surface);
+  color: var(--avend-danger);
+}
+
+.badgeExpired {
+  background: var(--avend-danger);
+  color: var(--avend-surface);
+}
+
 .badgePaused {
   background: var(--avend-surface-muted);
   color: var(--avend-text);
 }
 
+/*
+ * Full-strength colour inherited from the filter button: a dimmed count would
+ * fall below AA on the selected (soft blue) filter.
+ */
+.statusCount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.formHint {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--avend-text-muted);
+}
+
 .rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
   grid-column: 1 / -1;
 }
 

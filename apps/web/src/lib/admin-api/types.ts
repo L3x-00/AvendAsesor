@@ -352,12 +352,45 @@ export const unansweredQuestionSchema = z.object({
 
 export type UnansweredQuestion = z.infer<typeof unansweredQuestionSchema>;
 
-export const administrativeUserSchema = z.object({
+/**
+ * Derived access state served by the API. Mutually exclusive and computed with
+ * the same expiry rule and 7-day window the Inicio dashboard uses.
+ */
+export const administrativeUserAccessStates = [
+  "activo",
+  "expirado",
+  "pausado",
+  "por_vencer",
+] as const;
+
+export const administrativeUserAccessStateSchema = z.enum(
+  administrativeUserAccessStates,
+);
+
+export type AdministrativeUserAccessState = z.infer<
+  typeof administrativeUserAccessStateSchema
+>;
+
+/**
+ * Shape returned by role/status updates, which do not carry access-window
+ * fields. The directory listing returns the extended shape below.
+ */
+export const administrativeUserBaseSchema = z.object({
   accountStatus: accountStatusSchema,
   fullName: z.string().min(1).max(255),
   id: z.string().uuid(),
   lastAccessAt: timestampSchema.nullable(),
   role: userRoleSchema,
+});
+
+export type AdministrativeUserBase = z.infer<
+  typeof administrativeUserBaseSchema
+>;
+
+export const administrativeUserSchema = administrativeUserBaseSchema.extend({
+  accessExpiresAt: timestampSchema.nullable(),
+  accessStartAt: timestampSchema.nullable(),
+  accessState: administrativeUserAccessStateSchema,
 });
 
 export type AdministrativeUser = z.infer<typeof administrativeUserSchema>;
@@ -373,7 +406,24 @@ export type AdministrativeUserPage = z.infer<
   typeof administrativeUserPageSchema
 >;
 
+/**
+ * Cumulative bucket counts. `expiringSoon` is a subset of `active`, exactly as
+ * the Inicio dashboard cards define them.
+ */
+export const administrativeUserCountsSchema = z.object({
+  active: z.number().int().nonnegative(),
+  expired: z.number().int().nonnegative(),
+  expiringSoon: z.number().int().nonnegative(),
+  suspended: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
+
+export type AdministrativeUserCounts = z.infer<
+  typeof administrativeUserCountsSchema
+>;
+
 export interface AdministrativeUserQuery {
+  accessState?: AdministrativeUserAccessState;
   group?: "docente" | "staff";
   limit?: number;
   offset?: number;
@@ -383,6 +433,7 @@ export interface AdministrativeUserQuery {
 
 export const operationalAuditEventSchema = z.object({
   action: z.enum([
+    "access_window_changed",
     "chat_history_deleted",
     "unanswered_question_reviewed",
     "user_role_changed",
