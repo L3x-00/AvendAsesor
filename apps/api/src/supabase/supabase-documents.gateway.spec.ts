@@ -552,7 +552,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     const options = {
       limit: 10,
       offset: 20,
-      sort: 'year_asc' as const,
+      sort: 'year' as const,
       q: 'nombramiento',
       documentType: 'LEY',
       issuanceYear: 2009,
@@ -571,7 +571,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     expect(rpc).toHaveBeenCalledWith('list_document_library', {
       p_limit: 10,
       p_offset: 20,
-      p_sort: 'year_asc',
+      p_sort: 'year',
       p_query: 'nombramiento',
       p_document_type: 'LEY',
       p_issuance_year: 2009,
