@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { UsersManager } from "@/components/admin/users-manager";
+import { ModulePermissionsManager } from "@/components/admin/module-permissions-manager";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatOperationalAuditAction,
@@ -32,7 +33,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const { access, client } = await createAuthorizedAdminApiContext();
   if (access.role !== "superadmin") redirect("/access-denied");
   const query = parseUserDirectoryQuery(await searchParams);
-  const [userPage, events] = await Promise.all([
+  const [userPage, events, modulePermissions] = await Promise.all([
     client.listAdministrativeUsers({
       group: query.group,
       limit: USER_DIRECTORY_PAGE_SIZE,
@@ -41,6 +42,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       status: query.status === "all" ? undefined : query.status,
     }),
     client.listOperationalAuditEvents(),
+    client.listAdminModulePermissions(),
   ]);
 
   if (query.page > 1 && userPage.items.length === 0 && userPage.total > 0) {
@@ -56,12 +58,14 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     <AdminShell
       activeSection="users"
       description="Gestiona usuarios, administradores y accesos. Cada cambio de rol o estado exige un motivo y queda auditado; la autoridad es del servidor."
+      modulesAccess={access.modulesAccess}
       title="Usuarios y accesos"
       userName={access.fullName}
       userRole={access.role}
     >
       <div className="flex flex-col gap-8">
         <UsersManager page={userPage} query={query} />
+        <ModulePermissionsManager permissions={modulePermissions} />
 
         <section
           aria-labelledby="audit-title"

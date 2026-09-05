@@ -77,6 +77,7 @@ const eligibleConversation = {
       sources: [
         {
           articleReference: "Artículo 5",
+          documentSituation: "current" as const,
           documentTitle: "Norma de licencias",
           id: sourceId,
           moduleName: "Licencias",
@@ -205,9 +206,9 @@ describe("ChatPanel", () => {
     const answer = container.querySelector(".avend-chat-message--assistant");
 
     expect(answer).not.toBeNull();
-    expect(within(answer as HTMLElement).getByText("Requisitos principales").tagName).toBe(
-      "STRONG",
-    );
+    expect(
+      within(answer as HTMLElement).getByText("Requisitos principales").tagName,
+    ).toBe("STRONG");
     expect(within(answer as HTMLElement).getAllByRole("list")).toHaveLength(2);
     expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
   });
@@ -268,7 +269,11 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("textbox", { name: "Escribe tu consulta" }),
     ).toHaveValue("licencia médica");
-    expect(screen.getByText("Dictado finalizado. Revisa el texto antes de enviarlo.")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Dictado finalizado. Revisa el texto antes de enviarlo.",
+      ),
+    ).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: "Dictar la consulta por voz" }),
@@ -277,7 +282,9 @@ describe("ChatPanel", () => {
       screen.getByRole("button", { name: "Detener el dictado por voz" }),
     );
     expect(instances[1].stop).toHaveBeenCalledOnce();
-    expect(screen.getByText("Dictado detenido. Revisa el texto antes de enviarlo.")).toBeVisible();
+    expect(
+      screen.getByText("Dictado detenido. Revisa el texto antes de enviarlo."),
+    ).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: "Dictar la consulta por voz" }),
@@ -379,7 +386,9 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Tema: Licencia por estudios",
     );
-    expect(screen.getByRole("textbox", { name: "Escribe tu consulta" })).toHaveFocus();
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toHaveFocus();
   });
 
   it("cambia de módulo raíz de forma local sin una nueva navegación de servidor", async () => {
@@ -410,10 +419,7 @@ describe("ChatPanel", () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
       void args;
-      return streamResponse([
-        conversationEvent(),
-        doneEvent("rule"),
-      ]);
+      return streamResponse([conversationEvent(), doneEvent("rule")]);
     });
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal("fetch", fetchMock);
@@ -464,7 +470,7 @@ describe("ChatPanel", () => {
           new Response(
             [
               conversationEvent(),
-              'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n',
+              'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentSituation":"current","documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n',
               'event: token\ndata: {"text":"Respuesta sustentada. [1]"}\n\n',
               doneEvent("openai"),
             ].join(""),
@@ -532,17 +538,13 @@ describe("ChatPanel", () => {
           encoder.encode(
             [
               conversationEvent(),
-              `event: sources\ndata: {"sources":[{"id":"${sourceId}","rank":1,"documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n`,
+              `event: sources\ndata: {"sources":[{"id":"${sourceId}","rank":1,"documentSituation":"current","documentTitle":"Norma de licencias","moduleName":"Licencias","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":"Artículo 5","articleReference":"Artículo 5","numeralReference":null,"relevanceScore":0.91}]}\n\n`,
               'event: token\ndata: {"text":"Respuesta en curso. [1]"}\n\n',
             ].join(""),
           ),
         );
         finishStream = () => {
-          controller.enqueue(
-            encoder.encode(
-              doneEvent("openai"),
-            ),
-          );
+          controller.enqueue(encoder.encode(doneEvent("openai")));
           controller.close();
         };
       },

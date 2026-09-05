@@ -16,6 +16,7 @@ const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
 const questionId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
 const source = {
   articleReference: "Artículo 5",
+  documentSituation: "current" as const,
   documentTitle: "Ley de Reforma Magisterial",
   id: "9c8b56af-6d0c-4fef-881e-7c00907540dd",
   moduleName: "Licencias",
@@ -132,7 +133,11 @@ describe("orientation document model", () => {
       sources: [],
     });
 
-    const context = resolveOrientationContext(detail, conversationId, messageId);
+    const context = resolveOrientationContext(
+      detail,
+      conversationId,
+      messageId,
+    );
 
     expect(context?.question).toBe("¿Qué requisito debo presentar?");
   });
@@ -184,10 +189,14 @@ describe("orientation document model", () => {
     });
     detail.messages[0]!.content = "¿Qué\u000b corresponde?";
 
-    expect(resolveOrientationContext(detail, conversationId, messageId)).toMatchObject({
+    expect(
+      resolveOrientationContext(detail, conversationId, messageId),
+    ).toMatchObject({
       answer: "Respuesta segura. [1]",
       question: "¿Qué corresponde?",
-      sources: [{ documentTitle: "Norma oficial", sectionTitle: "Sección válida" }],
+      sources: [
+        { documentTitle: "Norma oficial", sectionTitle: "Sección válida" },
+      ],
     });
   });
 

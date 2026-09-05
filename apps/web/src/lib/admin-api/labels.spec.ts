@@ -43,17 +43,17 @@ describe("administrative display labels", () => {
   it("explains every document ingestion state in Spanish without technical errors", () => {
     expect(getDocumentIngestionStatusContent("pending")).toEqual({
       description:
-        "Esta versión está pendiente de procesamiento. Estará disponible para consultas cuando termine la indexación.",
+        "Esta versión está pendiente de procesamiento. Podrá aprobarse cuando termine la indexación.",
       label: "Pendiente",
     });
     expect(getDocumentIngestionStatusContent("processing")).toEqual({
       description:
-        "Estamos preparando esta versión. Estará disponible para consultas cuando termine la indexación.",
+        "Estamos preparando esta versión. Podrá aprobarse cuando termine la indexación.",
       label: "Procesando",
     });
     expect(getDocumentIngestionStatusContent("indexed")).toEqual({
       description:
-        "Esta versión ya está disponible para consultas en el asistente.",
+        "El procesamiento automático terminó. Su uso en consultas depende de que el documento esté aprobado como Listo.",
       label: "Indexado",
     });
     expect(getDocumentIngestionStatusContent("failed")).toEqual({

@@ -55,6 +55,7 @@ const modules: ManagedModule[] = [
 ];
 
 const document: DocumentLibraryItem = {
+  additionalDetail: null,
   articleReference: null,
   createdAt: "2026-09-01T15:00:00.000Z",
   createdBy: null,
@@ -62,9 +63,11 @@ const document: DocumentLibraryItem = {
   currentVersionId: versionId,
   currentVersionUploadedAt: "2026-09-01T15:00:00.000Z",
   documentType: "RESOLUCION_MINISTERIAL",
+  documentTypeOther: null,
   id: documentId,
   issuanceYear: 2026,
   issuingEntity: "Minedu",
+  issuingEntityOther: null,
   metadata: {},
   moduleAssociations: [
     {
@@ -84,6 +87,7 @@ const document: DocumentLibraryItem = {
   replacementYear: null,
   resolutionNumber: "RM-100-2026",
   situation: "current",
+  specificDependency: "Secretaría General",
   technicalStatus: "ready",
   title: "Nombramiento docente 2026",
   updatedAt: "2026-09-01T15:00:00.000Z",
@@ -112,9 +116,13 @@ describe("DocumentLibraryView", () => {
     const viewLinks = screen.getAllByRole("link", { name: "Ver PDF" });
     expect(viewLinks[0]).toHaveAttribute(
       "href",
-      `/api/admin/documents/${documentId}/access?disposition=inline&versionId=${versionId}`,
+      `/admin/documents/${documentId}#pdf-viewer`,
     );
-    expect(viewLinks[0]).toHaveAttribute("target", "_blank");
+    expect(viewLinks[0]).not.toHaveAttribute("target");
+    expect(
+      screen.getAllByRole("link", { name: "Descargar PDF" }),
+    ).not.toHaveLength(0);
+    expect(screen.getByLabelText("Año")).toHaveAttribute("type", "number");
     expect(
       screen.queryByRole("button", { name: "Cargar PDF" }),
     ).not.toBeInTheDocument();
@@ -174,5 +182,34 @@ describe("DocumentLibraryView", () => {
     expect(
       screen.getAllByRole("link", { name: "Ver detalle" }),
     ).not.toHaveLength(0);
+  });
+
+  it("shows custom type and institution names in both responsive representations", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{
+          items: [
+            {
+              ...document,
+              documentType: "OTRO",
+              documentTypeOther: "Protocolo regional",
+              issuingEntity: "OTRA_INSTITUCION",
+              issuingEntityOther: "Instituto Pedagógico Regional",
+            },
+          ],
+          limit: 20,
+          offset: 0,
+          total: 1,
+        }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    expect(screen.getAllByText(/Protocolo regional/)).toHaveLength(2);
+    expect(
+      screen.getAllByText(/Instituto Pedagógico Regional/),
+    ).toHaveLength(2);
   });
 });

@@ -14,12 +14,21 @@ import type {
   DocumentModuleAssociation,
   ManagedModule,
 } from "@/lib/admin-api/types";
+import {
+  DOCUMENT_TYPE_OPTIONS,
+  ISSUING_ENTITY_OPTIONS,
+  documentYears,
+  issuingEntityLabel,
+} from "@/lib/admin-api/document-taxonomy";
 
 interface DocumentLibraryViewProps {
   activeFilterCount: number;
+  basePath?: string;
   library: DocumentLibraryPage;
+  lockLocation?: boolean;
   modules: ManagedModule[];
   query: ParsedDocumentLibraryQuery;
+  resultsTitle?: string;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -109,6 +118,20 @@ function TechnicalBadge({ document }: { document: DocumentLibraryItem }) {
   );
 }
 
+function displayedDocumentType(document: DocumentLibraryItem): string {
+  return document.documentType === "OTRO" && document.documentTypeOther
+    ? document.documentTypeOther
+    : formatDocumentType(document.documentType);
+}
+
+function displayedIssuingEntity(document: DocumentLibraryItem): string {
+  if (!document.issuingEntity) return "—";
+  return document.issuingEntity === "OTRA_INSTITUCION" &&
+    document.issuingEntityOther
+    ? document.issuingEntityOther
+    : issuingEntityLabel(document.issuingEntity);
+}
+
 function DocumentActions({
   compact = false,
   document,
@@ -125,14 +148,12 @@ function DocumentActions({
       </Link>
       {document.currentVersionId ? (
         <>
-          <a
+          <Link
             className={actionClass}
-            href={accessHref(document.id, "inline", document.currentVersionId)}
-            rel="noreferrer"
-            target="_blank"
+            href={`/admin/documents/${document.id}#pdf-viewer`}
           >
             Ver PDF
-          </a>
+          </Link>
           <a
             className={actionClass}
             href={accessHref(
@@ -141,7 +162,7 @@ function DocumentActions({
               document.currentVersionId,
             )}
           >
-            Descargar
+            Descargar PDF
           </a>
         </>
       ) : (
@@ -155,9 +176,12 @@ function DocumentActions({
 
 export function DocumentLibraryView({
   activeFilterCount,
+  basePath = "/admin/documents",
   library,
+  lockLocation = false,
   modules,
   query,
+  resultsTitle = "Biblioteca documental",
 }: DocumentLibraryViewProps) {
   const visibleModules = modules.filter((module) => !module.isDeleted);
   const rootModules = visibleModules.filter((module) => !module.parentModuleId);
@@ -173,10 +197,16 @@ export function DocumentLibraryView({
   return (
     <div className="space-y-6">
       <form
-        action="/admin/documents"
+        action={basePath}
         className="avend-elevated rounded-xl border border-avend-border bg-avend-surface p-5"
         method="get"
       >
+        {lockLocation && query.moduleId ? (
+          <input name="moduleId" type="hidden" value={query.moduleId} />
+        ) : null}
+        {lockLocation && query.submoduleId ? (
+          <input name="submoduleId" type="hidden" value={query.submoduleId} />
+        ) : null}
         <div className="grid gap-4 lg:grid-cols-12">
           <label className="block lg:col-span-8" htmlFor="library-search">
             <span className="text-base font-semibold">Buscar documento</span>
@@ -206,6 +236,11 @@ export function DocumentLibraryView({
               <option value="year">Año (más reciente)</option>
               <option value="title">Título (A–Z)</option>
               <option value="upload_date">Fecha de carga</option>
+              <option value="document_type">Tipo documental</option>
+              <option value="issuing_entity">Entidad emisora</option>
+              <option value="situation">Situación</option>
+              <option value="technical_status">Estado técnico</option>
+              <option value="module">Módulo / submódulo</option>
             </select>
           </label>
 
@@ -215,74 +250,101 @@ export function DocumentLibraryView({
               <span className="text-base font-semibold">Año</span>
               <input
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                defaultValue={query.issuanceYear}
+                defaultValue={query.issuanceYear ?? ""}
                 id="library-year"
-                max="2200"
-                min="1800"
+                inputMode="numeric"
+                list="library-year-options"
+                max={new Date().getFullYear()}
+                min={1800}
                 name="issuanceYear"
+                placeholder="Todos (ej. 2026 o 2009)"
                 type="number"
               />
             </label>
+            <datalist id="library-year-options">
+              {documentYears().map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </datalist>
             <label className="block lg:col-span-3" htmlFor="library-type">
               <span className="text-base font-semibold">Tipo documental</span>
-              <input
+              <select
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
                 defaultValue={query.documentType}
                 id="library-type"
-                maxLength={64}
                 name="documentType"
-                placeholder="Ej. LEY"
-              />
-            </label>
-            <label className="block lg:col-span-3" htmlFor="library-entity">
-              <span className="text-base font-semibold">Entidad</span>
-              <input
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                defaultValue={query.issuingEntity}
-                id="library-entity"
-                maxLength={255}
-                name="issuingEntity"
-                placeholder="Ej. Minedu"
-              />
-            </label>
-            <label className="block lg:col-span-4" htmlFor="library-module">
-              <span className="text-base font-semibold">Módulo</span>
-              <select
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                defaultValue={query.moduleId ?? ""}
-                id="library-module"
-                name="moduleId"
               >
                 <option value="">Todos</option>
-                {rootModules.map((module) => (
-                  <option key={module.id} value={module.id}>
-                    {module.name}
+                {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </label>
-            <label className="block lg:col-span-4" htmlFor="library-submodule">
-              <span className="text-base font-semibold">Submódulo</span>
+            <label className="block lg:col-span-3" htmlFor="library-entity">
+              <span className="text-base font-semibold">Entidad</span>
               <select
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                defaultValue={query.submoduleId ?? ""}
-                id="library-submodule"
-                name="submoduleId"
+                defaultValue={query.issuingEntity}
+                id="library-entity"
+                name="issuingEntity"
               >
-                <option value="">Todos</option>
-                {visibleSubmodules.map((module) => {
-                  const parent = visibleModules.find(
-                    (candidate) => candidate.id === module.parentModuleId,
-                  );
-                  return (
-                    <option key={module.id} value={module.id}>
-                      {parent ? `${parent.name} — ` : ""}
-                      {module.name}
-                    </option>
-                  );
-                })}
+                <option value="">Todas</option>
+                {ISSUING_ENTITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
+            {!lockLocation ? (
+              <label className="block lg:col-span-4" htmlFor="library-module">
+                <span className="text-base font-semibold">Módulo</span>
+                <select
+                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  defaultValue={query.moduleId ?? ""}
+                  id="library-module"
+                  name="moduleId"
+                >
+                  <option value="">Todos</option>
+                  {rootModules.map((module) => (
+                    <option key={module.id} value={module.id}>
+                      {module.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {!lockLocation ? (
+              <label
+                className="block lg:col-span-4"
+                htmlFor="library-submodule"
+              >
+                <span className="text-base font-semibold">Submódulo</span>
+                <select
+                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  defaultValue={query.submoduleId ?? ""}
+                  id="library-submodule"
+                  name="submoduleId"
+                >
+                  <option value="">Todos</option>
+                  {visibleSubmodules.map((module) => {
+                    const parent = visibleModules.find(
+                      (candidate) => candidate.id === module.parentModuleId,
+                    );
+                    return (
+                      <option key={module.id} value={module.id}>
+                        {parent ? `${parent.name} — ` : ""}
+                        {module.name}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            ) : null}
             <label className="block lg:col-span-4" htmlFor="library-situation">
               <span className="text-base font-semibold">Situación</span>
               <select
@@ -324,7 +386,7 @@ export function DocumentLibraryView({
           </button>
           <Link
             className="inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
-            href="/admin/documents"
+            href={basePath}
           >
             Limpiar filtros
           </Link>
@@ -339,7 +401,7 @@ export function DocumentLibraryView({
       <section aria-labelledby="document-library-results" className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-xl font-bold" id="document-library-results">
-            Biblioteca documental
+            {resultsTitle}
           </h2>
           <p aria-live="polite" className="text-base text-avend-text-muted">
             {library.total} {library.total === 1 ? "documento" : "documentos"}
@@ -416,7 +478,7 @@ export function DocumentLibraryView({
                           {document.title}
                         </Link>
                         <span className="mt-1 block break-words text-avend-text-muted">
-                          {formatDocumentType(document.documentType)}
+                          {displayedDocumentType(document)}
                           {document.resolutionNumber
                             ? ` · ${document.resolutionNumber}`
                             : ""}
@@ -426,7 +488,7 @@ export function DocumentLibraryView({
                         {document.issuanceYear ?? "—"}
                       </td>
                       <td className="px-3 py-4">
-                        {document.issuingEntity ?? "—"}
+                        {displayedIssuingEntity(document)}
                       </td>
                       <td className="px-3 py-4">
                         <AssociationList
@@ -469,7 +531,7 @@ export function DocumentLibraryView({
                     {document.title}
                   </Link>
                   <p className="mt-1 text-base text-avend-text-muted">
-                    {formatDocumentType(document.documentType)}
+                    {displayedDocumentType(document)}
                     {document.resolutionNumber
                       ? ` · ${document.resolutionNumber}`
                       : ""}
@@ -483,7 +545,7 @@ export function DocumentLibraryView({
                       <dt className="font-semibold">Año / entidad</dt>
                       <dd>
                         {document.issuanceYear ?? "—"} ·{" "}
-                        {document.issuingEntity ?? "Sin entidad"}
+                        {displayedIssuingEntity(document)}
                       </dd>
                     </div>
                     <div>
@@ -527,7 +589,7 @@ export function DocumentLibraryView({
               {query.page > 1 ? (
                 <Link
                   className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
-                  href={documentLibraryHref(query, query.page - 1)}
+                  href={documentLibraryHref(query, query.page - 1, basePath)}
                 >
                   Anterior
                 </Link>
@@ -535,7 +597,7 @@ export function DocumentLibraryView({
               {query.page < totalPages ? (
                 <Link
                   className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
-                  href={documentLibraryHref(query, query.page + 1)}
+                  href={documentLibraryHref(query, query.page + 1, basePath)}
                 >
                   Siguiente
                 </Link>

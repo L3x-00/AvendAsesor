@@ -3,12 +3,15 @@ import { ZodError, type ZodType } from "zod";
 import { getAdminApiUrl } from "./config";
 import {
   downloadUrlSchema,
+  adminModulePermissionSchema,
+  documentSuggestionsSchema,
   documentLibraryPageSchema,
   adminHomeDashboardSchema,
   administrativeUserSchema,
   managedDocumentDetailsSchema,
   managedDocumentSchema,
   managedModuleSchema,
+  managedModuleSummarySchema,
   operationalAuditEventSchema,
   operationalMetricsSchema,
   unansweredQuestionSchema,
@@ -16,14 +19,17 @@ import {
   type AdminHomeDashboard,
   type AdministrativeUserPage,
   type AdministrativeUserQuery,
+  type AdminModulePermission,
   administrativeUserPageSchema,
   type DownloadUrl,
+  type DocumentSuggestions,
   type DocumentLibraryPage,
   type DocumentLibraryQuery,
   type DocumentSituation,
   type ManagedDocument,
   type ManagedDocumentDetails,
   type ManagedModule,
+  type ManagedModuleSummary,
   type OperationalAuditEvent,
   type OperationalMetrics,
   type UnansweredQuestion,
@@ -96,6 +102,14 @@ export class AdminApiClient {
       `/admin/documents/${documentId}`,
       { method: "GET" },
       managedDocumentDetailsSchema,
+    );
+  }
+
+  async getDocumentSuggestions(): Promise<DocumentSuggestions> {
+    return this.send(
+      "/admin/documents/suggestions",
+      { method: "GET" },
+      documentSuggestionsSchema,
     );
   }
 
@@ -222,6 +236,18 @@ export class AdminApiClient {
     );
   }
 
+  async listModuleSummaries(
+    status: "active" | "all" | "inactive" = "all",
+  ): Promise<ManagedModuleSummary[]> {
+    const query = new URLSearchParams({ status });
+
+    return this.send(
+      `/admin/modules/summary?${query.toString()}`,
+      { method: "GET" },
+      managedModuleSummarySchema.array(),
+    );
+  }
+
   async listUnansweredQuestions(
     status: "dismissed" | "pending_review" | "resolved" = "pending_review",
   ): Promise<UnansweredQuestion[]> {
@@ -246,9 +272,25 @@ export class AdminApiClient {
     );
   }
 
+  async setDocumentTechnicalStatus(
+    documentId: string,
+    technicalStatus: "pending_approval" | "ready",
+  ): Promise<ManagedDocument> {
+    return this.send(
+      `/admin/documents/${documentId}/technical-status`,
+      {
+        body: JSON.stringify({ technicalStatus }),
+        method: "PATCH",
+      },
+      managedDocumentSchema,
+    );
+  }
+
   async setDocumentSituation(
     documentId: string,
     payload: {
+      archiveReasonCode?: string;
+      archiveReasonDetail?: string;
       observation?: string;
       reason?: string;
       replacementDate?: string;
@@ -341,6 +383,26 @@ export class AdminApiClient {
       `/admin/users/${userId}`,
       { body: JSON.stringify(payload), method: "PATCH" },
       administrativeUserSchema,
+    );
+  }
+
+  async listAdminModulePermissions(): Promise<AdminModulePermission[]> {
+    return this.send(
+      "/admin/module-permissions",
+      { method: "GET" },
+      adminModulePermissionSchema.array(),
+    );
+  }
+
+  async setAdminModulePermission(
+    userId: string,
+    canAccess: boolean,
+    reason: string,
+  ): Promise<AdminModulePermission> {
+    return this.send(
+      `/admin/module-permissions/${userId}`,
+      { body: JSON.stringify({ canAccess, reason }), method: "PATCH" },
+      adminModulePermissionSchema,
     );
   }
 

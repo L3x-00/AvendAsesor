@@ -39,6 +39,7 @@ function authorize() {
   mocks.resolveAuthorizedAdminApiSession.mockResolvedValue({
     access: {
       fullName: "Ana Administradora",
+      modulesAccess: true,
       role: "superadmin",
       status: "authorized",
       userId: "user-1",
@@ -66,6 +67,27 @@ describe("admin document access BFF", () => {
     expect(response.status).toBe(401);
     expect(mocks.getDownloadUrl).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({ error: "DOCUMENT_ACCESS_DENIED" });
+  });
+
+  it("rejects administrators without module permission", async () => {
+    mocks.resolveAuthorizedAdminApiSession.mockResolvedValue({
+      access: {
+        fullName: "Ana Administradora",
+        modulesAccess: false,
+        role: "admin",
+        status: "authorized",
+        userId: "user-1",
+      },
+      client: { getDownloadUrl: mocks.getDownloadUrl },
+      status: "authorized",
+    });
+
+    const response = await GET(request(), {
+      params: Promise.resolve({ id: documentId }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(mocks.getDownloadUrl).not.toHaveBeenCalled();
   });
 
   it("uses the authorized server client and redirects with hardened headers", async () => {

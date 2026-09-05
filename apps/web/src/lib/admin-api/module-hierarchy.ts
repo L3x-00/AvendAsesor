@@ -2,19 +2,24 @@ import type {
   ModuleParentOption,
   ModuleView,
 } from "@/components/admin/modules-explorer";
-import type { ManagedModule } from "./types";
+import type { ManagedModuleSummary } from "./types";
 
-function byOrderThenName(a: ManagedModule, b: ManagedModule): number {
+function byOrderThenName(
+  a: ManagedModuleSummary,
+  b: ManagedModuleSummary,
+): number {
   return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es");
 }
 
 /** Modules that are not logically deleted (still manageable). */
-export function visibleModules(modules: ManagedModule[]): ManagedModule[] {
+export function visibleModules(
+  modules: ManagedModuleSummary[],
+): ManagedModuleSummary[] {
   return modules.filter((module) => !module.isDeleted);
 }
 
 export function countSubmodules(
-  modules: ManagedModule[],
+  modules: ManagedModuleSummary[],
   moduleId: string,
 ): number {
   return modules.filter(
@@ -23,43 +28,48 @@ export function countSubmodules(
 }
 
 export function toModuleView(
-  module: ManagedModule,
-  allModules: ManagedModule[],
+  module: ManagedModuleSummary,
 ): ModuleView {
   return {
     code: module.code,
     description: module.description,
+    documentCount: module.documentCount,
     id: module.id,
     isActive: module.isActive,
     name: module.name,
     parentModuleId: module.parentModuleId,
     sortOrder: module.sortOrder,
-    submoduleCount: countSubmodules(allModules, module.id),
+    submoduleCount: module.submoduleCount,
   };
 }
 
 /** Top-level modules (no parent), ordered, with submodule counts. */
-export function rootModuleViews(allModules: ManagedModule[]): ModuleView[] {
+export function rootModuleViews(
+  allModules: ManagedModuleSummary[],
+): ModuleView[] {
   return visibleModules(allModules)
     .filter((module) => !module.parentModuleId)
     .sort(byOrderThenName)
-    .map((module) => toModuleView(module, allModules));
+    .map(toModuleView);
 }
 
 /** Direct children of a module, ordered, with their own submodule counts. */
 export function childModuleViews(
-  allModules: ManagedModule[],
+  allModules: ManagedModuleSummary[],
   parentId: string,
 ): ModuleView[] {
   return visibleModules(allModules)
     .filter((module) => module.parentModuleId === parentId)
     .sort(byOrderThenName)
-    .map((module) => toModuleView(module, allModules));
+    .map(toModuleView);
 }
 
 /** Options for the "parent module" selects. */
-export function parentOptions(allModules: ManagedModule[]): ModuleParentOption[] {
+export function parentOptions(
+  allModules: ManagedModuleSummary[],
+): ModuleParentOption[] {
   return visibleModules(allModules)
+    .filter((module) => !module.parentModuleId)
     .sort(byOrderThenName)
     .map((module) => ({
       code: module.code,
@@ -69,8 +79,8 @@ export function parentOptions(allModules: ManagedModule[]): ModuleParentOption[]
 }
 
 export function findVisibleModule(
-  allModules: ManagedModule[],
+  allModules: ManagedModuleSummary[],
   moduleId: string,
-): ManagedModule | undefined {
+): ManagedModuleSummary | undefined {
   return visibleModules(allModules).find((module) => module.id === moduleId);
 }

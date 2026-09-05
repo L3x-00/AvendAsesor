@@ -19,6 +19,7 @@ export interface ModuleView {
   name: string;
   parentModuleId: string | null;
   sortOrder: number;
+  documentCount: number;
   submoduleCount: number;
 }
 
@@ -113,27 +114,35 @@ export function ModuleManageDetails({
             name="sortOrder"
             type="number"
           />
-          <label className={styles.fieldLabel} htmlFor={`${fieldId}-parent`}>
-            Módulo padre
-          </label>
-          <select
-            className={styles.input}
-            defaultValue="__keep__"
-            id={`${fieldId}-parent`}
-            name="parentModuleId"
-          >
-            <option value="__keep__">Mantener padre actual</option>
-            {module.parentModuleId ? (
-              <option value="__root__">Convertir en módulo principal</option>
-            ) : null}
-            {parents
-              .filter((parent) => parent.id !== module.id)
-              .map((parent) => (
-                <option key={parent.id} value={parent.id}>
-                  {parent.name} ({parent.code})
-                </option>
-              ))}
-          </select>
+          {module.parentModuleId ? (
+            <>
+              <label
+                className={styles.fieldLabel}
+                htmlFor={`${fieldId}-parent`}
+              >
+                Módulo padre
+              </label>
+              <select
+                className={styles.input}
+                defaultValue="__keep__"
+                id={`${fieldId}-parent`}
+                name="parentModuleId"
+              >
+                <option value="__keep__">Mantener padre actual</option>
+                {parents
+                  .filter((parent) => parent.id !== module.id)
+                  .map((parent) => (
+                    <option key={parent.id} value={parent.id}>
+                      {parent.name} ({parent.code})
+                    </option>
+                  ))}
+              </select>
+            </>
+          ) : (
+            <p className={styles.presetParent}>
+              Módulo padre: <strong>Sin padre</strong>
+            </p>
+          )}
         </AdminActionForm>
 
         <div className={styles.manageSide}>
@@ -198,6 +207,9 @@ export function ModulesExplorer({
   parents,
 }: ModulesExplorerProps) {
   const [query, setQuery] = useState("");
+  const [createKind, setCreateKind] = useState<"module" | "submodule">(
+    isRootContext(context) ? "module" : "submodule",
+  );
   const searchId = useId();
   const isRoot = context.kind === "root";
   const normalized = query.trim().toLocaleLowerCase("es");
@@ -273,9 +285,9 @@ export function ModulesExplorer({
                   <p className={styles.cardDescription}>{module.description}</p>
                 ) : null}
                 <p className={styles.cardStat}>
-                  {hasSubmodules
-                    ? `${module.submoduleCount} ${submoduleWord(module.submoduleCount)}`
-                    : "Sin submódulos"}
+                  {isRoot
+                    ? `${module.submoduleCount} ${submoduleWord(module.submoduleCount)} · ${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`
+                    : `${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`}
                 </p>
                 <Link className={styles.cardLink} href={primaryHref}>
                   {primaryLabel}
@@ -287,19 +299,31 @@ export function ModulesExplorer({
         </ul>
       )}
 
-      <section
-        aria-labelledby={`${searchId}-create`}
-        className={styles.createPanel}
-      >
-        <h3 className={styles.createTitle} id={`${searchId}-create`}>
-          {isRoot
-            ? "Crear módulo o submódulo"
-            : `Crear submódulo en ${context.moduleName}`}
-        </h3>
+      <details className={styles.createPanel}>
+        <summary className={styles.createTitle} id={`${searchId}-create`}>
+          {isRoot ? "+ Crear módulo o submódulo" : "+ Crear submódulo"}
+        </summary>
         <AdminActionForm
           action={createModuleAction}
+          className={styles.createForm}
           submitLabel={isRoot ? "Crear" : "Crear submódulo"}
         >
+          {isRoot ? (
+            <label className={styles.fieldLabel} htmlFor={`${searchId}-kind`}>
+              Tipo de elemento
+              <select
+                className={styles.input}
+                id={`${searchId}-kind`}
+                onChange={(event) =>
+                  setCreateKind(event.target.value as "module" | "submodule")
+                }
+                value={createKind}
+              >
+                <option value="module">Módulo principal</option>
+                <option value="submodule">Submódulo</option>
+              </select>
+            </label>
+          ) : null}
           {isRoot ? null : (
             <input
               name="parentModuleId"
@@ -354,21 +378,39 @@ export function ModulesExplorer({
             name="sortOrder"
             type="number"
           />
-          {isRoot ? (
+          <label
+            className={styles.fieldLabel}
+            htmlFor={`${searchId}-new-status`}
+          >
+            Estado
+            <select
+              className={styles.input}
+              defaultValue="true"
+              id={`${searchId}-new-status`}
+              name="isActive"
+            >
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </label>
+          {isRoot && createKind === "submodule" ? (
             <>
               <label
                 className={styles.fieldLabel}
                 htmlFor={`${searchId}-new-parent`}
               >
-                Módulo padre (opcional)
+                Módulo padre
               </label>
               <select
                 className={styles.input}
                 defaultValue=""
                 id={`${searchId}-new-parent`}
                 name="parentModuleId"
+                required
               >
-                <option value="">Sin padre (módulo principal)</option>
+                <option disabled value="">
+                  Selecciona un módulo principal
+                </option>
                 {parents.map((parent) => (
                   <option key={parent.id} value={parent.id}>
                     {parent.name} ({parent.code})
@@ -376,13 +418,19 @@ export function ModulesExplorer({
                 ))}
               </select>
             </>
+          ) : isRoot ? (
+            <input name="parentModuleId" type="hidden" value="__root__" />
           ) : (
             <p className={styles.presetParent}>
               Módulo padre: <strong>{context.moduleName}</strong>
             </p>
           )}
         </AdminActionForm>
-      </section>
+      </details>
     </div>
   );
+}
+
+function isRootContext(context: ExplorerContext): context is { kind: "root" } {
+  return context.kind === "root";
 }

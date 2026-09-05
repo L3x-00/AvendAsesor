@@ -7,6 +7,7 @@ describe("AdminShell", () => {
     const { container } = render(
       <AdminShell
         activeSection="home"
+        modulesAccess
         description="Descripción"
         title="Administración"
         userName="Juan Avend"
@@ -48,6 +49,7 @@ describe("AdminShell", () => {
     const { container } = render(
       <AdminShell
         activeSection="users"
+        modulesAccess
         description="Descripción"
         title="Usuarios"
         userName="Juan Avend"
@@ -73,6 +75,7 @@ describe("AdminShell", () => {
     const { container } = render(
       <AdminShell
         activeSection="home"
+        modulesAccess
         description="Descripción"
         title="Administración"
         userName="Usuario"
@@ -93,6 +96,7 @@ describe("AdminShell", () => {
         description="Resumen general del sistema y accesos principales."
         eyebrow={null}
         headerAside={<time>12:45:32 a. m. | Lunes, 31 de agosto de 2026</time>}
+        modulesAccess
         title="PANEL DE ADMINISTRACIÓN AVEND ASESOR"
         userName="Juan Avend"
         userRole="superadmin"
@@ -108,7 +112,9 @@ describe("AdminShell", () => {
         name: "PANEL DE ADMINISTRACIÓN AVEND ASESOR",
       }),
     ).toBeVisible();
-    expect(screen.getByText("¡Bienvenido de nuevo, Administrador!")).toBeVisible();
+    expect(
+      screen.getByText("¡Bienvenido de nuevo, Administrador!"),
+    ).toBeVisible();
     expect(
       screen.getByText("Resumen general del sistema y accesos principales."),
     ).toBeVisible();
@@ -121,6 +127,7 @@ describe("AdminShell", () => {
     const { container } = render(
       <AdminShell
         activeSection="documents"
+        modulesAccess
         description="Descripción"
         title="Historial"
         userName="María Administradora"

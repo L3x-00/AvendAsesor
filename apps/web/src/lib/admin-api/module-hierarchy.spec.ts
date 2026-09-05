@@ -7,11 +7,11 @@ import {
   rootModuleViews,
   visibleModules,
 } from "./module-hierarchy";
-import type { ManagedModule } from "./types";
+import type { ManagedModuleSummary } from "./types";
 
 function mod(
-  overrides: Partial<ManagedModule> & Pick<ManagedModule, "id">,
-): ManagedModule {
+  overrides: Partial<ManagedModuleSummary> & Pick<ManagedModuleSummary, "id">,
+): ManagedModuleSummary {
   return {
     code: "CODE",
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -23,23 +23,43 @@ function mod(
     deletedBy: null,
     deletionReason: null,
     description: null,
+    documentCount: 0,
     isActive: true,
     isDeleted: false,
     metadata: {},
     name: "Módulo",
     parentModuleId: null,
     sortOrder: 0,
+    submoduleCount: 0,
     updatedAt: "2026-01-01T00:00:00.000Z",
     updatedBy: null,
     ...overrides,
   };
 }
 
-const modules: ManagedModule[] = [
+const modules: ManagedModuleSummary[] = [
   mod({ code: "BETA", id: "root-b", name: "Beta", sortOrder: 2 }),
-  mod({ code: "ALFA", id: "root-a", name: "Alfa", sortOrder: 1 }),
-  mod({ code: "SUB1", id: "sub-1", name: "Sub Uno", parentModuleId: "root-a", sortOrder: 2 }),
-  mod({ code: "SUB2", id: "sub-2", name: "Sub Dos", parentModuleId: "root-a", sortOrder: 1 }),
+  mod({
+    code: "ALFA",
+    id: "root-a",
+    name: "Alfa",
+    sortOrder: 1,
+    submoduleCount: 2,
+  }),
+  mod({
+    code: "SUB1",
+    id: "sub-1",
+    name: "Sub Uno",
+    parentModuleId: "root-a",
+    sortOrder: 2,
+  }),
+  mod({
+    code: "SUB2",
+    id: "sub-2",
+    name: "Sub Dos",
+    parentModuleId: "root-a",
+    sortOrder: 1,
+  }),
   mod({ code: "DEL", id: "deleted", isDeleted: true, name: "Borrado" }),
 ];
 
@@ -65,10 +85,10 @@ describe("module-hierarchy", () => {
     expect(countSubmodules(modules, "root-b")).toBe(0);
   });
 
-  it("offers every non-deleted module as a parent option", () => {
+  it("offers only non-deleted root modules as parent options", () => {
     const options = parentOptions(modules);
 
-    expect(options).toHaveLength(4);
+    expect(options).toHaveLength(2);
     expect(options.some((option) => option.id === "deleted")).toBe(false);
   });
 

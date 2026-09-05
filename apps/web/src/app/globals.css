@@ -621,7 +621,7 @@ body {
 
 .avend-admin-account-avatar {
   align-items: center;
-  background: var(--avend-accent);
+  background: var(--avend-accent-strong);
   border-radius: 999px;
   color: var(--avend-surface);
   display: inline-flex;

@@ -37,6 +37,10 @@ export async function GET(
     );
   }
 
+  if (!session.access.modulesAccess) {
+    return safeError(403, "DOCUMENT_ACCESS_DENIED");
+  }
+
   const parsedId = idSchema.safeParse((await params).id);
   if (!parsedId.success) return safeError(404, "DOCUMENT_NOT_AVAILABLE");
 

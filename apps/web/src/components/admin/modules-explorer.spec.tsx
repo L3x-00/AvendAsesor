@@ -13,6 +13,7 @@ vi.mock("@/app/admin/actions", () => ({
 const rootModules: ModuleView[] = [
   {
     code: "EVAL",
+    documentCount: 73,
     description: "Procesos de evaluación",
     id: "m1",
     isActive: true,
@@ -23,6 +24,7 @@ const rootModules: ModuleView[] = [
   },
   {
     code: "CONTRATO",
+    documentCount: 0,
     description: null,
     id: "m2",
     isActive: false,
@@ -53,7 +55,9 @@ describe("ModulesExplorer", () => {
       .getByRole("heading", { name: "Evaluación docente" })
       .closest("li");
     if (!evaluation) throw new Error("Missing module card");
-    expect(within(evaluation).getByText("8 submódulos")).toBeVisible();
+    expect(
+      within(evaluation).getByText("8 submódulos · 73 documentos"),
+    ).toBeVisible();
     expect(within(evaluation).getByText("Activo")).toBeVisible();
     expect(
       within(evaluation).getByRole("link", { name: "Ver submódulos" }),
@@ -63,7 +67,9 @@ describe("ModulesExplorer", () => {
       .getByRole("heading", { name: "Contrato y desplazamiento" })
       .closest("li");
     if (!contrato) throw new Error("Missing module card");
-    expect(within(contrato).getByText("Sin submódulos")).toBeVisible();
+    expect(
+      within(contrato).getByText("0 submódulos · 0 documentos"),
+    ).toBeVisible();
     expect(within(contrato).getByText("Inactivo")).toBeVisible();
     expect(
       within(contrato).getByRole("link", { name: "Gestionar documentos" }),
@@ -95,7 +101,8 @@ describe("ModulesExplorer", () => {
     ).toBeVisible();
   });
 
-  it("offers a parent selector when creating at the root level", () => {
+  it("offers a parent selector when creating a submodule at the root level", async () => {
+    const user = userEvent.setup();
     render(
       <ModulesExplorer
         context={{ kind: "root" }}
@@ -104,11 +111,16 @@ describe("ModulesExplorer", () => {
       />,
     );
 
+    await user.click(screen.getByText("+ Crear módulo o submódulo"));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Tipo de elemento" }),
+      "submodule",
+    );
     expect(
-      screen.getByRole("heading", { name: "Crear módulo o submódulo" }),
-    ).toBeVisible();
+      screen.getByRole("option", { name: "Selecciona un módulo principal" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "Sin padre (módulo principal)" }),
+      screen.getByRole("option", { name: "Evaluación docente (EVAL)" }),
     ).toBeInTheDocument();
   });
 
@@ -116,6 +128,7 @@ describe("ModulesExplorer", () => {
     const child: ModuleView[] = [
       {
         code: "CONTRAT_DOC",
+        documentCount: 18,
         description: null,
         id: "s1",
         isActive: true,
@@ -138,14 +151,10 @@ describe("ModulesExplorer", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("heading", {
-        name: "Crear submódulo en Evaluación docente",
-      }),
-    ).toBeVisible();
+    expect(screen.getByText("+ Crear submódulo")).toBeVisible();
     // No parent chooser inside a module; parent is preset via a hidden field.
     expect(
-      screen.queryByRole("option", { name: "Sin padre (módulo principal)" }),
+      screen.queryByRole("option", { name: "Selecciona un módulo principal" }),
     ).not.toBeInTheDocument();
     const hidden = container.querySelector<HTMLInputElement>(
       'input[type="hidden"][name="parentModuleId"]',

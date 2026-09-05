@@ -17,7 +17,9 @@ export default async function DocumentsPage({
   searchParams,
 }: DocumentsPageProps) {
   const query = parseDocumentLibraryQuery(await searchParams);
-  const { access, client } = await createAuthorizedAdminApiContext();
+  const { access, client } = await createAuthorizedAdminApiContext({
+    requireModulesAccess: true,
+  });
   const [initialLibrary, modules] = await Promise.all([
     client.listDocumentLibrary(query),
     client.listModules("all"),
@@ -36,6 +38,7 @@ export default async function DocumentsPage({
       activeSection="documents"
       description="Consulta y revisa toda la biblioteca documental registrada. La estructura y la carga de nuevos PDF se gestionan desde Módulos."
       title="Historial de documentos"
+      modulesAccess={access.modulesAccess}
       userName={access.fullName}
       userRole={access.role}
     >

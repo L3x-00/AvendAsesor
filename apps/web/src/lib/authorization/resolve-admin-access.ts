@@ -24,11 +24,16 @@ export interface AuthorizationSupabaseClient {
     }>;
   };
   from(table: "profiles"): ProfileRoleQuery;
+  rpc(functionName: "current_user_has_admin_module_access"): PromiseLike<{
+    data: unknown;
+    error: unknown;
+  }>;
 }
 
 export type AdminAccessResult =
   | {
       fullName: string;
+      modulesAccess: boolean;
       status: "authorized";
       role: AdministrativeRole;
       userId: string;
@@ -88,8 +93,24 @@ export async function resolveAdminAccess(
     return { status: "unauthorized" };
   }
 
+  let permissionData: unknown;
+  let permissionError: unknown;
+
+  try {
+    ({ data: permissionData, error: permissionError } = await client.rpc(
+      "current_user_has_admin_module_access",
+    ));
+  } catch {
+    return { status: "unauthorized" };
+  }
+
+  if (permissionError || typeof permissionData !== "boolean") {
+    return { status: "unauthorized" };
+  }
+
   return {
     fullName: (data as { full_name: string }).full_name.trim(),
+    modulesAccess: permissionData,
     role: (data as { role: AdministrativeRole }).role,
     status: "authorized",
     userId: user.id,

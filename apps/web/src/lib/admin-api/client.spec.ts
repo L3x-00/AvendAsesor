@@ -24,7 +24,15 @@ const moduleRecord = {
 };
 
 const documentRecord = {
+  additionalDetail: null,
+  approvalStatus: "ready" as const,
+  approvalUpdatedAt: "2026-08-10T00:00:00.000Z",
+  approvalUpdatedBy: null,
+  approvedVersionId: "f84e1198-6c7d-4fa2-998e-2dced81389d8",
   articleReference: null,
+  archiveObservation: null,
+  archiveReasonCode: null,
+  archiveReasonDetail: null,
   createdAt: "2026-08-09T00:00:00.000Z",
   createdBy: null,
   currentVersionId: "f84e1198-6c7d-4fa2-998e-2dced81389d8",
@@ -34,12 +42,14 @@ const documentRecord = {
   deletedAt: null,
   deletedBy: null,
   deletionReason: null,
-  documentType: "NORMATIVE",
+  documentType: "LEY",
+  documentTypeOther: null,
   id: "680a1b3e-9a76-46b9-9130-7284e03aa123",
   isDeleted: false,
   issuanceYear: 2026,
-  issuingEntity: "AVEND",
-  metadata: {},
+  issuingEntity: "MINEDU",
+  issuingEntityOther: null,
+  metadata: { specificDependency: "Secretaría General" },
   publicationStatus: "active" as const,
   replacementDate: null,
   replacementDocumentId: null,
@@ -48,6 +58,7 @@ const documentRecord = {
   replacementYear: null,
   resolutionNumber: null,
   situation: "current" as const,
+  specificDependency: "Secretaría General",
   title: "Norma de prueba",
   updatedAt: "2026-08-09T00:00:00.000Z",
   updatedBy: null,
@@ -55,6 +66,7 @@ const documentRecord = {
 
 const documentDetails = {
   ...documentRecord,
+  auditEvents: [],
   createdByName: null,
   moduleIds: [moduleRecord.id],
   versions: [
@@ -74,6 +86,7 @@ const documentDetails = {
 };
 
 const documentLibraryItem = {
+  additionalDetail: documentRecord.additionalDetail,
   articleReference: documentRecord.articleReference,
   createdAt: documentRecord.createdAt,
   createdBy: documentRecord.createdBy,
@@ -81,9 +94,11 @@ const documentLibraryItem = {
   currentVersionId: documentRecord.currentVersionId,
   currentVersionUploadedAt: documentRecord.createdAt,
   documentType: documentRecord.documentType,
+  documentTypeOther: documentRecord.documentTypeOther,
   id: documentRecord.id,
   issuanceYear: documentRecord.issuanceYear,
   issuingEntity: documentRecord.issuingEntity,
+  issuingEntityOther: documentRecord.issuingEntityOther,
   metadata: documentRecord.metadata,
   moduleAssociations: [
     {
@@ -103,6 +118,7 @@ const documentLibraryItem = {
   replacementYear: null,
   resolutionNumber: null,
   situation: "current" as const,
+  specificDependency: documentRecord.specificDependency,
   technicalStatus: "ready" as const,
   title: documentRecord.title,
   updatedAt: documentRecord.updatedAt,

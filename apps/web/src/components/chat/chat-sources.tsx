@@ -11,9 +11,23 @@ function pageRange(source: ChatSource): string {
     : `${source.pageStart}–${source.pageEnd}`;
 }
 
+function situationLabel(source: ChatSource): string {
+  switch (source.documentSituation) {
+    case "current":
+      return "Vigente";
+    case "replaced":
+      return "Reemplazado / sin vigencia · Histórico";
+    case "archived":
+      return "Archivado · Antecedente histórico";
+  }
+}
+
 export function ChatSources({ sources }: ChatSourcesProps) {
   return (
-    <section aria-label="Referencias verificables" className="avend-chat-sources">
+    <section
+      aria-label="Referencias verificables"
+      className="avend-chat-sources"
+    >
       <header className={styles.heading}>
         <div>
           <h2>Referencias</h2>
@@ -52,7 +66,7 @@ export function ChatSources({ sources }: ChatSourcesProps) {
                 <tr key={source.id}>
                   <td data-label="#">
                     <span className={styles.mobileCellLabel}>
-                      Fuente número: {" "}
+                      Fuente número:{" "}
                     </span>
                     <span className={styles.rank}>{source.rank}</span>
                   </td>
@@ -64,7 +78,11 @@ export function ChatSources({ sources }: ChatSourcesProps) {
                       Proceso: {source.moduleName ?? "No especificado"}
                     </span>
                     <span className={styles.documentMeta}>
-                      Coincidencia documental: {Math.round(source.relevanceScore * 100)}%
+                      Situación: <strong>{situationLabel(source)}</strong>
+                    </span>
+                    <span className={styles.documentMeta}>
+                      Coincidencia documental:{" "}
+                      {Math.round(source.relevanceScore * 100)}%
                     </span>
                   </td>
                   <td data-label="Referencia">
@@ -81,7 +99,11 @@ export function ChatSources({ sources }: ChatSourcesProps) {
                       {source.numeralReference ?? "No especificado"}
                     </span>
                   </td>
-                  <td data-label={source.pageStart === source.pageEnd ? "Página" : "Páginas"}>
+                  <td
+                    data-label={
+                      source.pageStart === source.pageEnd ? "Página" : "Páginas"
+                    }
+                  >
                     <span className={styles.mobileCellLabel}>
                       {source.pageStart === source.pageEnd
                         ? "Página: "

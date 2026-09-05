@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useActionState, type ReactNode } from 'react';
-import { useFormStatus } from 'react-dom';
+import { useActionState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 import {
   initialAdminActionState,
   type AdminActionState,
-} from '@/lib/admin-api/action-state';
+} from "@/lib/admin-api/action-state";
 
 export type AdminAction = (
   state: AdminActionState,
@@ -16,6 +16,7 @@ interface AdminActionFormProps {
   action: AdminAction;
   children: ReactNode;
   className?: string;
+  confirmMessage?: string;
   submitLabel: string;
 }
 
@@ -28,7 +29,7 @@ function SubmitButton({ label }: { label: string }) {
       disabled={pending}
       type="submit"
     >
-      {pending ? 'Procesando…' : label}
+      {pending ? "Procesando…" : label}
     </button>
   );
 }
@@ -36,23 +37,37 @@ function SubmitButton({ label }: { label: string }) {
 export function AdminActionForm({
   action,
   children,
-  className = 'space-y-3',
+  className = "space-y-3",
+  confirmMessage,
   submitLabel,
 }: AdminActionFormProps) {
   const [state, formAction] = useActionState(action, initialAdminActionState);
   const messageClassName =
-    state.status === 'success'
-      ? 'avend-feedback--success'
-      : 'avend-feedback--error';
+    state.status === "success"
+      ? "avend-feedback--success"
+      : "avend-feedback--error";
 
   return (
-    <form action={formAction} className={className} noValidate>
+    <form
+      action={formAction}
+      className={className}
+      noValidate
+      onSubmit={(event) => {
+        if (!event.currentTarget.reportValidity()) {
+          event.preventDefault();
+          return;
+        }
+        if (confirmMessage && !window.confirm(confirmMessage)) {
+          event.preventDefault();
+        }
+      }}
+    >
       {children}
       {state.message ? (
         <p
           aria-live="polite"
           className={`avend-feedback ${messageClassName}`}
-          role={state.status === 'error' ? 'alert' : 'status'}
+          role={state.status === "error" ? "alert" : "status"}
         >
           {state.message}
         </p>
