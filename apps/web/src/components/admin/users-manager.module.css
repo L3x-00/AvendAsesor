@@ -447,3 +447,55 @@
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
+
+.importReport {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface-muted);
+}
+
+.importSummary {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.importErrors {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--avend-text);
+}
+
+.importError {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--avend-danger);
+}
+
+.exportLink {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0 1rem;
+  border: 1px solid var(--avend-accent);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--avend-accent-strong);
+  text-decoration: none;
+}
+
+.exportLink:hover {
+  background: var(--avend-soft-blue);
+}
+
+.exportLink:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}

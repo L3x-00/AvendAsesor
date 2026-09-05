@@ -8,6 +8,7 @@ import {
   updateAdministrativeUserAction,
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { UsersImportForm } from "@/components/admin/users-import-form";
 import { toDateInputValue } from "@/lib/admin-api/access-window";
 import { formatAccessState, formatUserRole } from "@/lib/admin-api/labels";
 import type {
@@ -24,6 +25,8 @@ import {
 import styles from "./users-manager.module.css";
 
 interface UsersManagerProps {
+  /** Render base URL: the roster upload goes straight to the API. */
+  apiBaseUrl: string;
   counts: AdministrativeUserCounts;
   page: AdministrativeUserPage;
   query: ParsedUserDirectoryQuery;
@@ -302,7 +305,21 @@ function CreateUserForm({
  * receives only the requested page; the API remains the authority for data,
  * role changes, account state and access windows.
  */
+/** Export link that carries the filters currently on screen. */
+function userExportHref(query: ParsedUserDirectoryQuery): string {
+  const params = new URLSearchParams();
+  if (query.group !== "docente") params.set("group", query.group);
+  if (query.search) params.set("search", query.search);
+  if (query.status !== "all") params.set("accessState", query.status);
+
+  const serialized = params.toString();
+  return serialized
+    ? `/api/admin/users/export?${serialized}`
+    : "/api/admin/users/export";
+}
+
 export function UsersManager({
+  apiBaseUrl,
   counts,
   page,
   query,
@@ -335,6 +352,10 @@ export function UsersManager({
           title="+ Agregar administrador"
           today={today}
         />
+        <UsersImportForm apiBaseUrl={apiBaseUrl} />
+        <a className={styles.exportLink} href={userExportHref(query)}>
+          Exportar Excel
+        </a>
       </div>
 
       <div className={styles.tabs} role="group" aria-label="Tipo de usuario">

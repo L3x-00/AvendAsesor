@@ -3,6 +3,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { UsersManager } from "@/components/admin/users-manager";
 import { ModulePermissionsManager } from "@/components/admin/module-permissions-manager";
 import { toDateInputValue } from "@/lib/admin-api/access-window";
+import { getAdminApiUrl } from "@/lib/admin-api/config";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatOperationalAuditAction,
@@ -71,6 +72,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     >
       <div className="flex flex-col gap-8">
         <UsersManager
+          apiBaseUrl={getAdminApiUrl()}
           counts={counts}
           page={userPage}
           query={query}

@@ -73,8 +73,10 @@ begin
       profile.access_start_at,
       profile.access_expires_at,
       profile.phone,
+      profile.updated_at,
       identity.email,
       creator.full_name as created_by_name,
+      editor.full_name as updated_by_name,
       case
         when profile.access_expires_at is not null
           and profile.access_expires_at < now_ts then 'expirado'
@@ -86,6 +88,7 @@ begin
     from public.profiles as profile
     left join auth.users as identity on identity.id = profile.id
     left join public.profiles as creator on creator.id = profile.created_by
+    left join public.profiles as editor on editor.id = profile.updated_by
     where (
         normalized_search is null
         or position(lower(normalized_search) in lower(profile.full_name)) > 0
@@ -155,7 +158,9 @@ begin
             'access_state', page.access_state,
             'email', page.email,
             'phone', page.phone,
-            'created_by_name', page.created_by_name
+            'updated_at', page.updated_at,
+            'created_by_name', page.created_by_name,
+            'updated_by_name', page.updated_by_name
           )
           order by page.full_name, page.id
         )

@@ -8,6 +8,10 @@ import type {
 import type { ParsedUserDirectoryQuery } from "@/lib/admin-api/user-directory";
 import { UsersManager } from "./users-manager";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
 vi.mock("@/app/admin/actions", () => ({
   createAdministrativeUserAction: vi.fn(async () => ({ status: "idle" })),
   updateAccessWindowAction: vi.fn(async () => ({ status: "idle" })),
@@ -91,6 +95,7 @@ const query: ParsedUserDirectoryQuery = {
 };
 
 const TODAY = "2026-09-05";
+const API = "http://localhost:3001";
 
 /** The row of a given user, so a badge is asserted on its own row. */
 function rowFor(name: string): HTMLElement {
@@ -103,7 +108,7 @@ function rowFor(name: string): HTMLElement {
 
 describe("UsersManager", () => {
   it("shows the protected directory page and exact result range", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(
       screen.getByText(/Vista de superadministrador/i),
@@ -117,7 +122,7 @@ describe("UsersManager", () => {
   });
 
   it("labels every derived access state as text, not colour alone", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     // selector: "span" separa la insignia de las <option> del formulario.
     const badge = (name: string, label: string) =>
@@ -130,14 +135,14 @@ describe("UsersManager", () => {
   });
 
   it("shows the access window of each user with explicit empty wording", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(screen.getAllByText(/Sin vencimiento/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Sin definir/).length).toBeGreaterThan(0);
   });
 
   it("shows the real bucket counts next to each state filter", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(screen.getByRole("link", { name: /Todos/ })).toHaveTextContent("15");
     expect(screen.getByRole("link", { name: /Activos/ })).toHaveTextContent(
@@ -155,7 +160,7 @@ describe("UsersManager", () => {
   });
 
   it("moves group, state and pagination filters through stable URLs", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(
       screen.getByRole("link", { name: "Equipo administrador" }),
@@ -175,7 +180,7 @@ describe("UsersManager", () => {
   });
 
   it("prefills the access window as the calendar day seen in Lima", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const starts = screen.getAllByLabelText("Inicio");
     const expiries = screen.getAllByLabelText("Fin");
@@ -188,7 +193,7 @@ describe("UsersManager", () => {
   it("binds the vigencia fields to the names the server action reads", () => {
     // A renamed field would silently clear the access window instead of
     // extending it, so the contract is asserted here and not just visually.
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const start = screen.getAllByLabelText("Inicio")[0];
     const expiry = screen.getAllByLabelText("Fin")[0];
@@ -200,7 +205,7 @@ describe("UsersManager", () => {
   });
 
   it("stops an expired user from being sent a past expiry", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const expired = rowFor("Luis Expirado");
     const expiry = within(expired).getByLabelText("Fin");
@@ -212,7 +217,7 @@ describe("UsersManager", () => {
   });
 
   it("offers the two registration forms the spec asks for", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(screen.getByText("+ Agregar usuario")).toBeVisible();
     expect(screen.getByText("+ Agregar administrador")).toBeVisible();
@@ -235,7 +240,7 @@ describe("UsersManager", () => {
   });
 
   it("shows the contact details and who registered each user", () => {
-    render(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const maria = rowFor("María Docente");
     expect(within(maria).getByText("maria@example.test")).toBeVisible();
@@ -250,9 +255,26 @@ describe("UsersManager", () => {
     expect(within(luis).getByText("Sin celular")).toBeVisible();
   });
 
+  it("offers Excel import and an export that carries the visible filters", () => {
+    render(
+      <UsersManager apiBaseUrl={API}
+        counts={counts}
+        page={page}
+        query={{ ...query, group: "staff", search: "Ana", status: "expirado" }}
+        today={TODAY}
+      />,
+    );
+
+    expect(screen.getByText("Importar Excel")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Exportar Excel" })).toHaveAttribute(
+      "href",
+      "/api/admin/users/export?group=staff&search=Ana&accessState=expirado",
+    );
+  });
+
   it("submits server-side search while preserving active filters", () => {
     render(
-      <UsersManager
+      <UsersManager apiBaseUrl={API}
         counts={counts}
         today={TODAY}
         page={{ ...page, items: [], offset: 25, total: 0 }}
@@ -282,7 +304,7 @@ describe("UsersManager", () => {
 
   it("clears the uncontrolled search field after URL navigation", () => {
     const { rerender } = render(
-      <UsersManager
+      <UsersManager apiBaseUrl={API}
         counts={counts}
         page={page}
         query={{ ...query, search: "María" }}
@@ -293,7 +315,7 @@ describe("UsersManager", () => {
       screen.getByRole("searchbox", { name: "Buscar usuario" }),
     ).toHaveValue("María");
 
-    rerender(<UsersManager counts={counts} page={page} query={query} today={TODAY} />);
+    rerender(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(
       screen.getByRole("searchbox", { name: "Buscar usuario" }),
@@ -303,14 +325,14 @@ describe("UsersManager", () => {
   it("discards an unsubmitted search draft when another filter navigates", () => {
     const initialQuery = { ...query, search: "María" };
     const { rerender } = render(
-      <UsersManager counts={counts} page={page} query={initialQuery} today={TODAY} />,
+      <UsersManager apiBaseUrl={API} counts={counts} page={page} query={initialQuery} today={TODAY} />,
     );
     const search = screen.getByRole("searchbox", { name: "Buscar usuario" });
     fireEvent.change(search, { target: { value: "Borrador sin enviar" } });
     expect(search).toHaveValue("Borrador sin enviar");
 
     rerender(
-      <UsersManager
+      <UsersManager apiBaseUrl={API}
         counts={counts}
         page={page}
         query={{ ...initialQuery, status: "activo" }}

@@ -2,13 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Post,
+  UploadedFile,
+  UseInterceptors,
   Param,
   ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AuthorizationGuard,
@@ -23,6 +27,7 @@ import { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit
 import { UpdateAccessWindowDto } from './dto/update-access-window.dto';
 import { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dto';
 import { UserAdministrationService } from './user-administration.service';
+import { USER_IMPORT_MAX_BYTES, type UserImportReport } from './user-import';
 import type {
   AdministrativeUser,
   AdministrativeUserCounts,
@@ -66,6 +71,33 @@ export class UserAdministrationController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdministrativeUserDirectoryEntry> {
     return this.userAdministrationService.createUser(dto, authorization);
+  }
+
+  @Post('import')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: USER_IMPORT_MAX_BYTES, files: 1 },
+    }),
+  )
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  importUsers(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<UserImportReport> {
+    return this.userAdministrationService.importUsers(file, authorization);
+  }
+
+  @Get('export')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @Header('Content-Disposition', 'attachment; filename="usuarios-avend.xlsx"')
+  exportUsers(
+    @Query() dto: ListAdministrativeUsersQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<Buffer> {
+    return this.userAdministrationService.exportUsers(dto, authorization);
   }
 
   @Get('counts')

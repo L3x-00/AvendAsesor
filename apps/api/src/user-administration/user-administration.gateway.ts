@@ -23,6 +23,8 @@ export interface AdministrativeUserDirectoryEntry extends AdministrativeUser {
   email: string | null;
   phone: string | null;
   createdByName: string | null;
+  updatedAt: string | null;
+  updatedByName: string | null;
 }
 
 export type AdministrativeUserGroup = 'docente' | 'staff';

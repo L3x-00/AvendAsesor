@@ -32,6 +32,7 @@
     "@tesseract.js-data/spa": "^1.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "exceljs": "^4.4.0",
     "helmet": "^8.3.0",
     "js-tiktoken": "^1.0.21",
     "openai": "^7.5.0",

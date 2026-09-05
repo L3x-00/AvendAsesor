@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import type { AuthorizationContext } from '../authorization';
 import { SUPABASE_USER_ADMINISTRATION_GATEWAY } from '../supabase/supabase.constants';
 import type { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
@@ -6,6 +11,16 @@ import type { ListAdministrativeUsersQueryDto } from './dto/list-administrative-
 import type { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
 import type { UpdateAccessWindowDto } from './dto/update-access-window.dto';
 import type { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dto';
+import {
+  buildUserDirectoryWorkbook,
+  USER_EXPORT_ROW_LIMIT,
+} from './user-directory-export';
+import {
+  parseUserImportWorkbook,
+  USER_IMPORT_MAX_BYTES,
+  type ImportRowError,
+  type UserImportReport,
+} from './user-import';
 import type {
   AdministrativeUser,
   AdministrativeUserCounts,
@@ -93,6 +108,106 @@ export class UserAdministrationService {
       phone,
       role: dto.role ?? 'docente',
     });
+  }
+
+  /**
+   * Pages through the whole filtered directory. The RPC caps a page at 100, so
+   * the export walks it instead of asking for an unbounded read.
+   */
+  async exportUsers(
+    dto: ListAdministrativeUsersQueryDto,
+    authorization: AuthorizationContext,
+  ): Promise<Buffer> {
+    const pageSize = 100;
+    const rows: AdministrativeUserDirectoryEntry[] = [];
+    let offset = 0;
+    let total = 0;
+
+    for (;;) {
+      const page = await this.gateway.listUsers({
+        accessState: dto.accessState ?? null,
+        actorId: authorization.userId,
+        group: dto.group ?? null,
+        limit: pageSize,
+        offset,
+        search: dto.search?.trim() || null,
+        status: dto.status ?? null,
+      });
+
+      total = page.total;
+      rows.push(...page.items);
+      offset += pageSize;
+
+      if (
+        page.items.length === 0 ||
+        rows.length >= page.total ||
+        rows.length >= USER_EXPORT_ROW_LIMIT
+      ) {
+        break;
+      }
+    }
+
+    return buildUserDirectoryWorkbook(
+      rows.slice(0, USER_EXPORT_ROW_LIMIT),
+      total,
+    );
+  }
+
+  /**
+   * Mixed loads are the norm for a roster, so the valid rows are imported and
+   * every rejected row is reported with its spreadsheet row number. Identities
+   * are created one by one because each one is a separate provider call.
+   */
+  async importUsers(
+    file: { buffer: Buffer; size: number } | undefined,
+    authorization: AuthorizationContext,
+  ): Promise<UserImportReport> {
+    if (!file || file.size === 0) {
+      throw new BadRequestException(
+        'Adjunta un archivo Excel con los usuarios.',
+      );
+    }
+
+    if (file.size > USER_IMPORT_MAX_BYTES) {
+      throw new BadRequestException(
+        'El archivo supera el tamaño permitido para una importación.',
+      );
+    }
+
+    const parsed = await parseUserImportWorkbook(file.buffer);
+    const errors: ImportRowError[] = [...parsed.errors];
+    let imported = 0;
+
+    for (const row of parsed.rows) {
+      try {
+        await this.gateway.createUser({
+          accessExpiresAt: row.accessExpiresAt,
+          accessStartAt: row.accessStartAt,
+          actorId: authorization.userId,
+          email: row.email,
+          fullName: row.fullName,
+          phone: row.phone,
+          role: 'docente',
+        });
+        imported += 1;
+      } catch (failure) {
+        errors.push({
+          email: row.email,
+          message:
+            failure instanceof ConflictException
+              ? 'Ya existe una cuenta con ese correo.'
+              : 'No se pudo registrar a esta persona. Inténtalo de nuevo.',
+          rowNumber: row.rowNumber,
+        });
+      }
+    }
+
+    return {
+      considered: parsed.rows.length + parsed.errors.length,
+      errors,
+      imported,
+      truncated: parsed.truncated,
+    };
   }
 
   countUsers(

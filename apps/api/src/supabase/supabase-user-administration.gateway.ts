@@ -319,6 +319,8 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     last_access_at: string | null;
     phone?: string | null;
     role: AdministrativeUser['role'];
+    updated_at?: string | null;
+    updated_by_name?: string | null;
   }): AdministrativeUserDirectoryEntry {
     return {
       ...this.toAdministrativeUser(user),
@@ -328,6 +330,8 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       createdByName: user.created_by_name ?? null,
       email: user.email ?? null,
       phone: user.phone ?? null,
+      updatedAt: user.updated_at ?? null,
+      updatedByName: user.updated_by_name ?? null,
     };
   }
 
@@ -372,6 +376,8 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     const email = user.email ?? null;
     const phone = user.phone ?? null;
     const createdByName = user.created_by_name ?? null;
+    const updatedAt = user.updated_at ?? null;
+    const updatedByName = user.updated_by_name ?? null;
     if (
       (accountStatus !== 'active' && accountStatus !== 'suspended') ||
       typeof fullName !== 'string' ||
@@ -384,7 +390,9 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       !ACCESS_STATES.has(accessState as AdministrativeUserAccessState) ||
       (email !== null && typeof email !== 'string') ||
       (phone !== null && typeof phone !== 'string') ||
-      (createdByName !== null && typeof createdByName !== 'string')
+      (createdByName !== null && typeof createdByName !== 'string') ||
+      (updatedAt !== null && typeof updatedAt !== 'string') ||
+      (updatedByName !== null && typeof updatedByName !== 'string')
     ) {
       throw new InternalServerErrorException(
         'Administrative user data is invalid.',
@@ -403,6 +411,8 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
       last_access_at: lastAccessAt,
       phone,
       role,
+      updated_at: updatedAt,
+      updated_by_name: updatedByName,
     });
   }
 }
