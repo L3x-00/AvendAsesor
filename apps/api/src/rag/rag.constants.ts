@@ -1,8 +1,8 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
-  'No encontré información suficiente en los documentos vigentes para responder esta consulta.';
+  'No encontré información suficiente en los documentos disponibles para responder esta consulta.';
 
 export const RAG_AMBIGUITY_MESSAGE =
-  'Encontré información vigente relacionada con más de un tema. La orientación exacta depende de identificar el módulo aplicable.';
+  'Encontré información documental relacionada con más de un tema. La orientación exacta depende de identificar el módulo aplicable.';
 
 export const MAX_RAG_ANSWER_CHARS = 20_000;
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;

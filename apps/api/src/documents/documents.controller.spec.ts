@@ -15,7 +15,15 @@ const authorization: AuthorizationContext = {
 };
 
 const documentRecord: ManagedDocument = {
+  additionalDetail: null,
+  approvalStatus: 'pending_approval',
+  approvalUpdatedAt: '2026-08-09T00:00:00.000Z',
+  approvalUpdatedBy: authorization.userId,
+  approvedVersionId: null,
   articleReference: null,
+  archiveObservation: null,
+  archiveReasonCode: null,
+  archiveReasonDetail: null,
   createdAt: '2026-08-09T00:00:00.000Z',
   createdBy: authorization.userId,
   currentVersionId: 'c060c51d-b347-4d4e-8f3b-ddd5b92bd6fe',
@@ -25,11 +33,13 @@ const documentRecord: ManagedDocument = {
   deletedAt: null,
   deletedBy: null,
   deletionReason: null,
-  documentType: 'NORMATIVE',
+  documentType: 'LEY',
+  documentTypeOther: null,
   id: 'f1053902-6af8-46bd-87b3-eb6a8bf6fc2e',
   isDeleted: false,
   issuanceYear: null,
-  issuingEntity: null,
+  issuingEntity: 'MINEDU',
+  issuingEntityOther: null,
   metadata: {},
   publicationStatus: 'active',
   replacementDate: null,
@@ -39,6 +49,7 @@ const documentRecord: ManagedDocument = {
   replacementYear: null,
   resolutionNumber: null,
   situation: 'current',
+  specificDependency: 'Secretaría General',
   title: 'Documento de prueba',
   updatedAt: '2026-08-09T00:00:00.000Z',
   updatedBy: authorization.userId,
@@ -68,6 +79,7 @@ describe('DocumentsController', () => {
     const file = { originalname: 'documento.pdf' } as Express.Multer.File;
     const details: ManagedDocumentDetails = {
       ...documentRecord,
+      auditEvents: [],
       createdByName: 'Administrador de prueba',
       moduleIds: [],
       versions: [],
@@ -101,7 +113,15 @@ describe('DocumentsController', () => {
 
     await expect(
       controller.create(
-        { documentType: 'NORMATIVE', title: documentRecord.title },
+        {
+          documentType: 'LEY',
+          issuanceYear: 2026,
+          issuingEntity: 'MINEDU',
+          moduleIds: ['da6105be-8676-46fe-b2d2-63e5ac83ee8d'],
+          situation: 'current',
+          specificDependency: 'Secretaría General',
+          title: documentRecord.title,
+        },
         file,
         authorization,
       ),
@@ -164,7 +184,15 @@ describe('DocumentsController', () => {
     );
 
     expect(documentsService.create).toHaveBeenCalledWith(
-      { documentType: 'NORMATIVE', title: documentRecord.title },
+      {
+        documentType: 'LEY',
+        issuanceYear: 2026,
+        issuingEntity: 'MINEDU',
+        moduleIds: ['da6105be-8676-46fe-b2d2-63e5ac83ee8d'],
+        situation: 'current',
+        specificDependency: 'Secretaría General',
+        title: documentRecord.title,
+      },
       file,
       authorization,
     );

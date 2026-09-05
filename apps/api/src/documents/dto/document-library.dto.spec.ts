@@ -38,9 +38,9 @@ describe('document library DTOs', () => {
     const dto = plainToInstance(SetDocumentSituationDto, {
       observation: '  Cambio comunicado por la entidad  ',
       reason: '  Nueva norma aplicable  ',
-      replacementDate: '2027-01-20',
+      replacementDate: '2026-01-20',
       replacementDocumentId: 'ad2a52fd-21c8-4bd5-86f4-92f0188cb0fc',
-      replacementYear: '2027',
+      replacementYear: '2026',
       situation: 'replaced',
     });
 
@@ -48,7 +48,7 @@ describe('document library DTOs', () => {
     expect(dto).toMatchObject({
       observation: 'Cambio comunicado por la entidad',
       reason: 'Nueva norma aplicable',
-      replacementYear: 2027,
+      replacementYear: 2026,
       situation: 'replaced',
     });
   });

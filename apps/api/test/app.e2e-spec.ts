@@ -114,7 +114,15 @@ describe('API endpoints (e2e)', () => {
     updatedBy: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
   };
   const documentRecord: ManagedDocument = {
+    additionalDetail: null,
+    approvalStatus: 'ready',
+    approvalUpdatedAt: '2026-08-09T00:00:00.000Z',
+    approvalUpdatedBy: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    approvedVersionId: 'a55ff9d0-0193-4d76-a6d4-6e61ee8769d4',
     articleReference: null,
+    archiveObservation: null,
+    archiveReasonCode: null,
+    archiveReasonDetail: null,
     createdAt: '2026-08-09T00:00:00.000Z',
     createdBy: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     currentVersionId: 'a55ff9d0-0193-4d76-a6d4-6e61ee8769d4',
@@ -124,11 +132,13 @@ describe('API endpoints (e2e)', () => {
     deletedAt: null,
     deletedBy: null,
     deletionReason: null,
-    documentType: 'NORMATIVE',
+    documentType: 'LEY',
+    documentTypeOther: null,
     id: '644adb97-6ac3-4c1c-bcf4-efa5470bb9c5',
     isDeleted: false,
     issuanceYear: 2026,
-    issuingEntity: 'AVEND',
+    issuingEntity: 'MINEDU',
+    issuingEntityOther: null,
     metadata: {},
     publicationStatus: 'active',
     replacementDate: null,
@@ -138,6 +148,7 @@ describe('API endpoints (e2e)', () => {
     replacementYear: null,
     resolutionNumber: null,
     situation: 'current',
+    specificDependency: 'Secretaría General',
     title: 'Documento de prueba',
     updatedAt: '2026-08-09T00:00:00.000Z',
     updatedBy: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
@@ -338,6 +349,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -350,6 +362,23 @@ describe('API endpoints (e2e)', () => {
       .expect([moduleRecord]);
 
     expect(modulesService.list).toHaveBeenCalledWith({ status: 'active' });
+  });
+
+  it('/admin/modules denies a direct URL when the administrator lacks the Modules permission', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'restricted-admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: false,
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+
+    await request(app.getHttpServer())
+      .get('/admin/modules')
+      .set('Authorization', 'Bearer restricted-admin-token')
+      .expect(403);
+
+    expect(modulesService.list).not.toHaveBeenCalled();
   });
 
   it('/admin/operations accepts numeric query parameters from the protected web client', async () => {
@@ -459,6 +488,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'superadmin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'superadmin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -481,6 +511,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -498,6 +529,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -544,6 +576,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -582,6 +615,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -590,8 +624,11 @@ describe('API endpoints (e2e)', () => {
     await request(app.getHttpServer())
       .post('/admin/documents')
       .set('Authorization', 'Bearer admin-token')
-      .field('documentType', 'normative')
-      .field('moduleIds', '[]')
+      .field('documentType', 'ley')
+      .field('issuanceYear', '2026')
+      .field('issuingEntity', 'minedu')
+      .field('moduleIds', '["30dd8519-3b3a-4e64-a7dc-2b82578eab95"]')
+      .field('specificDependency', 'Secretaría General')
       .field('title', ' Documento de prueba ')
       .attach('file', Buffer.from('%PDF-1.7'), 'documento.pdf')
       .expect(201)
@@ -599,8 +636,12 @@ describe('API endpoints (e2e)', () => {
 
     expect(documentsService.create).toHaveBeenCalledWith(
       {
-        documentType: 'NORMATIVE',
-        moduleIds: [],
+        documentType: 'LEY',
+        issuanceYear: 2026,
+        issuingEntity: 'MINEDU',
+        moduleIds: ['30dd8519-3b3a-4e64-a7dc-2b82578eab95'],
+        situation: 'current',
+        specificDependency: 'Secretaría General',
         title: 'Documento de prueba',
       },
       expect.objectContaining({ originalname: 'documento.pdf' }),
@@ -612,6 +653,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'admin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'admin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -632,6 +674,7 @@ describe('API endpoints (e2e)', () => {
     resolveContext.mockResolvedValue({
       email: 'superadmin@example.com',
       emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
       role: 'superadmin',
       userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     });
@@ -682,7 +725,7 @@ describe('API endpoints (e2e)', () => {
       .set('Authorization', 'Bearer superadmin-token')
       .send({
         reason: 'Nueva norma aplicable',
-        replacementYear: 2027,
+        replacementYear: new Date().getUTCFullYear(),
         situation: 'replaced',
       })
       .expect(200);

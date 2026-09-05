@@ -18,6 +18,7 @@ const validPdfBase64 =
 function createFile(
   buffer: Buffer,
   originalname = 'norma.pdf',
+  mimetype = 'application/pdf',
 ): Express.Multer.File {
   return {
     buffer,
@@ -25,7 +26,7 @@ function createFile(
     encoding: '7bit',
     fieldname: 'file',
     filename: originalname,
-    mimetype: 'text/plain',
+    mimetype,
     originalname,
     path: '',
     size: buffer.length,
@@ -71,6 +72,15 @@ describe('PdfInspectionService', () => {
     await expect(
       service.inspect(createFile(Buffer.from('not a PDF'))),
     ).rejects.toThrow('not a valid PDF');
+    await expect(
+      service.inspect(
+        createFile(
+          Buffer.from(validPdfBase64, 'base64'),
+          'norma.pdf',
+          'text/plain',
+        ),
+      ),
+    ).rejects.toThrow('file type must be PDF');
   });
 
   it('rejects malformed or over-page PDFs after parser inspection', async () => {
@@ -82,7 +92,7 @@ describe('PdfInspectionService', () => {
 
     mockGetInfo.mockRejectedValueOnce(new Error('malformed PDF'));
     await expect(service.inspect(createFile(pdf))).rejects.toThrow(
-      'not a valid PDF',
+      'could not be read or processed',
     );
   });
 });

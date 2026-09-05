@@ -9,10 +9,12 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import {
   toManagedDocument,
   toDocumentLibraryRow,
+  toStoredDocumentAuditEvent,
   toStoredDocumentVersion,
   type DocumentLibraryPage,
   type ManagedDocument,
   type StoredDocumentVersion,
+  type StoredDocumentAuditEvent,
 } from '../documents/domain/document';
 import type {
   AddDocumentVersionRecord,
@@ -24,7 +26,7 @@ import type {
 import type { Json, SupabaseServerClient } from './supabase.server-client';
 
 const DOCUMENT_COLUMNS =
-  'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,situation,replacement_document_id,replacement_date,replacement_year,replacement_reason,replacement_observation,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
+  'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,situation,replacement_document_id,replacement_date,replacement_year,replacement_reason,replacement_observation,archive_reason_code,archive_reason_detail,archive_observation,approval_status,approval_updated_at,approval_updated_by,approved_version_id,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
 const DOCUMENT_VERSION_COLUMNS =
   'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by';
 const NORMATIVE_DOCUMENTS_BUCKET = 'normative-documents';
@@ -74,13 +76,14 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
 
   async addVersion(input: AddDocumentVersionRecord): Promise<ManagedDocument> {
     const { data, error } = await this.requireClient().rpc(
-      'add_document_version',
+      'add_governed_document_version',
       {
         p_actor_id: input.actorId,
         p_document_id: input.documentId,
         p_file_size_bytes: input.fileSizeBytes,
         p_original_file_name: input.originalFileName,
         p_page_count: input.pageCount,
+        p_processing_error: input.processingError ?? null,
         p_sha256: input.sha256,
         p_storage_path: input.storagePath,
         p_version_id: input.versionId,
@@ -96,7 +99,7 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
 
   async create(input: CreateDocumentRecord): Promise<ManagedDocument> {
     const { data, error } = await this.requireClient().rpc(
-      'create_document_with_initial_version',
+      'create_governed_document_with_initial_version',
       {
         p_actor_id: input.actorId,
         p_article_reference: input.articleReference ?? null,
@@ -109,7 +112,16 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
         p_module_ids: input.moduleIds,
         p_original_file_name: input.originalFileName,
         p_page_count: input.pageCount,
+        p_processing_error: input.processingError ?? null,
         p_resolution_number: input.resolutionNumber ?? null,
+        p_situation: input.situation,
+        p_reason: input.reason ?? null,
+        p_replacement_date: input.replacementDate ?? null,
+        p_replacement_document_id: input.replacementDocumentId ?? null,
+        p_replacement_year: input.replacementYear ?? null,
+        p_observation: input.observation ?? null,
+        p_archive_reason_code: input.archiveReasonCode ?? null,
+        p_archive_reason_detail: input.archiveReasonDetail ?? null,
         p_sha256: input.sha256,
         p_storage_path: input.storagePath,
         p_title: input.title,
@@ -191,6 +203,29 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
 
     if (error) {
       databaseError(error);
+    }
+  }
+
+  async listAuditEvents(
+    documentId: string,
+  ): Promise<StoredDocumentAuditEvent[]> {
+    const { data, error } = await this.requireClient()
+      .from('document_audit_events')
+      .select(
+        'id,document_id,document_version_id,action,details,occurred_at,actor_id',
+      )
+      .eq('document_id', documentId)
+      .order('occurred_at', { ascending: false })
+      .order('id', { ascending: false });
+
+    if (error) databaseError(error);
+
+    try {
+      return (data ?? []).map((row) => toStoredDocumentAuditEvent(row));
+    } catch {
+      throw new InternalServerErrorException(
+        'Document audit history data is invalid.',
+      );
     }
   }
 
@@ -305,6 +340,39 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     return (data ?? []).map((row) => this.parseVersion(row));
   }
 
+  async listSuggestions(): Promise<{
+    additionalDetails: string[];
+    specificDependencies: string[];
+  }> {
+    const { data, error } = await this.requireClient().rpc(
+      'list_document_value_suggestions',
+    );
+
+    if (error) databaseError(error);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new InternalServerErrorException(
+        'Document suggestions data is invalid.',
+      );
+    }
+
+    const value = data as Record<string, unknown>;
+    if (
+      !Array.isArray(value.additionalDetails) ||
+      !value.additionalDetails.every((item) => typeof item === 'string') ||
+      !Array.isArray(value.specificDependencies) ||
+      !value.specificDependencies.every((item) => typeof item === 'string')
+    ) {
+      throw new InternalServerErrorException(
+        'Document suggestions data is invalid.',
+      );
+    }
+
+    return {
+      additionalDetails: value.additionalDetails,
+      specificDependencies: value.specificDependencies,
+    };
+  }
+
   async logicalDelete(
     documentId: string,
     reason: string,
@@ -379,6 +447,8 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     situation: 'archived' | 'current' | 'replaced',
     actorId: string,
     options: {
+      archiveReasonCode?: import('../documents/document-governance.constants').ArchiveReasonCode;
+      archiveReasonDetail?: string;
       observation?: string;
       reason?: string;
       replacementDate?: string;
@@ -387,9 +457,11 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     },
   ): Promise<ManagedDocument> {
     const { data, error } = await this.requireClient().rpc(
-      'set_document_situation',
+      'set_governed_document_situation',
       {
         p_actor_id: actorId,
+        p_archive_reason_code: options.archiveReasonCode ?? null,
+        p_archive_reason_detail: options.archiveReasonDetail ?? null,
         p_document_id: documentId,
         p_observation: options.observation ?? null,
         p_reason: options.reason ?? null,
@@ -404,6 +476,24 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
       databaseError(error);
     }
 
+    return this.parseDocument(data);
+  }
+
+  async setTechnicalStatus(
+    documentId: string,
+    technicalStatus: 'pending_approval' | 'ready',
+    actorId: string,
+  ): Promise<ManagedDocument> {
+    const { data, error } = await this.requireClient().rpc(
+      'set_document_technical_status',
+      {
+        p_actor_id: actorId,
+        p_document_id: documentId,
+        p_technical_status: technicalStatus,
+      },
+    );
+
+    if (error) databaseError(error);
     return this.parseDocument(data);
   }
 

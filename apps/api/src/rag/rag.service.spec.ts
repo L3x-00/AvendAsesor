@@ -1,4 +1,4 @@
-import { RagService } from './rag.service';
+import { detectRetrievalScope, RagService } from './rag.service';
 import type { RetrievalGateway } from './retrieval.gateway';
 
 function vector(value = 0.1): number[] {
@@ -10,6 +10,7 @@ const source = {
   chunkContent: 'Contenido recuperado.',
   chunkId: 'chunk-id',
   documentId: 'document-id',
+  documentSituation: 'current' as const,
   documentTitle: 'Norma interna',
   documentVersionId: 'version-id',
   lexicalScore: 0.5,
@@ -64,6 +65,7 @@ describe('RagService', () => {
       1,
       expect.objectContaining({
         query: 'Consulta',
+        retrievalScope: 'current',
         selectedModuleId: null,
       }),
     );
@@ -72,6 +74,7 @@ describe('RagService', () => {
       expect.objectContaining({
         matchCount: 5,
         matchThreshold: 0.7,
+        retrievalScope: 'current',
         selectedModuleId: 'module-a',
       }),
     );
@@ -315,11 +318,51 @@ describe('RagService', () => {
     });
   });
 
+  it.each([
+    ['Compara esta norma con su versión anterior', 'historical'],
+    ['Consulta el antecedente archivado', 'archived_explicit'],
+  ] as const)(
+    'passes the governed %s scope to every retrieval path',
+    async (question, retrievalScope) => {
+      gateway.search.mockResolvedValue([]);
+
+      await service.retrieve(question, 'module-a');
+
+      expect(gateway.search).toHaveBeenCalledTimes(2);
+      expect(gateway.search).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ retrievalScope }),
+      );
+      expect(gateway.search).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ retrievalScope }),
+      );
+    },
+  );
+
   it('rejects malformed query embeddings before database search', async () => {
     embeddings.embed.mockResolvedValue([[0.1]]);
     await expect(service.retrieve('Consulta', null)).rejects.toThrow(
       'RAG_INVALID_QUERY_EMBEDDING',
     );
     expect(gateway.search).not.toHaveBeenCalled();
+  });
+});
+
+describe('detectRetrievalScope', () => {
+  it.each([
+    ['¿Qué norma se aplica actualmente?', 'current'],
+    ['Compara la norma vigente con la versión anterior.', 'historical'],
+    ['¿Qué establecía la normativa de 2024?', 'historical'],
+    ['Necesito los antecedentes históricos específicos.', 'archived_explicit'],
+    ['Muéstrame el documento archivado.', 'archived_explicit'],
+  ] as const)('classifies %s as %s', (question, expected) => {
+    expect(detectRetrievalScope(question, 2026)).toBe(expected);
+  });
+
+  it('does not unlock history for the current year alone', () => {
+    expect(detectRetrievalScope('Normativa vigente de 2026', 2026)).toBe(
+      'current',
+    );
   });
 });

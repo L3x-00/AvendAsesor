@@ -11,9 +11,24 @@ import {
   Min,
 } from 'class-validator';
 import type { DocumentSituation } from '../domain/document';
+import {
+  ARCHIVE_REASON_CODES,
+  currentDocumentYear,
+  type ArchiveReasonCode,
+} from '../document-governance.constants';
 import { trimDocumentText } from './document.dto-helpers';
 
 export class SetDocumentSituationDto {
+  @IsOptional()
+  @IsIn(ARCHIVE_REASON_CODES)
+  archiveReasonCode?: ArchiveReasonCode;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 500)
+  @trimDocumentText
+  archiveReasonDetail?: string;
+
   @IsOptional()
   @IsString()
   @Length(2, 1000)
@@ -44,7 +59,7 @@ export class SetDocumentSituationDto {
   @Type(() => Number)
   @IsInt()
   @Min(1800)
-  @Max(2200)
+  @Max(currentDocumentYear())
   replacementYear?: number;
 
   @IsIn(['archived', 'current', 'replaced'])

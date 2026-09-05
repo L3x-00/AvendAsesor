@@ -17,6 +17,7 @@ export interface UserProfile {
   accountStatus: AccountStatus;
   fullName: string;
   id: string;
+  modulesAccess?: boolean;
   role: UserRole;
 }
 

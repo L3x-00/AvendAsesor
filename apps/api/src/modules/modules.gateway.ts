@@ -13,6 +13,7 @@ export interface CreateModuleRecord {
   code: string;
   createdBy: string;
   description?: string;
+  isActive?: boolean;
   metadata?: ModuleMetadata;
   name: string;
   parentModuleId?: string | null;
@@ -43,8 +44,16 @@ export interface ModulesGateway {
   findById(moduleId: string): Promise<ManagedModule | null>;
   hasNonDeletedChildren(moduleId: string): Promise<boolean>;
   list(options: ListModulesOptions): Promise<ManagedModule[]>;
+  listSummaries(
+    options: Pick<ListModulesOptions, 'status'>,
+  ): Promise<ManagedModuleSummary[]>;
   update(
     moduleId: string,
     input: UpdateModuleRecord,
   ): Promise<ManagedModule | null>;
+}
+
+export interface ManagedModuleSummary extends ManagedModule {
+  documentCount: number;
+  submoduleCount: number;
 }

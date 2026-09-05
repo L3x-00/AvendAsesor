@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 export interface AuthorizationContext {
   email: string | null;
   emailConfirmedAt: string | null;
+  modulesAccess?: boolean;
   role: UserRole;
   userId: string;
 }
@@ -45,6 +46,9 @@ export class AuthorizationService {
     return {
       email: identity.email,
       emailConfirmedAt: identity.emailConfirmedAt,
+      ...(profile.modulesAccess === undefined
+        ? {}
+        : { modulesAccess: profile.modulesAccess }),
       role: profile.role,
       userId: identity.id,
     };

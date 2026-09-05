@@ -42,6 +42,7 @@ function source(input: {
     chunkContent: input.content,
     chunkId: input.chunkId,
     documentId: input.documentId,
+    documentSituation: 'current',
     documentTitle: input.documentTitle,
     documentVersionId: input.versionId,
     lexicalScore: 0.5,

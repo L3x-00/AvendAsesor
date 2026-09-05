@@ -242,6 +242,34 @@ describe('ChatService', () => {
     });
   });
 
+  it('persists the real child association when a main module retrieves submodule evidence', async () => {
+    const parentModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: parentModuleId, name: 'Evaluación docente' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Respuesta fundada. [1]';
+      },
+    });
+
+    await collect(service, { selectedModuleId: parentModuleId });
+
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources: [
+          expect.objectContaining({
+            moduleId: source.moduleIds[0],
+          }),
+        ],
+      }),
+    );
+  });
+
   it('starts an unfiltered answer in the single module resolved by evidence', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',

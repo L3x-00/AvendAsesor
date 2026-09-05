@@ -7,7 +7,11 @@ import {
   MAX_CHAT_CONTEXT_CHARS,
   RAG_TOPIC_SWITCH_SCORE_MARGIN,
 } from './rag.constants';
-import type { RetrievalGateway, RetrievedChunk } from './retrieval.gateway';
+import type {
+  RetrievalGateway,
+  RetrievedChunk,
+  RetrievalScope,
+} from './retrieval.gateway';
 
 export interface ResolvedModule {
   id: string;
@@ -154,6 +158,59 @@ function contextualQuery(
     : question;
 }
 
+function normalizedIntentText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('es')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const ARCHIVED_INTENT_PATTERNS = [
+  /\barchivad[oa]s?\b/u,
+  /\bantecedentes? historicos? especificos?\b/u,
+  /\bconservad[oa]s? (?:unicamente |solo )?como antecedentes? historicos?\b/u,
+];
+
+const HISTORICAL_INTENT_PATTERNS = [
+  /\bantecedentes?\b/u,
+  /\bhistoric[oa]s?\b/u,
+  /\bcompar(?:ar|acion|aciones|ativa|ativas|ativo|ativos)\b/u,
+  /\bevolucion\b/u,
+  /\b(?:diferencias?|cambios?) entre versiones?\b/u,
+  /\bversion(?:es)? (?:anterior|anteriores|previa|previas)\b/u,
+  /\b(?:norma|normativa|documento|regla)s? (?:anterior|anteriores|previa|previas)\b/u,
+  /\b(?:reemplazad[oa]s?|derogad[oa]s?|sin vigencia)\b/u,
+  /\b(?:antes|anteriormente)\b/u,
+];
+
+/**
+ * Keeps historical material fail-closed unless the current question asks for
+ * it explicitly. Archived material requires an even stronger explicit signal.
+ */
+export function detectRetrievalScope(
+  question: string,
+  currentYear = new Date().getUTCFullYear(),
+): RetrievalScope {
+  const normalized = normalizedIntentText(question);
+
+  if (ARCHIVED_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'archived_explicit';
+  }
+
+  if (HISTORICAL_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'historical';
+  }
+
+  const years = normalized.match(/\b(?:19|20)\d{2}\b/gu) ?? [];
+  if (years.some((year) => Number(year) < currentYear)) {
+    return 'historical';
+  }
+
+  return 'current';
+}
+
 @Injectable()
 export class RagService {
   constructor(
@@ -169,6 +226,7 @@ export class RagService {
     priorUserQuestions: string[] = [],
   ): Promise<RetrievalResult> {
     const followUpQuery = contextualQuery(question, priorUserQuestions);
+    const retrievalScope = detectRetrievalScope(question);
     const queries =
       selectedModuleId && followUpQuery !== question
         ? [question, followUpQuery]
@@ -194,6 +252,7 @@ export class RagService {
       ...searchBase,
       embedding: currentEmbedding,
       query: question,
+      retrievalScope,
       selectedModuleId: null,
     });
     const selectedSearch = selectedModuleId
@@ -201,6 +260,7 @@ export class RagService {
           ...searchBase,
           embedding: contextualEmbedding,
           query: followUpQuery,
+          retrievalScope,
           selectedModuleId,
         })
       : Promise.resolve<RetrievedChunk[]>([]);
