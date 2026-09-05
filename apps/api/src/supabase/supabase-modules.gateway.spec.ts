@@ -241,12 +241,10 @@ describe('SupabaseModulesGatewayAdapter', () => {
   ])(
     'rejects counts that cannot be represented accurately: %j',
     async (counts) => {
-      const rpc = jest
-        .fn()
-        .mockResolvedValue({
-          data: [{ ...moduleRow, ...counts }],
-          error: null,
-        });
+      const rpc = jest.fn().mockResolvedValue({
+        data: [{ ...moduleRow, ...counts }],
+        error: null,
+      });
       const gateway = new SupabaseModulesGatewayAdapter({
         rpc,
       } as unknown as SupabaseServerClient);
