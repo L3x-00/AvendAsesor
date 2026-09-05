@@ -180,12 +180,24 @@ const unansweredQuestion = {
   topRelevanceScore: null,
 };
 
+/** Role/status updates return the base shape, without access-window fields. */
 const administrativeUser = {
   accountStatus: "active" as const,
   fullName: "Cuenta de prueba",
   id: "680a1b3e-9a76-46b9-9130-7284e03aa123",
   lastAccessAt: null,
   role: "admin" as const,
+};
+
+/** The directory listing returns the extended shape. */
+const administrativeDirectoryUser = {
+  ...administrativeUser,
+  accessExpiresAt: "2026-12-31T04:59:59.999Z",
+  accessStartAt: null,
+  accessState: "activo" as const,
+  createdByName: null,
+  email: "cuenta@example.test",
+  phone: null,
 };
 
 const auditEvent = {
@@ -422,7 +434,7 @@ describe("AdminApiClient", () => {
       if (url.includes("/audit-events")) return successfulJson([auditEvent]);
       if (url.includes("/admin/users/page?"))
         return successfulJson({
-          items: [administrativeUser],
+          items: [administrativeDirectoryUser],
           limit: 25,
           offset: 25,
           total: 1,
@@ -456,7 +468,7 @@ describe("AdminApiClient", () => {
         status: "active",
       }),
     ).resolves.toEqual({
-      items: [administrativeUser],
+      items: [administrativeDirectoryUser],
       limit: 25,
       offset: 25,
       total: 1,
@@ -480,6 +492,47 @@ describe("AdminApiClient", () => {
         "http://localhost:3001/admin/users/page?limit=25&offset=25&group=staff&search=prueba&status=active",
         "http://localhost:3001/admin/users/audit-events?limit=100",
         `http://localhost:3001/admin/users/${administrativeUser.id}`,
+      ]),
+    );
+  });
+
+  it("counts the directory and replaces an access window server-side", async () => {
+    const counts = {
+      active: 12,
+      expired: 2,
+      expiringSoon: 3,
+      suspended: 1,
+      total: 15,
+    };
+    const request = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) => {
+      const url = String(input);
+      if (url.includes("/admin/users/counts")) return successfulJson(counts);
+      return successfulJson(administrativeDirectoryUser);
+    });
+    const client = new AdminApiClient(
+      "server-session-token",
+      "http://localhost:3001",
+      request,
+    );
+
+    await expect(client.countAdministrativeUsers()).resolves.toEqual(counts);
+    await expect(
+      client.countAdministrativeUsers({ group: "docente", search: "  Ana  " }),
+    ).resolves.toEqual(counts);
+    await expect(
+      client.updateAdministrativeUserAccessWindow(administrativeUser.id, {
+        accessExpiresAt: "2026-12-31T04:59:59.999Z",
+        reason: "Extensión autorizada.",
+      }),
+    ).resolves.toEqual(administrativeDirectoryUser);
+
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        "http://localhost:3001/admin/users/counts",
+        "http://localhost:3001/admin/users/counts?group=docente&search=Ana",
+        `http://localhost:3001/admin/users/${administrativeUser.id}/access-window`,
       ]),
     );
   });

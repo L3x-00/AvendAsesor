@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { UsersManager } from "@/components/admin/users-manager";
 import { ModulePermissionsManager } from "@/components/admin/module-permissions-manager";
+import { toDateInputValue } from "@/lib/admin-api/access-window";
+import { getAdminApiUrl } from "@/lib/admin-api/config";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatOperationalAuditAction,
@@ -9,6 +11,7 @@ import {
   formatUserRole,
 } from "@/lib/admin-api/labels";
 import {
+  accessStateFilter,
   parseUserDirectoryQuery,
   USER_DIRECTORY_PAGE_SIZE,
   userDirectoryHref,
@@ -33,13 +36,17 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const { access, client } = await createAuthorizedAdminApiContext();
   if (access.role !== "superadmin") redirect("/access-denied");
   const query = parseUserDirectoryQuery(await searchParams);
-  const [userPage, events, modulePermissions] = await Promise.all([
+  const [userPage, counts, events, modulePermissions] = await Promise.all([
     client.listAdministrativeUsers({
+      accessState: accessStateFilter(query.status),
       group: query.group,
       limit: USER_DIRECTORY_PAGE_SIZE,
       offset: (query.page - 1) * USER_DIRECTORY_PAGE_SIZE,
       search: query.search,
-      status: query.status === "all" ? undefined : query.status,
+    }),
+    client.countAdministrativeUsers({
+      group: query.group,
+      search: query.search,
     }),
     client.listOperationalAuditEvents(),
     client.listAdminModulePermissions(),
@@ -64,7 +71,13 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       userRole={access.role}
     >
       <div className="flex flex-col gap-8">
-        <UsersManager page={userPage} query={query} />
+        <UsersManager
+          apiBaseUrl={getAdminApiUrl()}
+          counts={counts}
+          page={userPage}
+          query={query}
+          today={toDateInputValue(new Date().toISOString())}
+        />
         <ModulePermissionsManager permissions={modulePermissions} />
 
         <section

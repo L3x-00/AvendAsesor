@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { useId } from "react";
-import { updateAdministrativeUserAction } from "@/app/admin/actions";
+import {
+  createAdministrativeUserAction,
+  updateAccessWindowAction,
+  updateAdministrativeUserAction,
+} from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
-import { formatAccountStatus, formatUserRole } from "@/lib/admin-api/labels";
+import { UsersImportForm } from "@/components/admin/users-import-form";
+import { toDateInputValue } from "@/lib/admin-api/access-window";
+import { formatAccessState, formatUserRole } from "@/lib/admin-api/labels";
 import type {
   AdministrativeUser,
+  AdministrativeUserCounts,
   AdministrativeUserPage,
 } from "@/lib/admin-api/types";
 import {
@@ -18,19 +25,34 @@ import {
 import styles from "./users-manager.module.css";
 
 interface UsersManagerProps {
+  /** Render base URL: the roster upload goes straight to the API. */
+  apiBaseUrl: string;
+  counts: AdministrativeUserCounts;
   page: AdministrativeUserPage;
   query: ParsedUserDirectoryQuery;
+  /** Today in Lima (YYYY-MM-DD), resolved on the server so hydration matches. */
+  today: string;
 }
 
-const accessDateFormatter = new Intl.DateTimeFormat("es-PE", {
+const accessDateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
   dateStyle: "medium",
   timeStyle: "short",
   timeZone: "America/Lima",
 });
 
+const accessDayFormatter = new Intl.DateTimeFormat("es-PE", {
+  dateStyle: "medium",
+  timeZone: "America/Lima",
+});
+
 function formatAccess(value: string | null): string {
   if (!value) return "Sin acceso registrado";
-  return accessDateFormatter.format(new Date(value));
+  return accessDateTimeFormatter.format(new Date(value));
+}
+
+function formatDay(value: string | null, emptyLabel: string): string {
+  if (!value) return emptyLabel;
+  return accessDayFormatter.format(new Date(value));
 }
 
 const GROUPS: ReadonlyArray<{ group: UserGroup; label: string }> = [
@@ -39,13 +61,35 @@ const GROUPS: ReadonlyArray<{ group: UserGroup; label: string }> = [
 ];
 
 const STATUS_FILTERS: ReadonlyArray<{
+  countOf: (counts: AdministrativeUserCounts) => number;
   label: string;
   value: UserStatusFilter;
 }> = [
-  { label: "Todos", value: "all" },
-  { label: "Activos", value: "active" },
-  { label: "Pausados", value: "suspended" },
+  { countOf: (counts) => counts.total, label: "Todos", value: "all" },
+  { countOf: (counts) => counts.active, label: "Activos", value: "activo" },
+  {
+    countOf: (counts) => counts.expiringSoon,
+    label: "Por vencer",
+    value: "por_vencer",
+  },
+  {
+    countOf: (counts) => counts.expired,
+    label: "Expirados",
+    value: "expirado",
+  },
+  {
+    countOf: (counts) => counts.suspended,
+    label: "Pausados",
+    value: "pausado",
+  },
 ];
+
+const BADGE_CLASS: Record<AdministrativeUser["accessState"], string> = {
+  activo: styles.badgeActive,
+  expirado: styles.badgeExpired,
+  pausado: styles.badgePaused,
+  por_vencer: styles.badgeExpiring,
+};
 
 function UserEditForm({ user }: { user: AdministrativeUser }) {
   const fieldId = useId();
@@ -103,12 +147,184 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
   );
 }
 
+function AccessWindowForm({
+  today,
+  user,
+}: {
+  today: string;
+  user: AdministrativeUser;
+}) {
+  const fieldId = useId();
+
+  return (
+    <details className={styles.manage}>
+      <summary className={styles.manageSummary}>Extender vigencia</summary>
+      <AdminActionForm
+        action={updateAccessWindowAction}
+        className={styles.form}
+        submitLabel="Guardar vigencia"
+      >
+        <input name="userId" type="hidden" value={user.id} />
+        <p className={styles.formHint}>
+          El fin debe ser hoy o una fecha posterior. Deja una fecha vacía para
+          dejarla sin definir; si borras ambas, el acceso queda sin vencimiento.
+          Para bloquear el acceso de inmediato usa «Editar acceso» y pausa la
+          cuenta.
+        </p>
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
+          Inicio
+        </label>
+        <input
+          className={styles.input}
+          defaultValue={toDateInputValue(user.accessStartAt)}
+          id={`${fieldId}-start`}
+          name="accessStartAt"
+          type="date"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
+          Fin
+        </label>
+        <input
+          className={styles.input}
+          defaultValue={toDateInputValue(user.accessExpiresAt)}
+          id={`${fieldId}-expires`}
+          min={today}
+          name="accessExpiresAt"
+          type="date"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-reason`}>
+          Motivo (queda auditado)
+        </label>
+        <textarea
+          className={styles.textarea}
+          id={`${fieldId}-reason`}
+          maxLength={500}
+          minLength={4}
+          name="reason"
+          required
+          rows={3}
+        />
+      </AdminActionForm>
+    </details>
+  );
+}
+
+
+/**
+ * Registration form. The email is the login and the person sets their own
+ * password from the invitation, so no password is ever typed here.
+ */
+function CreateUserForm({
+  role,
+  submitLabel,
+  title,
+  today,
+}: {
+  role: "admin" | "docente";
+  submitLabel: string;
+  title: string;
+  today: string;
+}) {
+  const fieldId = useId();
+
+  return (
+    <details className={styles.create}>
+      <summary className={styles.createSummary}>{title}</summary>
+      <AdminActionForm
+        action={createAdministrativeUserAction}
+        className={styles.form}
+        submitLabel={submitLabel}
+      >
+        <input name="role" type="hidden" value={role} />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
+          Nombre y apellidos
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-name`}
+          maxLength={160}
+          minLength={2}
+          name="fullName"
+          required
+          type="text"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-email`}>
+          Correo electrónico
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-email`}
+          maxLength={254}
+          name="email"
+          required
+          type="email"
+        />
+        <p className={styles.formHint}>
+          El correo es el usuario con el que iniciará sesión. Recibirá un
+          mensaje para crear su propia contraseña.
+        </p>
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-phone`}>
+          Celular (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-phone`}
+          maxLength={20}
+          name="phone"
+          type="tel"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
+          Inicio de vigencia (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-start`}
+          name="accessStartAt"
+          type="date"
+        />
+        <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
+          Fin de vigencia (opcional)
+        </label>
+        <input
+          className={styles.input}
+          id={`${fieldId}-expires`}
+          min={today}
+          name="accessExpiresAt"
+          type="date"
+        />
+        <p className={styles.formHint}>
+          Si dejas las fechas vacías, el acceso queda sin vencimiento.
+        </p>
+      </AdminActionForm>
+    </details>
+  );
+}
+
 /**
  * Server-filtered and paginated administrative user directory. The browser
  * receives only the requested page; the API remains the authority for data,
- * role changes and account-state changes.
+ * role changes, account state and access windows.
  */
-export function UsersManager({ page, query }: UsersManagerProps) {
+/** Export link that carries the filters currently on screen. */
+function userExportHref(query: ParsedUserDirectoryQuery): string {
+  const params = new URLSearchParams();
+  if (query.group !== "docente") params.set("group", query.group);
+  if (query.search) params.set("search", query.search);
+  if (query.status !== "all") params.set("accessState", query.status);
+
+  const serialized = params.toString();
+  return serialized
+    ? `/api/admin/users/export?${serialized}`
+    : "/api/admin/users/export";
+}
+
+export function UsersManager({
+  apiBaseUrl,
+  counts,
+  page,
+  query,
+  today,
+}: UsersManagerProps) {
   const searchId = useId();
   const totalPages = Math.max(1, Math.ceil(page.total / page.limit));
   const firstVisible = page.total === 0 ? 0 : page.offset + 1;
@@ -119,8 +335,28 @@ export function UsersManager({ page, query }: UsersManagerProps) {
     <div className={styles.manager}>
       <p className={styles.notice} role="note">
         <strong>Vista de superadministrador.</strong> Puedes consultar todos los
-        usuarios y gestionar sus accesos; cada cambio queda auditado.
+        usuarios y gestionar sus accesos y vigencias; cada cambio queda
+        auditado.
       </p>
+
+      <div className={styles.createBar}>
+        <CreateUserForm
+          role="docente"
+          submitLabel="Registrar usuario"
+          title="+ Agregar usuario"
+          today={today}
+        />
+        <CreateUserForm
+          role="admin"
+          submitLabel="Registrar administrador"
+          title="+ Agregar administrador"
+          today={today}
+        />
+        <UsersImportForm apiBaseUrl={apiBaseUrl} />
+        <a className={styles.exportLink} href={userExportHref(query)}>
+          Exportar Excel
+        </a>
+      </div>
 
       <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
         {GROUPS.map((item) => (
@@ -158,7 +394,7 @@ export function UsersManager({ page, query }: UsersManagerProps) {
               key={`${query.group}:${query.status}:${query.page}:${query.search ?? ""}`}
               maxLength={160}
               name="search"
-              placeholder="Buscar usuario por nombre…"
+              placeholder="Buscar por nombre, correo o celular…"
               type="search"
             />
             <button className={styles.searchButton} type="submit">
@@ -180,7 +416,7 @@ export function UsersManager({ page, query }: UsersManagerProps) {
         </form>
 
         <div
-          aria-label="Filtrar por estado"
+          aria-label="Filtrar por estado de acceso"
           className={styles.statusFilter}
           role="group"
         >
@@ -199,7 +435,8 @@ export function UsersManager({ page, query }: UsersManagerProps) {
               })}
               key={item.value}
             >
-              {item.label}
+              {item.label}{" "}
+              <span className={styles.statusCount}>{item.countOf(counts)}</span>
             </Link>
           ))}
         </div>
@@ -223,20 +460,34 @@ export function UsersManager({ page, query }: UsersManagerProps) {
                   Rol: <strong>{formatUserRole(user.role)}</strong>
                 </p>
                 <p className={styles.rowMeta}>
+                  Inicio:{" "}
+                  <strong>
+                    {formatDay(user.accessStartAt, "Sin definir")}
+                  </strong>{" "}
+                  · Fin:{" "}
+                  <strong>
+                    {formatDay(user.accessExpiresAt, "Sin vencimiento")}
+                  </strong>
+                </p>
+                <p className={styles.rowMeta}>
+                  Correo: <strong>{user.email ?? "Sin correo"}</strong> ·
+                  Celular: <strong>{user.phone ?? "Sin celular"}</strong>
+                </p>
+                <p className={styles.rowMeta}>
                   Último acceso: {formatAccess(user.lastAccessAt)}
                 </p>
+                {user.createdByName ? (
+                  <p className={styles.rowMeta}>
+                    Creado por: <strong>{user.createdByName}</strong>
+                  </p>
+                ) : null}
               </div>
-              <span
-                className={
-                  user.accountStatus === "active"
-                    ? styles.badgeActive
-                    : styles.badgePaused
-                }
-              >
-                {formatAccountStatus(user.accountStatus)}
+              <span className={BADGE_CLASS[user.accessState]}>
+                {formatAccessState(user.accessState)}
               </span>
               <div className={styles.rowActions}>
                 <UserEditForm user={user} />
+                <AccessWindowForm today={today} user={user} />
               </div>
             </li>
           ))}

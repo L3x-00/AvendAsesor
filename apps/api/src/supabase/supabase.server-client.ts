@@ -15,8 +15,12 @@ export interface SupabaseDatabase {
       profiles: {
         Row: {
           access_expires_at: string | null;
+          access_start_at: string | null;
           account_status: AccountStatus;
           created_at: string;
+          created_by: string | null;
+          phone: string | null;
+          updated_by: string | null;
           full_name: string;
           id: string;
           last_access_at: string | null;
@@ -28,8 +32,12 @@ export interface SupabaseDatabase {
         };
         Insert: {
           access_expires_at?: string | null;
+          access_start_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
+          created_by?: string | null;
+          phone?: string | null;
+          updated_by?: string | null;
           full_name: string;
           id: string;
           last_access_at?: string | null;
@@ -41,8 +49,12 @@ export interface SupabaseDatabase {
         };
         Update: {
           access_expires_at?: string | null;
+          access_start_at?: string | null;
           account_status?: AccountStatus;
           created_at?: string;
+          created_by?: string | null;
+          phone?: string | null;
+          updated_by?: string | null;
           full_name?: string;
           id?: string;
           last_access_at?: string | null;
@@ -809,6 +821,7 @@ export interface SupabaseDatabase {
       };
       list_administrative_users_page: {
         Args: {
+          p_access_state?: string | null;
           p_account_status?: AccountStatus | null;
           p_actor_id: string;
           p_group?: string | null;
@@ -819,6 +832,59 @@ export interface SupabaseDatabase {
         Returns: {
           items: Json;
           total_count: number;
+        }[];
+      };
+      provision_administrative_user: {
+        Args: {
+          p_access_expires_at?: string | null;
+          p_access_start_at?: string | null;
+          p_actor_id: string;
+          p_full_name: string;
+          p_phone?: string | null;
+          p_role?: UserRole;
+          p_target_user_id: string;
+        };
+        Returns: {
+          access_expires_at: string | null;
+          access_start_at: string | null;
+          account_status: AccountStatus;
+          full_name: string;
+          id: string;
+          last_access_at: string | null;
+          phone: string | null;
+          role: UserRole;
+        }[];
+      };
+      count_administrative_users: {
+        Args: {
+          p_actor_id: string;
+          p_group?: string | null;
+          p_search?: string | null;
+        };
+        Returns: {
+          active_count: number;
+          expired_count: number;
+          expiring_soon_count: number;
+          suspended_count: number;
+          total_count: number;
+        }[];
+      };
+      update_administrative_user_access_window: {
+        Args: {
+          p_access_expires_at?: string | null;
+          p_access_start_at?: string | null;
+          p_actor_id: string;
+          p_reason?: string | null;
+          p_target_user_id: string;
+        };
+        Returns: {
+          access_expires_at: string | null;
+          access_start_at: string | null;
+          account_status: AccountStatus;
+          full_name: string;
+          id: string;
+          last_access_at: string | null;
+          role: UserRole;
         }[];
       };
       update_administrative_user: {
@@ -841,6 +907,7 @@ export interface SupabaseDatabase {
         Args: { p_actor_id: string; p_limit?: number };
         Returns: {
           action:
+            | 'access_window_changed'
             | 'chat_history_deleted'
             | 'unanswered_question_reviewed'
             | 'user_role_changed'
@@ -990,7 +1057,9 @@ export interface SupabaseDatabase {
       faq_memory_review_status:
         'pending_review' | 'approved' | 'rejected' | 'suppressed';
       operational_audit_action:
+        | 'access_window_changed'
         | 'chat_history_deleted'
+        | 'user_created'
         | 'unanswered_question_reviewed'
         | 'user_role_changed'
         | 'user_status_changed';

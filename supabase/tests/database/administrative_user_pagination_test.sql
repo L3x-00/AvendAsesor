@@ -5,13 +5,13 @@ select plan(18);
 select has_function(
   'public',
   'list_administrative_users_page',
-  array['uuid', 'text', 'text', 'account_status', 'integer', 'integer'],
+  array['uuid', 'text', 'text', 'account_status', 'integer', 'integer', 'text'],
   'Administrative users expose a dedicated paginated RPC'
 );
 select ok(
   has_function_privilege(
     'service_role',
-    'public.list_administrative_users_page(uuid,text,text,public.account_status,integer,integer)'::regprocedure,
+    'public.list_administrative_users_page(uuid,text,text,public.account_status,integer,integer,text)'::regprocedure,
     'execute'
   ),
   'Only the server role receives the paginated user directory capability'
@@ -19,7 +19,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'authenticated',
-    'public.list_administrative_users_page(uuid,text,text,public.account_status,integer,integer)'::regprocedure,
+    'public.list_administrative_users_page(uuid,text,text,public.account_status,integer,integer,text)'::regprocedure,
     'execute'
   ),
   'Authenticated clients cannot execute the paginated user directory directly'

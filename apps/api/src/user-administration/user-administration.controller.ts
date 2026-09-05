@@ -2,12 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Header,
+  Post,
+  UploadedFile,
+  UseInterceptors,
   Param,
   ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AuthorizationGuard,
@@ -16,12 +21,17 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
 import { ListAdministrativeUsersQueryDto } from './dto/list-administrative-users-query.dto';
 import { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
+import { UpdateAccessWindowDto } from './dto/update-access-window.dto';
 import { UpdateAdministrativeUserDto } from './dto/update-administrative-user.dto';
 import { UserAdministrationService } from './user-administration.service';
+import { USER_IMPORT_MAX_BYTES, type UserImportReport } from './user-import';
 import type {
   AdministrativeUser,
+  AdministrativeUserCounts,
+  AdministrativeUserDirectoryEntry,
   AdministrativeUserPage,
   OperationalAuditEvent,
 } from './user-administration.gateway';
@@ -55,12 +65,68 @@ export class UserAdministrationController {
     return this.userAdministrationService.listUsers(dto, authorization);
   }
 
+  @Post()
+  createUser(
+    @Body() dto: CreateAdministrativeUserDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    return this.userAdministrationService.createUser(dto, authorization);
+  }
+
+  @Post('import')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: USER_IMPORT_MAX_BYTES, files: 1 },
+    }),
+  )
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  importUsers(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<UserImportReport> {
+    return this.userAdministrationService.importUsers(file, authorization);
+  }
+
+  @Get('export')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @Header('Content-Disposition', 'attachment; filename="usuarios-avend.xlsx"')
+  exportUsers(
+    @Query() dto: ListAdministrativeUsersQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<Buffer> {
+    return this.userAdministrationService.exportUsers(dto, authorization);
+  }
+
+  @Get('counts')
+  countUsers(
+    @Query() dto: ListAdministrativeUsersQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserCounts> {
+    return this.userAdministrationService.countUsers(dto, authorization);
+  }
+
   @Get('audit-events')
   listAuditEvents(
     @Query() dto: ListOperationalAuditEventsQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<OperationalAuditEvent[]> {
     return this.userAdministrationService.listAuditEvents(dto, authorization);
+  }
+
+  @Patch(':id/access-window')
+  updateAccessWindow(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
+    @Body() dto: UpdateAccessWindowDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    return this.userAdministrationService.updateAccessWindow(
+      targetUserId,
+      dto,
+      authorization,
+    );
   }
 
   @Patch(':id')

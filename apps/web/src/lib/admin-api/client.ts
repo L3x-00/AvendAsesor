@@ -8,6 +8,8 @@ import {
   documentLibraryPageSchema,
   adminHomeDashboardSchema,
   administrativeUserSchema,
+  administrativeUserBaseSchema,
+  administrativeUserCountsSchema,
   managedDocumentDetailsSchema,
   managedDocumentSchema,
   managedModuleSchema,
@@ -16,6 +18,9 @@ import {
   operationalMetricsSchema,
   unansweredQuestionSchema,
   type AdministrativeUser,
+  type AdministrativeUserBase,
+  type AdministrativeUserCounts,
+  type CreateAdministrativeUserInput,
   type AdminHomeDashboard,
   type AdministrativeUserPage,
   type AdministrativeUserQuery,
@@ -205,6 +210,7 @@ export class AdminApiClient {
       offset: String(filters.offset ?? 0),
     });
 
+    if (filters.accessState) query.set("accessState", filters.accessState);
     if (filters.group) query.set("group", filters.group);
     if (filters.search?.trim()) query.set("search", filters.search.trim());
     if (filters.status) query.set("status", filters.status);
@@ -213,6 +219,66 @@ export class AdminApiClient {
       `/admin/users/page?${query.toString()}`,
       { method: "GET" },
       administrativeUserPageSchema,
+    );
+  }
+
+  async createAdministrativeUser(
+    payload: CreateAdministrativeUserInput,
+  ): Promise<AdministrativeUser> {
+    return this.send(
+      '/admin/users',
+      { body: JSON.stringify(payload), method: 'POST' },
+      administrativeUserSchema,
+    );
+  }
+
+  /**
+   * Binary download: the directory export is a spreadsheet, so it never goes
+   * through the JSON parsing path.
+   */
+  async exportAdministrativeUsers(
+    filters: Pick<
+      AdministrativeUserQuery,
+      "accessState" | "group" | "search"
+    > = {},
+  ): Promise<ArrayBuffer> {
+    const query = new URLSearchParams();
+    if (filters.accessState) query.set("accessState", filters.accessState);
+    if (filters.group) query.set("group", filters.group);
+    if (filters.search?.trim()) query.set("search", filters.search.trim());
+
+    const serialized = query.toString();
+    const response = await this.request(
+      `${this.baseUrl}/admin/users/export${serialized ? `?${serialized}` : ""}`,
+      {
+        cache: "no-store",
+        headers: {
+          Accept:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+        method: "GET",
+      },
+    );
+
+    if (!response.ok) throw new AdminApiError(response.status);
+
+    return response.arrayBuffer();
+  }
+
+  async countAdministrativeUsers(
+    filters: Pick<AdministrativeUserQuery, "group" | "search"> = {},
+  ): Promise<AdministrativeUserCounts> {
+    const query = new URLSearchParams();
+
+    if (filters.group) query.set("group", filters.group);
+    if (filters.search?.trim()) query.set("search", filters.search.trim());
+
+    const serialized = query.toString();
+    return this.send(
+      serialized ? `/admin/users/counts?${serialized}` : "/admin/users/counts",
+      { method: "GET" },
+      administrativeUserCountsSchema,
     );
   }
 
@@ -378,9 +444,24 @@ export class AdminApiClient {
       reason: string;
       role?: "admin" | "docente" | "superadmin";
     },
-  ): Promise<AdministrativeUser> {
+  ): Promise<AdministrativeUserBase> {
     return this.send(
       `/admin/users/${userId}`,
+      { body: JSON.stringify(payload), method: "PATCH" },
+      administrativeUserBaseSchema,
+    );
+  }
+
+  async updateAdministrativeUserAccessWindow(
+    userId: string,
+    payload: {
+      accessExpiresAt?: string;
+      accessStartAt?: string;
+      reason: string;
+    },
+  ): Promise<AdministrativeUser> {
+    return this.send(
+      `/admin/users/${userId}/access-window`,
       { body: JSON.stringify(payload), method: "PATCH" },
       administrativeUserSchema,
     );

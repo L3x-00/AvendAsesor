@@ -10,11 +10,21 @@ import {
 import type { PostgrestError } from '@supabase/supabase-js';
 import type {
   AdministrativeUser,
+  AdministrativeUserAccessState,
+  AdministrativeUserCounts,
+  AdministrativeUserDirectoryEntry,
   AdministrativeUserPage,
   OperationalAuditEvent,
   UserAdministrationGateway,
 } from '../user-administration/user-administration.gateway';
 import type { Json, SupabaseServerClient } from './supabase.server-client';
+
+const ACCESS_STATES: ReadonlySet<AdministrativeUserAccessState> = new Set([
+  'activo',
+  'expirado',
+  'pausado',
+  'por_vencer',
+]);
 
 function databaseError(error: PostgrestError): never {
   if (error.code === '42501') {
@@ -57,6 +67,18 @@ function asMetadata(value: Json): Record<string, unknown> {
   return value;
 }
 
+function requireCount(value: unknown, message: string): number {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  if (
+    typeof parsed !== 'number' ||
+    !Number.isSafeInteger(parsed) ||
+    parsed < 0
+  ) {
+    throw new InternalServerErrorException(message);
+  }
+  return parsed;
+}
+
 @Injectable()
 export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrationGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
@@ -88,6 +110,7 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     const { data, error } = await this.requireClient().rpc(
       'list_administrative_users_page',
       {
+        p_access_state: input.accessState,
         p_account_status: input.status,
         p_actor_id: input.actorId,
         p_group: input.group,
@@ -113,10 +136,109 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     }
 
     return {
-      items: page.items.map((user) => this.toAdministrativeUserJson(user)),
+      items: page.items.map((user) => this.toDirectoryEntryJson(user)),
       limit: input.limit,
       offset: input.offset,
       total: page.total_count,
+    };
+  }
+
+  async createUser(
+    input: Parameters<UserAdministrationGateway['createUser']>[0],
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    const client = this.requireClient();
+    const invited = await client.auth.admin.inviteUserByEmail(input.email, {
+      data: { full_name: input.fullName },
+    });
+
+    if (invited.error) {
+      // 422 is Supabase's "already registered"; anything else is opaque on
+      // purpose so provider details never reach the panel.
+      if (invited.error.status === 400 || invited.error.status === 422) {
+        throw new ConflictException(
+          'That email address already has an account.',
+        );
+      }
+      throw new ServiceUnavailableException(
+        'The invitation could not be sent. Try again later.',
+      );
+    }
+
+    const createdId = invited.data.user?.id;
+    if (!createdId) {
+      throw new ServiceUnavailableException(
+        'The administrative user creation did not complete.',
+      );
+    }
+
+    try {
+      const { data, error } = await client.rpc(
+        'provision_administrative_user',
+        {
+          p_access_expires_at: input.accessExpiresAt,
+          p_access_start_at: input.accessStartAt,
+          p_actor_id: input.actorId,
+          p_full_name: input.fullName,
+          p_phone: input.phone,
+          p_role: input.role,
+          p_target_user_id: createdId,
+        },
+      );
+      if (error) databaseError(error);
+
+      return this.toDirectoryEntry(
+        requireSingle(
+          data,
+          'The administrative user creation did not complete.',
+        ),
+      );
+    } catch (failure) {
+      // Compensate: without this the address stays taken by a half-created
+      // identity that the panel cannot see or fix.
+      await client.auth.admin.deleteUser(createdId).catch(() => undefined);
+      throw failure;
+    }
+  }
+
+  async countUsers(
+    input: Parameters<UserAdministrationGateway['countUsers']>[0],
+  ): Promise<AdministrativeUserCounts> {
+    const { data, error } = await this.requireClient().rpc(
+      'count_administrative_users',
+      {
+        p_actor_id: input.actorId,
+        p_group: input.group,
+        p_search: input.search,
+      },
+    );
+    if (error) databaseError(error);
+
+    const row = requireSingle(
+      data,
+      'The administrative user count did not complete.',
+    );
+
+    return {
+      active: requireCount(
+        row.active_count,
+        'Administrative counts are invalid.',
+      ),
+      expired: requireCount(
+        row.expired_count,
+        'Administrative counts are invalid.',
+      ),
+      expiringSoon: requireCount(
+        row.expiring_soon_count,
+        'Administrative counts are invalid.',
+      ),
+      suspended: requireCount(
+        row.suspended_count,
+        'Administrative counts are invalid.',
+      ),
+      total: requireCount(
+        row.total_count,
+        'Administrative counts are invalid.',
+      ),
     };
   }
 
@@ -137,6 +259,26 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
 
     return this.toAdministrativeUser(
       requireSingle(data, 'The administrative user update did not complete.'),
+    );
+  }
+
+  async updateAccessWindow(
+    input: Parameters<UserAdministrationGateway['updateAccessWindow']>[0],
+  ): Promise<AdministrativeUserDirectoryEntry> {
+    const { data, error } = await this.requireClient().rpc(
+      'update_administrative_user_access_window',
+      {
+        p_access_expires_at: input.accessExpiresAt,
+        p_access_start_at: input.accessStartAt,
+        p_actor_id: input.actorId,
+        p_reason: input.reason,
+        p_target_user_id: input.targetUserId,
+      },
+    );
+    if (error) databaseError(error);
+
+    return this.toDirectoryEntry(
+      requireSingle(data, 'The access-window update did not complete.'),
     );
   }
 
@@ -165,7 +307,58 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     };
   }
 
-  private toAdministrativeUserJson(user: Json): AdministrativeUser {
+  private toDirectoryEntry(user: {
+    access_expires_at: string | null;
+    access_start_at: string | null;
+    access_state?: AdministrativeUserAccessState;
+    account_status: AdministrativeUser['accountStatus'];
+    created_by_name?: string | null;
+    email?: string | null;
+    full_name: string;
+    id: string;
+    last_access_at: string | null;
+    phone?: string | null;
+    role: AdministrativeUser['role'];
+    updated_at?: string | null;
+    updated_by_name?: string | null;
+  }): AdministrativeUserDirectoryEntry {
+    return {
+      ...this.toAdministrativeUser(user),
+      accessExpiresAt: user.access_expires_at,
+      accessStartAt: user.access_start_at,
+      accessState: user.access_state ?? this.deriveAccessState(user),
+      createdByName: user.created_by_name ?? null,
+      email: user.email ?? null,
+      phone: user.phone ?? null,
+      updatedAt: user.updated_at ?? null,
+      updatedByName: user.updated_by_name ?? null,
+    };
+  }
+
+  private deriveAccessState(user: {
+    access_expires_at: string | null;
+    account_status: AdministrativeUser['accountStatus'];
+  }): AdministrativeUserAccessState {
+    const now = Date.now();
+    if (
+      user.access_expires_at !== null &&
+      Date.parse(user.access_expires_at) < now
+    ) {
+      return 'expirado';
+    }
+    if (user.account_status === 'suspended') {
+      return 'pausado';
+    }
+    if (
+      user.access_expires_at !== null &&
+      Date.parse(user.access_expires_at) < now + 7 * 24 * 60 * 60 * 1000
+    ) {
+      return 'por_vencer';
+    }
+    return 'activo';
+  }
+
+  private toDirectoryEntryJson(user: Json): AdministrativeUserDirectoryEntry {
     if (!user || Array.isArray(user) || typeof user !== 'object') {
       throw new InternalServerErrorException(
         'Administrative user data is invalid.',
@@ -177,24 +370,49 @@ export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrat
     const id = user.id;
     const lastAccessAt = user.last_access_at;
     const role = user.role;
+    const accessStartAt = user.access_start_at ?? null;
+    const accessExpiresAt = user.access_expires_at ?? null;
+    const accessState = user.access_state;
+    const email = user.email ?? null;
+    const phone = user.phone ?? null;
+    const createdByName = user.created_by_name ?? null;
+    const updatedAt = user.updated_at ?? null;
+    const updatedByName = user.updated_by_name ?? null;
     if (
       (accountStatus !== 'active' && accountStatus !== 'suspended') ||
       typeof fullName !== 'string' ||
       typeof id !== 'string' ||
       (lastAccessAt !== null && typeof lastAccessAt !== 'string') ||
-      (role !== 'admin' && role !== 'docente' && role !== 'superadmin')
+      (role !== 'admin' && role !== 'docente' && role !== 'superadmin') ||
+      (accessStartAt !== null && typeof accessStartAt !== 'string') ||
+      (accessExpiresAt !== null && typeof accessExpiresAt !== 'string') ||
+      typeof accessState !== 'string' ||
+      !ACCESS_STATES.has(accessState as AdministrativeUserAccessState) ||
+      (email !== null && typeof email !== 'string') ||
+      (phone !== null && typeof phone !== 'string') ||
+      (createdByName !== null && typeof createdByName !== 'string') ||
+      (updatedAt !== null && typeof updatedAt !== 'string') ||
+      (updatedByName !== null && typeof updatedByName !== 'string')
     ) {
       throw new InternalServerErrorException(
         'Administrative user data is invalid.',
       );
     }
 
-    return this.toAdministrativeUser({
+    return this.toDirectoryEntry({
+      access_expires_at: accessExpiresAt,
+      access_start_at: accessStartAt,
+      access_state: accessState as AdministrativeUserAccessState,
       account_status: accountStatus,
+      created_by_name: createdByName,
+      email,
       full_name: fullName,
       id,
       last_access_at: lastAccessAt,
+      phone,
       role,
+      updated_at: updatedAt,
+      updated_by_name: updatedByName,
     });
   }
 }

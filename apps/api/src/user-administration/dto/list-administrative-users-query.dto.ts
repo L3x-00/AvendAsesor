@@ -10,11 +10,16 @@ import {
 } from 'class-validator';
 import { trimText } from '../../modules/dto/module.dto-helpers';
 import type {
+  AdministrativeUserAccessState,
   AdministrativeUserGroup,
   AdministrativeUserStatusFilter,
 } from '../user-administration.gateway';
 
 export class ListAdministrativeUsersQueryDto {
+  @IsOptional()
+  @IsIn(['activo', 'por_vencer', 'expirado', 'pausado'])
+  accessState?: AdministrativeUserAccessState;
+
   @IsOptional()
   @IsIn(['docente', 'staff'])
   group?: AdministrativeUserGroup;
