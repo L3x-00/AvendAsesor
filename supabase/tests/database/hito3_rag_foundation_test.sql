@@ -259,6 +259,12 @@ select is(
   'A completed job makes the current version searchable'
 );
 
+update public.documents
+set
+  approval_status = 'ready',
+  approved_version_id = '00000000-0000-0000-0000-000000003202'
+where id = '00000000-0000-0000-0000-000000003201';
+
 select is(
   (
     select count(*)

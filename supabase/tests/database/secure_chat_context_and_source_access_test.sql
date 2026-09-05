@@ -122,6 +122,12 @@ select private.set_document_ingestion_status(
   'indexed'
 );
 
+update public.documents
+set
+  approval_status = 'ready',
+  approved_version_id = '00000000-0000-0000-0000-00000000e202'
+where id = '00000000-0000-0000-0000-00000000e201';
+
 insert into public.document_modules (document_id, module_id)
 values (
   '00000000-0000-0000-0000-00000000e201',
