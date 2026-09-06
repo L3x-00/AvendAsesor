@@ -24,6 +24,22 @@ const optionalTrimmedText = Transform(({ value }: { value: unknown }) => {
 
 export class ListDocumentLibraryQueryDto {
   @IsOptional()
+  @IsUUID('4')
+  createdBy?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @optionalTrimmedText
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @optionalTrimmedText
+  createdTo?: string;
+
+  @IsOptional()
   @IsString()
   @Length(1, 64)
   @Matches(/^[A-Za-z][A-Za-z0-9_]{1,63}$/)

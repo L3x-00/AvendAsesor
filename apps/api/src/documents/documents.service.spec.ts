@@ -47,6 +47,7 @@ const documentRecord: ManagedDocument = {
   issuanceYear: 2026,
   issuingEntity: 'MINEDU',
   issuingEntityOther: null,
+  keywords: null,
   metadata: { scope: 'local', specificDependency: 'Secretaría General' },
   publicationStatus: 'active',
   replacementDate: null,
@@ -117,6 +118,7 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
     listLibrary: jest.fn(),
     listModuleIds: jest.fn(),
     listSuggestions: jest.fn(),
+    listUploaders: jest.fn(),
     listVersions: jest.fn(),
     logicalDelete: jest.fn(),
     removePdf: jest.fn(),
@@ -600,6 +602,9 @@ describe('DocumentsService', () => {
     ).resolves.toMatchObject({ limit: 25, offset: 25 });
 
     expect(documentsGateway.listLibrary).toHaveBeenCalledWith({
+      createdBy: undefined,
+      createdFrom: undefined,
+      createdTo: undefined,
       documentType: undefined,
       issuanceYear: undefined,
       issuingEntity: undefined,
@@ -612,6 +617,126 @@ describe('DocumentsService', () => {
       submoduleId: undefined,
       technicalStatus: undefined,
     });
+  });
+
+  it('forwards the upload-date and uploader filters the client asked for', async () => {
+    documentsGateway.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 25,
+      offset: 0,
+      total: 0,
+    });
+
+    await service.listLibrary({
+      createdBy: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+      createdFrom: '2026-01-01',
+      createdTo: '2026-12-31',
+    });
+
+    expect(documentsGateway.listLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createdBy: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+        createdFrom: '2026-01-01',
+        createdTo: '2026-12-31',
+      }),
+    );
+  });
+
+  it('rejects an inverted upload-date range instead of returning an empty library', () => {
+    // La validación es síncrona: rechaza antes de construir la promesa.
+    expect(() =>
+      service.listLibrary({
+        createdFrom: '2026-12-31',
+        createdTo: '2026-01-01',
+      }),
+    ).toThrow(BadRequestException);
+
+    expect(documentsGateway.listLibrary).not.toHaveBeenCalled();
+  });
+
+  it('exposes the administrators that uploaded documents for the filter', async () => {
+    documentsGateway.listUploaders.mockResolvedValue([
+      {
+        documentCount: 3,
+        fullName: 'Ana Auditora',
+        id: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+      },
+    ]);
+
+    await expect(service.listUploaders()).resolves.toEqual([
+      {
+        documentCount: 3,
+        fullName: 'Ana Auditora',
+        id: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+      },
+    ]);
+  });
+
+  it('stores administrator keywords so the library search can find the document', async () => {
+    documentsGateway.create.mockResolvedValue(documentRecord);
+
+    await service.create(
+      { ...createDocumentDto, keywords: '  licencia, salud  ' },
+      createFile(),
+      authorization,
+    );
+
+    expect(documentsGateway.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          keywords: 'licencia, salud',
+          specificDependency: 'Secretaría General',
+        },
+      }),
+    );
+  });
+
+  it('clears the keywords when the administrator empties the field', async () => {
+    documentsGateway.findById.mockResolvedValue({
+      ...documentRecord,
+      keywords: 'licencia',
+      metadata: {
+        keywords: 'licencia',
+        specificDependency: 'Secretaría General',
+      },
+    });
+    documentsGateway.updateMetadata.mockResolvedValue(documentRecord);
+
+    await service.updateMetadata(
+      documentRecord.id,
+      { keywords: '   ' },
+      authorization,
+    );
+
+    expect(documentsGateway.updateMetadata).toHaveBeenCalledWith(
+      documentRecord.id,
+      expect.objectContaining({
+        metadata: { specificDependency: 'Secretaría General' },
+      }),
+      authorization.userId,
+    );
+  });
+
+  it('keeps keywords written as raw JSON when the dedicated field is absent', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.updateMetadata.mockResolvedValue(documentRecord);
+
+    await service.updateMetadata(
+      documentRecord.id,
+      { metadata: { keywords: ['vigente'] }, title: 'Documento actualizado' },
+      authorization,
+    );
+
+    expect(documentsGateway.updateMetadata).toHaveBeenCalledWith(
+      documentRecord.id,
+      expect.objectContaining({
+        metadata: {
+          keywords: ['vigente'],
+          specificDependency: 'Secretaría General',
+        },
+      }),
+      authorization.userId,
+    );
   });
 
   it('updates only defined metadata values and rejects empty or oversized patches', async () => {

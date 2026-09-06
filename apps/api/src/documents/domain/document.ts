@@ -57,6 +57,7 @@ export interface ManagedDocument {
   replacementReason: string | null;
   replacementYear: number | null;
   resolutionNumber: string | null;
+  keywords: string | null;
   situation: DocumentSituation;
   specificDependency: string | null;
   title: string;
@@ -142,6 +143,7 @@ export interface DocumentLibraryItem {
   replacementReason: string | null;
   replacementYear: number | null;
   resolutionNumber: string | null;
+  keywords: string | null;
   situation: DocumentSituation;
   specificDependency: string | null;
   technicalStatus: DocumentTechnicalStatus;
@@ -286,6 +288,7 @@ export function toManagedDocument(value: unknown): ManagedDocument {
     replacementReason: result.data.replacement_reason,
     replacementYear: result.data.replacement_year,
     resolutionNumber: result.data.resolution_number,
+    keywords: metadataText(result.data.metadata, 'keywords'),
     situation: result.data.situation,
     specificDependency: metadataText(
       result.data.metadata,
@@ -489,6 +492,7 @@ export function toDocumentLibraryRow(value: unknown): ParsedDocumentLibraryRow {
       replacementReason: result.data.replacement_reason,
       replacementYear: result.data.replacement_year,
       resolutionNumber: result.data.resolution_number,
+      keywords: metadataText(result.data.metadata, 'keywords'),
       situation: result.data.situation,
       specificDependency: metadataText(
         result.data.metadata,

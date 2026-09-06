@@ -35,6 +35,7 @@ import {
 import type {
   DocumentMetadataPatch,
   DocumentsGateway,
+  DocumentUploader,
 } from './documents.gateway';
 import {
   PdfInspectionService,
@@ -68,6 +69,7 @@ function hasMetadataUpdate(dto: UpdateDocumentMetadataDto): boolean {
     dto.issuanceYear !== undefined ||
     dto.issuingEntity !== undefined ||
     dto.issuingEntityOther !== undefined ||
+    dto.keywords !== undefined ||
     dto.metadata !== undefined ||
     dto.resolutionNumber !== undefined ||
     dto.specificDependency !== undefined ||
@@ -81,6 +83,25 @@ const RESERVED_METADATA_KEYS = [
   'issuingEntityOther',
   'specificDependency',
 ] as const;
+
+/**
+ * Las palabras clave tienen campo propio en el formulario, pero el panel
+ * también admite escribirlas como JSON crudo (y ahí pueden ser una lista). No
+ * se tratan como clave gobernada para no descartar en silencio ese formato:
+ * el campo dedicado solo las sobrescribe cuando el administrador lo envía.
+ */
+function applyKeywords(
+  metadata: DocumentMetadata,
+  keywords: string | null | undefined,
+): DocumentMetadata {
+  if (keywords === undefined) return metadata;
+
+  const trimmed = typeof keywords === 'string' ? keywords.trim() : '';
+  const result: DocumentMetadata = { ...metadata };
+  if (trimmed) result.keywords = trimmed;
+  else delete result.keywords;
+  return result;
+}
 
 function optionalMetadataText(
   metadata: DocumentMetadata,
@@ -287,12 +308,15 @@ export class DocumentsService {
     file: Express.Multer.File | undefined,
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
-    const metadata = governedMetadata(metadataOrEmpty(dto.metadata), {
-      additionalDetail: dto.additionalDetail,
-      documentTypeOther: dto.documentTypeOther,
-      issuingEntityOther: dto.issuingEntityOther,
-      specificDependency: dto.specificDependency,
-    });
+    const metadata = applyKeywords(
+      governedMetadata(metadataOrEmpty(dto.metadata), {
+        additionalDetail: dto.additionalDetail,
+        documentTypeOther: dto.documentTypeOther,
+        issuingEntityOther: dto.issuingEntityOther,
+        specificDependency: dto.specificDependency,
+      }),
+      dto.keywords,
+    );
     ensureMetadataSize(metadata);
     validateGovernedMetadata({
       documentType: dto.documentType,
@@ -464,7 +488,16 @@ export class DocumentsService {
   }
 
   listLibrary(dto: ListDocumentLibraryQueryDto): Promise<DocumentLibraryPage> {
+    if (dto.createdFrom && dto.createdTo && dto.createdFrom > dto.createdTo) {
+      throw new BadRequestException(
+        'The upload date range must start before it ends.',
+      );
+    }
+
     return this.documentsGateway.listLibrary({
+      createdBy: dto.createdBy,
+      createdFrom: dto.createdFrom,
+      createdTo: dto.createdTo,
       documentType: dto.documentType,
       issuanceYear: dto.issuanceYear,
       issuingEntity: dto.issuingEntity,
@@ -484,6 +517,10 @@ export class DocumentsService {
     specificDependencies: string[];
   }> {
     return this.documentsGateway.listSuggestions();
+  }
+
+  listUploaders(): Promise<DocumentUploader[]> {
+    return this.documentsGateway.listUploaders();
   }
 
   async logicalDelete(
@@ -636,7 +673,7 @@ export class DocumentsService {
       );
     }
 
-    const metadata = governedMetadata(
+    const baseMetadata = governedMetadata(
       dto.metadata === undefined ? document.metadata : dto.metadata,
       {
         additionalDetail:
@@ -662,6 +699,7 @@ export class DocumentsService {
             : dto.specificDependency,
       },
     );
+    const metadata = applyKeywords(baseMetadata, dto.keywords);
     ensureMetadataSize(metadata);
     validateGovernedMetadata({
       documentType,

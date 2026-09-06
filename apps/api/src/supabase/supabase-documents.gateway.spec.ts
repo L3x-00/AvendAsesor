@@ -509,6 +509,47 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     );
   });
 
+  it('lists the administrators that uploaded documents and rejects malformed rows', async () => {
+    const { client, rpc } = createClient({});
+    rpc.mockResolvedValue({
+      data: [
+        {
+          document_count: '3',
+          full_name: 'Ana Auditora',
+          id: documentRow.created_by,
+        },
+      ],
+      error: null,
+    });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+
+    // PostgREST serializa el bigint del conteo como cadena.
+    await expect(gateway.listUploaders()).resolves.toEqual([
+      { documentCount: 3, fullName: 'Ana Auditora', id: documentRow.created_by },
+    ]);
+    expect(rpc).toHaveBeenCalledWith('list_document_uploaders');
+
+    rpc.mockResolvedValueOnce({ data: null, error: null });
+    await expect(gateway.listUploaders()).resolves.toEqual([]);
+
+    for (const data of [
+      'invalid',
+      [{ document_count: 1, full_name: 42, id: documentRow.created_by }],
+      [{ document_count: 'x', full_name: 'Ana', id: documentRow.created_by }],
+      [{ document_count: 1, full_name: 'Ana', id: 'not-a-uuid' }],
+    ]) {
+      rpc.mockResolvedValueOnce({ data, error: null });
+      await expect(gateway.listUploaders()).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+    }
+
+    rpc.mockResolvedValueOnce({ data: null, error: postgrestError('XX000') });
+    await expect(gateway.listUploaders()).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
   it('returns only the requested document audit trail in reverse chronological order', async () => {
     const event = {
       id: '2e1460a0-e290-4c6e-9a0b-f122996ab006',
@@ -554,6 +595,9 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       offset: 20,
       sort: 'year' as const,
       q: 'nombramiento',
+      createdBy: documentRow.created_by,
+      createdFrom: '2026-01-01',
+      createdTo: '2026-12-31',
       documentType: 'LEY',
       issuanceYear: 2009,
       issuingEntity: 'MINEDU',
@@ -573,6 +617,9 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       p_offset: 20,
       p_sort: 'year',
       p_query: 'nombramiento',
+      p_created_by: documentRow.created_by,
+      p_created_from: '2026-01-01',
+      p_created_to: '2026-12-31',
       p_document_type: 'LEY',
       p_issuance_year: 2009,
       p_issuing_entity: 'MINEDU',

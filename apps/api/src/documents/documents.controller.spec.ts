@@ -40,6 +40,7 @@ const documentRecord: ManagedDocument = {
   issuanceYear: null,
   issuingEntity: 'MINEDU',
   issuingEntityOther: null,
+  keywords: null,
   metadata: {},
   publicationStatus: 'active',
   replacementDate: null,
@@ -64,6 +65,8 @@ function createDocumentsService(): jest.Mocked<DocumentsService> {
     linkModule: jest.fn(),
     list: jest.fn(),
     listLibrary: jest.fn(),
+    listSuggestions: jest.fn(),
+    listUploaders: jest.fn(),
     logicalDelete: jest.fn(),
     setStatus: jest.fn(),
     setSituation: jest.fn(),
@@ -135,6 +138,28 @@ describe('DocumentsController', () => {
       offset: 0,
       total: 0,
     });
+    documentsService.listSuggestions.mockResolvedValue({
+      additionalDetails: ['Direccion docente'],
+      specificDependencies: ['DIGEDD'],
+    });
+    await expect(controller.listSuggestions()).resolves.toEqual({
+      additionalDetails: ['Direccion docente'],
+      specificDependencies: ['DIGEDD'],
+    });
+    documentsService.listUploaders.mockResolvedValue([
+      {
+        documentCount: 2,
+        fullName: 'Administrador de prueba',
+        id: 'da6105be-8676-46fe-b2d2-63e5ac83ee8d',
+      },
+    ]);
+    await expect(controller.listUploaders()).resolves.toEqual([
+      {
+        documentCount: 2,
+        fullName: 'Administrador de prueba',
+        id: 'da6105be-8676-46fe-b2d2-63e5ac83ee8d',
+      },
+    ]);
     await expect(controller.findOne(documentRecord.id)).resolves.toEqual(
       details,
     );

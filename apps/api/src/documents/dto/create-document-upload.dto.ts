@@ -54,6 +54,13 @@ export class CreateDocumentUploadDto {
   @trimDocumentText
   articleReference?: string;
 
+  /** Palabras clave libres del administrador; alimentan el buscador. */
+  @IsOptional()
+  @IsString()
+  @Length(2, 500)
+  @trimDocumentText
+  keywords?: string;
+
   @IsString()
   @Matches(/^[A-Za-z][A-Za-z0-9_]{1,63}$/)
   @IsIn(DOCUMENT_TYPE_CODES)
