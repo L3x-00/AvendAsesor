@@ -37,7 +37,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'authenticated',
-    'public.list_document_library(text,smallint,text,text,uuid,uuid,public.document_situation,text,text,integer,integer)'::regprocedure,
+    'public.list_document_library(text,smallint,text,text,uuid,uuid,public.document_situation,text,text,integer,integer,date,date,uuid)'::regprocedure,
     'execute'
   ),
   'Authenticated clients cannot query the administrative library directly'
@@ -53,7 +53,7 @@ select ok(
 select ok(
   has_function_privilege(
     'service_role',
-    'public.list_document_library(text,smallint,text,text,uuid,uuid,public.document_situation,text,text,integer,integer)'::regprocedure,
+    'public.list_document_library(text,smallint,text,text,uuid,uuid,public.document_situation,text,text,integer,integer,date,date,uuid)'::regprocedure,
     'execute'
   ),
   'The server role can query the administrative library'
