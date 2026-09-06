@@ -12,6 +12,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
 import { DocumentSituationActions } from "@/components/admin/document-situation-actions";
+import { DocumentSituationSummary } from "@/components/admin/document-situation-summary";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import { AdminApiError } from "@/lib/admin-api/client";
 import { getAdminApiUrl } from "@/lib/admin-api/config";
@@ -42,6 +43,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
   timeStyle: "short",
   timeZone: "America/Lima",
 });
+
 
 function accessHref(
   documentId: string,
@@ -142,6 +144,21 @@ export default async function DocumentDetailPage({
     client.getDocumentSuggestions(),
     listReplacementDocumentCandidates(client, document.id),
   ]);
+
+  // El documento que reemplaza se muestra por su título y con enlace directo.
+  // Puede haber sido eliminado después de registrarse el reemplazo, así que su
+  // ausencia no debe romper la ficha ni dejar un vínculo muerto.
+  let replacementDocument: { id: string; title: string } | null = null;
+  if (document.replacementDocumentId) {
+    try {
+      const replacement = await client.getDocument(
+        document.replacementDocumentId,
+      );
+      replacementDocument = { id: replacement.id, title: replacement.title };
+    } catch {
+      replacementDocument = null;
+    }
+  }
   const currentVersion = document.versions.find(
     (version) => version.id === document.currentVersionId,
   );
@@ -256,6 +273,9 @@ export default async function DocumentDetailPage({
                 : ""}
             </a>
           ) : null}
+          <a className="avend-button" href="#version-history">
+            Ver historial de versiones
+          </a>
           <a className="avend-button" href="#new-version">
             Nueva versión
           </a>
@@ -314,6 +334,11 @@ export default async function DocumentDetailPage({
             </p>
           </article>
         </section>
+
+        <DocumentSituationSummary
+          document={document}
+          replacement={replacementDocument}
+        />
 
         <section
           className="rounded-xl border border-avend-border bg-avend-surface p-5"
@@ -447,6 +472,7 @@ export default async function DocumentDetailPage({
                       issuanceYear: document.issuanceYear,
                       issuingEntity: document.issuingEntity,
                       issuingEntityOther: document.issuingEntityOther,
+                      keywords: document.keywords,
                       specificDependency: document.specificDependency,
                     }}
                     required
@@ -498,7 +524,10 @@ export default async function DocumentDetailPage({
               </details>
             </section>
 
-            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
+            <section
+              className="rounded-xl border border-avend-border bg-avend-surface p-5"
+              id="version-history"
+            >
               <h2 className="text-xl font-bold">Historial de versiones</h2>
               <p className="mt-1 text-base text-avend-text-muted">
                 Cada PDF anterior se conserva y puede verse o descargarse.
@@ -542,22 +571,41 @@ export default async function DocumentDetailPage({
                           <strong>{ingestion.label}.</strong>{" "}
                           {ingestion.description}
                         </p>
-                        <p className="mt-1 text-sm text-avend-text-muted">
-                          <time dateTime={version.uploadedAt}>
-                            {dateTimeFormatter.format(
-                              new Date(version.uploadedAt),
-                            )}
-                          </time>{" "}
-                          · {version.uploadedByName ?? "Cuenta no disponible"}
-                        </p>
+                        {/* Fecha y Administrador son dos de las cinco columnas
+                            que el cliente pide: van rotuladas y a 16px, no como
+                            texto secundario sin etiqueta. */}
+                        <dl className="mt-3 grid gap-2 text-base sm:grid-cols-2">
+                          <div>
+                            <dt className="font-semibold text-avend-text-muted">
+                              Fecha
+                            </dt>
+                            <dd>
+                              <time dateTime={version.uploadedAt}>
+                                {dateTimeFormatter.format(
+                                  new Date(version.uploadedAt),
+                                )}
+                              </time>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-avend-text-muted">
+                              Administrador
+                            </dt>
+                            <dd>
+                              {version.uploadedByName ?? "Cuenta no disponible"}
+                            </dd>
+                          </div>
+                        </dl>
                         <div className="mt-4 flex flex-wrap gap-2">
                           <Link
+                            aria-label={`Ver la versión ${version.versionNumber} de ${document.title}`}
                             className="avend-button"
                             href={`/admin/documents/${document.id}?versionId=${encodeURIComponent(version.id)}#pdf-viewer`}
                           >
                             Ver
                           </Link>
                           <a
+                            aria-label={`Descargar la versión ${version.versionNumber} de ${document.title}`}
                             className="avend-button"
                             href={accessHref(
                               document.id,

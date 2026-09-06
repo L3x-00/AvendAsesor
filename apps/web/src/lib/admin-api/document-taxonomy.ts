@@ -96,3 +96,10 @@ export function issuingEntityLabel(value: string): string {
     value
   );
 }
+
+export function archiveReasonLabel(value: string): string {
+  return (
+    ARCHIVE_REASON_OPTIONS.find((option) => option.value === value)?.label ??
+    value
+  );
+}
