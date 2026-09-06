@@ -78,10 +78,11 @@ export interface ManagedDocumentVersion {
   versionNumber: number;
 }
 
-export interface StoredDocumentVersion extends Omit<
-  ManagedDocumentVersion,
-  'uploadedByName'
-> {
+/**
+ * `uploadedByName` se persiste junto a la versión y no se resuelve por join:
+ * el rastro del responsable debe sobrevivir al borrado de su perfil.
+ */
+export interface StoredDocumentVersion extends ManagedDocumentVersion {
   mimeType: 'application/pdf';
   sha256: string;
   storageBucket: 'normative-documents';
@@ -240,6 +241,7 @@ const storedDocumentVersionRowSchema = z.object({
   storage_path: z.string().min(1),
   uploaded_at: timestampSchema,
   uploaded_by: z.string().uuid().nullable(),
+  uploaded_by_name: z.string().nullable().default(null),
   version_number: z.number().int().positive(),
 });
 
@@ -320,6 +322,7 @@ export function toStoredDocumentVersion(value: unknown): StoredDocumentVersion {
     storagePath: result.data.storage_path,
     uploadedAt: result.data.uploaded_at,
     uploadedBy: result.data.uploaded_by,
+    uploadedByName: result.data.uploaded_by_name,
     versionNumber: result.data.version_number,
   };
 }

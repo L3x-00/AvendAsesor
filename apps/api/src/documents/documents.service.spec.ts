@@ -86,6 +86,7 @@ const versionRecord: StoredDocumentVersion = {
   storagePath: `documents/${documentRecord.id}/versions/${documentRecord.currentVersionId}.pdf`,
   uploadedAt: '2026-08-09T00:00:00.000Z',
   uploadedBy: authorization.userId,
+  uploadedByName: null,
   versionNumber: 1,
 };
 

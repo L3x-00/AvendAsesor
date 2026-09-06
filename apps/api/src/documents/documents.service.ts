@@ -460,7 +460,12 @@ export class DocumentsService {
       versions: versions.map((version) =>
         toManagedDocumentVersion(
           version,
-          version.uploadedBy ? (actorNames[version.uploadedBy] ?? null) : null,
+          // El nombre guardado con la versión manda: sobrevive al borrado del
+          // perfil. El join solo cubre las versiones anteriores al respaldo.
+          version.uploadedByName ??
+            (version.uploadedBy
+              ? (actorNames[version.uploadedBy] ?? null)
+              : null),
         ),
       ),
     };
