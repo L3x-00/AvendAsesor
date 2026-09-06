@@ -16,6 +16,7 @@ import { RagModule } from './rag/rag.module';
 import { ChatModule } from './chat/chat.module';
 import { OperationsModule } from './operations/operations.module';
 import { UserAdministrationModule } from './user-administration/user-administration.module';
+import { ConsultationCasesModule } from './consultation-cases/consultation-cases.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UserAdministrationModule } from './user-administration/user-administrat
     AuthModule,
     AuthorizationModule,
     ChatModule,
+    ConsultationCasesModule,
     DocumentsModule,
     HealthModule,
     IngestionModule,

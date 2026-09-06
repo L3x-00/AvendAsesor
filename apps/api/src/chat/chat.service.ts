@@ -15,7 +15,12 @@ import {
   RAG_AMBIGUITY_MESSAGE,
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
-import { RagService, type ResolvedModule } from '../rag/rag.service';
+import {
+  detectRetrievalScope,
+  RagService,
+  resolveDetectedSubmodule,
+  type ResolvedModule,
+} from '../rag/rag.service';
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
 import type { RetrievedChunk } from '../rag/retrieval.gateway';
 import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
@@ -44,6 +49,8 @@ export interface ChatSource {
   pageStart: number;
   rank: number;
   relevanceScore: number;
+  relatedModuleName: string | null;
+  relatedSubmoduleName: string | null;
   sectionTitle: string | null;
   versionNumber: number;
 }
@@ -86,16 +93,170 @@ interface CitationBundle {
 }
 
 const MAX_AMBIGUITY_EXCERPT_CHARS = 280;
+const MIN_SUBSTANTIVE_CLAIM_CHARS = 30;
+const CITATION_PATTERN = /\[(\d+)\]/gu;
+type CitationQualitySignal =
+  'citation_insufficient' | 'support_insufficient' | 'support_partial';
+
+export interface AnswerCitationQualityEvaluation {
+  excerpts: Partial<Record<CitationQualitySignal, string>>;
+  signals: CitationQualitySignal[];
+}
+const CLAIM_PATTERN = /[^.!?]+(?:[.!?]+(?:\s*\[\d+\])?|\s*$)/gu;
+const QUALITY_STOP_WORDS = new Set([
+  'acerca',
+  'ademas',
+  'como',
+  'conforme',
+  'cuando',
+  'desde',
+  'donde',
+  'esta',
+  'este',
+  'estos',
+  'fuente',
+  'informacion',
+  'norma',
+  'para',
+  'porque',
+  'puede',
+  'respuesta',
+  'segun',
+  'sobre',
+  'tambien',
+]);
 
 function clampScore(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+function normalizedTerms(value: string): string[] {
+  return [
+    ...new Set(
+      (
+        value
+          .normalize('NFD')
+          .replace(/\p{Diacritic}/gu, '')
+          .toLocaleLowerCase('es')
+          .match(/[\p{L}\p{N}]{4,}/gu) ?? []
+      ).filter((term) => !QUALITY_STOP_WORDS.has(term)),
+    ),
+  ];
+}
+
+function sourceSupportsClaim(claim: string, source: RetrievedChunk): boolean {
+  const claimTerms = normalizedTerms(claim.replace(CITATION_PATTERN, ''));
+  if (!claimTerms.length) return true;
+
+  const sourceTerms = normalizedTerms(source.chunkContent);
+  return claimTerms.some((claimTerm) =>
+    sourceTerms.some(
+      (sourceTerm) =>
+        sourceTerm === claimTerm ||
+        (claimTerm.length >= 6 &&
+          sourceTerm.length >= 6 &&
+          (sourceTerm.startsWith(claimTerm.slice(0, 6)) ||
+            claimTerm.startsWith(sourceTerm.slice(0, 6)))),
+    ),
+  );
+}
+
+/**
+ * A deterministic post-generation control complements the evidence-only
+ * prompt. It cannot decide legal truth, so it flags a case for human review
+ * whenever a substantive claim lacks a source marker or its cited evidence has
+ * no meaningful lexical bridge to the claim.
+ */
+function normalizedReviewExcerpt(claim: string): string {
+  return claim.replace(/\s+/gu, ' ').trim().slice(0, 2_000);
+}
+
+export function evaluateAnswerCitationQualityDetails(
+  answer: string,
+  sources: RetrievedChunk[],
+): AnswerCitationQualityEvaluation {
+  if (!sources.length) {
+    return { excerpts: {}, signals: ['support_insufficient'] };
+  }
+
+  const signals = new Set<CitationQualitySignal>();
+  const excerpts: AnswerCitationQualityEvaluation['excerpts'] = {};
+  const claims = answer
+    .replace(/\r/gu, '')
+    .split(/\n{2,}/gu)
+    .flatMap((paragraph) => paragraph.match(CLAIM_PATTERN) ?? [])
+    .map((claim) => claim.trim())
+    .filter(
+      (claim) =>
+        claim.replace(CITATION_PATTERN, '').replace(/\s+/gu, '').length >=
+        MIN_SUBSTANTIVE_CLAIM_CHARS,
+    );
+
+  for (const claim of claims) {
+    const citationIndexes = [...claim.matchAll(CITATION_PATTERN)].map((match) =>
+      Number(match[1]),
+    );
+    if (!citationIndexes.length) {
+      signals.add('support_partial');
+      excerpts.support_partial ??= normalizedReviewExcerpt(claim);
+      continue;
+    }
+
+    const citedSources = citationIndexes
+      .map((index) => sources[index - 1])
+      .filter((source): source is RetrievedChunk => Boolean(source));
+    if (
+      citedSources.length !== citationIndexes.length ||
+      !citedSources.some((source) => sourceSupportsClaim(claim, source))
+    ) {
+      signals.add('citation_insufficient');
+      excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
+    }
+  }
+
+  return { excerpts, signals: [...signals] };
+}
+
+/**
+ * Compatibility wrapper used by callers that only need the quality flags.
+ * The detailed evaluation is persisted by the chat flow so the administrator
+ * can see the concrete answer fragment that needs review.
+ */
+export function evaluateAnswerCitationQuality(
+  answer: string,
+  sources: RetrievedChunk[],
+): CitationQualitySignal[] {
+  return evaluateAnswerCitationQualityDetails(answer, sources).signals;
+}
+
+function sourceIncludesModuleContext(
+  source: RetrievedChunk,
+  moduleId: string,
+): boolean {
+  return Boolean(
+    source.moduleAssociations?.some(
+      (association) =>
+        association.rootModuleId === moduleId ||
+        association.submoduleId === moduleId,
+    ) ?? source.moduleIds.includes(moduleId),
+  );
+}
+
 function selectCitationModule(
   source: RetrievedChunk,
   selectedModuleId: string | null,
+  detectedSubmoduleId: string | null,
 ): string | null {
-  if (selectedModuleId && source.moduleIds.includes(selectedModuleId)) {
+  if (
+    detectedSubmoduleId &&
+    sourceIncludesModuleContext(source, detectedSubmoduleId)
+  ) {
+    return detectedSubmoduleId;
+  }
+  if (
+    selectedModuleId &&
+    sourceIncludesModuleContext(source, selectedModuleId)
+  ) {
     return selectedModuleId;
   }
   if (selectedModuleId) return source.moduleIds[0] ?? null;
@@ -105,6 +266,8 @@ function selectCitationModule(
 function toCitationBundle(
   retrieved: RetrievedChunk[],
   selectedModuleId: string | null,
+  relatedModule: ResolvedModule | null,
+  relatedSubmodule: ResolvedModule | null,
 ): CitationBundle {
   const inputs: ChatCitationInput[] = [];
   const sources: ChatSource[] = [];
@@ -114,7 +277,11 @@ function toCitationBundle(
     const relevanceScore = clampScore(source.semanticScore);
     inputs.push({
       chunkId: source.chunkId,
-      moduleId: selectCitationModule(source, selectedModuleId),
+      moduleId: selectCitationModule(
+        source,
+        selectedModuleId,
+        relatedSubmodule?.id ?? null,
+      ),
       relevanceScore,
       sourceId,
     });
@@ -132,6 +299,8 @@ function toCitationBundle(
       pageStart: source.pageStart,
       rank: index + 1,
       relevanceScore,
+      relatedModuleName: relatedModule?.name ?? null,
+      relatedSubmoduleName: relatedSubmodule?.name ?? null,
       sectionTitle: source.sectionTitle,
       versionNumber: source.versionNumber,
     });
@@ -272,6 +441,20 @@ export class ChatService {
     });
   }
 
+  recordTechnicalFailure(
+    input: {
+      conversationId: string;
+      errorCode: string;
+      userMessageId: string;
+    },
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    return this.historyGateway.recordTechnicalFailure({
+      ...input,
+      userId: authorization.userId,
+    });
+  }
+
   listModules(): Promise<ActiveChatModule[]> {
     return this.historyGateway.listActiveModules();
   }
@@ -316,6 +499,8 @@ export class ChatService {
 
     if (input.abortSignal?.aborted) return;
 
+    const retrievalScope = detectRetrievalScope(input.question);
+
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
       conversationContext = [];
@@ -346,6 +531,16 @@ export class ChatService {
       userId: input.authorization.userId,
     });
 
+    const relatedModule =
+      retrieval.kind === 'evidence' || retrieval.kind === 'topic_change'
+        ? retrieval.resolvedModule
+        : null;
+    const relatedSubmodule =
+      (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') &&
+      relatedModule
+        ? resolveDetectedSubmodule(retrieval.sources, relatedModule.id)
+        : null;
+
     yield {
       data: {
         conversationId: turn.conversationId,
@@ -363,7 +558,11 @@ export class ChatService {
         answer: RAG_NO_EVIDENCE_MESSAGE,
         conversationId: turn.conversationId,
         faqMemory,
+        detectedModuleId: null,
+        detectedSubmoduleId: null,
+        qualitySignals: [],
         replyRole: 'no_evidence',
+        retrievalScope,
         sources: [],
         topRelevanceScore: retrieval.topRelevanceScore,
         unansweredReason: 'insufficient_evidence',
@@ -384,7 +583,7 @@ export class ChatService {
     }
 
     if (retrieval.kind === 'ambiguous') {
-      const citations = toCitationBundle(retrieval.sources, null);
+      const citations = toCitationBundle(retrieval.sources, null, null, null);
       const message = ambiguityMessage(retrieval.modules, retrieval.sources);
       yield { data: { sources: citations.sources }, type: 'sources' };
       if (input.abortSignal?.aborted) return;
@@ -392,7 +591,11 @@ export class ChatService {
         answer: message,
         conversationId: turn.conversationId,
         faqMemory,
+        detectedModuleId: null,
+        detectedSubmoduleId: null,
+        qualitySignals: [],
         replyRole: 'clarification',
+        retrievalScope,
         sources: citations.inputs,
         topRelevanceScore: retrieval.topRelevanceScore,
         unansweredReason: 'ambiguous_request',
@@ -415,7 +618,12 @@ export class ChatService {
       return;
     }
 
-    const citations = toCitationBundle(retrieval.sources, selectedModuleId);
+    const citations = toCitationBundle(
+      retrieval.sources,
+      selectedModuleId,
+      relatedModule,
+      relatedSubmodule,
+    );
     yield { data: { sources: citations.sources }, type: 'sources' };
 
     let answer = '';
@@ -445,11 +653,28 @@ export class ChatService {
       );
     }
 
+    const citationQuality = evaluateAnswerCitationQualityDetails(
+      normalizedAnswer,
+      retrieval.sources,
+    );
+    const qualitySignals = new Set<string>(citationQuality.signals);
+    if (
+      retrieval.topRelevanceScore <
+      (this.configService.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7) + 0.05
+    ) {
+      qualitySignals.add('low_confidence');
+    }
+
     const completed = await this.historyGateway.completeTurn({
       answer: normalizedAnswer,
       conversationId: turn.conversationId,
       faqMemory,
+      detectedModuleId: relatedModule?.id ?? null,
+      detectedSubmoduleId: relatedSubmodule?.id ?? null,
+      qualityExcerpts: citationQuality.excerpts,
+      qualitySignals: [...qualitySignals],
       replyRole: 'assistant',
+      retrievalScope,
       sources: citations.inputs,
       topRelevanceScore: retrieval.topRelevanceScore,
       unansweredReason: null,

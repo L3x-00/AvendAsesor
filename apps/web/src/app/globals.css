@@ -892,6 +892,20 @@ body {
   font-weight: 700;
 }
 
+.avend-chat-related-route {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 0.5rem;
+  color: var(--avend-navy);
+  display: inline-flex;
+  font-size: 1rem;
+  line-height: 1.45;
+  margin: 1rem 0 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.75rem;
+}
+
 .avend-chat-message--no_evidence .avend-chat-message-content,
 .avend-chat-message--clarification .avend-chat-message-content {
   color: var(--avend-text-muted);
