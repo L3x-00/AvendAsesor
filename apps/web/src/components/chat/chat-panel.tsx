@@ -18,6 +18,7 @@ import type {
 } from "@/lib/chat-api/types";
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
+import { ConsultationFeedback } from "./consultation-feedback";
 import { ChatSources } from "./chat-sources";
 
 type MessageRole = ChatHistoryMessage["role"];
@@ -126,6 +127,8 @@ function renderInline(text: string): ReactNode[] {
 
 const unorderedListItemPattern = /^\s*[-*•]\s+(.+)$/;
 const orderedListItemPattern = /^\s*\d+[.)]\s+(.+)$/;
+const persistedMessageIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function renderRichContent(content: string): ReactNode[] {
   const blocks: ReactNode[] = [];
@@ -185,6 +188,16 @@ function renderRichContent(content: string): ReactNode[] {
   flushParagraph();
   flushList();
   return blocks;
+}
+
+function relatedRouteLabel(message: RenderedMessage): string | null {
+  const relatedSource = message.sources.find(
+    (source) => source.relatedModuleName,
+  );
+  if (!relatedSource?.relatedModuleName) return null;
+  return relatedSource.relatedSubmoduleName
+    ? `${relatedSource.relatedModuleName} › ${relatedSource.relatedSubmoduleName}`
+    : relatedSource.relatedModuleName;
 }
 
 interface SpeechRecognitionResultLike {
@@ -290,6 +303,16 @@ export function ChatPanel({
     const selected = modules.find((module) => module.id === selectedModuleId);
     return selected && selected.parentModuleId ? selected : undefined;
   }, [modules, selectedModuleId]);
+  const latestReportableAnswerId = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role !== "user" && persistedMessageIdPattern.test(message.id),
+        )?.id,
+    [messages],
+  );
 
   function changeModuleContext(
     moduleId: string | undefined,
@@ -413,12 +436,19 @@ export function ChatPanel({
     }
   }
 
-  function replaceStreamingMessage(
+  function replacePendingResponseMessage(
     update: (message: RenderedMessage) => RenderedMessage,
   ) {
     setMessages((current) => {
       const latest = current.at(-1);
-      if (!latest || latest.id !== "streaming") return current;
+      if (
+        !latest ||
+        (latest.id !== "streaming" &&
+          !latest.id.startsWith("clarification-") &&
+          !latest.id.startsWith("no-evidence-"))
+      ) {
+        return current;
+      }
       return [...current.slice(0, -1), update(latest)];
     });
   }
@@ -429,9 +459,17 @@ export function ChatPanel({
     unpersistedQuestionId?: string,
   ) {
     setMessages((current) =>
-      current.filter(
-        (item) => item.id !== "streaming" && item.id !== unpersistedQuestionId,
-      ),
+      current.filter((item, index) => {
+        if (item.id === "streaming" || item.id === unpersistedQuestionId) {
+          return false;
+        }
+        const isLatest = index === current.length - 1;
+        return !(
+          isLatest &&
+          (item.id.startsWith("clarification-") ||
+            item.id.startsWith("no-evidence-"))
+        );
+      }),
     );
     if (retryQuestion) {
       setQuestion((current) => current || retryQuestion);
@@ -655,7 +693,7 @@ export function ChatPanel({
               );
               return;
             }
-            replaceStreamingMessage((message) => ({
+            replacePendingResponseMessage((message) => ({
               ...message,
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
@@ -786,6 +824,12 @@ export function ChatPanel({
                 <div className="avend-chat-message-content">
                   {renderRichContent(message.content)}
                 </div>
+                {relatedRouteLabel(message) ? (
+                  <p className="avend-chat-related-route">
+                    <strong>Relacionado con:</strong>{" "}
+                    {relatedRouteLabel(message)}
+                  </p>
+                ) : null}
                 {message.modules?.length ? (
                   <div className="avend-chat-clarification-options">
                     {message.modules.map((module) => (
@@ -920,6 +964,11 @@ export function ChatPanel({
               "La respuesta se sustentará en los documentos disponibles."}
           </p>
         </form>
+        <ConsultationFeedback
+          answerMessageId={latestReportableAnswerId}
+          conversationId={conversationId}
+          disabled={isStreaming}
+        />
       </section>
     </TeacherShell>
   );

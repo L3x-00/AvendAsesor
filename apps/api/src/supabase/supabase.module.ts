@@ -4,6 +4,7 @@ import {
   SUPABASE_ADMIN_DASHBOARD_GATEWAY,
   SUPABASE_AUTH_GATEWAY,
   SUPABASE_CHAT_GATEWAY,
+  SUPABASE_CONSULTATION_CASES_GATEWAY,
   SUPABASE_DOCUMENTS_GATEWAY,
   SUPABASE_FAQ_MEMORY_GATEWAY,
   SUPABASE_HEALTH_GATEWAY,
@@ -19,6 +20,7 @@ import {
 import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
 import { SupabaseAuthGatewayAdapter } from './supabase-auth.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
+import { SupabaseConsultationCasesGatewayAdapter } from './supabase-consultation-cases.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
 import { SupabaseFaqMemoryGatewayAdapter } from './supabase-faq-memory.gateway';
 import { SupabaseHealthGatewayAdapter } from './supabase-health.gateway';
@@ -126,6 +128,12 @@ import {
         new SupabaseChatGatewayAdapter(client),
     },
     {
+      provide: SUPABASE_CONSULTATION_CASES_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseConsultationCasesGatewayAdapter(client),
+    },
+    {
       provide: SUPABASE_FAQ_MEMORY_GATEWAY,
       inject: [SUPABASE_SERVER_CLIENT],
       useFactory: (client: SupabaseServerClient | null) =>
@@ -148,6 +156,7 @@ import {
     SUPABASE_ADMIN_DASHBOARD_GATEWAY,
     SUPABASE_AUTH_GATEWAY,
     SUPABASE_CHAT_GATEWAY,
+    SUPABASE_CONSULTATION_CASES_GATEWAY,
     SUPABASE_DOCUMENTS_GATEWAY,
     SUPABASE_FAQ_MEMORY_GATEWAY,
     SUPABASE_HEALTH_GATEWAY,

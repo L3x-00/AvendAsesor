@@ -94,6 +94,8 @@ export class ChatController {
     response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders();
 
+    let startedTurn:
+      { conversationId: string; userMessageId: string } | undefined;
     try {
       for await (const event of this.chatService.stream({
         abortSignal: abortController.signal,
@@ -103,10 +105,30 @@ export class ChatController {
         selectedModuleId: dto.moduleId ?? null,
       })) {
         if (abortController.signal.aborted) return;
+        if (event.type === 'conversation') {
+          startedTurn = {
+            conversationId: event.data.conversationId,
+            userMessageId: event.data.userMessageId,
+          };
+        }
         this.writeEvent(response, event);
       }
     } catch {
       if (!abortController.signal.aborted) {
+        if (startedTurn) {
+          try {
+            await this.chatService.recordTechnicalFailure(
+              {
+                ...startedTurn,
+                errorCode: 'CHAT_STREAM_FAILED',
+              },
+              authorization,
+            );
+          } catch {
+            // The user receives a generic failure either way; an unavailable
+            // quality queue must not reveal internal persistence details.
+          }
+        }
         this.writeEvent(response, {
           data: { code: 'CHAT_STREAM_FAILED' },
           type: 'error',

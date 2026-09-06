@@ -97,12 +97,15 @@ describe('SupabaseChatGatewayAdapter', () => {
         userId,
       }),
     ).resolves.toEqual({ conversationId, userMessageId: messageId });
-    expect(rpc).toHaveBeenCalledWith('begin_chat_turn', {
-      p_conversation_id: null,
-      p_question: 'Consulta',
-      p_selected_module_id: null,
-      p_user_id: userId,
-    });
+    expect(rpc).toHaveBeenCalledWith(
+      'begin_chat_turn_with_consultation_routing',
+      {
+        p_conversation_id: null,
+        p_question: 'Consulta',
+        p_selected_module_id: null,
+        p_user_id: userId,
+      },
+    );
 
     rpc.mockResolvedValueOnce({
       data: [{ answer_message_id: messageId }],
@@ -132,8 +135,10 @@ describe('SupabaseChatGatewayAdapter', () => {
       }),
     ).resolves.toEqual({ answerMessageId: messageId });
     expect(rpc).toHaveBeenLastCalledWith(
-      'complete_chat_turn_with_learning_v2',
+      'complete_chat_turn_with_consultation_case',
       expect.objectContaining({
+        p_detected_module_id: null,
+        p_detected_submodule_id: null,
         p_faq_question_fingerprint:
           'd7d93628135348b418dccf36bcffca1b5484813982f4d4ca8dc4570d65e78f4d',
         p_sources: [
@@ -310,7 +315,10 @@ describe('SupabaseChatGatewayAdapter', () => {
     expect(from).toHaveBeenCalledWith('modules');
     expect(modules.eq).toHaveBeenCalledWith('is_active', true);
     expect(modules.eq).toHaveBeenCalledWith('is_deleted', false);
-    expect(modules.is).toHaveBeenCalledWith('parent_module_id', null);
+    expect(modules.order).toHaveBeenCalledWith('parent_module_id', {
+      ascending: true,
+      nullsFirst: true,
+    });
 
     await expect(
       gateway.listConversations({ cursor: null, limit: 20, userId }),

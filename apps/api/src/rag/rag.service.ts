@@ -10,6 +10,7 @@ import {
 import type {
   RetrievalGateway,
   RetrievedChunk,
+  RetrievedModuleAssociation,
   RetrievalScope,
 } from './retrieval.gateway';
 
@@ -43,6 +44,94 @@ interface SourceRoute {
   kind: 'ambiguous' | 'resolved';
   modules: ResolvedModule[];
   resolvedModule: ResolvedModule | null;
+}
+
+function sourceAssociations(
+  source: RetrievedChunk,
+): RetrievedModuleAssociation[] {
+  if (source.moduleAssociations?.length) return source.moduleAssociations;
+
+  return source.moduleIds.map((rootModuleId, index) => ({
+    rootModuleId,
+    rootModuleName: source.moduleNames[index] ?? 'Módulo sin nombre',
+    submoduleId: null,
+    submoduleName: null,
+  }));
+}
+
+/** True when a root or a submodule is genuinely associated with the source. */
+function sourceIncludesContext(
+  source: RetrievedChunk,
+  moduleOrSubmoduleId: string,
+): boolean {
+  return sourceAssociations(source).some(
+    (association) =>
+      association.rootModuleId === moduleOrSubmoduleId ||
+      association.submoduleId === moduleOrSubmoduleId,
+  );
+}
+
+/**
+ * A submodule is disclosed only when every recovered source has one identical
+ * submodule association below the detected root. This avoids inventing a
+ * narrow route for documents that were associated directly with the root.
+ */
+export function resolveDetectedSubmodule(
+  sources: RetrievedChunk[],
+  rootModuleId: string,
+): ResolvedModule | null {
+  if (!sources.length) return null;
+
+  let common: Map<string, string> | null = null;
+  for (const source of sources) {
+    const candidates = new Map<string, string>();
+    for (const association of sourceAssociations(source)) {
+      if (
+        association.rootModuleId === rootModuleId &&
+        association.submoduleId !== null &&
+        association.submoduleName !== null
+      ) {
+        candidates.set(association.submoduleId, association.submoduleName);
+      }
+    }
+    if (!candidates.size) return null;
+    if (common === null) {
+      common = candidates;
+    } else {
+      const intersection = new Map<string, string>();
+      common.forEach((name, id) => {
+        if (candidates.has(id)) intersection.set(id, name);
+      });
+      common = intersection;
+    }
+    if (!common.size) return null;
+  }
+
+  if (common?.size !== 1) return null;
+  const entry = common ? Array.from(common.entries())[0] : undefined;
+  if (!entry) return null;
+  const [id, name] = entry;
+  return { id, name };
+}
+
+function resolveSelectedRootModule(
+  sources: RetrievedChunk[],
+  selectedModuleId: string,
+): ResolvedModule | null {
+  const roots = new Map<string, string>();
+  for (const source of sources) {
+    for (const association of sourceAssociations(source)) {
+      if (
+        association.rootModuleId === selectedModuleId ||
+        association.submoduleId === selectedModuleId
+      ) {
+        roots.set(association.rootModuleId, association.rootModuleName);
+      }
+    }
+  }
+  if (roots.size !== 1) return null;
+  const [id, name] = roots.entries().next().value as [string, string];
+  return { id, name };
 }
 
 function clampScore(value: number): number {
@@ -298,7 +387,10 @@ export class RagService {
       if (
         currentRoute.kind === 'resolved' &&
         currentRoute.resolvedModule &&
-        currentRoute.resolvedModule.id !== selectedModuleId
+        currentRoute.resolvedModule.id !== selectedModuleId &&
+        !globalSources.some((source) =>
+          sourceIncludesContext(source, selectedModuleId),
+        )
       ) {
         const globalScore = topScore(globalSources);
         const selectedScore = selectedSources.length
@@ -332,7 +424,7 @@ export class RagService {
       if (
         currentRoute.kind === 'ambiguous' &&
         !globalSources.some((source) =>
-          source.moduleIds.includes(selectedModuleId),
+          sourceIncludesContext(source, selectedModuleId),
         )
       ) {
         return {
@@ -345,19 +437,15 @@ export class RagService {
     }
 
     if (selectedSources.length) {
-      const selectedModuleName = selectedSources
-        .flatMap((source) =>
-          source.moduleIds.map((id, index) => ({
-            id,
-            name: source.moduleNames[index] ?? 'Módulo sin nombre',
-          })),
-        )
-        .find((module) => module.id === selectedModuleId)?.name;
+      const selectedRoot = resolveSelectedRootModule(
+        selectedSources,
+        selectedModuleId,
+      );
       return {
         kind: 'evidence',
-        resolvedModule: {
+        resolvedModule: selectedRoot ?? {
           id: selectedModuleId,
-          name: selectedModuleName ?? 'Módulo seleccionado',
+          name: 'Módulo seleccionado',
         },
         sources: selectedSources,
         topRelevanceScore: topScore(selectedSources),

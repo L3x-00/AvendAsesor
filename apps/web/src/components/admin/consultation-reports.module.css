@@ -1,0 +1,421 @@
+.page {
+  display: grid;
+  gap: 1.75rem;
+}
+
+.section {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  padding: 1.25rem;
+}
+
+.sectionHeader {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.sectionHeader h2,
+.detailTitle {
+  color: var(--avend-navy);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.sectionHeader p,
+.description,
+.meta,
+.empty,
+.caseText,
+.historyText {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.375rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.periodForm,
+.filters,
+.formGrid {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+}
+
+.routeHelp {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.periodForm label,
+.filters label,
+.formGrid label {
+  color: var(--avend-text);
+  display: grid;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  line-height: 1.35;
+}
+
+.periodForm select,
+.filters input,
+.filters select,
+.formGrid input,
+.formGrid select,
+.formGrid textarea {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-text);
+  font: inherit;
+  min-height: 2.875rem;
+  min-width: 12rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.formGrid textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.periodForm select:focus,
+.filters input:focus,
+.filters select:focus,
+.formGrid input:focus,
+.formGrid select:focus,
+.formGrid textarea:focus {
+  border-color: var(--avend-accent);
+  box-shadow: 0 0 0 3px var(--avend-soft-blue);
+  outline: none;
+}
+
+.metrics {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.metric {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-left: 4px solid var(--avend-accent);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 8.75rem;
+  padding: 1rem;
+}
+
+.metric[data-tone="attention"] {
+  border-left-color: #dc6803;
+}
+.metric[data-tone="risk"] {
+  border-left-color: var(--avend-danger);
+}
+.metric[data-tone="success"] {
+  border-left-color: #039855;
+}
+
+.metric dt {
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.metric dd {
+  color: var(--avend-navy);
+  font-size: 1.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1.1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.metric small {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.rankings {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-top: 1rem;
+}
+
+.ranking {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.ranking h3 {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ranking ol {
+  display: grid;
+  gap: 0.625rem;
+  list-style-position: inside;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.ranking a {
+  align-items: center;
+  color: var(--avend-navy);
+  display: flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  justify-content: space-between;
+  text-decoration: none;
+}
+
+.ranking a:hover {
+  color: var(--avend-accent-strong);
+  text-decoration: underline;
+}
+.ranking strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.caseList {
+  display: grid;
+  gap: 0.875rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.caseItem {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.caseItemHeader,
+.badgeRow,
+.detailActions,
+.documentList,
+.attachmentList {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.caseItemHeader {
+  justify-content: space-between;
+}
+
+.badge {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  color: var(--avend-text);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.25;
+  padding: 0.35rem 0.625rem;
+}
+.badge[data-status="pending"] {
+  background: #fff8eb;
+  border-color: #fedf89;
+  color: #93370d;
+}
+.badge[data-status="in_review"] {
+  background: var(--avend-soft-blue);
+  border-color: #b2d2ff;
+  color: var(--avend-navy);
+}
+.badge[data-status="resolved"] {
+  background: #ecfdf3;
+  border-color: #a6f4c5;
+  color: #067647;
+}
+.badge[data-status="discarded"] {
+  background: #f3f4f6;
+  color: #475467;
+}
+.badge[data-priority="critical"] {
+  background: #fef3f2;
+  border-color: #fecdca;
+  color: #b42318;
+}
+.badge[data-priority="high"] {
+  background: #fff8eb;
+  border-color: #fedf89;
+  color: #93370d;
+}
+.badge[data-priority="medium"] {
+  background: var(--avend-soft-blue);
+  border-color: #b2d2ff;
+  color: var(--avend-navy);
+}
+
+.priorityList {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.priorityList a {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  color: var(--avend-text);
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-decoration: none;
+}
+
+.priorityList a:hover {
+  border-color: var(--avend-accent);
+  text-decoration: underline;
+}
+
+.caseQuestion {
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.route {
+  color: var(--avend-navy);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.caseLink,
+.backLink {
+  color: var(--avend-accent-strong);
+  font-size: 1rem;
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.pagination {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr auto 1fr;
+  margin-top: 1rem;
+}
+
+.pagination > :last-child {
+  justify-self: end;
+}
+
+.caseLink:hover,
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.detailBlock {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.detailBlock h3 {
+  color: var(--avend-text);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.detailBlock p {
+  white-space: pre-wrap;
+}
+
+.sourceList,
+.eventList {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.source,
+.event,
+.attachment {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  padding: 0.875rem;
+}
+
+.source h3,
+.event h3,
+.attachment h3 {
+  color: var(--avend-text);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.compactForm {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 42rem) {
+  .section {
+    padding: 1rem;
+  }
+  .periodForm,
+  .filters,
+  .formGrid,
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .periodForm > *,
+  .filters > *,
+  .formGrid > *,
+  .pagination > * {
+    width: 100%;
+  }
+  .periodForm select,
+  .filters input,
+  .filters select,
+  .formGrid input,
+  .formGrid select,
+  .formGrid textarea {
+    min-width: 0;
+  }
+}

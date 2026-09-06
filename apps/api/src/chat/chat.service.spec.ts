@@ -5,7 +5,12 @@ import {
   RAG_AMBIGUITY_MESSAGE,
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
-import { ChatService, type ChatStreamEvent } from './chat.service';
+import {
+  ChatService,
+  evaluateAnswerCitationQuality,
+  evaluateAnswerCitationQualityDetails,
+  type ChatStreamEvent,
+} from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
 
 const authorization: AuthorizationContext = {
@@ -20,6 +25,7 @@ const source = {
   chunkContent: 'La licencia se solicita mediante procedimiento institucional.',
   chunkId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
   documentId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+  documentSituation: 'current' as const,
   documentTitle: 'Norma de licencias',
   documentVersionId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
   lexicalScore: 0.2,
@@ -61,6 +67,7 @@ describe('ChatService', () => {
     getConversationContext: jest.Mock;
     listActiveModules: jest.Mock;
     listConversations: jest.Mock;
+    recordTechnicalFailure: jest.Mock;
   };
   let ragService: { retrieve: jest.Mock };
   let configService: { get: jest.Mock };
@@ -77,6 +84,7 @@ describe('ChatService', () => {
       completeTurn: jest.fn().mockResolvedValue({
         answerMessageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
       }),
+      recordTechnicalFailure: jest.fn().mockResolvedValue(undefined),
       createSourceDownloadUrl: jest.fn(),
       deleteConversation: jest.fn(),
       getConversation: jest.fn(),
@@ -242,6 +250,35 @@ describe('ChatService', () => {
     });
   });
 
+  it('persists the exact unsupported answer fragment for administrator review', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'La licencia se concede automáticamente durante treinta días sin condición.';
+      },
+    });
+    configService.get.mockImplementation((key: string) =>
+      key === 'RAG_MATCH_THRESHOLD' ? 0.7 : 20,
+    );
+
+    await collect(service);
+
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualityExcerpts: {
+          support_partial:
+            'La licencia se concede automáticamente durante treinta días sin condición.',
+        },
+        qualitySignals: ['support_partial'],
+      }),
+    );
+  });
+
   it('persists the real child association when a main module retrieves submodule evidence', async () => {
     const parentModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     ragService.retrieve.mockResolvedValue({
@@ -266,6 +303,64 @@ describe('ChatService', () => {
             moduleId: source.moduleIds[0],
           }),
         ],
+      }),
+    );
+  });
+
+  it('persists and emits the discretely detected root and submodule route', async () => {
+    const rootModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    const submoduleId = 'ec8b56af-6d0c-4fef-881e-7c00907540dd';
+    const routedSource = {
+      ...source,
+      moduleAssociations: [
+        {
+          rootModuleId,
+          rootModuleName: 'Situaciones administrativas',
+          submoduleId,
+          submoduleName: 'Licencias, permisos y vacaciones',
+        },
+      ],
+      moduleIds: [rootModuleId],
+      moduleNames: ['Situaciones administrativas'],
+    };
+    configService.get.mockImplementation((key: string) =>
+      key === 'RAG_MATCH_THRESHOLD' ? 0.7 : 20,
+    );
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: {
+        id: rootModuleId,
+        name: 'Situaciones administrativas',
+      },
+      sources: [routedSource],
+      topRelevanceScore: 0.72,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield await Promise.resolve(
+          'La licencia se tramita conforme a la norma vigente. [1]',
+        );
+      },
+    });
+
+    const events = await collect(service);
+
+    expect(events[1]).toEqual({
+      data: {
+        sources: [
+          expect.objectContaining({
+            relatedModuleName: 'Situaciones administrativas',
+            relatedSubmoduleName: 'Licencias, permisos y vacaciones',
+          }),
+        ],
+      },
+      type: 'sources',
+    });
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detectedModuleId: rootModuleId,
+        detectedSubmoduleId: submoduleId,
+        qualitySignals: ['low_confidence'],
       }),
     );
   });
@@ -470,6 +565,24 @@ describe('ChatService', () => {
     });
   });
 
+  it('records a technical failure only against the authenticated turn owner', async () => {
+    await service.recordTechnicalFailure(
+      {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        errorCode: 'PROVIDER_UNAVAILABLE',
+        userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+      },
+      authorization,
+    );
+
+    expect(historyGateway.recordTechnicalFailure).toHaveBeenCalledWith({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      errorCode: 'PROVIDER_UNAVAILABLE',
+      userId: authorization.userId,
+      userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+  });
+
   it('loads bounded owned history and passes it to retrieval and generation', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -564,6 +677,7 @@ describe('ChatService', () => {
   it('starts a separate conversation when the current question changes modules', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    const newSubmoduleId = 'ec8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId,
       messages: [{ content: 'Consulta anterior', role: 'user' }],
@@ -575,6 +689,14 @@ describe('ChatService', () => {
       sources: [
         {
           ...source,
+          moduleAssociations: [
+            {
+              rootModuleId: newModuleId,
+              rootModuleName: 'Situaciones administrativas',
+              submoduleId: newSubmoduleId,
+              submoduleName: 'Vacaciones',
+            },
+          ],
           moduleIds: [newModuleId],
           moduleNames: ['Vacaciones'],
         },
@@ -610,6 +732,12 @@ describe('ChatService', () => {
     });
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({ conversationContext: [] }),
+    );
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detectedModuleId: newModuleId,
+        detectedSubmoduleId: newSubmoduleId,
+      }),
     );
   });
 
@@ -682,5 +810,43 @@ describe('ChatService', () => {
       ServiceUnavailableException,
     );
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+  });
+});
+
+describe('evaluateAnswerCitationQuality', () => {
+  it('flags no evidence, unsupported claims and mismatched citations for review', () => {
+    expect(
+      evaluateAnswerCitationQuality(
+        'La licencia se solicita mediante procedimiento institucional vigente. [1]',
+        [source],
+      ),
+    ).toEqual([]);
+    expect(
+      evaluateAnswerCitationQuality(
+        'La licencia se concede automáticamente durante treinta días sin condición.',
+        [source],
+      ),
+    ).toEqual(['support_partial']);
+    expect(
+      evaluateAnswerCitationQuality(
+        'La remuneración aumenta por completo en todos los supuestos. [2]',
+        [source],
+      ),
+    ).toEqual(['citation_insufficient']);
+    expect(
+      evaluateAnswerCitationQuality('No existe sustento disponible.', []),
+    ).toEqual(['support_insufficient']);
+    expect(
+      evaluateAnswerCitationQualityDetails(
+        'La licencia se concede automáticamente durante treinta días sin condición.',
+        [source],
+      ),
+    ).toEqual({
+      excerpts: {
+        support_partial:
+          'La licencia se concede automáticamente durante treinta días sin condición.',
+      },
+      signals: ['support_partial'],
+    });
   });
 });

@@ -2,6 +2,13 @@ import type { DocumentSituation } from '../documents/domain/document';
 
 export type RetrievalScope = 'archived_explicit' | 'current' | 'historical';
 
+export interface RetrievedModuleAssociation {
+  rootModuleId: string;
+  rootModuleName: string;
+  submoduleId: string | null;
+  submoduleName: string | null;
+}
+
 export interface RetrievedChunk {
   articleReference: string | null;
   chunkContent: string;
@@ -11,6 +18,8 @@ export interface RetrievedChunk {
   documentTitle: string;
   documentVersionId: string;
   lexicalScore: number;
+  /** Present for the consultation-control search; legacy test doubles may omit it. */
+  moduleAssociations?: RetrievedModuleAssociation[];
   moduleIds: string[];
   moduleNames: string[];
   numeralReference: string | null;

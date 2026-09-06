@@ -30,6 +30,14 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           document_title: 'Norma',
           document_version_id: 'version',
           lexical_score: 0.4,
+          module_associations: [
+            {
+              rootModuleId: 'module',
+              rootModuleName: 'Módulo',
+              submoduleId: 'submodule',
+              submoduleName: 'Submódulo',
+            },
+          ],
           module_ids: ['module'],
           module_names: ['Módulo'],
           numeral_reference: null,
@@ -50,11 +58,19 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
         chunkId: 'chunk',
         documentSituation: 'replaced',
         documentTitle: 'Norma',
+        moduleAssociations: [
+          {
+            rootModuleId: 'module',
+            rootModuleName: 'Módulo',
+            submoduleId: 'submodule',
+            submoduleName: 'Submódulo',
+          },
+        ],
         semanticScore: 0.9,
       }),
     ]);
     expect(rpc).toHaveBeenCalledWith(
-      'search_document_chunks_by_situation',
+      'search_document_chunks_with_consultation_context',
       expect.objectContaining({
         p_query_text: input.query,
         p_retrieval_scope: 'historical',
