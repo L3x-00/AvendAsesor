@@ -525,7 +525,11 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
 
     // PostgREST serializa el bigint del conteo como cadena.
     await expect(gateway.listUploaders()).resolves.toEqual([
-      { documentCount: 3, fullName: 'Ana Auditora', id: documentRow.created_by },
+      {
+        documentCount: 3,
+        fullName: 'Ana Auditora',
+        id: documentRow.created_by,
+      },
     ]);
     expect(rpc).toHaveBeenCalledWith('list_document_uploaders');
 
