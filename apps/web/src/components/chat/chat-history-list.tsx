@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import {
   deleteConversationAction,
   initialHistoryActionState,
-} from "@/app/history/actions";
+} from "@/app/(teacher)/history/actions";
 import type { ChatConversation } from "@/lib/chat-api/types";
 
 function formatDate(value: string): string {
