@@ -182,6 +182,14 @@ set metadata = metadata || jsonb_build_object(
 )
 where nullif(btrim(metadata ->> 'specificDependency'), '') is null;
 
+-- El backfill de `approved_version_id` encola el chequeo del FK diferido
+-- `documents_approved_version_belongs_to_document_fkey`. PostgreSQL rechaza un
+-- ALTER TABLE mientras haya eventos de trigger pendientes (SQLSTATE 55006), así
+-- que hay que vaciarlos antes de seguir. Sin esto la migración solo funciona
+-- contra una tabla `documents` vacía: en cualquier base que ya tenga documentos
+-- —producción, entre otras— falla aquí.
+set constraints all immediate;
+
 alter table public.documents
   add column governed_metadata_search_vector tsvector generated always as (
     setweight(to_tsvector('spanish', coalesce(metadata ->> 'documentTypeOther', '')), 'B')
@@ -200,6 +208,8 @@ set archive_reason_code = case
   else null
 end
 where situation <> 'current';
+
+set constraints all immediate;
 
 alter table public.documents
   alter column issuing_entity set not null,
