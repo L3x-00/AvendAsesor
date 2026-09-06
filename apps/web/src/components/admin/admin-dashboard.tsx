@@ -39,7 +39,7 @@ const quickLinks: ReadonlyArray<QuickLink> = [
     description:
       "Consultar, buscar, visualizar y descargar el historial documental.",
     href: "/admin/documents",
-    title: "Documentos",
+    title: "Historial de documentos",
   },
   {
     description: "Revisar consultas, incidencias, reportes y métricas.",

@@ -103,6 +103,7 @@ export const managedDocumentSchema = z.object({
   replacementReason: z.string().nullable(),
   replacementYear: z.number().int().nullable(),
   resolutionNumber: z.string().nullable(),
+  keywords: z.string().nullable(),
   situation: z.enum(["archived", "current", "replaced"]),
   specificDependency: z.string().nullable(),
   title: z.string(),
@@ -189,6 +190,7 @@ export const documentLibraryItemSchema = z.object({
   replacementReason: z.string().nullable(),
   replacementYear: z.number().int().nullable(),
   resolutionNumber: z.string().nullable(),
+  keywords: z.string().nullable(),
   situation: z.enum(["archived", "current", "replaced"]),
   specificDependency: z.string().nullable(),
   technicalStatus: z.enum(["error", "pending_approval", "ready"]),
@@ -209,7 +211,20 @@ export type DocumentLibraryPage = z.infer<typeof documentLibraryPageSchema>;
 export type DocumentSituation = ManagedDocument["situation"];
 export type DocumentTechnicalStatus = DocumentLibraryItem["technicalStatus"];
 
+export const documentUploaderSchema = z.object({
+  documentCount: z.number().int().nonnegative(),
+  fullName: z.string(),
+  id: z.string().uuid(),
+});
+
+export const documentUploaderListSchema = z.array(documentUploaderSchema);
+
+export type DocumentUploader = z.infer<typeof documentUploaderSchema>;
+
 export interface DocumentLibraryQuery {
+  createdBy?: string;
+  createdFrom?: string;
+  createdTo?: string;
   documentType?: string;
   issuanceYear?: number;
   issuingEntity?: string;

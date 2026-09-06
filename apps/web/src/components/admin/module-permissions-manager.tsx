@@ -21,11 +21,12 @@ export function ModulePermissionsManager({
       className="rounded-xl border border-avend-border bg-avend-surface p-5"
     >
       <h2 className="text-xl font-bold" id={`${prefix}-title`}>
-        Acceso a Módulos y Documentos
+        Acceso a Módulos e Historial de documentos
       </h2>
       <p className="mt-1 text-base leading-7 text-avend-text-muted">
-        El permiso controla la navegación, las URLs directas y todas las APIs de
-        módulos, biblioteca y PDF. Los superadministradores conservan acceso.
+        Un solo permiso cubre las dos secciones: «Módulos» y «Historial de
+        documentos». Controla la navegación, las URLs directas y todas las APIs
+        de módulos, biblioteca y PDF. Los superadministradores conservan acceso.
       </p>
       {editable.length ? (
         <ul className="mt-4 space-y-3" role="list">

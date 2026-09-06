@@ -111,7 +111,7 @@ describe("AdminDashboard", () => {
     expect(links.map((link) => link.firstElementChild?.textContent)).toEqual([
       "Usuarios",
       "Módulos",
-      "Documentos",
+      "Historial de documentos",
       "Consultas y reportes",
       "Ver como docente",
     ]);
