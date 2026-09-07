@@ -51,7 +51,10 @@
   background: var(--avend-navy);
   color: var(--avend-surface);
 }
-
+.tabActive:hover {
+  background: var(--avend-navy);
+  color: var(--avend-surface);
+}
 .toolbar {
   display: flex;
   flex-wrap: wrap;
