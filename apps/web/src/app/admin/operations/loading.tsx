@@ -1,7 +1,5 @@
-export default function ConsultationReportsLoading() {
-  return (
-    <p className="p-6 text-base text-avend-text-muted">
-      Cargando Consultas y reportes…
-    </p>
-  );
+import { AdminSectionLoading } from "@/components/admin/admin-section-loading";
+
+export default function OperationsLoading() {
+  return <AdminSectionLoading label="Cargando Consultas y reportes…" />;
 }

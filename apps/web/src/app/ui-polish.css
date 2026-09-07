@@ -463,3 +463,76 @@ button.avend-teacher-new-chat:disabled,
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Esqueleto de sección administrativa
+   ---------------------------------------------------------------------------
+   Ocupa el hueco de la cabecera y del contenido, nunca el de la barra lateral:
+   esta la aporta el layout del panel y queda fuera del límite de carga. Las
+   medidas imitan las de la cabecera real para que la llegada del contenido no
+   desplace la vista.
+   -------------------------------------------------------------------------- */
+
+.avend-admin-section-loading-header {
+  border-bottom: 1px solid var(--avend-border);
+  display: grid;
+  gap: 0.875rem;
+  padding: 0 0 1.5rem;
+}
+
+.avend-admin-section-loading-body {
+  display: grid;
+  gap: 0.875rem;
+  padding: 1.5rem 0 0;
+}
+
+.avend-admin-section-loading-header span,
+.avend-admin-section-loading-body span {
+  animation: avend-skeleton-shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--avend-surface-muted) 25%,
+    var(--avend-soft-blue) 45%,
+    var(--avend-surface-muted) 65%
+  );
+  background-size: 220% 100%;
+  border-radius: 99px;
+  display: block;
+  height: 0.75rem;
+  width: 100%;
+}
+
+.avend-admin-section-loading-title {
+  height: 2.25rem !important;
+  max-width: 26rem;
+}
+
+.avend-admin-section-loading-subtitle {
+  max-width: 38rem;
+}
+
+.avend-admin-section-loading-body span {
+  border-radius: 0.75rem;
+  height: 6rem;
+}
+
+.avend-admin-section-loading-body span:nth-child(2) {
+  height: 12rem;
+}
+
+.avend-admin-section-loading-body span:nth-child(3) {
+  height: 8rem;
+}
+
+@media (min-width: 64rem) {
+  .avend-admin-section-loading-body {
+    padding-top: 2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-admin-section-loading-header span,
+  .avend-admin-section-loading-body span {
+    animation: none;
+  }
+}

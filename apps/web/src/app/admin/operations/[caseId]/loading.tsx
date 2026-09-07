@@ -1,7 +1,5 @@
+import { AdminSectionLoading } from "@/components/admin/admin-section-loading";
+
 export default function ConsultationCaseLoading() {
-  return (
-    <p className="p-6 text-base text-avend-text-muted">
-      Cargando el caso de consulta…
-    </p>
-  );
+  return <AdminSectionLoading label="Cargando el caso de consulta…" />;
 }

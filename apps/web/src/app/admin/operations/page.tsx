@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
 import { createAuthorizedConsultationReportsApiContext } from "@/lib/consultation-reports-api/authorized-client";
 import {
@@ -281,7 +281,7 @@ export default async function OperationsPage({
   const query = one(requested.query)?.trim();
   const currentPage = pageNumber(requested.page);
   const offset = (currentPage - 1) * CASES_PER_PAGE;
-  const { access, client } =
+  const { client } =
     await createAuthorizedConsultationReportsApiContext();
   const [dashboard, topics, reviewPriorities, cases] = await Promise.all([
     client.getDashboard(period),
@@ -319,13 +319,9 @@ export default async function OperationsPage({
     cases.length === CASES_PER_PAGE && totalCases > offset + CASES_PER_PAGE;
 
   return (
-    <AdminShell
-      activeSection="operations"
+    <AdminPage
       description="Centro de control de calidad del asistente: revisa tendencias, reportes y sugerencias sin modificar la conversación original."
-      modulesAccess={access.modulesAccess}
       title="Consultas y reportes"
-      userName={access.fullName}
-      userRole={access.role}
     >
       <main className={styles.page}>
         <section
@@ -661,6 +657,6 @@ export default async function OperationsPage({
           ) : null}
         </section>
       </main>
-    </AdminShell>
+    </AdminPage>
   );
 }

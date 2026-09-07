@@ -1,10 +1,18 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import { formatUserRole } from "@/lib/admin-api/labels";
 import type { AdministrativeRole } from "@/lib/authorization/policy";
 
-type AdminSection = "documents" | "home" | "modules" | "operations" | "users";
+export type AdminSection =
+  | "documents"
+  | "home"
+  | "modules"
+  | "operations"
+  | "users";
 type AdminNavigationIconName =
   | "chat"
   | "documents"
@@ -15,17 +23,11 @@ type AdminNavigationIconName =
   | "signout"
   | "users";
 
-interface AdminShellProps {
-  activeSection: AdminSection;
+interface AdminShellFrameProps {
   children: ReactNode;
-  description: string;
-  eyebrow?: string | null;
-  headerAside?: ReactNode;
   modulesAccess: boolean;
-  title: string;
   userName: string;
   userRole: AdministrativeRole;
-  welcome?: string;
 }
 
 const navigation: ReadonlyArray<{
@@ -67,6 +69,19 @@ const navigation: ReadonlyArray<{
     label: "Chat (ver como docente)",
   },
 ];
+
+/**
+ * El marco vive en el layout del segmento, que no sabe cuál de sus hijos se
+ * está mostrando. La sección se deduce de la ruta, que además cambia en el
+ * instante del clic: el resaltado se mueve sin esperar al servidor.
+ */
+export function adminSectionFromPathname(pathname: string): AdminSection {
+  if (pathname.startsWith("/admin/users")) return "users";
+  if (pathname.startsWith("/admin/modules")) return "modules";
+  if (pathname.startsWith("/admin/operations")) return "operations";
+  if (pathname.startsWith("/admin/documents")) return "documents";
+  return "home";
+}
 
 function AdminNavigationIcon({
   className = "",
@@ -151,7 +166,11 @@ function AdminNavigation({
   activeSection,
   modulesAccess,
   userRole,
-}: Pick<AdminShellProps, "activeSection" | "modulesAccess" | "userRole">) {
+}: {
+  activeSection: AdminSection;
+  modulesAccess: boolean;
+  userRole: AdministrativeRole;
+}) {
   return (
     <nav aria-label="Administración" className="avend-admin-navigation">
       {navigation
@@ -183,7 +202,10 @@ function AdminNavigation({
 function AdminAccount({
   userName,
   userRole,
-}: Pick<AdminShellProps, "userName" | "userRole">) {
+}: {
+  userName: string;
+  userRole: AdministrativeRole;
+}) {
   return (
     <div className="avend-admin-account">
       <div className="avend-admin-account-identity">
@@ -213,21 +235,26 @@ function AdminAccount({
 }
 
 /**
- * Presentational frame for the administrative BFF. Identity and role arrive
- * from the verified server-side profile; this component adds no permissions.
+ * Marco persistente del panel administrativo: barra lateral, identidad y menú
+ * móvil. Vive en `app/admin/layout.tsx`, así que al cambiar de sección Next.js
+ * solo sustituye el contenido y la barra lateral no se desmonta.
+ *
+ * Antes cada página renderizaba el marco completo por su cuenta. Sin segmento
+ * común, el único límite de carga disponible ocupaba toda la pantalla y cada
+ * navegación reconstruía la interfaz entera.
+ *
+ * La identidad y el rol llegan del perfil verificado en el servidor; este
+ * componente no concede permisos: solo decide qué enlaces se muestran.
  */
-export function AdminShell({
-  activeSection,
+export function AdminShellFrame({
   children,
-  description,
-  eyebrow = "Administración",
-  headerAside,
   modulesAccess,
-  title,
   userName,
   userRole,
-  welcome,
-}: AdminShellProps) {
+}: AdminShellFrameProps) {
+  const pathname = usePathname();
+  const activeSection = adminSectionFromPathname(pathname ?? "/admin");
+
   return (
     <div
       className={`avend-admin-shell${activeSection === "home" ? " avend-admin-shell--home" : ""}`}
@@ -269,38 +296,21 @@ export function AdminShell({
       </aside>
 
       <main className="avend-admin-main" id="main-content">
-        <header
-          className={`avend-admin-header${headerAside ? " avend-admin-header--with-aside" : ""}`}
-        >
-          <div className="avend-admin-mobile-bar">
-            <BrandLogo className="avend-admin-mobile-logo" />
-            <details className="avend-admin-mobile-menu">
-              <summary>Menú administrativo</summary>
-              <div className="avend-admin-mobile-panel">
-                <AdminNavigation
-                  activeSection={activeSection}
-                  modulesAccess={modulesAccess}
-                  userRole={userRole}
-                />
-                <AdminAccount userName={userName} userRole={userRole} />
-              </div>
-            </details>
-          </div>
-          <div className="avend-admin-header-layout">
-            <div className="avend-admin-header-copy">
-              {eyebrow ? <p className="avend-eyebrow">{eyebrow}</p> : null}
-              <h1>{title}</h1>
-              {welcome ? (
-                <p className="avend-admin-header-welcome">{welcome}</p>
-              ) : null}
-              <p className="avend-admin-header-description">{description}</p>
+        <div className="avend-admin-mobile-bar">
+          <BrandLogo className="avend-admin-mobile-logo" />
+          <details className="avend-admin-mobile-menu">
+            <summary>Menú administrativo</summary>
+            <div className="avend-admin-mobile-panel">
+              <AdminNavigation
+                activeSection={activeSection}
+                modulesAccess={modulesAccess}
+                userRole={userRole}
+              />
+              <AdminAccount userName={userName} userRole={userRole} />
             </div>
-            {headerAside ? (
-              <div className="avend-admin-header-aside">{headerAside}</div>
-            ) : null}
-          </div>
-        </header>
-        <div className="avend-admin-content">{children}</div>
+          </details>
+        </div>
+        {children}
       </main>
     </div>
   );
