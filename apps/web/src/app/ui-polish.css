@@ -221,7 +221,13 @@ button.avend-teacher-new-chat {
   animation: avend-page-enter 260ms var(--avend-ease-enter) both;
 }
 
+/* Tarjeta de subtema. El icono y el nombre se centran entre sí en una sola
+   fila: antes cada uno se alineaba por su cuenta con un selector que alcanzaba
+   a los dos `span` del botón, así que en "Evaluación docente" —donde los
+   nombres son largos y ocupan dos o tres renglones— el icono quedaba
+   descolgado respecto al texto. */
 .avend-chat-module {
+  align-items: center;
   box-shadow: 0 2px 0 rgb(13 27 61 / 3%);
   display: grid;
   gap: 0.75rem;
@@ -241,27 +247,35 @@ button.avend-teacher-new-chat {
 
 .avend-chat-module-icon {
   align-items: center;
+  aspect-ratio: 1;
   background: var(--avend-soft-blue);
   border: 1px solid rgb(22 119 255 / 18%);
   border-radius: 0.625rem;
   color: var(--avend-accent);
   display: inline-flex;
+  flex: none;
   height: 2.25rem;
   justify-content: center;
   width: 2.25rem;
 }
 
 .avend-chat-module-icon svg {
-  height: 1.2rem;
+  height: 1.25rem;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
-  width: 1.2rem;
+  width: 1.25rem;
 }
 
-.avend-chat-module span {
-  align-self: center;
+/* El nombre manda en la altura de la tarjeta, así que su interlineado define
+   el ritmo. Se corta con puntos suspensivos antes de desbordar para que todas
+   las tarjetas de la fila conserven la misma estructura. */
+.avend-chat-module-name {
+  font-weight: 600;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .avend-chat-composer {
@@ -533,6 +547,127 @@ button.avend-teacher-new-chat:disabled,
 @media (prefers-reduced-motion: reduce) {
   .avend-admin-section-loading-header span,
   .avend-admin-section-loading-body span {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Avisos emergentes
+   ---------------------------------------------------------------------------
+   Uno solo para todo AVEND. La confirmación de guardado tiene que verse igual
+   y en el mismo sitio en los dos paneles, o deja de leerse como confirmación.
+   No bloquea la interfaz y se retira sola.
+   -------------------------------------------------------------------------- */
+
+.avend-toast-region {
+  bottom: 1rem;
+  display: grid;
+  gap: 0.625rem;
+  justify-items: center;
+  left: 50%;
+  pointer-events: none;
+  position: fixed;
+  transform: translateX(-50%);
+  width: min(28rem, calc(100vw - 2rem));
+  z-index: 60;
+}
+
+.avend-toast {
+  align-items: flex-start;
+  animation: avend-toast-enter 220ms var(--avend-ease-enter) both;
+  border: 1px solid;
+  border-radius: 0.75rem;
+  box-shadow: var(--avend-shadow-card);
+  display: flex;
+  font-size: 1rem;
+  gap: 0.625rem;
+  line-height: 1.5;
+  padding: 0.875rem 1rem;
+  pointer-events: auto;
+  width: 100%;
+}
+
+.avend-toast--success {
+  background: var(--avend-success-soft-surface);
+  border-color: var(--avend-success-soft-border);
+  color: var(--avend-success);
+}
+
+.avend-toast--error {
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger-soft-border);
+  color: var(--avend-danger);
+}
+
+.avend-toast-icon {
+  flex: none;
+  height: 1.5rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  width: 1.5rem;
+}
+
+.avend-toast-text {
+  flex: 1;
+  font-weight: 600;
+  min-width: 0;
+}
+
+/* 44px de zona táctil sin agrandar el aviso: el relleno se compensa con un
+   margen negativo. */
+.avend-toast-close {
+  background: none;
+  border: 0;
+  border-radius: 0.5rem;
+  color: inherit;
+  cursor: pointer;
+  flex: none;
+  margin: -0.625rem -0.5rem -0.625rem 0;
+  padding: 0.625rem 0.5rem;
+}
+
+.avend-toast-close svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+  width: 1.125rem;
+}
+
+.avend-toast-close:hover {
+  background: rgb(17 24 39 / 8%);
+}
+
+.avend-toast-close:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+@keyframes avend-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 48rem) {
+  .avend-toast-region {
+    bottom: 1.5rem;
+    justify-items: end;
+    left: auto;
+    right: 1.5rem;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-toast {
     animation: none;
   }
 }
