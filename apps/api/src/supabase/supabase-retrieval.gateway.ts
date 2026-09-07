@@ -14,6 +14,12 @@ interface SituationAwareRetrievalRow {
   document_title: string;
   document_version_id: string;
   lexical_score: number;
+  module_associations: Array<{
+    rootModuleId: string;
+    rootModuleName: string;
+    submoduleId: string | null;
+    submoduleName: string | null;
+  }>;
   module_ids: string[];
   module_names: string[];
   numeral_reference: string | null;
@@ -26,7 +32,7 @@ interface SituationAwareRetrievalRow {
 
 interface SituationAwareRetrievalClient {
   rpc(
-    name: 'search_document_chunks_by_situation',
+    name: 'search_document_chunks_with_consultation_context',
     args: {
       p_match_count: number;
       p_match_threshold: number;
@@ -58,7 +64,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     const retrievalClient = this
       .client as unknown as SituationAwareRetrievalClient;
     const { data, error } = await retrievalClient.rpc(
-      'search_document_chunks_by_situation',
+      'search_document_chunks_with_consultation_context',
       {
         p_match_count: input.matchCount,
         p_match_threshold: input.matchThreshold,
@@ -82,6 +88,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       documentTitle: row.document_title,
       documentVersionId: row.document_version_id,
       lexicalScore: row.lexical_score,
+      moduleAssociations: row.module_associations,
       moduleIds: row.module_ids,
       moduleNames: row.module_names,
       numeralReference: row.numeral_reference,

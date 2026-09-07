@@ -70,13 +70,29 @@ export interface ChatHistoryGateway {
     answer: string;
     conversationId: string;
     faqMemory: FaqMemoryObservationInput | null;
+    detectedModuleId?: string | null;
+    detectedSubmoduleId?: string | null;
+    qualityExcerpts?: Partial<
+      Record<
+        'citation_insufficient' | 'support_insufficient' | 'support_partial',
+        string
+      >
+    >;
+    qualitySignals?: string[];
     replyRole: ChatReplyRole;
+    retrievalScope?: 'archived_explicit' | 'current' | 'historical';
     sources: ChatCitationInput[];
     topRelevanceScore: number | null;
     unansweredReason: 'ambiguous_request' | 'insufficient_evidence' | null;
     userId: string;
     userMessageId: string;
   }): Promise<ChatTurnCompletion>;
+  recordTechnicalFailure(input: {
+    conversationId: string;
+    errorCode: string;
+    userId: string;
+    userMessageId: string;
+  }): Promise<void>;
   getConversation(input: {
     conversationId: string;
     limit: number;

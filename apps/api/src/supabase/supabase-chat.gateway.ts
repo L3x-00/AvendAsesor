@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
@@ -17,10 +18,48 @@ import type {
 } from '../chat/chat-history.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
 
+/**
+ * Kept local until generated Supabase types are refreshed by the database
+ * integration. It exposes only the new server-only RPCs introduced here.
+ */
+interface ConsultationChatRpcClient {
+  rpc(
+    name: 'begin_chat_turn_with_consultation_routing',
+    args: {
+      p_conversation_id: string | null;
+      p_question: string;
+      p_selected_module_id: string | null;
+      p_user_id: string;
+    },
+  ): Promise<{
+    data: Array<{ conversation_id: string; user_message_id: string }> | null;
+    error: PostgrestError | null;
+  }>;
+  rpc(
+    name: 'complete_chat_turn_with_consultation_case',
+    args: Record<string, unknown>,
+  ): Promise<{
+    data: Array<{ answer_message_id: string }> | null;
+    error: PostgrestError | null;
+  }>;
+  rpc(
+    name: 'record_consultation_technical_failure',
+    args: {
+      p_conversation_id: string;
+      p_error_code: string;
+      p_user_id: string;
+      p_user_message_id: string;
+    },
+  ): Promise<{ data: null; error: PostgrestError | null }>;
+}
+
 const CHAT_MODULE_COLUMNS =
   'id,name,code,description,parent_module_id,sort_order';
 
 function databaseError(error: PostgrestError): never {
+  if (error.code === '42501') {
+    throw new ForbiddenException('The chat request is not authorized.');
+  }
   if (error.code === 'P0002') {
     throw new NotFoundException('The requested chat resource was not found.');
   }
@@ -106,12 +145,15 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
   async beginTurn(
     input: Parameters<ChatHistoryGateway['beginTurn']>[0],
   ): Promise<ChatTurnStart> {
-    const { data, error } = await this.requireClient().rpc('begin_chat_turn', {
-      p_conversation_id: input.conversationId,
-      p_question: input.question,
-      p_selected_module_id: input.selectedModuleId,
-      p_user_id: input.userId,
-    });
+    const { data, error } = await this.consultationRpcClient().rpc(
+      'begin_chat_turn_with_consultation_routing',
+      {
+        p_conversation_id: input.conversationId,
+        p_question: input.question,
+        p_selected_module_id: input.selectedModuleId,
+        p_user_id: input.userId,
+      },
+    );
 
     if (error) databaseError(error);
 
@@ -125,14 +167,24 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
   async completeTurn(
     input: Parameters<ChatHistoryGateway['completeTurn']>[0],
   ): Promise<ChatTurnCompletion> {
-    const { data, error } = await this.requireClient().rpc(
-      'complete_chat_turn_with_learning_v2',
+    const { data, error } = await this.consultationRpcClient().rpc(
+      'complete_chat_turn_with_consultation_case',
       {
         p_answer: input.answer,
         p_answer_role: input.replyRole,
         p_conversation_id: input.conversationId,
+        p_detected_module_id: input.detectedModuleId ?? null,
+        p_detected_submodule_id: input.detectedSubmoduleId ?? null,
         p_faq_question_fingerprint:
           input.faqMemory?.questionFingerprint ?? null,
+        p_quality_signals:
+          input.qualityExcerpts && Object.keys(input.qualityExcerpts).length > 0
+            ? {
+                excerpts: input.qualityExcerpts,
+                signals: input.qualitySignals ?? [],
+              }
+            : (input.qualitySignals ?? []),
+        p_retrieval_scope: input.retrievalScope ?? 'current',
         p_sources: input.sources.map((source) => ({
           chunkId: source.chunkId,
           moduleId: source.moduleId ?? '',
@@ -170,6 +222,21 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
 
     if (error) databaseError(error);
     return data;
+  }
+
+  async recordTechnicalFailure(
+    input: Parameters<ChatHistoryGateway['recordTechnicalFailure']>[0],
+  ): Promise<void> {
+    const { error } = await this.consultationRpcClient().rpc(
+      'record_consultation_technical_failure',
+      {
+        p_conversation_id: input.conversationId,
+        p_error_code: input.errorCode,
+        p_user_id: input.userId,
+        p_user_message_id: input.userMessageId,
+      },
+    );
+    if (error) databaseError(error);
   }
 
   async getConversationContext(
@@ -250,14 +317,13 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
       .select(CHAT_MODULE_COLUMNS)
       .eq('is_active', true)
       .eq('is_deleted', false)
-      .is('parent_module_id', null)
       .order('parent_module_id', { ascending: true, nullsFirst: true })
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
 
     if (error) databaseError(error);
 
-    return (data ?? []).map((module) => ({
+    const activeModules = (data ?? []).map((module) => ({
       code: module.code,
       description: module.description ?? null,
       id: module.id,
@@ -265,6 +331,12 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
       parentModuleId: module.parent_module_id,
       sortOrder: module.sort_order,
     }));
+    const activeIds = new Set(activeModules.map((module) => module.id));
+
+    return activeModules.filter(
+      (module) =>
+        module.parentModuleId === null || activeIds.has(module.parentModuleId),
+    );
   }
 
   async listConversations(
@@ -299,5 +371,9 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
     }
 
     return this.client;
+  }
+
+  private consultationRpcClient(): ConsultationChatRpcClient {
+    return this.requireClient() as unknown as ConsultationChatRpcClient;
   }
 }

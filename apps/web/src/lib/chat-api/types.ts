@@ -28,6 +28,8 @@ export const chatSourceSchema = z.object({
   pageStart: z.number().int().min(1).max(300),
   rank: z.number().int().min(1).max(20),
   relevanceScore: z.number().min(0).max(1),
+  relatedModuleName: z.string().max(255).nullable().optional(),
+  relatedSubmoduleName: z.string().max(255).nullable().optional(),
   sectionTitle: z.string().max(500).nullable(),
   versionNumber: z.number().int().positive(),
 });

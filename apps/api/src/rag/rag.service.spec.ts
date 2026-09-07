@@ -1,4 +1,8 @@
-import { detectRetrievalScope, RagService } from './rag.service';
+import {
+  detectRetrievalScope,
+  RagService,
+  resolveDetectedSubmodule,
+} from './rag.service';
 import type { RetrievalGateway } from './retrieval.gateway';
 
 function vector(value = 0.1): number[] {
@@ -318,6 +322,28 @@ describe('RagService', () => {
     });
   });
 
+  it('keeps a selected submodule under its actual root instead of declaring a false topic change', async () => {
+    const associatedSource = {
+      ...source,
+      moduleAssociations: [
+        {
+          rootModuleId: 'module-a',
+          rootModuleName: 'Módulo A',
+          submoduleId: 'submodule-a',
+          submoduleName: 'Submódulo A',
+        },
+      ],
+    };
+    gateway.search.mockResolvedValue([associatedSource]);
+
+    await expect(
+      service.retrieve('Consulta del submódulo', 'submodule-a'),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      resolvedModule: { id: 'module-a', name: 'Módulo A' },
+    });
+  });
+
   it.each([
     ['Compara esta norma con su versión anterior', 'historical'],
     ['Consulta el antecedente archivado', 'archived_explicit'],
@@ -346,6 +372,47 @@ describe('RagService', () => {
       'RAG_INVALID_QUERY_EMBEDDING',
     );
     expect(gateway.search).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveDetectedSubmodule', () => {
+  it('discloses a submodule only when every source agrees on the same route', () => {
+    const sources = [
+      {
+        ...source,
+        moduleAssociations: [
+          {
+            rootModuleId: 'module-a',
+            rootModuleName: 'Módulo A',
+            submoduleId: 'submodule-a',
+            submoduleName: 'Submódulo A',
+          },
+        ],
+      },
+      {
+        ...source,
+        chunkId: 'chunk-b',
+        moduleAssociations: [
+          {
+            rootModuleId: 'module-a',
+            rootModuleName: 'Módulo A',
+            submoduleId: 'submodule-a',
+            submoduleName: 'Submódulo A',
+          },
+        ],
+      },
+    ];
+
+    expect(resolveDetectedSubmodule(sources, 'module-a')).toEqual({
+      id: 'submodule-a',
+      name: 'Submódulo A',
+    });
+    expect(
+      resolveDetectedSubmodule(
+        [{ ...sources[0], moduleAssociations: [] }],
+        'module-a',
+      ),
+    ).toBeNull();
   });
 });
 

@@ -185,6 +185,10 @@ class InMemoryChatHistoryGateway implements ChatHistoryGateway {
     });
   }
 
+  recordTechnicalFailure(): Promise<void> {
+    return Promise.resolve();
+  }
+
   getConversationContext(input: { conversationId: string }): Promise<{
     conversationId: string;
     messages: ChatContextMessage[];

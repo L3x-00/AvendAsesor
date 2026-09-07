@@ -1,8 +1,14 @@
-import { BrandLogo } from "@/components/ui/brand-logo";
-
 /**
  * Reserva la estructura de la pantalla durante una navegación de servidor.
  * No consulta datos ni altera los límites de autorización de cada ruta.
+ *
+ * Cubre la entrada a la aplicación (`/`, `/auth/*`, `/access-denied`). Las
+ * secciones del docente y del panel tienen sus propios límites acotados, así
+ * que ya no caen aquí: cambiar de sección no debe parecer un arranque en frío.
+ *
+ * Ya no incluye el logotipo. Es un `.webp` de 191 KB y, mientras no terminaba
+ * de descargarse, el navegador pintaba su texto alternativo —«AVEND ASESOR»—
+ * junto al rótulo de abajo, de modo que la marca aparecía repetida.
  */
 export default function Loading() {
   return (
@@ -13,7 +19,6 @@ export default function Loading() {
         className="avend-route-loading-card"
         role="status"
       >
-        <BrandLogo className="avend-route-loading-logo" priority />
         <p className="avend-eyebrow">AVEND ASESOR</p>
         <h1>Preparando tu espacio de trabajo</h1>
         <p>
