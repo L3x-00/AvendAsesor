@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import { UsersManager } from "@/components/admin/users-manager";
 import { ModulePermissionsManager } from "@/components/admin/module-permissions-manager";
 import { toDateInputValue } from "@/lib/admin-api/access-window";
@@ -62,13 +62,9 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   }
 
   return (
-    <AdminShell
-      activeSection="users"
+    <AdminPage
       description="Gestiona usuarios, administradores y accesos. Cada cambio de rol o estado exige un motivo y queda auditado; la autoridad es del servidor."
-      modulesAccess={access.modulesAccess}
       title="Usuarios y accesos"
-      userName={access.fullName}
-      userRole={access.role}
     >
       <div className="flex flex-col gap-8">
         <UsersManager
@@ -119,6 +115,6 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
           )}
         </section>
       </div>
-    </AdminShell>
+    </AdminPage>
   );
 }
