@@ -1,12 +1,16 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
 import { useFormStatus } from 'react-dom';
+import { FormField } from '@/components/ui/form-field';
+import { useToast } from '@/components/ui/toast';
+import { ValidatedForm } from '@/components/ui/validated-form';
 import {
   initialAuthActionState,
   type AuthActionState,
   type AuthFieldName,
 } from '@/lib/auth/action-state';
+import type { FieldRules } from '@/lib/ui/field-validation';
 import { AuthLayout } from './auth-layout';
 
 export type AuthAction = (
@@ -33,6 +37,37 @@ interface AuthFormProps {
   links?: AuthLink[];
   submitLabel: string;
   title: string;
+}
+
+const FIELD_LABELS: Record<AuthFieldName, string> = {
+  email: 'El correo electrónico',
+  fullName: 'El nombre completo',
+  password: 'La contraseña',
+  passwordConfirmation: 'La confirmación de la contraseña',
+};
+
+/**
+ * Las reglas se derivan de los campos que la pantalla declara, de modo que
+ * sign-in, sign-up, recuperación y cambio de contraseña comparten los mismos
+ * mensajes sin repetirlos en cada ruta.
+ */
+function rulesForFields(fields: AuthField[]): FieldRules {
+  const rules: FieldRules = {};
+
+  for (const field of fields) {
+    const label = FIELD_LABELS[field.name];
+    rules[field.name] = [{ kind: 'required', label }];
+
+    if (field.type === 'email') {
+      rules[field.name].push({ kind: 'email', label });
+    }
+
+    if (field.name === 'password' || field.name === 'passwordConfirmation') {
+      rules[field.name].push({ kind: 'minLength', label, min: 8 });
+    }
+  }
+
+  return rules;
 }
 
 function SubmitButton({ label }: { label: string }) {
@@ -67,10 +102,15 @@ export function AuthForm({
   title,
 }: AuthFormProps) {
   const [state, formAction] = useActionState(action, initialAuthActionState);
-  const messageClassName =
-    state.status === 'success'
-      ? 'avend-feedback--success'
-      : 'avend-feedback--error';
+  const { showToast } = useToast();
+  const announced = useRef<AuthActionState | null>(null);
+  const rules = rulesForFields(fields);
+
+  useEffect(() => {
+    if (state.status !== 'success' || announced.current === state) return;
+    announced.current = state;
+    if (state.message) showToast(state.message);
+  }, [showToast, state]);
 
   return (
     <AuthLayout>
@@ -83,50 +123,47 @@ export function AuthForm({
           <p>{description}</p>
         </header>
 
-        <form action={formAction} className="avend-auth-form" noValidate>
-          {fields.map((field) => {
-            const error = state.fieldErrors?.[field.name];
-            const errorId = `${field.name}-error`;
+        <ValidatedForm
+          action={formAction}
+          className="avend-auth-form"
+          rules={rules}
+          serverErrors={state.fieldErrors}
+        >
+          {fields.map((field) => (
+            <FormField key={field.name} label={field.label} name={field.name} required>
+              <input
+                autoComplete={field.autoComplete}
+                className="avend-field"
+                name={field.name}
+                type={field.type}
+              />
+            </FormField>
+          ))}
 
-            return (
-              <div key={field.name}>
-                <label
-                  className="avend-field-label"
-                  htmlFor={field.name}
-                >
-                  {field.label}
-                </label>
-                <input
-                  aria-describedby={error ? errorId : undefined}
-                  aria-invalid={Boolean(error)}
-                  autoComplete={field.autoComplete}
-                  className="avend-field"
-                  id={field.name}
-                  name={field.name}
-                  required
-                  type={field.type}
-                />
-                {error ? (
-                  <p className="avend-field-error" id={errorId}>
-                    {error}
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
-
-          {state.message ? (
+          {/* El aviso general queda para lo que no pertenece a un campo: una
+              credencial rechazada, una sesión caducada o un fallo del servidor. */}
+          {state.status === 'error' && state.message ? (
             <p
               aria-live="polite"
-              className={`avend-feedback ${messageClassName}`}
-              role={state.status === 'error' ? 'alert' : 'status'}
+              className="avend-feedback avend-feedback--error"
+              role="alert"
+            >
+              {state.message}
+            </p>
+          ) : null}
+
+          {state.status === 'success' && state.message ? (
+            <p
+              aria-live="polite"
+              className="avend-feedback avend-feedback--success"
+              role="status"
             >
               {state.message}
             </p>
           ) : null}
 
           <SubmitButton label={submitLabel} />
-        </form>
+        </ValidatedForm>
 
         {links.length > 0 ? (
           <nav aria-label="Enlaces de autenticación" className="avend-auth-links">

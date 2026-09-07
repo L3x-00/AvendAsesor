@@ -9,6 +9,8 @@ import {
   updateModuleAction,
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { FieldError } from "@/components/ui/form-field";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import styles from "./modules-explorer.module.css";
 
 export interface ModuleView {
@@ -39,6 +41,29 @@ interface ModulesExplorerProps {
 }
 
 const CODE_PATTERN = "[A-Za-z][A-Za-z0-9_]{1,63}";
+
+/**
+ * Reglas del módulo y del submódulo. El código repite aquí el patrón del
+ * atributo `pattern` para poder dar un mensaje en castellano en vez del texto
+ * genérico del navegador.
+ */
+const MODULE_RULES: FieldRules = {
+  code: [
+    { kind: "required", label: "El código" },
+    {
+      kind: "pattern",
+      label: "El código",
+      message:
+        "El código empieza por una letra y solo admite letras, números y guion bajo.",
+      regexp: /^[A-Za-z][A-Za-z0-9_]{1,63}$/u,
+    },
+  ],
+  description: [{ kind: "maxLength", label: "La descripción", max: 500 }],
+  name: [
+    { kind: "required", label: "El nombre" },
+    { kind: "maxLength", label: "El nombre", max: 160 },
+  ],
+};
 const CODE_TITLE =
   "Use solo letras, números y guion bajo, sin espacios ni acentos.";
 
@@ -64,7 +89,9 @@ export function ModuleManageDetails({
       <div className={styles.manageGrid}>
         <AdminActionForm
           action={updateModuleAction}
+          rules={MODULE_RULES}
           submitLabel="Guardar cambios"
+          successMessage="Módulo actualizado con éxito."
         >
           <input name="moduleId" type="hidden" value={module.id} />
           <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
@@ -77,6 +104,7 @@ export function ModuleManageDetails({
             name="name"
             required
           />
+          <FieldError name="name" />
           <label className={styles.fieldLabel} htmlFor={`${fieldId}-code`}>
             Código
           </label>
@@ -89,6 +117,7 @@ export function ModuleManageDetails({
             required
             title={CODE_TITLE}
           />
+          <FieldError name="code" />
           <label
             className={styles.fieldLabel}
             htmlFor={`${fieldId}-description`}
@@ -103,6 +132,7 @@ export function ModuleManageDetails({
             minLength={2}
             name="description"
           />
+          <FieldError name="description" />
           <label className={styles.fieldLabel} htmlFor={`${fieldId}-order`}>
             Orden
           </label>
@@ -114,6 +144,7 @@ export function ModuleManageDetails({
             name="sortOrder"
             type="number"
           />
+          <FieldError name="sortOrder" />
           {module.parentModuleId ? (
             <>
               <label
@@ -306,7 +337,9 @@ export function ModulesExplorer({
         <AdminActionForm
           action={createModuleAction}
           className={styles.createForm}
+          rules={MODULE_RULES}
           submitLabel={isRoot ? "Crear" : "Crear submódulo"}
+          successMessage="Módulo creado con éxito."
         >
           {isRoot ? (
             <label className={styles.fieldLabel} htmlFor={`${searchId}-kind`}>
@@ -340,6 +373,7 @@ export function ModulesExplorer({
             name="name"
             required
           />
+          <FieldError name="name" />
           <label className={styles.fieldLabel} htmlFor={`${searchId}-new-code`}>
             Código
           </label>
@@ -352,6 +386,7 @@ export function ModulesExplorer({
             required
             title={CODE_TITLE}
           />
+          <FieldError name="code" />
           <label
             className={styles.fieldLabel}
             htmlFor={`${searchId}-new-description`}
@@ -365,6 +400,7 @@ export function ModulesExplorer({
             minLength={2}
             name="description"
           />
+          <FieldError name="description" />
           <label
             className={styles.fieldLabel}
             htmlFor={`${searchId}-new-order`}
@@ -378,6 +414,7 @@ export function ModulesExplorer({
             name="sortOrder"
             type="number"
           />
+          <FieldError name="sortOrder" />
           <label
             className={styles.fieldLabel}
             htmlFor={`${searchId}-new-status`}

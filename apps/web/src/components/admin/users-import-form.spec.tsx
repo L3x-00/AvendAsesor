@@ -64,9 +64,8 @@ describe("UsersImportForm", () => {
 
     fireEvent.click(submit);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Elige el archivo Excel",
-    );
+    // El aviso ya no es general: cuelga del campo del archivo.
+    expect(await screen.findByText(/Elige el archivo Excel/)).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -76,9 +75,9 @@ describe("UsersImportForm", () => {
 
     fireEvent.click(submit);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "supera el tamaño permitido",
-    );
+    expect(
+      await screen.findByText(/supera el tamaño permitido/),
+    ).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 

@@ -1,11 +1,15 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { FormField } from "@/components/ui/form-field";
+import { useToast } from "@/components/ui/toast";
+import { ValidatedForm } from "@/components/ui/validated-form";
 import {
   initialAdminActionState,
   type AdminActionState,
 } from "@/lib/admin-api/action-state";
+import type { FieldRules } from "@/lib/ui/field-validation";
 
 export type AdminAction = (
   state: AdminActionState,
@@ -17,7 +21,12 @@ interface AdminActionFormProps {
   children: ReactNode;
   className?: string;
   confirmMessage?: string;
+  /** Reglas por campo. Sin ellas el formulario sigue funcionando, pero pierde
+   * la validación inmediata y solo muestra lo que responda el servidor. */
+  rules?: FieldRules;
   submitLabel: string;
+  /** Texto del aviso de éxito. Si se omite se usa el mensaje de la acción. */
+  successMessage?: string;
 }
 
 function SubmitButton({ label }: { label: string }) {
@@ -39,35 +48,58 @@ export function AdminActionForm({
   children,
   className = "space-y-3",
   confirmMessage,
+  rules = {},
   submitLabel,
+  successMessage,
 }: AdminActionFormProps) {
   const [state, formAction] = useActionState(action, initialAdminActionState);
-  const messageClassName =
-    state.status === "success"
-      ? "avend-feedback--success"
-      : "avend-feedback--error";
+  const { showToast } = useToast();
+  const announced = useRef<AdminActionState | null>(null);
+
+  // El éxito se confirma con un aviso emergente en vez de un párrafo que se
+  // pierde entre el resto de la pantalla. La referencia evita repetirlo cuando
+  // React vuelve a renderizar con el mismo estado.
+  useEffect(() => {
+    if (state.status !== "success" || announced.current === state) return;
+    announced.current = state;
+    showToast(state.message ?? successMessage ?? "Guardado con éxito.");
+  }, [showToast, state, successMessage]);
+
+  // Solo queda visible el aviso general: lo que pertenece a un campo lo pinta
+  // el propio campo, debajo de él.
+  const generalMessage = state.status === "error" ? state.message : undefined;
 
   return (
-    <form
-      action={formAction}
+    <ValidatedForm
+      action={
+        confirmMessage
+          ? (formData: FormData) => {
+              if (window.confirm(confirmMessage)) formAction(formData);
+            }
+          : formAction
+      }
       className={className}
-      noValidate
-      onSubmit={(event) => {
-        if (!event.currentTarget.reportValidity()) {
-          event.preventDefault();
-          return;
-        }
-        if (confirmMessage && !window.confirm(confirmMessage)) {
-          event.preventDefault();
-        }
-      }}
+      rules={rules}
+      serverErrors={state.fieldErrors}
     >
       {children}
-      {state.message ? (
+      {generalMessage ? (
         <p
           aria-live="polite"
-          className={`avend-feedback ${messageClassName}`}
-          role={state.status === "error" ? "alert" : "status"}
+          className="avend-feedback avend-feedback--error"
+          role="alert"
+        >
+          {generalMessage}
+        </p>
+      ) : null}
+      {/* El aviso emergente confirma; este texto permanece. Hace falta para dar
+          contexto a lo que la acción deja en pantalla, como el enlace de
+          descarga temporal, que sin él aparecería suelto. */}
+      {state.status === "success" && state.message ? (
+        <p
+          aria-live="polite"
+          className="avend-feedback avend-feedback--success"
+          role="status"
         >
           {state.message}
         </p>
@@ -83,6 +115,8 @@ export function AdminActionForm({
         </a>
       ) : null}
       <SubmitButton label={submitLabel} />
-    </form>
+    </ValidatedForm>
   );
 }
+
+export { FormField };
