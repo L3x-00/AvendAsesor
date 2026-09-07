@@ -40,6 +40,20 @@ function uuid(value: SearchValue): string | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+/**
+ * Solo se acepta un día real del calendario: `Date.parse` desborda 2026-02-30
+ * al 2 de marzo y dejaría pasar una fecha que el administrador nunca eligió.
+ */
+function day(value: SearchValue): string | undefined {
+  const raw = clean(value, 10);
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== raw
+    ? undefined
+    : raw;
+}
+
 export function parseDocumentLibraryQuery(
   params: DocumentLibrarySearchParams,
 ): ParsedDocumentLibraryQuery {
@@ -60,7 +74,17 @@ export function parseDocumentLibraryQuery(
   const rawTechnicalStatus = clean(params.technicalStatus, 32);
   const rawSort = clean(params.sort, 32);
 
+  const createdFrom = day(params.createdFrom);
+  const createdTo = day(params.createdTo);
+  // Un rango invertido no devuelve nada y no explica por qué: se ignora el
+  // extremo inferior en lugar de vaciar la biblioteca en silencio.
+  const orderedFrom =
+    createdFrom && createdTo && createdFrom > createdTo ? undefined : createdFrom;
+
   return {
+    createdBy: uuid(params.createdBy),
+    createdFrom: orderedFrom,
+    createdTo,
     documentType,
     issuanceYear,
     issuingEntity: clean(params.issuingEntity, 255),
@@ -86,6 +110,9 @@ export function countDocumentLibraryFilters(
   query: ParsedDocumentLibraryQuery,
 ): number {
   return [
+    query.createdBy,
+    query.createdFrom,
+    query.createdTo,
     query.documentType,
     query.issuanceYear,
     query.issuingEntity,
@@ -95,6 +122,19 @@ export function countDocumentLibraryFilters(
     query.submoduleId,
     query.technicalStatus,
   ].filter((value) => value !== undefined).length;
+}
+
+/**
+ * El orden no es un filtro (no se cuenta como tal), así que limpiar filtros no
+ * debe descartar en silencio el criterio que el administrador eligió.
+ */
+export function clearedLibraryFiltersHref(
+  query: ParsedDocumentLibraryQuery,
+  basePath = "/admin/documents",
+): string {
+  return query.sort && query.sort !== "newest"
+    ? `${basePath}?sort=${encodeURIComponent(query.sort)}`
+    : basePath;
 }
 
 export function documentLibraryHref(
@@ -116,6 +156,9 @@ export function documentLibraryHref(
   if (query.technicalStatus) {
     params.set("technicalStatus", query.technicalStatus);
   }
+  if (query.createdBy) params.set("createdBy", query.createdBy);
+  if (query.createdFrom) params.set("createdFrom", query.createdFrom);
+  if (query.createdTo) params.set("createdTo", query.createdTo);
   if (query.sort && query.sort !== "newest") params.set("sort", query.sort);
   if (page > 1) params.set("page", String(page));
 

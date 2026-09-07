@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
@@ -11,6 +11,7 @@ import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-clie
 import { getAdminApiUrl } from "@/lib/admin-api/config";
 import {
   countDocumentLibraryFilters,
+  documentLibraryHref,
   parseDocumentLibraryQuery,
   type DocumentLibrarySearchParams,
 } from "@/lib/admin-api/document-library-query";
@@ -59,6 +60,25 @@ export default async function ModuleDetailPage({
     client.getDocumentSuggestions(),
     listReplacementDocumentCandidates(client),
   ]);
+  // Una página fuera de rango devuelve 0 filas y total 0, lo que borra la
+  // paginación y deja al administrador atrapado en una pantalla vacía que
+  // además dice "Aún no hay documentos registrados".
+  if (scopedQuery.page > 1 && library.items.length === 0) {
+    const firstPage = await client.listDocumentLibrary({
+      ...scopedQuery,
+      offset: 0,
+    });
+    if (firstPage.total > 0) {
+      redirect(
+        documentLibraryHref(
+          scopedQuery,
+          Math.ceil(firstPage.total / firstPage.limit),
+          `/admin/modules/${current.id}`,
+        ),
+      );
+    }
+  }
+
   const canUpload = current.isActive && children.length === 0;
   const activeFilterCount = Math.max(
     0,

@@ -23,6 +23,7 @@ export interface DocumentMetadataInitialValues {
   issuanceYear?: number | null;
   issuingEntity?: string | null;
   issuingEntityOther?: string | null;
+  keywords?: string | null;
   situation?: DocumentSituation;
   specificDependency?: string | null;
 }
@@ -346,6 +347,30 @@ export function DocumentMetadataFields({
             ))}
           </div>
         ) : null}
+      </div>
+
+      {/* La biblioteca ya indexaba metadata.keywords, pero ningún formulario
+          permitía capturarlas: la búsqueda por palabras clave que la interfaz
+          promete era inalcanzable salvo escribiendo JSON a mano. */}
+      <div className="block sm:col-span-2">
+        <label
+          className="text-base font-semibold"
+          htmlFor={`${prefix}-keywords`}
+        >
+          Palabras clave (opcional)
+        </label>
+        <input
+          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+          defaultValue={initial?.keywords ?? ""}
+          id={`${prefix}-keywords`}
+          maxLength={500}
+          name="keywords"
+          placeholder="Ej. licencia, ascenso, nombramiento"
+        />
+        <span className="mt-1 block text-sm text-avend-text-muted">
+          Sepáralas con comas. Sirven para encontrar el documento desde el
+          buscador del Historial.
+        </span>
       </div>
 
       {includeSituation ? (

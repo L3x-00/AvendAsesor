@@ -49,6 +49,7 @@ const documentRecord = {
   issuanceYear: 2026,
   issuingEntity: "MINEDU",
   issuingEntityOther: null,
+  keywords: null,
   metadata: { specificDependency: "Secretaría General" },
   publicationStatus: "active" as const,
   replacementDate: null,
@@ -99,6 +100,7 @@ const documentLibraryItem = {
   issuanceYear: documentRecord.issuanceYear,
   issuingEntity: documentRecord.issuingEntity,
   issuingEntityOther: documentRecord.issuingEntityOther,
+  keywords: documentRecord.keywords,
   metadata: documentRecord.metadata,
   moduleAssociations: [
     {
@@ -315,6 +317,9 @@ describe("AdminApiClient", () => {
 
     await expect(
       client.listDocumentLibrary({
+        createdBy: moduleRecord.id,
+        createdFrom: "2026-01-01",
+        createdTo: "2026-12-31",
         limit: 20,
         offset: 20,
         q: "licencia",
@@ -330,6 +335,10 @@ describe("AdminApiClient", () => {
 
     expect(String(request.mock.calls[0]?.[0])).toContain(
       "/admin/documents/library?limit=20&offset=20&sort=title&q=licencia&situation=current",
+    );
+    // Los dos filtros opcionales que el cliente enumeró viajan al servidor.
+    expect(String(request.mock.calls[0]?.[0])).toContain(
+      `createdBy=${moduleRecord.id}&createdFrom=2026-01-01&createdTo=2026-12-31`,
     );
     expect(request.mock.calls[1]?.[1]?.body).toBe(
       JSON.stringify({

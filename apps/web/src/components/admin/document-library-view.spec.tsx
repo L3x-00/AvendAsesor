@@ -68,6 +68,7 @@ const document: DocumentLibraryItem = {
   issuanceYear: 2026,
   issuingEntity: "Minedu",
   issuingEntityOther: null,
+  keywords: null,
   metadata: {},
   moduleAssociations: [
     {
@@ -211,5 +212,95 @@ describe("DocumentLibraryView", () => {
     expect(
       screen.getAllByText(/Instituto Pedagógico Regional/),
     ).toHaveLength(2);
+  });
+
+  it("offers the upload-date and uploader filters the client enumerated", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+        uploaders={[
+          { documentCount: 4, fullName: "Ana Auditora", id: versionId },
+        ]}
+      />,
+    );
+
+    expect(screen.getByLabelText("Cargado desde")).toHaveAttribute(
+      "name",
+      "createdFrom",
+    );
+    expect(screen.getByLabelText("Cargado hasta")).toHaveAttribute(
+      "name",
+      "createdTo",
+    );
+    const uploader = screen.getByLabelText("Administrador que lo cargó");
+    expect(uploader).toHaveAttribute("name", "createdBy");
+    expect(
+      screen.getByRole("option", { name: "Ana Auditora (4)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the uploader filter while no administrator has uploaded anything", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Administrador que lo cargó")).toBeNull();
+  });
+
+  it("keeps situation and technical status tellable apart", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    // Ambos conceptos caen en columnas contiguas: el lector de pantalla debe
+    // poder nombrarlos aunque el color sea parecido.
+    expect(screen.getAllByText("Situación:").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Estado técnico:").length).toBeGreaterThan(0);
+  });
+
+  it("groups submodules under their module so the choice is unambiguous", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    const group = screen
+      .getByLabelText("Submódulo")
+      .querySelector("optgroup");
+    expect(group).toHaveAttribute("label", "Evaluación docente");
+  });
+
+  it("lets a keyboard user reach the horizontally scrollable table", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    expect(
+      screen.getByRole("region", {
+        name: "Tabla de documentos, desplazable horizontalmente",
+      }),
+    ).toHaveAttribute("tabindex", "0");
   });
 });

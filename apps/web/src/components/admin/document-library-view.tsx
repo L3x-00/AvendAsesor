@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  clearedLibraryFiltersHref,
   documentLibraryHref,
   type ParsedDocumentLibraryQuery,
 } from "@/lib/admin-api/document-library-query";
@@ -12,6 +13,7 @@ import type {
   DocumentLibraryItem,
   DocumentLibraryPage,
   DocumentModuleAssociation,
+  DocumentUploader,
   ManagedModule,
 } from "@/lib/admin-api/types";
 import {
@@ -29,6 +31,7 @@ interface DocumentLibraryViewProps {
   modules: ManagedModule[];
   query: ParsedDocumentLibraryQuery;
   resultsTitle?: string;
+  uploaders?: DocumentUploader[];
 }
 
 const dateFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -95,25 +98,70 @@ function AssociationList({
   );
 }
 
+/**
+ * Situación y estado técnico son conceptos distintos que caen en columnas
+ * contiguas. Compartían color y forma, así que un documento Vigente + Listo
+ * mostraba dos píldoras verdes gemelas imposibles de distinguir de un vistazo.
+ * La situación conserva la píldora redonda; el estado técnico usa un chip
+ * rectangular con símbolo. El texto va a 16px, el mínimo del proyecto.
+ */
 function SituationBadge({ document }: { document: DocumentLibraryItem }) {
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-sm font-semibold ${situationClasses[document.situation]}`}
+      className={`inline-flex rounded-full border px-3 py-1 text-base font-semibold ${situationClasses[document.situation]}`}
     >
+      <span aria-hidden="true" className="mr-1.5">
+        ●
+      </span>
+      <span className="sr-only">Situación: </span>
       {formatDocumentSituation(document.situation)}
     </span>
   );
 }
 
+const technicalSymbols = {
+  error: "!",
+  pending_approval: "…",
+  ready: "✓",
+} as const;
+
 function TechnicalBadge({ document }: { document: DocumentLibraryItem }) {
   const content = getDocumentTechnicalStatusContent(document.technicalStatus);
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-sm font-semibold ${technicalClasses[document.technicalStatus]}`}
+      className={`inline-flex rounded-md border px-3 py-1 text-base font-semibold ${technicalClasses[document.technicalStatus]}`}
       title={content.description}
     >
+      <span aria-hidden="true" className="mr-1.5 font-bold">
+        {technicalSymbols[document.technicalStatus]}
+      </span>
+      <span className="sr-only">Estado técnico: </span>
       {content.label}
       <span className="sr-only">. {content.description}</span>
+    </span>
+  );
+}
+
+/**
+ * El orden por defecto («Más recientes») usa la fecha de la última versión, un
+ * dato que la tabla no mostraba: el listado parecía desordenado respecto de la
+ * única fecha visible. Se muestra cuando difiere de la fecha de registro.
+ */
+function LastVersionDate({ document }: { document: DocumentLibraryItem }) {
+  const uploadedAt = document.currentVersionUploadedAt;
+  if (!uploadedAt) return null;
+
+  const sameDay =
+    dateFormatter.format(new Date(uploadedAt)) ===
+    dateFormatter.format(new Date(document.createdAt));
+  if (sameDay) return null;
+
+  return (
+    <span className="mt-1 block break-words text-avend-text-muted">
+      Última versión:{" "}
+      <time dateTime={uploadedAt}>
+        {dateFormatter.format(new Date(uploadedAt))}
+      </time>
     </span>
   );
 }
@@ -182,6 +230,7 @@ export function DocumentLibraryView({
   modules,
   query,
   resultsTitle = "Biblioteca documental",
+  uploaders = [],
 }: DocumentLibraryViewProps) {
   const visibleModules = modules.filter((module) => !module.isDeleted);
   const rootModules = visibleModules.filter((module) => !module.parentModuleId);
@@ -192,6 +241,16 @@ export function DocumentLibraryView({
   const visibleSubmodules = selectedModule
     ? submodules.filter((module) => module.parentModuleId === selectedModule.id)
     : submodules;
+  // Sin módulo elegido la lista mezcla submódulos de los siete módulos. Se
+  // agrupan por su módulo padre para que el administrador sepa cuál elige.
+  const submodulesByParent = rootModules
+    .map((parent) => ({
+      parent,
+      children: visibleSubmodules.filter(
+        (module) => module.parentModuleId === parent.id,
+      ),
+    }))
+    .filter((group) => group.children.length > 0);
   const totalPages = Math.max(1, Math.ceil(library.total / library.limit));
 
   return (
@@ -233,15 +292,25 @@ export function DocumentLibraryView({
             >
               <option value="newest">Más recientes (última versión)</option>
               <option value="oldest">Más antiguos (última versión)</option>
-              <option value="year">Año (más reciente)</option>
+              <option value="year">Año (más reciente primero)</option>
               <option value="title">Título (A–Z)</option>
-              <option value="upload_date">Fecha de carga</option>
-              <option value="document_type">Tipo documental</option>
-              <option value="issuing_entity">Entidad emisora</option>
-              <option value="situation">Situación</option>
-              <option value="technical_status">Estado técnico</option>
+              <option value="upload_date">
+                Fecha de carga (más reciente primero)
+              </option>
+              <option value="document_type">Tipo documental (A–Z)</option>
+              <option value="issuing_entity">Entidad emisora (A–Z)</option>
+              <option value="situation">
+                Situación (Vigente → Archivado)
+              </option>
+              <option value="technical_status">
+                Estado técnico (Error primero)
+              </option>
               <option value="module">Módulo / submódulo</option>
             </select>
+            <span className="mt-1 block text-sm text-avend-text-muted">
+              «Más recientes» usa la fecha de la última versión subida; «Fecha
+              de carga» usa la fecha en que se registró el documento.
+            </span>
           </label>
 
           <fieldset className="contents">
@@ -331,17 +400,15 @@ export function DocumentLibraryView({
                   name="submoduleId"
                 >
                   <option value="">Todos</option>
-                  {visibleSubmodules.map((module) => {
-                    const parent = visibleModules.find(
-                      (candidate) => candidate.id === module.parentModuleId,
-                    );
-                    return (
-                      <option key={module.id} value={module.id}>
-                        {parent ? `${parent.name} — ` : ""}
-                        {module.name}
-                      </option>
-                    );
-                  })}
+                  {submodulesByParent.map((group) => (
+                    <optgroup key={group.parent.id} label={group.parent.name}>
+                      {group.children.map((module) => (
+                        <option key={module.id} value={module.id}>
+                          {module.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </label>
             ) : null}
@@ -375,6 +442,51 @@ export function DocumentLibraryView({
                 <option value="error">Error</option>
               </select>
             </label>
+            <label className="block lg:col-span-3" htmlFor="library-created-from">
+              <span className="text-base font-semibold">
+                Cargado desde
+              </span>
+              <input
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                defaultValue={query.createdFrom ?? ""}
+                id="library-created-from"
+                name="createdFrom"
+                type="date"
+              />
+            </label>
+            <label className="block lg:col-span-3" htmlFor="library-created-to">
+              <span className="text-base font-semibold">Cargado hasta</span>
+              <input
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                defaultValue={query.createdTo ?? ""}
+                id="library-created-to"
+                name="createdTo"
+                type="date"
+              />
+            </label>
+            {uploaders.length > 0 ? (
+              <label
+                className="block lg:col-span-6"
+                htmlFor="library-created-by"
+              >
+                <span className="text-base font-semibold">
+                  Administrador que lo cargó
+                </span>
+                <select
+                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  defaultValue={query.createdBy ?? ""}
+                  id="library-created-by"
+                  name="createdBy"
+                >
+                  <option value="">Todos</option>
+                  {uploaders.map((uploader) => (
+                    <option key={uploader.id} value={uploader.id}>
+                      {uploader.fullName} ({uploader.documentCount})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </fieldset>
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -386,7 +498,7 @@ export function DocumentLibraryView({
           </button>
           <Link
             className="inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
-            href={basePath}
+            href={clearedLibraryFiltersHref(query, basePath)}
           >
             Limpiar filtros
           </Link>
@@ -431,7 +543,14 @@ export function DocumentLibraryView({
           </div>
         ) : (
           <>
-            <div className="hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block">
+            {/* La tabla desborda a propósito (min-w 64rem): el contenedor debe
+                ser enfocable para poder desplazarlo solo con teclado. */}
+            <div
+              aria-label="Tabla de documentos, desplazable horizontalmente"
+              className="hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block"
+              role="region"
+              tabIndex={0}
+            >
               <table className="w-full min-w-[64rem] table-fixed border-collapse text-left text-base">
                 <thead className="bg-avend-surface-muted text-avend-navy">
                   <tr>
@@ -508,6 +627,7 @@ export function DocumentLibraryView({
                         <span className="mt-1 block break-words text-avend-text-muted">
                           {document.createdByName ?? "Cuenta no disponible"}
                         </span>
+                        <LastVersionDate document={document} />
                       </td>
                       <td className="sticky right-0 w-40 border-l border-avend-border bg-avend-surface px-3 py-4">
                         <DocumentActions compact document={document} />
@@ -565,6 +685,7 @@ export function DocumentLibraryView({
                           {dateFormatter.format(new Date(document.createdAt))}
                         </time>{" "}
                         · {document.createdByName ?? "Cuenta no disponible"}
+                        <LastVersionDate document={document} />
                       </dd>
                     </div>
                   </dl>
