@@ -1,13 +1,16 @@
 "use client";
 
 import {
-  type FormEvent,
   useCallback,
   useEffect,
   useId,
   useRef,
   useState,
 } from "react";
+import { FormField } from "@/components/ui/form-field";
+import { useToast } from "@/components/ui/toast";
+import { ValidatedForm } from "@/components/ui/validated-form";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import styles from "./consultation-feedback.module.css";
 
 const reportReasons = [
@@ -29,6 +32,33 @@ const reportReasons = [
 ] as const;
 
 type FeedbackDialog = "report" | "suggestion" | null;
+
+/** 10 MB es el máximo que acepta el endpoint; decirlo antes ahorra la subida. */
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+const REPORT_RULES: FieldRules = {
+  file: [
+    {
+      accept: [".jpg", ".jpeg", ".png", ".webp"],
+      kind: "file",
+      label: "La captura",
+      maxBytes: ATTACHMENT_MAX_BYTES,
+    },
+  ],
+  reason: [{ kind: "required", label: "El motivo del reporte" }],
+};
+
+const SUGGESTION_RULES: FieldRules = {
+  comment: [{ kind: "required", label: "La sugerencia" }],
+  file: [
+    {
+      accept: [".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx"],
+      kind: "file",
+      label: "El archivo",
+      maxBytes: ATTACHMENT_MAX_BYTES,
+    },
+  ],
+};
 
 interface ConsultationFeedbackProps {
   answerMessageId?: string;
@@ -81,8 +111,7 @@ export function ConsultationFeedback({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-  const reportFormRef = useRef<HTMLFormElement>(null);
-  const suggestionFormRef = useRef<HTMLFormElement>(null);
+  const { showToast } = useToast();
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const reportSubmissionIdRef = useRef<string | null>(null);
@@ -146,11 +175,9 @@ export function ConsultationFeedback({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [closeDialog, dialog, isSubmitting]);
 
-  async function submitReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitReport(data: FormData, form: HTMLFormElement) {
     if (!answerMessageId || isSubmitting) return;
 
-    const data = new FormData(event.currentTarget);
     data.set("answerMessageId", answerMessageId);
     data.set("submissionId", reportSubmissionIdRef.current ?? submissionId());
     setIsSubmitting(true);
@@ -166,10 +193,11 @@ export function ConsultationFeedback({
         setMessage(await requestMessage(response));
         return;
       }
-      reportFormRef.current?.reset();
+      form.reset();
       reportSubmissionIdRef.current = null;
       setIsError(false);
       setMessage("Gracias. Tu reporte fue enviado para revisión.");
+      showToast("Gracias. Tu reporte fue enviado para revisión.");
       closeDialog();
     } catch {
       setIsError(true);
@@ -181,11 +209,9 @@ export function ConsultationFeedback({
     }
   }
 
-  async function submitSuggestion(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitSuggestion(data: FormData, form: HTMLFormElement) {
     if (isSubmitting) return;
 
-    const data = new FormData(event.currentTarget);
     if (conversationId) data.set("conversationId", conversationId);
     data.set(
       "submissionId",
@@ -204,12 +230,13 @@ export function ConsultationFeedback({
         setMessage(await requestMessage(response));
         return;
       }
-      suggestionFormRef.current?.reset();
+      form.reset();
       suggestionSubmissionIdRef.current = null;
       setIsError(false);
       setMessage(
         "Gracias por tu sugerencia. La tendremos en cuenta para seguir mejorando AVEND ASESOR.",
       );
+      showToast("Gracias por tu sugerencia. Ya la registramos.");
       closeDialog();
     } catch {
       setIsError(true);
@@ -293,13 +320,12 @@ export function ConsultationFeedback({
                 ×
               </button>
             </div>
-            <form
+            <ValidatedForm
               className={styles.form}
-              onSubmit={submitReport}
-              ref={reportFormRef}
+              onValidSubmit={submitReport}
+              rules={REPORT_RULES}
             >
-              <label>
-                Motivo del reporte
+              <FormField label="Motivo del reporte" name="reason" required>
                 <select defaultValue="" name="reason" required>
                   <option disabled value="">
                     Selecciona un motivo
@@ -310,20 +336,25 @@ export function ConsultationFeedback({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                Cuéntanos qué ocurrió <span>(opcional)</span>
+              </FormField>
+              <FormField
+                hint="Opcional."
+                label="Cuéntanos qué ocurrió"
+                name="comment"
+              >
                 <textarea maxLength={2000} name="comment" rows={4} />
-              </label>
-              <label>
-                Captura o imagen{" "}
-                <span>(opcional, JPG, PNG o WebP; máximo 10 MB)</span>
+              </FormField>
+              <FormField
+                hint="Opcional. JPG, PNG o WebP; máximo 10 MB."
+                label="Captura o imagen"
+                name="file"
+              >
                 <input
                   accept="image/jpeg,image/png,image/webp"
                   name="file"
                   type="file"
                 />
-              </label>
+              </FormField>
               <p className={styles.notice}>
                 Puedes adjuntar una captura o foto para ayudarnos a revisar el
                 problema.
@@ -345,7 +376,7 @@ export function ConsultationFeedback({
                   {isSubmitting ? "Enviando…" : "Enviar reporte"}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </section>
         </div>
       ) : null}
@@ -377,13 +408,12 @@ export function ConsultationFeedback({
                 ×
               </button>
             </div>
-            <form
+            <ValidatedForm
               className={styles.form}
-              onSubmit={submitSuggestion}
-              ref={suggestionFormRef}
+              onValidSubmit={submitSuggestion}
+              rules={SUGGESTION_RULES}
             >
-              <label>
-                Sugerencia
+              <FormField label="Sugerencia" name="comment" required>
                 <textarea
                   maxLength={2000}
                   minLength={1}
@@ -391,16 +421,18 @@ export function ConsultationFeedback({
                   required
                   rows={5}
                 />
-              </label>
-              <label>
-                Adjuntar archivo{" "}
-                <span>(opcional: imagen, PDF, Word; máximo 10 MB)</span>
+              </FormField>
+              <FormField
+                hint="Opcional. Imagen, PDF o Word; máximo 10 MB."
+                label="Adjuntar archivo"
+                name="file"
+              >
                 <input
                   accept="image/jpeg,image/png,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.doc,.docx"
                   name="file"
                   type="file"
                 />
-              </label>
+              </FormField>
               <p className={styles.notice}>
                 ¿Quieres compartir una norma o documento? Puedes adjuntar una
                 imagen, PDF o archivo Word. No se usa este contenido para
@@ -423,7 +455,7 @@ export function ConsultationFeedback({
                   {isSubmitting ? "Enviando…" : "Enviar sugerencia"}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </section>
         </div>
       ) : null}

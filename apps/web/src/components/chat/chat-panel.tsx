@@ -779,7 +779,9 @@ export function ChatPanel({
                       <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
                     </svg>
                   </span>
-                  <span>{submodule.name}</span>
+                  <span className="avend-chat-module-name">
+                    {submodule.name}
+                  </span>
                 </button>
               ))}
             </section>
