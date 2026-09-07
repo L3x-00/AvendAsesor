@@ -9,11 +9,28 @@ import { AdminApiError, type AdminApiClient } from "@/lib/admin-api/client";
 import { type AdminActionState } from "@/lib/admin-api/action-state";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
 
-class FormValidationError extends Error {}
+/**
+ * Un error de validación sabe a QUÉ campo pertenece. Sin ese dato el
+ * formulario solo podía pintar un mensaje general y el administrador tenía que
+ * adivinar cuál de los campos lo había provocado.
+ */
+class FormValidationError extends Error {
+  readonly field?: string;
+
+  constructor(message: string, field?: string) {
+    super(message);
+    this.field = field;
+  }
+}
 
 function actionFailure(error: unknown): AdminActionState {
   if (error instanceof FormValidationError) {
-    return { message: error.message, status: "error" };
+    return error.field
+      ? {
+          fieldErrors: { [error.field]: error.message },
+          status: "error",
+        }
+      : { message: error.message, status: "error" };
   }
 
   if (error instanceof AdminApiError) {
@@ -73,7 +90,7 @@ function requiredText(formData: FormData, name: string, label: string): string {
   const value = formData.get(name);
 
   if (typeof value !== "string" || !value.trim()) {
-    throw new FormValidationError(`${label} es obligatorio.`);
+    throw new FormValidationError(`${label} es obligatorio.`, name);
   }
 
   return value.trim();
@@ -103,7 +120,7 @@ function optionalInteger(
   const parsed = Number(value);
 
   if (!Number.isInteger(parsed)) {
-    throw new FormValidationError(`${label} debe ser un número entero.`);
+    throw new FormValidationError(`${label} debe ser un número entero.`, name);
   }
 
   return parsed;
@@ -117,7 +134,7 @@ function optionalBoolean(
   if (value === undefined) return undefined;
   if (value === "true") return true;
   if (value === "false") return false;
-  throw new FormValidationError(`${name} no es válido.`);
+  throw new FormValidationError(`El valor de ${name} no es válido.`, name);
 }
 
 function optionalJsonObject(
@@ -192,7 +209,7 @@ function documentMetadataPayload(formData: FormData): Record<string, unknown> {
   const issuanceYear = optionalInteger(formData, "issuanceYear", "El año");
 
   if (issuanceYear === undefined) {
-    throw new FormValidationError("El año es obligatorio.");
+    throw new FormValidationError("El año es obligatorio.", "issuanceYear");
   }
 
   return {
@@ -300,7 +317,7 @@ export async function setModuleStatusAction(
       const reason = optionalText(formData, "reason");
 
       if (!isActive && !reason) {
-        throw new FormValidationError("Indica el motivo de la desactivación.");
+        throw new FormValidationError("Indica el motivo de la desactivación.", "reason");
       }
 
       await client.setModuleStatus(moduleId, isActive, reason);
@@ -371,7 +388,7 @@ export async function setDocumentStatusAction(
       const reason = optionalText(formData, "reason");
 
       if (!isActive && !reason) {
-        throw new FormValidationError("Indica el motivo de la desactivación.");
+        throw new FormValidationError("Indica el motivo de la desactivación.", "reason");
       }
 
       await client.setDocumentStatus(documentId, isActive, reason);
@@ -402,7 +419,7 @@ export async function setDocumentSituationAction(
           situation as (typeof allowedSituations)[number],
         )
       ) {
-        throw new FormValidationError("Selecciona una situación válida.");
+        throw new FormValidationError("Selecciona una situación válida.", "situation");
       }
 
       const reason = optionalText(formData, "reason");
@@ -424,11 +441,11 @@ export async function setDocumentSituationAction(
         (situation === "archived" && archiveReasonCode === "REPLACED_BY_NEWER");
 
       if (situation === "archived" && !archiveReasonCode) {
-        throw new FormValidationError("Selecciona el motivo del archivo.");
+        throw new FormValidationError("Selecciona el motivo del archivo.", "archiveReasonCode");
       }
 
       if (archiveReasonCode === "OTHER" && !archiveReasonDetail) {
-        throw new FormValidationError("Especifica el motivo del archivo.");
+        throw new FormValidationError("Especifica el motivo del archivo.", "archiveReasonDetail");
       }
 
       if (
@@ -590,11 +607,11 @@ export async function reviewUnansweredQuestionAction(
     ] as const;
 
     if (!categories.includes(category as (typeof categories)[number])) {
-      throw new FormValidationError("Selecciona una clasificación válida.");
+      throw new FormValidationError("Selecciona una clasificación válida.", "classification");
     }
 
     if (decision !== "resolved" && decision !== "dismissed") {
-      throw new FormValidationError("Selecciona una decisión válida.");
+      throw new FormValidationError("Selecciona una decisión válida.", "decision");
     }
 
     await client.reviewUnansweredQuestion(questionId, {
@@ -626,14 +643,14 @@ export async function updateAdministrativeUserAction(
 
     if (accountStatus && accountStatus !== "__keep__") {
       if (accountStatus !== "active" && accountStatus !== "suspended") {
-        throw new FormValidationError("Selecciona un estado de cuenta válido.");
+        throw new FormValidationError("Selecciona un estado de cuenta válido.", "accountStatus");
       }
       payload.accountStatus = accountStatus;
     }
 
     if (role && role !== "__keep__") {
       if (role !== "admin" && role !== "docente" && role !== "superadmin") {
-        throw new FormValidationError("Selecciona un rol válido.");
+        throw new FormValidationError("Selecciona un rol válido.", "role");
       }
       payload.role = role;
     }
@@ -670,6 +687,7 @@ export async function createAdministrativeUserAction(
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new FormValidationError(
         "Escribe un correo electrónico válido; es el usuario con el que iniciará sesión.",
+        "email",
       );
     }
 
@@ -693,7 +711,7 @@ export async function createAdministrativeUserAction(
 
     if (role) {
       if (role !== "admin" && role !== "docente" && role !== "superadmin") {
-        throw new FormValidationError("Selecciona un rol válido.");
+        throw new FormValidationError("Selecciona un rol válido.", "role");
       }
       payload.role = role;
     }
@@ -701,7 +719,7 @@ export async function createAdministrativeUserAction(
     if (startInput) {
       const startInstant = accessStartInstant(startInput);
       if (!startInstant) {
-        throw new FormValidationError("La fecha de inicio no es válida.");
+        throw new FormValidationError("La fecha de inicio no es válida.", "accessStartAt");
       }
       payload.accessStartAt = startInstant;
     }
@@ -709,7 +727,7 @@ export async function createAdministrativeUserAction(
     if (expiresInput) {
       const expiryInstant = accessExpiryInstant(expiresInput);
       if (!expiryInstant) {
-        throw new FormValidationError("La fecha de fin no es válida.");
+        throw new FormValidationError("La fecha de fin no es válida.", "accessExpiresAt");
       }
       if (Date.parse(expiryInstant) < Date.now()) {
         throw new FormValidationError(
@@ -726,6 +744,7 @@ export async function createAdministrativeUserAction(
     ) {
       throw new FormValidationError(
         "La fecha de inicio no puede ser posterior a la de fin.",
+        "accessExpiresAt",
       );
     }
 
@@ -759,7 +778,7 @@ export async function updateAccessWindowAction(
     if (startInput) {
       const startInstant = accessStartInstant(startInput);
       if (!startInstant) {
-        throw new FormValidationError("La fecha de inicio no es válida.");
+        throw new FormValidationError("La fecha de inicio no es válida.", "accessStartAt");
       }
       payload.accessStartAt = startInstant;
     }
@@ -767,7 +786,7 @@ export async function updateAccessWindowAction(
     if (expiresInput) {
       const expiryInstant = accessExpiryInstant(expiresInput);
       if (!expiryInstant) {
-        throw new FormValidationError("La fecha de fin no es válida.");
+        throw new FormValidationError("La fecha de fin no es válida.", "accessExpiresAt");
       }
       // The database rejects a past expiry. Saying so here keeps the main flow
       // of the "Expirados" filter actionable instead of a generic API error.
@@ -809,7 +828,7 @@ export async function setAdminModulePermissionAction(
     const reason = requiredText(formData, "reason", "El motivo");
     const rawAccess = requiredText(formData, "canAccess", "El permiso");
     if (rawAccess !== "true" && rawAccess !== "false") {
-      throw new FormValidationError("Selecciona un permiso válido.");
+      throw new FormValidationError("Selecciona un permiso válido.", "canAccess");
     }
     const canAccess = rawAccess === "true";
     await client.setAdminModulePermission(userId, canAccess, reason);
