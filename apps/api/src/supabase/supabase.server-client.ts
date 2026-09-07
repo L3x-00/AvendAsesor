@@ -429,8 +429,19 @@ export interface SupabaseDatabase {
         Args: { p_actor_id: string; p_document_id: string; p_reason: string };
         Returns: null;
       };
+      list_document_uploaders: {
+        Args: Record<never, never>;
+        Returns: {
+          document_count: number | string;
+          full_name: string;
+          id: string;
+        }[];
+      };
       list_document_library: {
         Args: {
+          p_created_by: string | null;
+          p_created_from: string | null;
+          p_created_to: string | null;
           p_document_type: string | null;
           p_issuance_year: number | null;
           p_issuing_entity: string | null;

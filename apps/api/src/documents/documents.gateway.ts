@@ -15,6 +15,9 @@ import type {
 } from './document-governance.constants';
 
 export interface DocumentLibraryQuery {
+  createdBy?: string;
+  createdFrom?: string;
+  createdTo?: string;
   documentType?: string;
   issuanceYear?: number;
   issuingEntity?: string;
@@ -26,6 +29,13 @@ export interface DocumentLibraryQuery {
   sort: DocumentLibrarySort;
   submoduleId?: string;
   technicalStatus?: DocumentTechnicalStatus;
+}
+
+/** Feeds the "Administrador que lo cargó" filter without exposing profiles. */
+export interface DocumentUploader {
+  documentCount: number;
+  fullName: string;
+  id: string;
 }
 
 export interface CreateDocumentRecord {
@@ -110,6 +120,7 @@ export interface DocumentsGateway {
     additionalDetails: string[];
     specificDependencies: string[];
   }>;
+  listUploaders(): Promise<DocumentUploader[]>;
   logicalDelete(
     documentId: string,
     reason: string,

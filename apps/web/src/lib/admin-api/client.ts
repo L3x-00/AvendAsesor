@@ -5,6 +5,7 @@ import {
   downloadUrlSchema,
   adminModulePermissionSchema,
   documentSuggestionsSchema,
+  documentUploaderListSchema,
   documentLibraryPageSchema,
   adminHomeDashboardSchema,
   administrativeUserSchema,
@@ -28,6 +29,7 @@ import {
   administrativeUserPageSchema,
   type DownloadUrl,
   type DocumentSuggestions,
+  type DocumentUploader,
   type DocumentLibraryPage,
   type DocumentLibraryQuery,
   type DocumentSituation,
@@ -118,6 +120,14 @@ export class AdminApiClient {
     );
   }
 
+  async listDocumentUploaders(): Promise<DocumentUploader[]> {
+    return this.send(
+      "/admin/documents/uploaders",
+      { method: "GET" },
+      documentUploaderListSchema,
+    );
+  }
+
   async getDownloadUrl(
     documentId: string,
     versionId?: string,
@@ -194,6 +204,9 @@ export class AdminApiClient {
     if (filters.technicalStatus) {
       query.set("technicalStatus", filters.technicalStatus);
     }
+    if (filters.createdBy) query.set("createdBy", filters.createdBy);
+    if (filters.createdFrom) query.set("createdFrom", filters.createdFrom);
+    if (filters.createdTo) query.set("createdTo", filters.createdTo);
 
     return this.send(
       `/admin/documents/library?${query.toString()}`,

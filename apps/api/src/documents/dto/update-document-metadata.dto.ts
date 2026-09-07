@@ -69,6 +69,13 @@ export class UpdateDocumentMetadataDto {
   @trimDocumentText
   issuingEntityOther?: string | null;
 
+  /** Palabras clave libres del administrador; alimentan el buscador. */
+  @IsOptional()
+  @IsString()
+  @Length(2, 500)
+  @trimDocumentText
+  keywords?: string | null;
+
   @IsOptional()
   @IsObject()
   @parseJsonObject

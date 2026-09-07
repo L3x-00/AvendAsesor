@@ -139,6 +139,7 @@ describe('API endpoints (e2e)', () => {
     issuanceYear: 2026,
     issuingEntity: 'MINEDU',
     issuingEntityOther: null,
+    keywords: null,
     metadata: {},
     publicationStatus: 'active',
     replacementDate: null,

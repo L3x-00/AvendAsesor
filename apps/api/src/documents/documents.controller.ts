@@ -41,6 +41,7 @@ import type {
   ManagedDocumentDetails,
   DocumentLibraryPage,
 } from './domain/document';
+import type { DocumentUploader } from './documents.gateway';
 import { DocumentsService } from './documents.service';
 import { MulterExceptionFilter } from './multer-exception.filter';
 import { MAX_PDF_BYTES } from './pdf-inspection.service';
@@ -88,6 +89,11 @@ export class DocumentsController {
     specificDependencies: string[];
   }> {
     return this.documentsService.listSuggestions();
+  }
+
+  @Get('uploaders')
+  listUploaders(): Promise<DocumentUploader[]> {
+    return this.documentsService.listUploaders();
   }
 
   @Get(':id')

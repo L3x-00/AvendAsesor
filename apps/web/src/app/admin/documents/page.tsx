@@ -20,9 +20,10 @@ export default async function DocumentsPage({
   const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
-  const [initialLibrary, modules] = await Promise.all([
+  const [initialLibrary, modules, uploaders] = await Promise.all([
     client.listDocumentLibrary(query),
     client.listModules("all"),
+    client.listDocumentUploaders(),
   ]);
 
   if (query.page > 1 && initialLibrary.items.length === 0) {
@@ -43,6 +44,7 @@ export default async function DocumentsPage({
         library={initialLibrary}
         modules={modules}
         query={query}
+        uploaders={uploaders}
       />
     </AdminPage>
   );

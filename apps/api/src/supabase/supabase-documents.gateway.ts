@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { PostgrestError } from '@supabase/supabase-js';
+import { z } from 'zod';
 import {
   toManagedDocument,
   toDocumentLibraryRow,
@@ -22,14 +23,24 @@ import type {
   DocumentMetadataPatch,
   DocumentLibraryQuery,
   DocumentsGateway,
+  DocumentUploader,
 } from '../documents/documents.gateway';
 import type { Json, SupabaseServerClient } from './supabase.server-client';
 
 const DOCUMENT_COLUMNS =
   'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,situation,replacement_document_id,replacement_date,replacement_year,replacement_reason,replacement_observation,archive_reason_code,archive_reason_detail,archive_observation,approval_status,approval_updated_at,approval_updated_by,approved_version_id,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
 const DOCUMENT_VERSION_COLUMNS =
-  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by';
+  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by,uploaded_by_name';
 const NORMATIVE_DOCUMENTS_BUCKET = 'normative-documents';
+
+// `count(*)` viaja como cadena cuando PostgREST serializa un bigint.
+const uploaderRowsSchema = z.array(
+  z.object({
+    document_count: z.union([z.number().int(), z.string().regex(/^\d+$/)]),
+    full_name: z.string(),
+    id: z.string().uuid(),
+  }),
+);
 
 function toJson(value: Record<string, unknown>): Json {
   return value as Json;
@@ -293,6 +304,9 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     const { data, error } = await this.requireClient().rpc(
       'list_document_library',
       {
+        p_created_by: options.createdBy ?? null,
+        p_created_from: options.createdFrom ?? null,
+        p_created_to: options.createdTo ?? null,
         p_document_type: options.documentType ?? null,
         p_issuance_year: options.issuanceYear ?? null,
         p_issuing_entity: options.issuingEntity ?? null,
@@ -371,6 +385,27 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
       additionalDetails: value.additionalDetails,
       specificDependencies: value.specificDependencies,
     };
+  }
+
+  async listUploaders(): Promise<DocumentUploader[]> {
+    const { data, error } = await this.requireClient().rpc(
+      'list_document_uploaders',
+    );
+
+    if (error) databaseError(error);
+
+    const parsed = uploaderRowsSchema.safeParse(data ?? []);
+    if (!parsed.success) {
+      throw new InternalServerErrorException(
+        'Document uploader data is invalid.',
+      );
+    }
+
+    return parsed.data.map((row) => ({
+      documentCount: Number(row.document_count),
+      fullName: row.full_name,
+      id: row.id,
+    }));
   }
 
   async logicalDelete(
