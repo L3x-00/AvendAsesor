@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   useEffect,
   useRef,
@@ -44,6 +45,19 @@ function isAdministrative(role: TeacherRole | undefined): boolean {
   return role === "admin" || role === "superadmin";
 }
 
+/**
+ * Cuando el marco lo aporta el layout compartido, la sección activa no puede
+ * llegar por prop: el layout no sabe cuál de sus hijos se está mostrando. Se
+ * deduce de la URL, que además cambia en el instante del clic, así que el
+ * resaltado se mueve sin esperar al servidor.
+ */
+function sectionFromPathname(pathname: string): TeacherSection {
+  if (pathname.startsWith("/guide")) return "guide";
+  if (pathname.startsWith("/history")) return "history";
+  if (pathname.startsWith("/profile")) return "profile";
+  return "chat";
+}
+
 /** Solo los módulos raíz se listan en la barra lateral; los submódulos se
  * muestran en la zona principal de trabajo (guía visual §3–§4). */
 function parentModules(modules: ChatModule[]): ChatModule[] {
@@ -53,7 +67,9 @@ function parentModules(modules: ChatModule[]): ChatModule[] {
 }
 
 interface TeacherShellProps {
-  activeSection: TeacherSection;
+  /** Solo para quien renderiza el marco por su cuenta (el chat). Si se omite,
+   * se deduce de la ruta actual. */
+  activeSection?: TeacherSection;
   children: ReactNode;
   moduleNavigationDisabled?: boolean;
   modules: ChatModule[];
@@ -284,6 +300,8 @@ export function TeacherShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuDetailsRef = useRef<HTMLDetailsElement>(null);
   const mobileMenuSummaryRef = useRef<HTMLElement>(null);
+  const pathname = usePathname();
+  const currentSection = activeSection ?? sectionFromPathname(pathname ?? "/");
 
   useEffect(() => {
     const details = mobileMenuDetailsRef.current;
@@ -336,7 +354,7 @@ export function TeacherShell({
           tone="dark-surface"
         />
         <TeacherNavigation
-          activeSection={activeSection}
+          activeSection={currentSection}
           moduleNavigationDisabled={moduleNavigationDisabled}
           modules={modules}
           onModuleSelect={onModuleSelect}
@@ -373,7 +391,7 @@ export function TeacherShell({
               <span>Menú</span>
             </summary>
             <TeacherNavigation
-              activeSection={activeSection}
+              activeSection={currentSection}
               moduleNavigationDisabled={moduleNavigationDisabled}
               modules={modules}
               onModuleSelect={

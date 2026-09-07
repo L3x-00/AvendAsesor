@@ -10,7 +10,7 @@ const { deleteConversationAction } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("@/app/history/actions", () => ({
+vi.mock("@/app/(teacher)/history/actions", () => ({
   deleteConversationAction,
   initialHistoryActionState: { message: null, status: "idle" },
 }));

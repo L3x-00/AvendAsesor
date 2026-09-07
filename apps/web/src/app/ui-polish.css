@@ -365,3 +365,101 @@ button.avend-teacher-new-chat:disabled,
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Esqueletos de sección
+   ---------------------------------------------------------------------------
+   Sustituyen a la portada de pantalla completa al cambiar de sección. Solo
+   ocupan el área que realmente se está reemplazando, de modo que la barra
+   lateral y la cabecera permanecen visibles y la vista no da un salto.
+   -------------------------------------------------------------------------- */
+
+.avend-visually-hidden {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.avend-section-loading {
+  padding: clamp(1rem, 4vw, 2rem);
+}
+
+.avend-section-loading-shapes {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: clamp(1rem, 4vw, 2rem) 0;
+}
+
+.avend-section-loading-shapes span {
+  animation: avend-skeleton-shimmer 1.5s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--avend-surface-muted) 25%,
+    var(--avend-soft-blue) 45%,
+    var(--avend-surface-muted) 65%
+  );
+  background-size: 220% 100%;
+  border-radius: 99px;
+  height: 0.75rem;
+  width: 100%;
+}
+
+.avend-section-loading-shapes span:nth-child(3) {
+  width: 82%;
+}
+
+.avend-section-loading-shapes span:nth-child(4) {
+  width: 64%;
+}
+
+.avend-section-loading-title {
+  height: 1.75rem !important;
+  margin-bottom: 0.75rem;
+  max-width: 20rem;
+}
+
+/* Silueta de la barra lateral del chat: mismas medidas que la real para que el
+   cambio a la vista definitiva no desplace nada. */
+.avend-sidebar-loading-logo,
+.avend-sidebar-loading-links span {
+  animation: avend-skeleton-shimmer 1.8s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    rgb(255 255 255 / 8%) 25%,
+    rgb(255 255 255 / 18%) 45%,
+    rgb(255 255 255 / 8%) 65%
+  );
+  background-size: 220% 100%;
+  border-radius: 0.5rem;
+  display: block;
+}
+
+.avend-sidebar-loading-logo {
+  height: 2.5rem;
+  margin: 0 0 1.75rem;
+  max-width: 7.5rem;
+}
+
+.avend-sidebar-loading-links {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.avend-sidebar-loading-links span {
+  height: 2.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-section-loading-shapes span,
+  .avend-sidebar-loading-logo,
+  .avend-sidebar-loading-links span {
+    animation: none;
+  }
+}
