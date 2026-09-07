@@ -67,7 +67,10 @@ function extensionFor(
 }
 
 function safeOriginalFileName(value: string): string {
-  return [...basename(value || 'adjunto')]
+  // Uploads can arrive from Windows or POSIX clients while the API runs on a
+  // different OS. Normalize both separators before taking the basename so a
+  // Windows traversal prefix is never retained by a Linux deployment.
+  return [...basename((value || 'adjunto').replace(/\\/gu, '/'))]
     .filter((character) => {
       const codePoint = character.codePointAt(0);
       return (
