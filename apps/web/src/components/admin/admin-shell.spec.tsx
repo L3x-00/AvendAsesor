@@ -1,21 +1,41 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { AdminShell } from "./admin-shell";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminShellFrame } from "./admin-shell";
 
-describe("AdminShell", () => {
+const usePathname = vi.fn<() => string | null>();
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => usePathname(),
+}));
+
+function renderFrame(
+  pathname: string,
+  props: Partial<{
+    modulesAccess: boolean;
+    userName: string;
+    userRole: "admin" | "superadmin";
+  }> = {},
+) {
+  usePathname.mockReturnValue(pathname);
+
+  return render(
+    <AdminShellFrame
+      modulesAccess={props.modulesAccess ?? true}
+      userName={props.userName ?? "Juan Avend"}
+      userRole={props.userRole ?? "superadmin"}
+    >
+      <p>Contenido administrativo</p>
+    </AdminShellFrame>,
+  );
+}
+
+describe("AdminShellFrame", () => {
+  beforeEach(() => {
+    usePathname.mockReset();
+  });
+
   it("renders only the authorized SUPERADMIN sections in their specified order", () => {
-    const { container } = render(
-      <AdminShell
-        activeSection="home"
-        modulesAccess
-        description="Descripción"
-        title="Administración"
-        userName="Juan Avend"
-        userRole="superadmin"
-      >
-        <p>Contenido administrativo</p>
-      </AdminShell>,
-    );
+    const { container } = renderFrame("/admin");
     const sidebar = within(container.querySelector("aside") as HTMLElement);
     const navigation = sidebar.getByRole("navigation", {
       name: "Administración",
@@ -46,18 +66,7 @@ describe("AdminShell", () => {
   });
 
   it("shows the verified identity, role and bordered sign-out action", () => {
-    const { container } = render(
-      <AdminShell
-        activeSection="users"
-        modulesAccess
-        description="Descripción"
-        title="Usuarios"
-        userName="Juan Avend"
-        userRole="superadmin"
-      >
-        <p>Contenido administrativo</p>
-      </AdminShell>,
-    );
+    const { container } = renderFrame("/admin/users");
     const sidebar = within(container.querySelector("aside") as HTMLElement);
 
     expect(sidebar.getByText("JA")).toHaveAttribute("aria-hidden", "true");
@@ -72,70 +81,17 @@ describe("AdminShell", () => {
   });
 
   it("uses the first two letters when the verified profile has one name", () => {
-    const { container } = render(
-      <AdminShell
-        activeSection="home"
-        modulesAccess
-        description="Descripción"
-        title="Administración"
-        userName="Usuario"
-        userRole="superadmin"
-      >
-        <p>Contenido administrativo</p>
-      </AdminShell>,
-    );
+    const { container } = renderFrame("/admin", { userName: "Usuario" });
     const sidebar = within(container.querySelector("aside") as HTMLElement);
 
     expect(sidebar.getByText("US")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("supports the exact dashboard heading, welcome and live-time slot", () => {
-    const { container } = render(
-      <AdminShell
-        activeSection="home"
-        description="Resumen general del sistema y accesos principales."
-        eyebrow={null}
-        headerAside={<time>12:45:32 a. m. | Lunes, 31 de agosto de 2026</time>}
-        modulesAccess
-        title="PANEL DE ADMINISTRACIÓN AVEND ASESOR"
-        userName="Juan Avend"
-        userRole="superadmin"
-        welcome="¡Bienvenido de nuevo, Administrador!"
-      >
-        <p>Contenido administrativo</p>
-      </AdminShell>,
-    );
-
-    expect(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "PANEL DE ADMINISTRACIÓN AVEND ASESOR",
-      }),
-    ).toBeVisible();
-    expect(
-      screen.getByText("¡Bienvenido de nuevo, Administrador!"),
-    ).toBeVisible();
-    expect(
-      screen.getByText("Resumen general del sistema y accesos principales."),
-    ).toBeVisible();
-    expect(screen.queryByText("Administración", { selector: "p" })).toBeNull();
-    expect(screen.getByRole("time")).toBeVisible();
-    expect(container.firstElementChild).toHaveClass("avend-admin-shell--home");
-  });
-
   it("keeps the current section explicit and hides Usuarios from ADMIN", () => {
-    const { container } = render(
-      <AdminShell
-        activeSection="documents"
-        modulesAccess
-        description="Descripción"
-        title="Historial"
-        userName="María Administradora"
-        userRole="admin"
-      >
-        <p>Contenido administrativo</p>
-      </AdminShell>,
-    );
+    const { container } = renderFrame("/admin/documents", {
+      userName: "María Administradora",
+      userRole: "admin",
+    });
     const sidebar = within(container.querySelector("aside") as HTMLElement);
 
     expect(
@@ -146,5 +102,43 @@ describe("AdminShell", () => {
     expect(
       screen.getByRole("link", { name: "Saltar al contenido principal" }),
     ).toHaveAttribute("href", "#main-content");
+  });
+
+  /**
+   * La sección activa y la variante de Inicio ya no llegan por prop: el layout
+   * que renderiza el marco no sabe cuál de sus hijos se muestra. Si esta
+   * deducción se rompe, la barra lateral deja de señalar dónde está el usuario
+   * sin que falle nada más.
+   */
+  it.each([
+    ["/admin/users", "Usuarios"],
+    ["/admin/modules", "Módulos"],
+    ["/admin/modules/9f1c2b7e", "Módulos"],
+    ["/admin/operations", "Consultas y reportes"],
+    ["/admin/operations/3c4d", "Consultas y reportes"],
+    ["/admin/documents", "Historial de documentos"],
+    ["/admin/documents/77aa", "Historial de documentos"],
+    ["/admin", "Inicio"],
+  ])("marks %s as the current section", (pathname, linkName) => {
+    const { container } = renderFrame(pathname);
+    const sidebar = within(container.querySelector("aside") as HTMLElement);
+
+    expect(sidebar.getByRole("link", { name: linkName })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("applies the home variant only on the dashboard route", () => {
+    const home = renderFrame("/admin");
+    expect(home.container.firstElementChild).toHaveClass(
+      "avend-admin-shell--home",
+    );
+    home.unmount();
+
+    const users = renderFrame("/admin/users");
+    expect(users.container.firstElementChild).not.toHaveClass(
+      "avend-admin-shell--home",
+    );
   });
 });

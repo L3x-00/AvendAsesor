@@ -8,7 +8,7 @@ import {
   updateDocumentAction,
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
 import { DocumentSituationActions } from "@/components/admin/document-situation-actions";
@@ -125,7 +125,7 @@ export default async function DocumentDetailPage({
   const requestedEdit = rawSearchParams.edit;
   const editMode =
     (Array.isArray(requestedEdit) ? requestedEdit[0] : requestedEdit) === "1";
-  const { access, client } = await createAuthorizedAdminApiContext({
+  const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
 
@@ -177,13 +177,9 @@ export default async function DocumentDetailPage({
     : undefined;
 
   return (
-    <AdminShell
-      activeSection="documents"
+    <AdminPage
       description="Visualiza el PDF, edita sus datos, gestiona asociaciones, versiones, vigencia y trazabilidad."
-      modulesAccess={access.modulesAccess}
       title={document.title}
-      userName={access.fullName}
-      userRole={access.role}
     >
       <div className="space-y-6">
         <nav aria-label="Ruta de navegación" className="text-base">
@@ -806,6 +802,6 @@ export default async function DocumentDetailPage({
           </div>
         </div>
       </div>
-    </AdminShell>
+    </AdminPage>
   );
 }

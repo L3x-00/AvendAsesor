@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { ConsultationRouteFields } from "@/components/admin/consultation-route-fields";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import type {
@@ -122,13 +122,9 @@ export default async function ConsultationCasePage({
   const submodules = modules.filter((module) => module.parentModuleId !== null);
 
   return (
-    <AdminShell
-      activeSection="operations"
+    <AdminPage
       description="Revisa el caso con sus fuentes y conserva cada decisión en el historial operativo."
-      modulesAccess={access.modulesAccess}
       title="Detalle de caso"
-      userName={access.fullName}
-      userRole={access.role}
     >
       <main className={styles.page}>
         <Link className={styles.backLink} href="/admin/operations">
@@ -496,6 +492,6 @@ export default async function ConsultationCasePage({
           )}
         </section>
       </main>
-    </AdminShell>
+    </AdminPage>
   );
 }

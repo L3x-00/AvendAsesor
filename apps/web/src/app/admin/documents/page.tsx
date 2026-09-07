@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
@@ -17,7 +17,7 @@ export default async function DocumentsPage({
   searchParams,
 }: DocumentsPageProps) {
   const query = parseDocumentLibraryQuery(await searchParams);
-  const { access, client } = await createAuthorizedAdminApiContext({
+  const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
   const [initialLibrary, modules] = await Promise.all([
@@ -34,13 +34,9 @@ export default async function DocumentsPage({
   }
 
   return (
-    <AdminShell
-      activeSection="documents"
+    <AdminPage
       description="Consulta y revisa toda la biblioteca documental registrada. La estructura y la carga de nuevos PDF se gestionan desde Módulos."
       title="Historial de documentos"
-      modulesAccess={access.modulesAccess}
-      userName={access.fullName}
-      userRole={access.role}
     >
       <DocumentLibraryView
         activeFilterCount={countDocumentLibraryFilters(query)}
@@ -48,6 +44,6 @@ export default async function DocumentsPage({
         modules={modules}
         query={query}
       />
-    </AdminShell>
+    </AdminPage>
   );
 }

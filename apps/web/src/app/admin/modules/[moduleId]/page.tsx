@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
@@ -32,7 +32,7 @@ export default async function ModuleDetailPage({
   searchParams,
 }: ModuleDetailPageProps) {
   const { moduleId } = await params;
-  const { access, client } = await createAuthorizedAdminApiContext({
+  const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
   const modules = await client.listModuleSummaries("all");
@@ -66,13 +66,9 @@ export default async function ModuleDetailPage({
   );
 
   return (
-    <AdminShell
-      activeSection="modules"
+    <AdminPage
       description="Organiza la estructura y carga documentos en el módulo o submódulo correspondiente. El Historial conserva la consulta general."
       title={current.name}
-      modulesAccess={access.modulesAccess}
-      userName={access.fullName}
-      userRole={access.role}
     >
       <div className="flex flex-col gap-6">
         <nav aria-label="Ruta de navegación" className="text-base">
@@ -175,6 +171,6 @@ export default async function ModuleDetailPage({
           />
         ) : null}
       </div>
-    </AdminShell>
+    </AdminPage>
   );
 }

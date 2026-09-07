@@ -1,4 +1,4 @@
-import { AdminShell } from "@/components/admin/admin-shell";
+import { AdminPage } from "@/components/admin/admin-page";
 import { ModulesExplorer } from "@/components/admin/modules-explorer";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
@@ -7,19 +7,15 @@ import {
 } from "@/lib/admin-api/module-hierarchy";
 
 export default async function ModulesPage() {
-  const { access, client } = await createAuthorizedAdminApiContext({
+  const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
   const modules = await client.listModuleSummaries("all");
 
   return (
-    <AdminShell
-      activeSection="modules"
+    <AdminPage
       description="Organiza la biblioteca por módulos y submódulos. La carga principal se realiza dentro del módulo o submódulo correspondiente."
       title="Módulos"
-      modulesAccess={access.modulesAccess}
-      userName={access.fullName}
-      userRole={access.role}
     >
       <div className="space-y-6">
         <nav aria-label="Ruta de navegación" className="text-base">
@@ -35,6 +31,6 @@ export default async function ModulesPage() {
           parents={parentOptions(modules)}
         />
       </div>
-    </AdminShell>
+    </AdminPage>
   );
 }
