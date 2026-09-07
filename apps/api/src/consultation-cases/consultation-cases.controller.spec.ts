@@ -158,4 +158,48 @@ describe('Consultation cases controllers', () => {
       'view',
     );
   });
+
+  it('uses safe defaults when an administrative filter is omitted', async () => {
+    await admin.getDashboard({}, authorization);
+    await admin.getReviewPriorities({}, authorization);
+    await admin.getTopics({}, authorization);
+    await admin.listCases({ query: '   ' }, authorization);
+    await admin.createAttachmentDownloadUrl(
+      caseId,
+      attachmentId,
+      {},
+      authorization,
+    );
+
+    expect(service.getDashboard).toHaveBeenCalledWith(
+      authorization.userId,
+      'month',
+    );
+    expect(service.getReviewPriorities).toHaveBeenCalledWith(
+      authorization.userId,
+      'month',
+    );
+    expect(service.getTopics).toHaveBeenCalledWith(
+      authorization.userId,
+      'month',
+    );
+    expect(service.listCases).toHaveBeenCalledWith({
+      issueType: undefined,
+      kind: undefined,
+      limit: 50,
+      moduleId: undefined,
+      offset: 0,
+      period: 'month',
+      query: undefined,
+      reviewerId: authorization.userId,
+      status: undefined,
+      submoduleId: undefined,
+    });
+    expect(service.createAttachmentDownloadUrl).toHaveBeenCalledWith(
+      authorization.userId,
+      caseId,
+      attachmentId,
+      'download',
+    );
+  });
 });
