@@ -1,5 +1,6 @@
 import type { DocumentSuggestions } from "@/lib/admin-api/types";
 import { DocumentMetadataFields } from "./document-metadata-fields";
+import { FieldError } from "@/components/ui/form-field";
 import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
 
 interface DocumentUploadPanelProps {
@@ -50,6 +51,7 @@ export function DocumentUploadPanel({
             type="file"
           />
         </label>
+        <FieldError name="file" />
         <label className="block lg:col-span-2" htmlFor={`${prefix}-name`}>
           <span className="text-base font-semibold">Título</span>
           <input

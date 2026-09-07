@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FieldError } from "@/components/ui/form-field";
 import {
   DocumentPdfUploadForm,
   MAX_ADMIN_PDF_BYTES,
@@ -33,6 +34,9 @@ function renderUploadForm(endpoint = "/admin/documents", includeModule = true) {
         Archivo
         <input id="test-file" name="file" type="file" />
       </label>
+      {/* Igual que en la pantalla real: el error del archivo se pinta debajo
+          de su campo, no en el aviso general del formulario. */}
+      <FieldError name="file" />
       <label htmlFor="test-title">
         Título
         <input id="test-title" name="title" />
@@ -118,7 +122,9 @@ describe("DocumentPdfUploadForm", () => {
     await user.type(titleInput, "Norma que debe conservarse");
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("20 MiB");
+    // El tamaño es un problema del campo del archivo, así que se señala ahí y
+    // no en el aviso general del formulario.
+    expect(await screen.findByText(/20 MiB/)).toBeVisible();
     expect(titleInput).toHaveValue("Norma que debe conservarse");
     expect(fileInput.files?.[0]?.name).toBe("norma.pdf");
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -204,7 +210,7 @@ describe("DocumentPdfUploadForm", () => {
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("20 MiB");
+      expect(screen.getByText(/20 MiB/)).toBeVisible();
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.getSession).not.toHaveBeenCalled();

@@ -14,6 +14,16 @@
   --avend-focus: #1677ff;
   --avend-danger: #b42318;
   --avend-danger-on-dark: #ff8191;
+  /* Rojo suave para el estado de error de un campo: señala sin alarmar y
+     mantiene el texto por encima de 4.5:1 sobre el fondo claro. */
+  --avend-danger-soft-surface: #fef4f2;
+  --avend-danger-soft-border: #f3b5ad;
+  --avend-danger-soft-ring: rgb(180 35 24 / 18%);
+  /* Verde de confirmación. No existía: el éxito se pintaba con el mismo gris
+     que cualquier otro aviso y no se leía como confirmación. */
+  --avend-success: #05713d;
+  --avend-success-soft-surface: #eefaf3;
+  --avend-success-soft-border: #a6dcc0;
   --background: var(--avend-surface);
   --foreground: var(--avend-text);
 }
@@ -252,16 +262,69 @@ body {
   outline: none;
 }
 
-.avend-field[aria-invalid="true"] {
-  border-color: var(--avend-navy);
+/* El campo con error se tiñe de rojo suave. El color nunca va solo: el mensaje
+   de debajo lleva icono y texto, para que la señal no dependa de distinguir
+   colores.
+   Se marca por `aria-invalid` y no por una clase, para que valga igual en los
+   formularios del panel administrativo, que maquetan sus campos con CSS
+   Modules y no llevan la clase `avend-field`. */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"],
+.avend-field--invalid {
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger-soft-border);
+}
+
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus,
+.avend-field--invalid:focus {
+  border-color: var(--avend-danger);
+  box-shadow: 0 0 0 3px var(--avend-danger-soft-ring);
+  outline: none;
+}
+
+.avend-form-field {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.avend-field-label--required::after {
+  color: var(--avend-danger);
+  content: " *";
+}
+
+.avend-field-hint {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: -0.25rem 0 0.5rem;
 }
 
 .avend-field-error {
-  color: var(--avend-text);
+  align-items: flex-start;
+  color: var(--avend-danger);
+  display: flex;
   font-size: 1rem;
+  font-weight: 600;
+  gap: 0.375rem;
   line-height: 1.5;
   margin: 0.5rem 0 0;
 }
+
+.avend-field-error svg {
+  flex: none;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  width: 1.25rem;
+}
+
 
 .avend-button {
   align-items: center;
@@ -330,19 +393,30 @@ body {
 }
 
 .avend-feedback--success {
-  background: var(--avend-soft-blue);
-  color: var(--avend-navy);
+  background: var(--avend-success-soft-surface);
+  border-color: var(--avend-success-soft-border);
+  color: var(--avend-success);
 }
 
+/* El aviso general queda para lo que no pertenece a un campo concreto: un
+   fallo de red, de permisos o de sesión. Los errores de campo se pintan
+   debajo de su campo. */
 .avend-feedback--error {
-  background: var(--avend-surface-muted);
-  color: var(--avend-text);
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger-soft-border);
+  color: var(--avend-danger);
 }
 
+/* Una sola fila. Antes era una rejilla de una columna, así que "Olvidé mi
+   contraseña" y "Crear una cuenta" caían siempre en renglones distintos. El
+   `wrap` deja que se partan solo si de verdad no caben. */
 .avend-auth-links {
-  display: grid;
-  gap: 0.75rem;
+  column-gap: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   margin-top: 1.5rem;
+  row-gap: 0.25rem;
 }
 
 .avend-auth-links .avend-text-link {

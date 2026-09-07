@@ -3,6 +3,9 @@
 import { type FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { FieldError } from "@/components/ui/form-field";
+import { useToast } from "@/components/ui/toast";
+import { FieldErrorProvider } from "@/components/ui/validated-form";
 import styles from "./users-manager.module.css";
 
 /** Matches the ceiling the API enforces for one roster. */
@@ -46,6 +49,8 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | undefined>();
+  const { showToast } = useToast();
   const [report, setReport] = useState<ImportReport | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -61,17 +66,18 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
 
     if (!file) {
       setReport(null);
-      setMessage("Elige el archivo Excel con los usuarios.");
+      setFileError("Elige el archivo Excel con los usuarios.");
       return;
     }
 
     if (file.size > MAX_USER_IMPORT_BYTES) {
       setReport(null);
-      setMessage("El archivo supera el tamaño permitido para una importación.");
+      setFileError("El archivo supera el tamaño permitido para una importación.");
       return;
     }
 
     setMessage(null);
+    setFileError(undefined);
     setReport(null);
     setPending(true);
 
@@ -106,6 +112,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
 
       const result = (await response.json()) as ImportReport;
       setReport(result);
+      showToast("Importación completada con éxito.");
       formRef.current?.reset();
       if (result.imported > 0) router.refresh();
     } catch {
@@ -119,6 +126,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
     <details className={styles.create}>
       <summary className={styles.createSummary}>Importar Excel</summary>
       {/* noValidate: la validación nativa bloqueaba el envío sin decir por qué. */}
+      <FieldErrorProvider errors={fileError ? { file: fileError } : {}}>
       <form
         className={styles.form}
         noValidate
@@ -142,6 +150,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
           name="file"
           type="file"
         />
+        <FieldError name="file" />
         <button
           className={styles.searchButton}
           disabled={pending}
@@ -187,6 +196,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
           </div>
         ) : null}
       </form>
+      </FieldErrorProvider>
     </details>
   );
 }

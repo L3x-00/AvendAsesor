@@ -3,6 +3,8 @@
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { FieldErrorProvider } from "@/components/ui/form-field";
+import { useToast } from "@/components/ui/toast";
 
 export const MAX_ADMIN_PDF_BYTES = 20 * 1024 * 1024;
 
@@ -96,6 +98,8 @@ export function DocumentPdfUploadForm({
   const router = useRouter();
   const [feedback, setFeedback] = useState<UploadFeedback>({ status: "idle" });
   const [pending, setPending] = useState(false);
+  const [fileError, setFileError] = useState<string | undefined>();
+  const { showToast } = useToast();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -155,9 +159,14 @@ export function DocumentPdfUploadForm({
     const validationMessage = validatePdf(formData);
 
     if (validationMessage) {
-      setFeedback({ message: validationMessage, status: "error" });
+      // El problema es del campo del archivo, así que se señala ahí y no en un
+      // aviso general al pie del formulario.
+      setFileError(validationMessage);
+      setFeedback({ status: "idle" });
       return;
     }
+
+    setFileError(undefined);
 
     setFeedback({ status: "idle" });
     pendingRef.current = true;
@@ -198,6 +207,7 @@ export function DocumentPdfUploadForm({
 
       formRef.current?.reset();
       setFeedback({ message: successMessage, status: "success" });
+      showToast(successMessage);
       router.refresh();
     } catch {
       setFeedback({
@@ -224,7 +234,9 @@ export function DocumentPdfUploadForm({
       onSubmit={(event) => void submit(event)}
       ref={formRef}
     >
-      {children}
+      <FieldErrorProvider errors={fileError ? { file: fileError } : {}}>
+        {children}
+      </FieldErrorProvider>
       {feedback.message ? (
         <p
           aria-live="polite"

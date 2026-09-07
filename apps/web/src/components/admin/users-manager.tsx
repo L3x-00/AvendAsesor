@@ -9,6 +9,8 @@ import {
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { UsersImportForm } from "@/components/admin/users-import-form";
+import { FieldError } from "@/components/ui/form-field";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import { toDateInputValue } from "@/lib/admin-api/access-window";
 import { formatAccessState, formatUserRole } from "@/lib/admin-api/labels";
 import type {
@@ -23,6 +25,43 @@ import {
   type UserStatusFilter,
 } from "@/lib/admin-api/user-directory";
 import styles from "./users-manager.module.css";
+
+/**
+ * Reglas del alta de usuario y del cambio de vigencia. La fecha de fin se
+ * compara con la de inicio para que el error salga en el campo que hay que
+ * corregir, no en un aviso general al pie del formulario.
+ */
+const ACCESS_WINDOW_RULES: FieldRules = {
+  accessExpiresAt: [
+    {
+      kind: "dateOrder",
+      label: "La fecha de fin",
+      startField: "accessStartAt",
+      startLabel: "la fecha de inicio",
+    },
+  ],
+};
+
+const USER_EDIT_RULES: FieldRules = {
+  reason: [
+    { kind: "required", label: "El motivo" },
+    { kind: "minLength", label: "El motivo", min: 4 },
+  ],
+};
+
+const CREATE_USER_RULES: FieldRules = {
+  ...ACCESS_WINDOW_RULES,
+  email: [
+    { kind: "required", label: "El correo electrónico" },
+    { kind: "email", label: "El correo electrónico" },
+  ],
+  fullName: [
+    { kind: "required", label: "El nombre y apellidos" },
+    { kind: "minLength", label: "El nombre y apellidos", min: 2 },
+    { kind: "maxLength", label: "El nombre y apellidos", max: 160 },
+  ],
+  phone: [{ kind: "phone", label: "El celular" }],
+};
 
 interface UsersManagerProps {
   /** Render base URL: the roster upload goes straight to the API. */
@@ -100,7 +139,9 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
       <AdminActionForm
         action={updateAdministrativeUserAction}
         className={styles.form}
+        rules={USER_EDIT_RULES}
         submitLabel="Actualizar usuario"
+        successMessage="Usuario actualizado con éxito."
       >
         <input name="userId" type="hidden" value={user.id} />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-role`}>
@@ -142,6 +183,7 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
           required
           rows={3}
         />
+        <FieldError name="reason" />
       </AdminActionForm>
     </details>
   );
@@ -162,7 +204,9 @@ function AccessWindowForm({
       <AdminActionForm
         action={updateAccessWindowAction}
         className={styles.form}
+        rules={{ ...ACCESS_WINDOW_RULES, ...USER_EDIT_RULES }}
         submitLabel="Guardar vigencia"
+        successMessage="Vigencia guardada con éxito."
       >
         <input name="userId" type="hidden" value={user.id} />
         <p className={styles.formHint}>
@@ -181,6 +225,7 @@ function AccessWindowForm({
           name="accessStartAt"
           type="date"
         />
+        <FieldError name="accessStartAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
           Fin
         </label>
@@ -192,6 +237,7 @@ function AccessWindowForm({
           name="accessExpiresAt"
           type="date"
         />
+        <FieldError name="accessExpiresAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-reason`}>
           Motivo (queda auditado)
         </label>
@@ -204,6 +250,7 @@ function AccessWindowForm({
           required
           rows={3}
         />
+        <FieldError name="reason" />
       </AdminActionForm>
     </details>
   );
@@ -233,7 +280,9 @@ function CreateUserForm({
       <AdminActionForm
         action={createAdministrativeUserAction}
         className={styles.form}
+        rules={CREATE_USER_RULES}
         submitLabel={submitLabel}
+        successMessage="Registro exitoso. El usuario recibirá un correo para crear su contraseña."
       >
         <input name="role" type="hidden" value={role} />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
@@ -248,6 +297,7 @@ function CreateUserForm({
           required
           type="text"
         />
+        <FieldError name="fullName" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-email`}>
           Correo electrónico
         </label>
@@ -259,6 +309,7 @@ function CreateUserForm({
           required
           type="email"
         />
+        <FieldError name="email" />
         <p className={styles.formHint}>
           El correo es el usuario con el que iniciará sesión. Recibirá un
           mensaje para crear su propia contraseña.
@@ -273,6 +324,7 @@ function CreateUserForm({
           name="phone"
           type="tel"
         />
+        <FieldError name="phone" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
           Inicio de vigencia (opcional)
         </label>
@@ -282,6 +334,7 @@ function CreateUserForm({
           name="accessStartAt"
           type="date"
         />
+        <FieldError name="accessStartAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
           Fin de vigencia (opcional)
         </label>
@@ -292,6 +345,7 @@ function CreateUserForm({
           name="accessExpiresAt"
           type="date"
         />
+        <FieldError name="accessExpiresAt" />
         <p className={styles.formHint}>
           Si dejas las fechas vacías, el acceso queda sin vencimiento.
         </p>

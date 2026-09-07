@@ -55,7 +55,7 @@ describe("admin server actions", () => {
     const state = await createModuleAction(initialState, formData);
 
     expect(state).toEqual({
-      message: "El código es obligatorio.",
+      fieldErrors: { code: "El código es obligatorio." },
       status: "error",
     });
     expect(client.createModule).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe("admin server actions", () => {
     const state = await setModuleStatusAction(initialState, formData);
 
     expect(state).toEqual({
-      message: "Indica el motivo de la desactivación.",
+      fieldErrors: { reason: "Indica el motivo de la desactivación." },
       status: "error",
     });
     expect(client.setModuleStatus).not.toHaveBeenCalled();
@@ -348,7 +348,7 @@ describe("admin server actions", () => {
     const state = await updateAccessWindowAction(initialState, formData);
 
     expect(state).toEqual({
-      message: "La fecha de fin no es válida.",
+      fieldErrors: { accessExpiresAt: "La fecha de fin no es válida." },
       status: "error",
     });
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
@@ -384,7 +384,7 @@ describe("admin server actions", () => {
     const state = await createAdministrativeUserAction(initialState, formData);
 
     expect(state.status).toBe("error");
-    expect(state.message).toMatch(/correo electrónico válido/i);
+    expect(state.fieldErrors?.email).toMatch(/correo electrónico válido/i);
     expect(client.createAdministrativeUser).not.toHaveBeenCalled();
   });
 
