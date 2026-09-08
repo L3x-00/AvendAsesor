@@ -26,7 +26,7 @@ Las credenciales locales de los perfiles demo usan la contraseña `AvendDemo2026
 
 ## Carga demostrativa en producción protegida
 
-Existe un ejecutor independiente únicamente para el proyecto de producción autorizado. No reutiliza el comando local, exige la referencia exacta del proyecto, confirmación explícita y un respaldo lógico reciente con manifiesto verificable. Nunca use este flujo para una base de un cliente sin autorización expresa de su responsable.
+Existe un ejecutor independiente únicamente para el proyecto de producción autorizado. No reutiliza el comando local, exige la referencia exacta del proyecto, confirmación explícita y un respaldo reciente con manifiesto verificable. El respaldo contiene la copia lógica de la base y un snapshot hash-verificado de los buckets privados usados por documentos y adjuntos. Nunca use este flujo para una base de un cliente sin autorización expresa de su responsable.
 
 Primero genere un respaldo privado:
 
@@ -52,7 +52,7 @@ Antes de una carga productiva deben estar aplicadas las migraciones `20260908151
 
 ## Restablecimiento de un entorno descartable
 
-`supabase db reset --local` elimina todos los datos de la instancia local. Úsalo solamente cuando sea un entorno de desarrollo descartable y no haya trabajo de otra persona que preservar. Después del reset, ejecuta de nuevo `npm run demo:seed`. Nunca ejecute `db reset` contra producción: para ese entorno se conserva el respaldo lógico previo y cualquier reversión requiere un plan de recuperación aprobado.
+`supabase db reset --local` elimina todos los datos de la instancia local. Úsalo solamente cuando sea un entorno de desarrollo descartable y no haya trabajo de otra persona que preservar. Después del reset, ejecuta de nuevo `npm run demo:seed`. Nunca ejecute `db reset` contra producción: para ese entorno se conserva el respaldo de base y Storage previo; no hay PITR habilitado, por lo que cualquier reversión integral requiere un plan de recuperación aprobado por el proveedor.
 
 El script no incluye un borrado selectivo: las versiones documentales son inmutables por diseño y el restablecimiento seguro de una demo completa debe realizarse con un reset de la base local desechable.
 

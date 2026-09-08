@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runDemoSeed } from './seed-demo-data.mjs';
 
@@ -103,6 +103,31 @@ function loadVerifiedBackupManifest(verifyOnly) {
     || createHash('sha256').update(contents).digest('hex') !== manifest.sha256
   ) {
     failure('El respaldo no coincide con su manifiesto o tiene más de dos horas. Cree uno nuevo antes de continuar.');
+  }
+  if (!isAbsolute(manifest.storageSnapshotDirectory || '') || !existsSync(manifest.storageSnapshotDirectory)) {
+    failure('El manifiesto no incluye un snapshot privado de Storage. Cree un respaldo nuevo antes de continuar.');
+  }
+  if (!Array.isArray(manifest.storageSnapshot)) {
+    failure('El snapshot de Storage no tiene un manifiesto válido.');
+  }
+  const snapshotRoot = `${resolve(manifest.storageSnapshotDirectory)}${sep}`;
+  for (const object of manifest.storageSnapshot) {
+    if (
+      !object
+      || typeof object.relativePath !== 'string'
+      || !isAbsolute(manifest.storageSnapshotDirectory)
+      || !resolve(manifest.storageSnapshotDirectory, ...object.relativePath.split('/')).startsWith(snapshotRoot)
+      || !Number.isInteger(object.bytes)
+      || typeof object.sha256 !== 'string'
+    ) {
+      failure('El manifiesto contiene una entrada de Storage inválida.');
+    }
+    const objectFile = resolve(manifest.storageSnapshotDirectory, ...object.relativePath.split('/'));
+    if (!existsSync(objectFile)) failure('Falta un objeto en el snapshot privado de Storage.');
+    const contents = readFileSync(objectFile);
+    if (contents.byteLength !== object.bytes || createHash('sha256').update(contents).digest('hex') !== object.sha256) {
+      failure('Un objeto del snapshot de Storage no coincide con su hash o tamaño.');
+    }
   }
 }
 
