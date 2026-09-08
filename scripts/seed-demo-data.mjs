@@ -1579,14 +1579,19 @@ function consultationPlans(moduleMap, documents) {
     if (!module.parent_module_id) continue;
     const parent = [...moduleMap.values()].find((candidate) => candidate.id === module.parent_module_id);
     if (!parent) continue;
-    const existing = leavesByRoot.get(parent.code) ?? [];
+    const parentCode = rootModules.find((code) => moduleMap.get(code)?.id === parent.id);
+    if (!parentCode) continue;
+    const existing = leavesByRoot.get(parentCode) ?? [];
     existing.push(module);
-    leavesByRoot.set(parent.code, existing);
+    leavesByRoot.set(parentCode, existing);
   }
 
   return Array.from({ length: 44 }, (_, index) => {
     const rootCode = weightedRoots[index % weightedRoots.length];
+    const root = moduleMap.get(rootCode);
+    if (!root) failure(`No existe el módulo raíz ${rootCode} para las consultas demostrativas.`);
     const choices = leavesByRoot.get(rootCode) ?? [];
+    if (!choices.length) failure(`No existen submódulos para ${rootCode} en las consultas demostrativas.`);
     const leaf = choices[index % choices.length];
     const issue = ['support_insufficient', 'support_partial', 'stale_document', 'citation_insufficient', 'possible_contradiction', 'technical_error'][index % 6];
     const eligibleDocuments = issue === 'stale_document'
@@ -1605,7 +1610,7 @@ function consultationPlans(moduleMap, documents) {
       issue,
       key: `consultation-${String(index + 1).padStart(2, '0')}`,
       leaf,
-      root: moduleMap.get(rootCode),
+      root,
       title: `Consulta sobre ${leaf.name.toLowerCase()}: criterio aplicable y plazos del procedimiento`,
     };
   });
@@ -2227,6 +2232,7 @@ async function seedConsultations(client, runtime, moduleMap, documents, superadm
     .filter((user) => user.role === 'docente' && user.state === 'active')
     .map((user) => idsByKey.get(user.key))
     .filter(Boolean);
+  if (!activeTeacherIds.length) failure('No hay docentes activos para las consultas demostrativas.');
   const turns = [];
   for (const [index, plan] of consultationPlans(moduleMap, documents).entries()) {
     const userId = activeTeacherIds[index % activeTeacherIds.length];
