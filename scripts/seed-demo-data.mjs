@@ -62,7 +62,108 @@ const rootModules = [
   'REMUNERACIONES',
 ];
 
+const rootModuleDetails = [
+  {
+    code: 'CONTRATACION_DESPLAZAMIENTOS',
+    description: 'Procesos de contratación, encargatura y desplazamiento docente.',
+    name: 'Contratación y desplazamientos',
+    sortOrder: 10,
+  },
+  {
+    code: 'EVALUACION_DOCENTE',
+    description: 'Procesos de evaluación, nombramiento y desarrollo de la carrera docente.',
+    name: 'Evaluación docente',
+    sortOrder: 20,
+  },
+  {
+    code: 'SITUACIONES_ADMINISTRATIVAS',
+    description: 'Licencias, destaques y otras situaciones administrativas del personal docente.',
+    name: 'Situaciones administrativas',
+    sortOrder: 30,
+  },
+  {
+    code: 'AUXILIAR_EDUCACION',
+    description: 'Normativa y procesos aplicables a auxiliares de educación.',
+    name: 'Auxiliar de educación',
+    sortOrder: 40,
+  },
+  {
+    code: 'LEY_REGLAMENTO',
+    description: 'Ley de Reforma Magisterial y reglamento aplicable.',
+    name: 'Ley y reglamento',
+    sortOrder: 50,
+  },
+  {
+    code: 'CARGOS_PLAZAS',
+    description: 'Gestión de cargos, plazas y cuadro de horas pedagógicas.',
+    name: 'Cargos y plazas',
+    sortOrder: 60,
+  },
+  {
+    code: 'REMUNERACIONES',
+    description: 'Escalas remunerativas, asignaciones y bonificaciones docentes.',
+    name: 'Remuneraciones',
+    sortOrder: 70,
+  },
+];
+
 const extraSubmodules = [
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'NOMBRAMIENTO_DOCENTE_INGRESO_CPM',
+    name: 'Nombramiento Docente / Ingreso a la Carrera Pública Magisterial',
+    description: 'Nombramiento docente e ingreso a la Carrera Pública Magisterial.',
+    sortOrder: 10,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'CONTRATACION_DOCENTE',
+    name: 'Contratación Docente',
+    description: 'Proceso de contratación docente y criterios de adjudicación.',
+    sortOrder: 20,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'ASCENSO_ESCALA_MAGISTERIAL',
+    name: 'Ascenso de Escala Magisterial',
+    description: 'Evaluación y requisitos para el ascenso de escala magisterial.',
+    sortOrder: 30,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'ACCESO_CARGOS_DIRECTIVOS',
+    name: 'Acceso a Cargos Directivos',
+    description: 'Acceso a cargos directivos y especialistas en formación.',
+    sortOrder: 40,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'ACCESO_ESPECIALISTA_EDUCACION',
+    name: 'Acceso al cargo de Especialista en Educación',
+    description: 'Acceso al cargo de especialista en educación.',
+    sortOrder: 50,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'EVALUACION_DESEMPENO_DOCENTE',
+    name: 'Evaluación del Desempeño Docente',
+    description: 'Evaluación del desempeño docente y retroalimentación.',
+    sortOrder: 60,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'EVALUACION_DESEMPENO_DIRECTIVOS',
+    name: 'Evaluación del Desempeño de Directivos',
+    description: 'Evaluación del desempeño de directivos de instituciones educativas.',
+    sortOrder: 70,
+  },
+  {
+    parentCode: 'EVALUACION_DOCENTE',
+    code: 'PROCESOS_ESPECIFICOS',
+    name: 'Procesos específicos (CETPRO, PRITE, MININTER y MINDEF)',
+    description: 'Procesos específicos de CETPRO, PRITE, MININTER, MINDEF y otros.',
+    sortOrder: 80,
+  },
   {
     parentCode: 'CONTRATACION_DESPLAZAMIENTOS',
     code: 'REASIGNACION_DOCENTE',
@@ -324,7 +425,9 @@ function statusForTeacher(index) {
 function teacherAccess(status, index) {
   if (status === 'expiring') {
     return {
-      accessExpiresAt: isoDaysFromNow((index - 32) % EXPIRING_SOON_DAYS + 1, 23),
+      // Keep every demo expiry at least one full day inside the seven-day
+      // window so the dashboard count does not flap at the UTC boundary.
+      accessExpiresAt: isoDaysFromNow((index - 32) % (EXPIRING_SOON_DAYS - 1) + 1, 23),
       accessStartAt: isoDaysFromNow(-180, 8),
     };
   }
@@ -445,11 +548,14 @@ function getLocalRuntime() {
     anonKey,
     apiUrl,
     databaseContainer,
+    demoPassword: DEMO_PASSWORD,
+    mode: 'local',
+    moduleCodePrefix: '',
     serviceRoleKey,
   };
 }
 
-function createPdf(title, versionNumber) {
+function createPdf(title, versionNumber, environment = 'entorno de demostración') {
   return new Promise((resolvePdf, rejectPdf) => {
     const document = new PDFDocument({
       info: { Author: 'AVEND ASESOR', Title: title },
@@ -462,13 +568,13 @@ function createPdf(title, versionNumber) {
     document.on('end', () => resolvePdf(Buffer.concat(chunks)));
     document.fontSize(18).fillColor('#0f2d4f').text('AVEND ASESOR');
     document.moveDown(0.4);
-    document.fontSize(12).fillColor('#111827').text('Documento ficticio para entorno local de demostración');
+    document.fontSize(12).fillColor('#111827').text('Documento ficticio para entorno de demostración');
     document.moveDown(1.2);
     document.fontSize(16).fillColor('#0f172a').text(title);
     document.moveDown(1);
     document.fontSize(10).fillColor('#334155').text(`Versión ${versionNumber} · Datos de demostración · No usar como sustento normativo real.`);
     document.moveDown(1.2);
-    document.text('Este archivo permite comprobar la visualización, descarga y el historial de versiones dentro del entorno local de AVEND ASESOR.');
+    document.text(`Este archivo permite comprobar la visualización, descarga y el historial de versiones dentro del ${environment} de AVEND ASESOR.`);
     document.end();
   });
 }
@@ -605,18 +711,22 @@ async function listAllAuthUsers(client) {
   }
 }
 
-async function ensureIdentity(client, user, usersByEmail) {
+async function ensureIdentity(client, runtime, user, usersByEmail) {
   const found = usersByEmail.get(user.email);
   const userMetadata = { demoSeed: DEMO_MARKER, full_name: user.fullName };
+  const appMetadata = { demoSeed: DEMO_MARKER };
 
   if (found) {
-    if (found.user_metadata?.demoSeed !== DEMO_MARKER) {
-      failure(`La identidad ${user.email} ya existe y no pertenece al seed local de demostración.`);
+    const isSeedIdentity = found.app_metadata?.demoSeed === DEMO_MARKER
+      || (runtime.mode === 'local' && found.user_metadata?.demoSeed === DEMO_MARKER);
+    if (!isSeedIdentity) {
+      failure(`La identidad ${user.email} ya existe y no pertenece al seed de demostración.`);
     }
     await requireResult(
       client.auth.admin.updateUserById(found.id, {
+        app_metadata: appMetadata,
         email_confirm: true,
-        password: DEMO_PASSWORD,
+        password: runtime.demoPassword,
         user_metadata: userMetadata,
       }),
       `No se pudo actualizar ${user.email}`,
@@ -626,9 +736,10 @@ async function ensureIdentity(client, user, usersByEmail) {
 
   const created = await requireResult(
     client.auth.admin.createUser({
+      app_metadata: appMetadata,
       email: user.email,
       email_confirm: true,
-      password: DEMO_PASSWORD,
+      password: runtime.demoPassword,
       user_metadata: userMetadata,
     }),
     `No se pudo crear ${user.email}`,
@@ -661,7 +772,7 @@ function sqlUuid(value) {
   return `${sqlText(value)}::uuid`;
 }
 
-function applyLocalProfilePatch(runtime, userId, profile) {
+function profilePatchSql(userId, profile) {
   const assignments = [
     `access_expires_at = ${sqlText(profile.accessExpiresAt)}::timestamptz`,
     `access_start_at = ${sqlText(profile.accessStartAt)}::timestamptz`,
@@ -678,10 +789,15 @@ function applyLocalProfilePatch(runtime, userId, profile) {
     `updated_by = ${sqlUuid(profile.updatedBy)}`,
     'updated_at = now()',
   ];
-  executeLocalSql(
+  return `update public.profiles set ${assignments.join(', ')} where id = ${sqlUuid(userId)};`;
+}
+
+function applyProfilePatches(runtime, patches) {
+  if (!patches.length) return;
+  executeSql(
     runtime,
-    `update public.profiles set ${assignments.join(', ')} where id = ${sqlUuid(userId)};`,
-    `No se pudo completar el perfil local ${userId}`,
+    patches.map(({ userId, profile }) => profilePatchSql(userId, profile)).join('\n'),
+    'No se pudieron completar los perfiles de demostración',
   );
 }
 
@@ -690,7 +806,7 @@ async function seedUsers(client, runtime) {
   const idsByKey = new Map();
   const usersByEmail = new Map((await listAllAuthUsers(client)).map((user) => [user.email, user]));
   for (const user of users) {
-    idsByKey.set(user.key, await ensureIdentity(client, user, usersByEmail));
+    idsByKey.set(user.key, await ensureIdentity(client, runtime, user, usersByEmail));
   }
 
   const superadministrator = users.find((user) => user.key === 'superadmin');
@@ -699,7 +815,7 @@ async function seedUsers(client, runtime) {
 
   const bootstrapProfile = await getProfile(client, superadministratorId);
   if (!bootstrapProfile) failure('El trigger de perfiles no creó la superadministradora local.');
-  applyLocalProfilePatch(runtime, superadministratorId, {
+  const profilePatches = [{ userId: superadministratorId, profile: {
     accessExpiresAt: null,
     accessStartAt: isoDaysFromNow(-365, 8),
     accountStatus: 'active',
@@ -713,7 +829,7 @@ async function seedUsers(client, runtime) {
     statusChangedBy: null,
     statusReason: null,
     updatedBy: superadministratorId,
-  });
+  } }];
 
   for (const [index, user] of users.entries()) {
     if (user.key === 'superadmin') continue;
@@ -722,18 +838,11 @@ async function seedUsers(client, runtime) {
     const profile = await getProfile(client, userId);
     if (!profile) failure(`No existe el perfil de ${user.email}.`);
 
-    if (profile.created_by === null) {
-      await callRpc(client, 'provision_administrative_user', {
-        p_access_expires_at: user.state === 'expiring' ? user.accessExpiresAt : null,
-        p_access_start_at: user.accessStartAt,
-        p_actor_id: superadministratorId,
-        p_full_name: user.fullName,
-        p_phone: user.phone,
-        p_role: user.role,
-        p_target_user_id: userId,
-      });
-    }
-
+    // Complete the demo profile with one deterministic patch below.  The
+    // provisioning RPC is intended for interactive onboarding and appends a
+    // user_created audit event; the demo directory keeps the audit feed
+    // compatible with the existing admin view while recording created_by and
+    // updated_by ownership (suspended profiles still exercise status audits).
     const mustSuspend = user.state === 'suspended';
     const freshProfile = await getProfile(client, userId);
     if (mustSuspend && freshProfile?.account_status !== 'suspended') {
@@ -746,7 +855,7 @@ async function seedUsers(client, runtime) {
       });
     }
 
-    applyLocalProfilePatch(runtime, userId, {
+    profilePatches.push({ userId, profile: {
       accessExpiresAt: user.accessExpiresAt,
       accessStartAt: user.accessStartAt,
       accountStatus: mustSuspend ? 'suspended' : 'active',
@@ -760,8 +869,12 @@ async function seedUsers(client, runtime) {
       statusChangedBy: mustSuspend ? superadministratorId : null,
       statusReason: mustSuspend ? 'Pausa temporal para demostración local.' : null,
       updatedBy: superadministratorId,
-    });
+    } });
   }
+
+  // A single guarded SQL batch avoids one remote Management API round-trip per
+  // profile while keeping the same deterministic ownership values.
+  applyProfilePatches(runtime, profilePatches);
 
   for (const administrator of administrativeUsers.filter((user) => user.key !== 'superadmin')) {
     const userId = idsByKey.get(administrator.key);
@@ -788,7 +901,20 @@ async function seedUsers(client, runtime) {
   return { idsByKey, superadministratorId, users };
 }
 
-async function loadModuleMap(client) {
+function scopedModuleCode(runtime, code) {
+  return `${runtime.moduleCodePrefix ?? ''}${code}`;
+}
+
+function logicalModuleMap(runtime, modules) {
+  const actualByCode = new Map(modules.map((module) => [module.code, module]));
+  return new Map(
+    [...rootModules, ...extraSubmodules.map((module) => module.code)]
+      .map((code) => [code, actualByCode.get(scopedModuleCode(runtime, code))])
+      .filter(([, module]) => Boolean(module)),
+  );
+}
+
+async function loadModuleMap(client, runtime) {
   const modules = await requireResult(
     client
       .from('modules')
@@ -800,7 +926,7 @@ async function loadModuleMap(client) {
       .order('code', { ascending: true }),
     'No se pudo leer la jerarquía de módulos',
   );
-  return new Map(modules.map((module) => [module.code, module]));
+  return logicalModuleMap(runtime, modules);
 }
 
 function requireCanonicalRoots(moduleMap) {
@@ -812,39 +938,75 @@ function requireCanonicalRoots(moduleMap) {
   }
 }
 
-async function ensureModules(client, superadministratorId) {
-  const roots = await requireResult(
+async function ensureModules(client, runtime, superadministratorId) {
+  const scopedRootCodes = rootModules.map((code) => scopedModuleCode(runtime, code));
+  if (runtime.moduleCodePrefix) {
+    for (const root of rootModuleDetails) {
+      const code = scopedModuleCode(runtime, root.code);
+      const existing = await requireResult(
+        client
+          .from('modules')
+          .select('id, metadata')
+          .eq('code', code)
+          .maybeSingle(),
+        `No se pudo revisar el módulo demo ${root.name}`,
+      );
+      const payload = {
+        code,
+        created_by: superadministratorId,
+        description: root.description,
+        id: existing?.id ?? stableUuid(`module:${code}`),
+        is_active: true,
+        is_deleted: false,
+        metadata: { demoSeed: DEMO_MARKER, logicalCode: root.code },
+        name: root.name,
+        parent_module_id: null,
+        sort_order: root.sortOrder,
+        updated_by: superadministratorId,
+      };
+      if (existing?.metadata?.demoSeed === DEMO_MARKER) {
+        await requireResult(client.from('modules').update(payload).eq('id', existing.id), `No se pudo actualizar ${root.name}`);
+      } else if (existing) {
+        failure(`El código aislado ${code} ya pertenece a un módulo no demostrativo.`);
+      } else {
+        await requireResult(client.from('modules').insert(payload), `No se pudo crear ${root.name}`);
+      }
+    }
+  }
+
+  const refreshedRoots = await requireResult(
     client
       .from('modules')
       .select('id, code, name, parent_module_id, is_active')
-      .in('code', rootModules)
+      .in('code', scopedRootCodes)
       .eq('is_deleted', false)
       .eq('is_active', true),
-    'No se pudieron leer los módulos canónicos',
+    'No se pudieron leer los módulos principales de demostración',
   );
-  const rootMap = new Map(roots.map((module) => [module.code, module]));
+  const rootMap = logicalModuleMap(runtime, refreshedRoots);
   requireCanonicalRoots(rootMap);
-  const rootIds = new Map(roots.map((module) => [module.code, module.id]));
+  const rootIds = new Map([...rootMap.entries()].map(([code, module]) => [code, module.id]));
 
   for (const submodule of extraSubmodules) {
     const parentModuleId = rootIds.get(submodule.parentCode);
     if (!parentModuleId) failure(`Falta el padre ${submodule.parentCode}.`);
+    const code = scopedModuleCode(runtime, submodule.code);
     const existing = await requireResult(
       client
         .from('modules')
         .select('id, is_active, is_deleted, metadata, parent_module_id')
-        .eq('code', submodule.code)
+        .eq('code', code)
         .maybeSingle(),
       `No se pudo buscar el submódulo ${submodule.code}`,
     );
     const payload = {
-      code: submodule.code,
+      code,
       created_by: superadministratorId,
       description: submodule.description,
-      id: existing?.id ?? stableUuid(`module:${submodule.code}`),
+      id: existing?.id ?? stableUuid(`module:${code}`),
       is_active: true,
       is_deleted: false,
-      metadata: { demoSeed: DEMO_MARKER },
+      metadata: { demoSeed: DEMO_MARKER, logicalCode: submodule.code },
       name: submodule.name,
       parent_module_id: parentModuleId,
       sort_order: submodule.sortOrder,
@@ -857,34 +1019,49 @@ async function ensureModules(client, superadministratorId) {
       );
     } else if (existing) {
       if (
+        runtime.mode === 'production'
+        ||
         existing.parent_module_id !== parentModuleId
         || existing.is_deleted
         || !existing.is_active
       ) {
-        failure(`El código ${submodule.code} ya pertenece a un módulo local no demostrativo incompatible.`);
+        failure(`El código ${code} ya pertenece a un módulo no demostrativo incompatible.`);
       }
     } else {
       await requireResult(client.from('modules').insert(payload), `No se pudo crear ${submodule.code}`);
     }
   }
-  const moduleMap = await loadModuleMap(client);
+  const moduleMap = await loadModuleMap(client, runtime);
   requireCanonicalRoots(moduleMap);
   return moduleMap;
 }
 
-async function uploadPdf(client, storagePath, title, versionNumber) {
+async function uploadPdf(client, runtime, storagePath, title, versionNumber) {
   const pdf = title.technicalStatus === 'error'
     ? Buffer.from(`AVEND ASESOR DEMO - archivo PDF ilegible para ${title.title}\n`, 'utf8')
-    : await createPdf(title.title, versionNumber);
+    : await createPdf(title.title, versionNumber, runtime.pdfEnvironment);
   const sha256 = createHash('sha256').update(pdf).digest('hex');
   await requireResult(
     client.storage.from('normative-documents').upload(storagePath, new Blob([pdf], { type: 'application/pdf' }), {
       contentType: 'application/pdf',
+      // Paths are namespaced under demo/ and deterministic, so an upsert
+      // makes a retry recover cleanly if the SQL transaction failed after the
+      // object upload. It cannot overwrite a customer-named path.
       upsert: true,
     }),
     `No se pudo subir ${storagePath}`,
   );
   return { pdf, sha256 };
+}
+
+async function verifyStorageObject(client, bucket, storagePath, expectedSize, expectedSha256, label) {
+  const { data, error } = await client.storage.from(bucket).download(storagePath);
+  if (error || !data) failure(`${label}: no se pudo descargar el objeto almacenado.`);
+  const content = Buffer.from(await data.arrayBuffer());
+  const actualSha256 = createHash('sha256').update(content).digest('hex');
+  if (content.byteLength !== Number(expectedSize) || actualSha256 !== expectedSha256) {
+    failure(`${label}: el tamaño o hash del objeto almacenado no coincide con la base de datos.`);
+  }
 }
 
 function sqlSmallint(value) {
@@ -900,8 +1077,8 @@ function sqlUuidArray(values) {
   return `array[${values.map(sqlUuid).join(', ')}]::uuid[]`;
 }
 
-function createGovernedDocumentLocally(runtime, plan, actorId, moduleIds, file, storagePath) {
-  executeLocalSql(
+function createGovernedDocument(runtime, plan, actorId, moduleIds, file, storagePath) {
+  executeSql(
     runtime,
     `select public.create_governed_document_with_initial_version(
       ${sqlUuid(plan.documentId)}, ${sqlUuid(plan.versionId)}, ${sqlText(plan.title)},
@@ -925,46 +1102,88 @@ function createGovernedDocumentLocally(runtime, plan, actorId, moduleIds, file, 
         ? 'Fallo simulado de lectura OCR para demostrar el estado técnico Error.'
         : null)}
     );`,
-    `No se pudo crear ${plan.title} en la base local`,
+    `No se pudo crear ${plan.title} en la base de demostración`,
   );
 }
 
-function addGovernedDocumentVersionLocally(runtime, plan, actorId, versionId, versionNumber, file, storagePath) {
-  executeLocalSql(
+function addGovernedDocumentVersion(runtime, plan, actorId, versionId, versionNumber, file, storagePath) {
+  executeSql(
     runtime,
     `select public.add_governed_document_version(
       ${sqlUuid(plan.documentId)}, ${sqlUuid(versionId)}, ${sqlText(storagePath)},
       ${sqlText(`${plan.key}-v${versionNumber}.pdf`)}, ${sqlBigint(file.pdf.byteLength)},
       1, ${sqlText(file.sha256)}, ${sqlUuid(actorId)}, null::text
     );`,
-    `No se pudo añadir la versión ${versionNumber} de ${plan.title} en la base local`,
+    `No se pudo añadir la versión ${versionNumber} de ${plan.title} en la base de demostración`,
   );
 }
 
 async function ensureDocumentVersions(client, runtime, plan, actorId, moduleIds) {
+  let created = false;
   let document = await requireResult(
-    client.from('documents').select('id, current_version_id').eq('id', plan.documentId).maybeSingle(),
+    client.from('documents').select('id, current_version_id, metadata').eq('id', plan.documentId).maybeSingle(),
     `No se pudo buscar ${plan.title}`,
   );
+  if (document && document.metadata?.demoSeed !== DEMO_MARKER) {
+    failure(`El identificador de ${plan.title} ya pertenece a un documento no demostrativo.`);
+  }
 
   if (!document) {
+    created = true;
     const storagePath = `demo/${plan.documentId}/version-1.pdf`;
-    const file = await uploadPdf(client, storagePath, plan, 1);
-    createGovernedDocumentLocally(runtime, plan, actorId, moduleIds, file, storagePath);
+    const file = await uploadPdf(client, runtime, storagePath, plan, 1);
+    createGovernedDocument(runtime, plan, actorId, moduleIds, file, storagePath);
     document = { id: plan.documentId, current_version_id: plan.versionId };
+  } else {
+    const initialVersion = await requireResult(
+      client
+        .from('document_versions')
+        .select('storage_path, file_size_bytes, sha256')
+        .eq('id', plan.versionId)
+        .eq('document_id', plan.documentId)
+        .maybeSingle(),
+      `No se pudo revisar la versión inicial de ${plan.title}`,
+    );
+    if (!initialVersion) failure(`Falta la versión inicial de ${plan.title}.`);
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      initialVersion.storage_path,
+      initialVersion.file_size_bytes,
+      initialVersion.sha256,
+      `La versión inicial de ${plan.title}`,
+    );
   }
 
   for (let versionNumber = 2; versionNumber <= plan.versionCount; versionNumber += 1) {
     const versionId = stableUuid(`${plan.key}:version-${versionNumber}`);
     const existingVersion = await requireResult(
-      client.from('document_versions').select('id').eq('id', versionId).maybeSingle(),
+      client
+        .from('document_versions')
+        .select('id, document_id, storage_path, file_size_bytes, sha256')
+        .eq('id', versionId)
+        .maybeSingle(),
       `No se pudo revisar la versión ${versionNumber} de ${plan.title}`,
     );
-    if (existingVersion) continue;
+    if (existingVersion) {
+      if (existingVersion.document_id !== plan.documentId) {
+        failure(`La versión ${versionNumber} de ${plan.title} pertenece a otro documento.`);
+      }
+      await verifyStorageObject(
+        client,
+        'normative-documents',
+        existingVersion.storage_path,
+        existingVersion.file_size_bytes,
+        existingVersion.sha256,
+        `La versión ${versionNumber} de ${plan.title}`,
+      );
+      continue;
+    }
     const storagePath = `demo/${plan.documentId}/version-${versionNumber}.pdf`;
-    const file = await uploadPdf(client, storagePath, plan, versionNumber);
-    addGovernedDocumentVersionLocally(runtime, plan, actorId, versionId, versionNumber, file, storagePath);
+    const file = await uploadPdf(client, runtime, storagePath, plan, versionNumber);
+    addGovernedDocumentVersion(runtime, plan, actorId, versionId, versionNumber, file, storagePath);
   }
+  return { created };
 }
 
 async function ensureUnreadableDemoVersion(client, runtime, plan, actorId) {
@@ -972,37 +1191,81 @@ async function ensureUnreadableDemoVersion(client, runtime, plan, actorId) {
   const document = await requireResult(
     client
       .from('documents')
-      .select('current_version_id')
+      .select('current_version_id, metadata')
       .eq('id', plan.documentId)
       .maybeSingle(),
     `No se pudo leer la versión actual de ${plan.title}`,
   );
+  if (document && document.metadata?.demoSeed !== DEMO_MARKER) {
+    failure(`El identificador de ${plan.title} ya pertenece a un documento no demostrativo.`);
+  }
   if (!document?.current_version_id) failure(`No existe una versión actual para ${plan.title}.`);
   const currentVersion = await requireResult(
     client
       .from('document_versions')
-      .select('ingestion_status')
+      .select('ingestion_status, storage_path, file_size_bytes, sha256')
       .eq('id', document.current_version_id)
       .maybeSingle(),
     `No se pudo leer el estado de ${plan.title}`,
   );
-  if (currentVersion?.ingestion_status === 'failed') return;
+  if (currentVersion?.ingestion_status === 'failed') {
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      currentVersion.storage_path,
+      currentVersion.file_size_bytes,
+      currentVersion.sha256,
+      `La versión ilegible de ${plan.title}`,
+    );
+    return;
+  }
 
   const errorVersionId = stableUuid(`${plan.key}:unreadable-version`);
   const existingVersion = await requireResult(
-    client.from('document_versions').select('id').eq('id', errorVersionId).maybeSingle(),
+    client
+      .from('document_versions')
+      .select('id, document_id, storage_path, file_size_bytes, sha256')
+      .eq('id', errorVersionId)
+      .maybeSingle(),
     `No se pudo revisar la versión ilegible de ${plan.title}`,
   );
-  if (existingVersion) return;
+  if (existingVersion) {
+    if (existingVersion.document_id !== plan.documentId) {
+      failure(`La versión ilegible de ${plan.title} pertenece a otro documento.`);
+    }
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      existingVersion.storage_path,
+      existingVersion.file_size_bytes,
+      existingVersion.sha256,
+      `La versión ilegible de ${plan.title}`,
+    );
+    return;
+  }
   const storagePath = `demo/${plan.documentId}/unreadable-version.pdf`;
-  const file = await uploadPdf(client, storagePath, plan, 99);
-  addGovernedDocumentVersionLocally(runtime, plan, actorId, errorVersionId, 99, file, storagePath);
+  const file = await uploadPdf(client, runtime, storagePath, plan, 99);
+  addGovernedDocumentVersion(runtime, plan, actorId, errorVersionId, 99, file, storagePath);
 }
 
-function synchronizeDemoDocumentPlan(runtime, plan, actorId, moduleIds) {
-  executeLocalSql(
+function synchronizeDemoDocumentPlans(runtime, repairs) {
+  if (!repairs.length) return;
+  executeSql(
     runtime,
-    `
+    repairs.map(({ plan, actorId, moduleIds }) => `
+do $$
+begin
+  if not exists (
+    select 1
+    from public.documents
+    where id = ${sqlUuid(plan.documentId)}
+      and metadata ->> 'demoSeed' = ${sqlText(DEMO_MARKER)}
+  ) then
+    raise exception 'DEMO_DOCUMENT_OWNERSHIP_MISMATCH';
+  end if;
+end;
+$$;
+
 update public.documents
 set
   metadata = ${sqlText(JSON.stringify(plan.metadata))}::jsonb,
@@ -1014,13 +1277,22 @@ where id = ${sqlUuid(plan.documentId)}
 insert into public.document_modules (document_id, module_id)
 select ${sqlUuid(plan.documentId)}, module_id
 from unnest(${sqlUuidArray(moduleIds)}) as module_id
+where exists (
+  select 1
+  from public.documents
+  where id = ${sqlUuid(plan.documentId)}
+    and metadata ->> 'demoSeed' = ${sqlText(DEMO_MARKER)}
+)
 on conflict (document_id, module_id) do nothing;
-`,
-    `No se pudo sincronizar ${plan.title} en la base local`,
+`).join('\n'),
+    'No se pudieron sincronizar documentos existentes de la demostración',
   );
 }
 
-function executeLocalSql(runtime, sql, label) {
+function executeSql(runtime, sql, label) {
+  if (runtime.mode === 'production') {
+    return runtime.executeSql(sql, label);
+  }
   const execution = spawnSync(
     'docker',
     ['exec', '-i', runtime.databaseContainer, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres'],
@@ -1034,7 +1306,7 @@ function executeLocalSql(runtime, sql, label) {
 
 async function indexReadyDocuments(client, runtime, superadministratorId) {
   const safeMarker = DEMO_MARKER.replaceAll("'", "''");
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 begin;
 with ready_documents as (
   select document.id, document.current_version_id, document.title
@@ -1179,7 +1451,7 @@ async function synchronizeDemoDocumentTechnicalStates(client, runtime, plans, su
       ? 'El archivo de demostración no pudo leerse durante el procesamiento.'
       : null)}
   )`).join(',\n');
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 begin;
 with targets (document_version_id, ingestion_status, error_code, error_message) as (
   values ${values}
@@ -1254,16 +1526,21 @@ async function seedDocuments(client, runtime, moduleMap, superadministratorId, i
     const rank = { current: 0, replaced: 1, archived: 2 };
     return rank[first.situation] - rank[second.situation];
   });
+  const repairs = [];
   for (const [index, plan] of orderedPlans.entries()) {
     const moduleIds = plan.moduleCodes.map((code) => moduleMap.get(code)?.id).filter(Boolean);
     if (moduleIds.length !== plan.moduleCodes.length) {
       failure(`Falta una asociación de módulo para ${plan.key}.`);
     }
     const actorId = authors[index % authors.length] ?? superadministratorId;
-    await ensureDocumentVersions(client, runtime, plan, actorId, moduleIds);
+    const documentState = await ensureDocumentVersions(client, runtime, plan, actorId, moduleIds);
     await ensureUnreadableDemoVersion(client, runtime, plan, actorId);
-    synchronizeDemoDocumentPlan(runtime, plan, actorId, moduleIds);
+    // The governed creation RPC already persists metadata and associations for
+    // a new document.  Keep the repair statement for reruns, where it protects
+    // existing demo rows without adding one remote SQL call to every insert.
+    if (!documentState.created) repairs.push({ actorId, moduleIds, plan });
   }
+  synchronizeDemoDocumentPlans(runtime, repairs);
 
   await synchronizeDemoDocumentTechnicalStates(client, runtime, plans, superadministratorId);
   await indexReadyDocuments(client, runtime, superadministratorId);
@@ -1302,14 +1579,19 @@ function consultationPlans(moduleMap, documents) {
     if (!module.parent_module_id) continue;
     const parent = [...moduleMap.values()].find((candidate) => candidate.id === module.parent_module_id);
     if (!parent) continue;
-    const existing = leavesByRoot.get(parent.code) ?? [];
+    const parentCode = rootModules.find((code) => moduleMap.get(code)?.id === parent.id);
+    if (!parentCode) continue;
+    const existing = leavesByRoot.get(parentCode) ?? [];
     existing.push(module);
-    leavesByRoot.set(parent.code, existing);
+    leavesByRoot.set(parentCode, existing);
   }
 
   return Array.from({ length: 44 }, (_, index) => {
     const rootCode = weightedRoots[index % weightedRoots.length];
+    const root = moduleMap.get(rootCode);
+    if (!root) failure(`No existe el módulo raíz ${rootCode} para las consultas demostrativas.`);
     const choices = leavesByRoot.get(rootCode) ?? [];
+    if (!choices.length) failure(`No existen submódulos para ${rootCode} en las consultas demostrativas.`);
     const leaf = choices[index % choices.length];
     const issue = ['support_insufficient', 'support_partial', 'stale_document', 'citation_insufficient', 'possible_contradiction', 'technical_error'][index % 6];
     const eligibleDocuments = issue === 'stale_document'
@@ -1328,32 +1610,32 @@ function consultationPlans(moduleMap, documents) {
       issue,
       key: `consultation-${String(index + 1).padStart(2, '0')}`,
       leaf,
-      root: moduleMap.get(rootCode),
+      root,
       title: `Consulta sobre ${leaf.name.toLowerCase()}: criterio aplicable y plazos del procedimiento`,
     };
   });
 }
 
-async function sourceForDocument(client, documentId, documentVersionId, moduleId) {
-  const chunk = await requireResult(
-    client
-      .from('document_chunks')
-      .select('id')
-      .eq('document_id', documentId)
-      .eq('document_version_id', documentVersionId)
-      .eq('chunk_index', 0)
-      .maybeSingle(),
-    'No se pudo recuperar un fragmento documental',
-  );
-  if (!chunk) failure(`No existe un fragmento indexado para el documento ${documentId}.`);
-  return { chunkId: chunk.id, moduleId, relevanceScore: 0.82 };
-}
-
 async function ensureConversation(client, input) {
   const existing = await requireResult(
-    client.from('chat_conversations').select('id').eq('id', input.conversationId).maybeSingle(),
+    client
+      .from('chat_conversations')
+      .select('id, is_deleted, selected_module_id, title, user_id')
+      .eq('id', input.conversationId)
+      .maybeSingle(),
     'No se pudo buscar una conversación demostrativa',
   );
+  if (
+    existing
+    && (
+      existing.user_id !== input.userId
+      || existing.selected_module_id !== input.selectedModuleId
+      || existing.title !== input.title
+      || existing.is_deleted
+    )
+  ) {
+    failure(`El identificador de conversación ${input.conversationId} no pertenece a la demostración.`);
+  }
   if (!existing) {
     await requireResult(
       client.from('chat_conversations').insert({
@@ -1399,6 +1681,19 @@ async function ensureConsultationTurn(client, input) {
   }
   const needsCompletion = !answerMessageId;
 
+  if (answerMessageId) {
+    // Earlier demo revisions could attach synthetic citations before the RAG
+    // isolation guard existed.  A rerun must remove those links from this
+    // deterministic demo answer so they cannot leak through chat history.
+    await requireResult(
+      client
+        .from('chat_message_sources')
+        .delete()
+        .eq('message_id', answerMessageId),
+      'No se pudieron limpiar las citas sintéticas de la consulta demostrativa',
+    );
+  }
+
   if (!userMessageId) {
     const started = await callRpc(client, 'begin_chat_turn_with_consultation_routing', {
       p_conversation_id: input.conversationId,
@@ -1423,18 +1718,12 @@ async function ensureConsultationTurn(client, input) {
 
   if (!turnId || !userMessageId) failure('No se encontró el turno demostrativo para completar.');
 
-  const noEvidence = input.issue === 'support_insufficient' || input.issue === 'technical_error';
+  // Demo documents are deliberately excluded from retrieval in every
+  // environment, so seeded consultations must never cite them as evidence.
+  const noEvidence = true;
   const retrievalScope = input.issue === 'stale_document' ? 'historical' : 'current';
   const topRelevanceScore = noEvidence ? 0.31 : 0.82;
   if (!answerMessageId) {
-    const source = noEvidence
-      ? null
-      : await sourceForDocument(
-        client,
-        input.documentId,
-        input.documentVersionId,
-        input.selectedModuleId,
-      );
     const completed = await callRpc(client, 'complete_chat_turn', {
       p_answer: input.issue === 'technical_error'
         ? 'No se pudo completar la consulta por una incidencia técnica de demostración. Intente nuevamente o contacte al equipo administrador.'
@@ -1443,7 +1732,7 @@ async function ensureConsultationTurn(client, input) {
           : 'La orientación se basa en la fuente documental recuperada para el procedimiento indicado. [1]',
       p_answer_role: noEvidence ? 'no_evidence' : 'assistant',
       p_conversation_id: input.conversationId,
-      p_sources: source ? [source] : [],
+      p_sources: [],
       p_top_relevance_score: topRelevanceScore,
       p_unanswered_reason: noEvidence ? 'insufficient_evidence' : null,
       p_user_id: input.userId,
@@ -1564,8 +1853,10 @@ function buildConsultationCasePlans(turns) {
   });
 
   const assistantTurns = turns.filter((turn) => turn.answerMessageId);
-  const reportSlots = [0, 6, 12, 18, 36];
-  const suggestionSlots = [1, 7, 13, 20, 40];
+  // Keep one report in the current month but outside the current week so the
+  // dashboard's Hoy, Esta semana and Este mes values remain visibly distinct.
+  const reportSlots = [0, 6, 12, 16, 36];
+  const suggestionSlots = [1, 6, 13, 20, 40];
   if (
     reportSlots.some((slot) => !assistantTurns[slot])
     || suggestionSlots.some((slot) => !assistantTurns[slot])
@@ -1639,7 +1930,47 @@ function casePlanTuple(casePlan) {
   )`;
 }
 
-function seedConsultationCaseRows(runtime, superadministratorId, casePlans) {
+async function seedConsultationCaseRows(client, runtime, superadministratorId, casePlans) {
+  const planByCaseId = new Map(casePlans.map((casePlan) => [casePlan.caseId, casePlan]));
+  const existingCases = await selectRowsInChunks(
+    client,
+    'consultation_cases',
+    'id, conversation_id, user_id',
+    'id',
+    casePlans.map((casePlan) => casePlan.caseId),
+    'No se pudieron validar los casos demostrativos existentes',
+  );
+  for (const existingCase of existingCases) {
+    const plan = planByCaseId.get(existingCase.id);
+    if (
+      !plan
+      || existingCase.conversation_id !== plan.turn.conversationId
+      || existingCase.user_id !== plan.turn.userId
+    ) {
+      failure(`El identificador de caso ${existingCase.id} no pertenece a la demostración.`);
+    }
+  }
+
+  const expectedEventCaseIds = new Map(
+    casePlans.flatMap((casePlan) => [
+      [casePlan.caseCreatedEventId, casePlan.caseId],
+      ...(casePlan.statusEventId ? [[casePlan.statusEventId, casePlan.caseId]] : []),
+    ]),
+  );
+  const existingEvents = await selectRowsInChunks(
+    client,
+    'consultation_case_events',
+    'id, consultation_case_id',
+    'id',
+    [...expectedEventCaseIds.keys()],
+    'No se pudieron validar los eventos demostrativos existentes',
+  );
+  for (const existingEvent of existingEvents) {
+    if (expectedEventCaseIds.get(existingEvent.id) !== existingEvent.consultation_case_id) {
+      failure(`El identificador de evento ${existingEvent.id} no pertenece a la demostración.`);
+    }
+  }
+
   const tuples = casePlans.map(casePlanTuple).join(',\n');
   const createdEvents = casePlans.map((casePlan) => `(
     ${sqlUuid(casePlan.caseCreatedEventId)},
@@ -1666,7 +1997,7 @@ function seedConsultationCaseRows(runtime, superadministratorId, casePlans) {
       ${sqlText(casePlan.statusAt)}::timestamptz
     )`).join(',\n');
 
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 begin;
 with plans (
   id, kind, issue_type, status, turn_id, client_submission_id, report_reason,
@@ -1772,23 +2103,53 @@ async function seedCaseAttachments(client, runtime, casePlans) {
   const attachmentPlans = [];
   for (const [index, casePlan] of casePlans.filter((item) => item.kind !== 'automatic_alert').entries()) {
     const report = casePlan.kind === 'teacher_report';
-    const content = report ? png : await createPdf(`Sugerencia docente ${index + 1}`, 1);
+    const content = report ? png : await createPdf(`Sugerencia docente ${index + 1}`, 1, runtime.pdfEnvironment);
     const mimeType = report ? 'image/png' : 'application/pdf';
     const kind = report ? 'report_image' : 'suggestion_file';
     const sha256 = createHash('sha256').update(content).digest('hex');
-    const storagePath = `${casePlan.caseId}/${sha256}.${report ? 'png' : 'pdf'}`;
-    await requireResult(
-      client.storage.from('consultation-case-attachments').upload(
-        storagePath,
-        new Blob([content], { type: mimeType }),
-        { contentType: mimeType, upsert: true },
-      ),
-      'No se pudo cargar un adjunto demostrativo',
+    const storagePath = `demo/${casePlan.caseId}/attachment.${report ? 'png' : 'pdf'}`;
+    const attachmentId = stableUuid(`${DEMO_CONSULTATION_REVISION}:attachment:${casePlan.caseId}`);
+    const existingAttachment = await requireResult(
+      client
+        .from('consultation_case_attachments')
+        .select('id, consultation_case_id, storage_path, file_size_bytes, sha256')
+        .eq('id', attachmentId)
+        .maybeSingle(),
+      'No se pudo validar un adjunto demostrativo existente',
     );
+    if (
+      existingAttachment
+      && (
+        existingAttachment.consultation_case_id !== casePlan.caseId
+        || existingAttachment.storage_path !== storagePath
+      )
+    ) {
+      failure(`El identificador de adjunto ${attachmentId} no pertenece a la demostración.`);
+    }
+    if (existingAttachment) {
+      await verifyStorageObject(
+        client,
+        'consultation-case-attachments',
+        existingAttachment.storage_path,
+        existingAttachment.file_size_bytes,
+        existingAttachment.sha256,
+        `El adjunto de la consulta ${casePlan.caseId}`,
+      );
+    }
+    if (!existingAttachment) {
+      await requireResult(
+        client.storage.from('consultation-case-attachments').upload(
+          storagePath,
+          new Blob([content], { type: mimeType }),
+          { contentType: mimeType, upsert: true },
+        ),
+        'No se pudo cargar un adjunto demostrativo',
+      );
+    }
     attachmentPlans.push({
       attachmentAt: addMinutesAtMostNow(casePlan.createdAt, 35),
       attachmentEventId: stableUuid(`${DEMO_CONSULTATION_REVISION}:attachment:${casePlan.caseId}:event`),
-      attachmentId: stableUuid(`${DEMO_CONSULTATION_REVISION}:attachment:${casePlan.caseId}`),
+      attachmentId,
       casePlan,
       content,
       kind,
@@ -1799,6 +2160,23 @@ async function seedCaseAttachments(client, runtime, casePlans) {
     });
   }
   if (!attachmentPlans.length) return;
+
+  const expectedAttachmentEventCaseIds = new Map(
+    attachmentPlans.map((attachment) => [attachment.attachmentEventId, attachment.casePlan.caseId]),
+  );
+  const existingAttachmentEvents = await selectRowsInChunks(
+    client,
+    'consultation_case_events',
+    'id, consultation_case_id',
+    'id',
+    [...expectedAttachmentEventCaseIds.keys()],
+    'No se pudieron validar los eventos de adjuntos demostrativos',
+  );
+  for (const existingEvent of existingAttachmentEvents) {
+    if (expectedAttachmentEventCaseIds.get(existingEvent.id) !== existingEvent.consultation_case_id) {
+      failure(`El identificador de evento ${existingEvent.id} no pertenece a la demostración.`);
+    }
+  }
 
   const attachments = attachmentPlans.map((attachment) => `(
     ${sqlUuid(attachment.attachmentId)},
@@ -1827,7 +2205,7 @@ async function seedCaseAttachments(client, runtime, casePlans) {
     }))}::jsonb,
     ${sqlText(attachment.attachmentAt)}::timestamptz
   )`).join(',\n');
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 begin;
 insert into public.consultation_case_attachments (
   id, consultation_case_id, uploaded_by, attachment_kind, storage_bucket,
@@ -1854,6 +2232,7 @@ async function seedConsultations(client, runtime, moduleMap, documents, superadm
     .filter((user) => user.role === 'docente' && user.state === 'active')
     .map((user) => idsByKey.get(user.key))
     .filter(Boolean);
+  if (!activeTeacherIds.length) failure('No hay docentes activos para las consultas demostrativas.');
   const turns = [];
   for (const [index, plan] of consultationPlans(moduleMap, documents).entries()) {
     const userId = activeTeacherIds[index % activeTeacherIds.length];
@@ -1876,7 +2255,7 @@ async function seedConsultations(client, runtime, moduleMap, documents, superadm
     turns.push({ ...plan, ...turn, ...chronology, userId });
   }
   const casePlans = buildConsultationCasePlans(turns);
-  seedConsultationCaseRows(runtime, superadministratorId, casePlans);
+  await seedConsultationCaseRows(client, runtime, superadministratorId, casePlans);
   await seedCaseAttachments(client, runtime, casePlans);
   return {
     activeTeacherIds,
@@ -1900,13 +2279,14 @@ async function selectRowsInChunks(client, table, fields, column, ids, label) {
 
 function verifyDemoRagRetrieval(runtime) {
   const safeMarker = DEMO_MARKER.replaceAll("'", "''");
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 do $$
 declare
   target record;
-  expected_scope text;
-  found_expected boolean;
-  found_current boolean;
+  retrieval_scope text;
+  found_contextual boolean;
+  found_legacy boolean;
+  target_count integer := 0;
 begin
   if to_regprocedure(
     'public.search_document_chunks_with_consultation_context(extensions.vector,text,uuid,real,integer,text)'
@@ -1937,51 +2317,53 @@ begin
       and document.situation in ('current', 'replaced', 'archived')
     order by document.situation, document.id
   loop
+    target_count := target_count + 1;
     if (target.embedding operator(extensions.<=>) target.embedding) is distinct from 0::real then
       raise exception 'DEMO_RAG_EMBEDDING_IS_NOT_USABLE for %', target.document_id;
     end if;
-    expected_scope := case target.situation
-      when 'current' then 'current'
-      when 'replaced' then 'historical'
-      else 'archived_explicit'
-    end;
+
+    foreach retrieval_scope in array array['current', 'historical', 'archived_explicit'] loop
+      select exists (
+        select 1
+        from public.search_document_chunks_with_consultation_context(
+          target.embedding,
+          'consulta demostrativa de verificación',
+          target.selected_module_id,
+          0.999::real,
+          10,
+          retrieval_scope
+        ) as result
+        where result.document_id = target.document_id
+      ) into found_contextual;
+      if found_contextual then
+        raise exception 'DEMO_RAG_CONTEXTUAL_LEAK for %, scope %', target.document_id, retrieval_scope;
+      end if;
+    end loop;
+
     select exists (
       select 1
-      from public.search_document_chunks_with_consultation_context(
+      from public.search_document_chunks(
         target.embedding,
         'consulta demostrativa de verificación',
         target.selected_module_id,
         0.999::real,
-        10,
-        expected_scope
+        10
       ) as result
       where result.document_id = target.document_id
-        and result.document_situation = target.situation
-    ) into found_expected;
-    select exists (
-      select 1
-      from public.search_document_chunks_with_consultation_context(
-        target.embedding,
-        'consulta demostrativa de verificación',
-        target.selected_module_id,
-        0.999::real,
-        10,
-        'current'
-      ) as result
-      where result.document_id = target.document_id
-    ) into found_current;
-    if not found_expected
-      or (target.situation = 'current' and not found_current)
-      or (target.situation <> 'current' and found_current) then
-      raise exception 'DEMO_RAG_SITUATION_SCOPE_FAILED for %', target.situation;
+    ) into found_legacy;
+    if found_legacy then
+      raise exception 'DEMO_RAG_LEGACY_LEAK for %', target.document_id;
     end if;
   end loop;
+  if target_count <> 3 then
+    raise exception 'DEMO_RAG_DOCUMENT_SITUATIONS_ARE_INCOMPLETE';
+  end if;
 end;
 $$;
-`, 'No se pudo verificar la recuperación RAG demostrativa');
+`, 'No se pudo verificar el aislamiento RAG de la demostración');
 }
 
-async function verifyLocalDemo(client, runtime, state) {
+async function verifyDemo(client, runtime, state) {
   const profiles = await requireResult(
     client.from('profiles').select('id, role, account_status, access_expires_at').in('id', [...state.idsByKey.values()]),
     'No se pudieron verificar perfiles demostrativos',
@@ -2102,6 +2484,28 @@ async function verifyLocalDemo(client, runtime, state) {
   if (!state.demoConversationIds?.length) {
     failure('No se identificaron las conversaciones demostrativas para la verificación.');
   }
+  const demoAnswerMessages = await selectRowsInChunks(
+    client,
+    'chat_messages',
+    'id',
+    'conversation_id',
+    state.demoConversationIds,
+    'No se pudieron verificar respuestas demostrativas',
+  );
+  const demoAnswerIds = demoAnswerMessages.map((message) => message.id);
+  if (demoAnswerIds.length) {
+    const demoSources = await selectRowsInChunks(
+      client,
+      'chat_message_sources',
+      'id, message_id, document_id',
+      'message_id',
+      demoAnswerIds,
+      'No se pudieron verificar citas demostrativas',
+    );
+    if (demoSources.length) {
+      failure('Las respuestas demostrativas conservan citas documentales que deben permanecer vacías.');
+    }
+  }
   const cases = await requireResult(
     client
       .from('consultation_cases')
@@ -2212,7 +2616,7 @@ async function verifyLocalDemo(client, runtime, state) {
   const activeTeacherId = state.idsByKey.get(activeTeacher.key);
   const expiredTeacherId = state.idsByKey.get(expiredTeacher.key);
   const suspendedTeacherId = state.idsByKey.get(suspendedTeacher.key);
-  executeLocalSql(runtime, `
+  executeSql(runtime, `
 begin;
 select * from public.begin_chat_turn_with_consultation_routing(
   '${activeTeacherId}', null, null, 'Verificación transaccional de acceso activo'
@@ -2238,7 +2642,7 @@ begin
 end;
 $$;
 rollback;
-`, 'No se pudo verificar el enforcement de vigencia local');
+`, 'No se pudo verificar el enforcement de vigencia de demostración');
 
   if (state.verifyActiveLogin) {
     const publicClient = createClient(runtime.apiUrl, runtime.anonKey, {
@@ -2246,9 +2650,9 @@ rollback;
     });
     const login = await publicClient.auth.signInWithPassword({
       email: activeTeacher.email,
-      password: DEMO_PASSWORD,
+      password: runtime.demoPassword,
     });
-    if (login.error || !login.data.session) failure('La docente activa de demostración no puede iniciar sesión localmente.');
+    if (login.error || !login.data.session) failure('La docente activa de demostración no puede iniciar sesión.');
   }
 
   return {
@@ -2265,9 +2669,7 @@ rollback;
   };
 }
 
-async function main() {
-  const verifyOnly = process.argv.includes('--verify');
-  const runtime = getLocalRuntime();
+export async function runDemoSeed(runtime, { verifyOnly = false, verifyActiveLogin = true } = {}) {
   const client = createClient(runtime.apiUrl, runtime.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -2275,19 +2677,24 @@ async function main() {
   if (verifyOnly) {
     const users = demoUsers();
     const existing = await listAllAuthUsers(client);
-    const idsByKey = new Map(
-      users.map((user) => [user.key, existing.find((candidate) => candidate.email === user.email)?.id]).filter(([, id]) => id),
-    );
+    const idsByKey = new Map();
+    for (const user of users) {
+      const identity = existing.find((candidate) => candidate.email === user.email);
+      if (!identity || identity.app_metadata?.demoSeed !== DEMO_MARKER) {
+        failure(`La identidad ${user.email} no pertenece al seed de demostración.`);
+      }
+      idsByKey.set(user.key, identity.id);
+    }
     const superadministratorId = idsByKey.get('superadmin');
     if (!superadministratorId) failure('La superadministradora demostrativa no existe. Ejecute primero demo:seed.');
-    const moduleMap = await loadModuleMap(client);
+    const moduleMap = await loadModuleMap(client, runtime);
     const documents = await loadDemoDocumentsWithModules(client);
     const demoConversationIds = consultationPlans(moduleMap, documents).map(demoConversationId);
     const activeTeacherIds = users
       .filter((user) => user.role === 'docente' && user.state === 'active')
       .map((user) => idsByKey.get(user.key))
       .filter(Boolean);
-    const summary = await verifyLocalDemo(client, runtime, {
+    return verifyDemo(client, runtime, {
       activeTeacherIds,
       demoConversationIds,
       documents,
@@ -2296,12 +2703,10 @@ async function main() {
       superadministratorId,
       verifyActiveLogin: false,
     });
-    console.log(`Verificación demo local correcta: ${JSON.stringify(summary)}`);
-    return;
   }
 
   const users = await seedUsers(client, runtime);
-  const moduleMap = await ensureModules(client, users.superadministratorId);
+  const moduleMap = await ensureModules(client, runtime, users.superadministratorId);
   const documents = await seedDocuments(client, runtime, moduleMap, users.superadministratorId, users.idsByKey);
   const consultations = await seedConsultations(
     client,
@@ -2311,17 +2716,30 @@ async function main() {
     users.superadministratorId,
     users.idsByKey,
   );
-  const summary = await verifyLocalDemo(client, runtime, {
+  return verifyDemo(client, runtime, {
     ...users,
     ...consultations,
     documents: documents.documents,
     moduleMap,
-    verifyActiveLogin: true,
+    verifyActiveLogin,
   });
-  console.log(`Seed demo local correcto: ${JSON.stringify(summary)}`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+async function main() {
+  const runtime = getLocalRuntime();
+  const verifyOnly = process.argv.includes('--verify');
+  const summary = await runDemoSeed(runtime, {
+    verifyActiveLogin: !verifyOnly,
+    verifyOnly,
+  });
+  console.log(`${verifyOnly ? 'Verificación' : 'Seed'} demo local correcto: ${JSON.stringify(summary)}`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}
+
+export { DEMO_MARKER, demoUsers };

@@ -1,6 +1,6 @@
 begin;
 
-select plan(40);
+select plan(44);
 
 select has_extension('vector', 'pgvector is enabled for RAG embeddings');
 select has_table('public', 'document_ingestion_jobs', 'The durable ingestion queue exists');
@@ -172,6 +172,12 @@ select is(
   1::bigint,
   'Creating a document version enqueues exactly one durable ingestion job'
 );
+
+-- Make the fixture deterministic when a developer has unrelated pending jobs
+-- in the shared local queue. The worker claims the oldest requested job.
+update public.document_ingestion_jobs
+set requested_at = '2000-01-01 00:00:00+00'::timestamptz
+where document_version_id = '00000000-0000-0000-0000-000000003202';
 
 select throws_ok(
   $$
@@ -392,6 +398,120 @@ select is(
   'Norma de licencias',
   'The historical source retains the real document citation snapshot'
 );
+
+update public.documents
+set metadata = jsonb_build_object('demoSeed', 'isolated-test')
+where id = '00000000-0000-0000-0000-000000003201';
+
+-- Keep a real indexed chunk in place while the marker is active.  The earlier
+-- chunk is intentionally removed above to prove citation snapshot durability;
+-- this dedicated row makes the retrieval exclusion assertions exercise the
+-- marker predicate instead of passing vacuously on an empty vector table.
+insert into public.document_chunks (
+  id,
+  document_id,
+  document_version_id,
+  chunk_index,
+  chunk_content,
+  token_count,
+  page_start,
+  page_end,
+  section_title,
+  article_reference,
+  embedding
+)
+values (
+  '00000000-0000-0000-0000-000000003302',
+  '00000000-0000-0000-0000-000000003201',
+  '00000000-0000-0000-0000-000000003202',
+  1,
+  'Artículo 6. La licencia docente mantiene el procedimiento institucional vigente.',
+  18,
+  1,
+  1,
+  'Artículo 6',
+  'Artículo 6',
+  array_fill(0.01::real, array[1536])::extensions.vector
+);
+
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'licencia docente procedimiento',
+      '00000000-0000-0000-0000-000000003101',
+      0.70,
+      5
+    )
+  ),
+  0::bigint,
+  'Legacy retrieval excludes a document carrying the demo marker'
+);
+
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_with_consultation_context(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'licencia docente procedimiento',
+      '00000000-0000-0000-0000-000000003101',
+      0.70,
+      5,
+      'current'
+    )
+  ),
+  0::bigint,
+  'Contextual retrieval excludes a demo document from current questions'
+);
+
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_with_consultation_context(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'licencia docente procedimiento',
+      '00000000-0000-0000-0000-000000003101',
+      0.70,
+      5,
+      'historical'
+    )
+  ),
+  0::bigint,
+  'Contextual retrieval excludes a demo document from historical questions'
+);
+
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_with_consultation_context(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'licencia docente procedimiento',
+      '00000000-0000-0000-0000-000000003101',
+      0.70,
+      5,
+      'archived_explicit'
+    )
+  ),
+  0::bigint,
+  'Contextual retrieval excludes a demo document from explicit archival questions'
+);
+
+update public.documents
+set metadata = '{}'::jsonb
+where id = '00000000-0000-0000-0000-000000003201';
+
+do $$
+begin
+  if (
+    select metadata ->> 'demoSeed'
+    from public.documents
+    where id = '00000000-0000-0000-0000-000000003201'
+  ) <> 'isolated-test' then
+    raise exception 'The server-controlled demo marker did not survive metadata replacement';
+  end if;
+end;
+$$;
 
 select * from finish();
 
