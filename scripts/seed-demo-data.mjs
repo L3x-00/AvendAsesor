@@ -831,18 +831,11 @@ async function seedUsers(client, runtime) {
     const profile = await getProfile(client, userId);
     if (!profile) failure(`No existe el perfil de ${user.email}.`);
 
-    if (profile.created_by === null) {
-      await callRpc(client, 'provision_administrative_user', {
-        p_access_expires_at: user.state === 'expiring' ? user.accessExpiresAt : null,
-        p_access_start_at: user.accessStartAt,
-        p_actor_id: superadministratorId,
-        p_full_name: user.fullName,
-        p_phone: user.phone,
-        p_role: user.role,
-        p_target_user_id: userId,
-      });
-    }
-
+    // Complete the demo profile with one deterministic patch below.  The
+    // provisioning RPC is intended for interactive onboarding and appends a
+    // user_created audit event; the demo directory keeps the audit feed
+    // compatible with the existing admin view while recording created_by and
+    // updated_by ownership (suspended profiles still exercise status audits).
     const mustSuspend = user.state === 'suspended';
     const freshProfile = await getProfile(client, userId);
     if (mustSuspend && freshProfile?.account_status !== 'suspended') {
