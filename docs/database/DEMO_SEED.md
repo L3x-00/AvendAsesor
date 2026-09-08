@@ -10,7 +10,7 @@ Con el stack local levantado:
 npm run demo:seed
 ```
 
-El proceso puede ejecutarse nuevamente sin duplicar identidades, módulos, documentos, versiones, conversaciones ni casos para la misma revisión del seed. Usa identificadores estables y sólo actualiza módulos, documentos e identidades que ya llevan el marcador de demo. Si un código de submódulo o un correo existente pertenece a contenido no demostrativo incompatible, el proceso se detiene en vez de modificarlo. Las filas de demostración llevan `metadata.demoSeed = "avend-demo-2026"` y las identidades usan el dominio `@demo.avend.local`. No cambie `DEMO_CONSULTATION_REVISION` para resembrar una misma base: esa revisión identifica registros históricos inmutables.
+El proceso puede ejecutarse nuevamente sin duplicar identidades, módulos, documentos, versiones, conversaciones ni casos para la misma revisión del seed. En la primera ejecución crea filas nuevas bajo los identificadores estables; en las siguientes sólo actualiza registros que ya llevan el marcador de demo. Si un código de submódulo o un correo existente pertenece a contenido no demostrativo incompatible, el proceso se detiene en vez de modificarlo. Las filas de demostración llevan `metadata.demoSeed = "avend-demo-2026"` y las identidades usan el dominio `@demo.avend.local`. No cambie `DEMO_CONSULTATION_REVISION` para resembrar una misma base: esa revisión identifica registros históricos inmutables.
 
 Para validar la consistencia sin sembrar ni alterar contenido durable:
 
@@ -46,7 +46,7 @@ Compruebe el resultado sin alterar datos:
 npm run demo:verify:production -- --project-ref blxrdotroysitfyehmqw
 ```
 
-El ejecutor productivo sólo crea o actualiza identidades, módulos, documentos, archivos, conversaciones y casos que ya llevan el marcador `demoSeed = "avend-demo-2026"`. Usa módulos con códigos `DEMO_` para no reactivar ni modificar jerarquías preexistentes, genera contraseñas aleatorias que no se imprimen y conserva los datos sin marcador intactos. Sus PDFs y adjuntos se guardan bajo rutas `demo/` y son contenido ficticio no normativo.
+El ejecutor productivo crea registros nuevos con el marcador `demoSeed = "avend-demo-2026"` y, en reintentos, sólo actualiza registros demo existentes. Usa módulos con códigos `DEMO_` para no reactivar ni modificar jerarquías preexistentes, genera contraseñas aleatorias que no se imprimen y conserva los datos sin marcador intactos. Sus PDFs y adjuntos se guardan bajo rutas `demo/` y son contenido ficticio no normativo. Los objetos se suben con rutas deterministas y `upsert` para que un reintento recupere un fallo posterior del SQL; un fallo de red todavía debe verificarse con `demo:verify:production` antes de reintentar.
 
 Antes de una carga productiva deben estar aplicadas las migraciones `20260908151631_excluir_documentos_demo_del_rag.sql` y `20260908204204_preservar_marcador_demo_rag.sql`. Los documentos con el marcador demo permanecen visibles para la demostración administrativa, pero no pueden recuperarse como evidencia por el chat de docentes, ni siquiera en búsquedas históricas o archivadas. El segundo cambio conserva el marcador cuando se edita la metadata completa y también bloquea una cita directa que intente saltarse el buscador.
 

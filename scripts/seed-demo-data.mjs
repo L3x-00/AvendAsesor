@@ -1033,7 +1033,10 @@ async function uploadPdf(client, runtime, storagePath, title, versionNumber) {
   await requireResult(
     client.storage.from('normative-documents').upload(storagePath, new Blob([pdf], { type: 'application/pdf' }), {
       contentType: 'application/pdf',
-      upsert: runtime.mode !== 'production',
+      // Paths are namespaced under demo/ and deterministic, so an upsert
+      // makes a retry recover cleanly if the SQL transaction failed after the
+      // object upload. It cannot overwrite a customer-named path.
+      upsert: true,
     }),
     `No se pudo subir ${storagePath}`,
   );
@@ -2003,7 +2006,7 @@ async function seedCaseAttachments(client, runtime, casePlans) {
     const mimeType = report ? 'image/png' : 'application/pdf';
     const kind = report ? 'report_image' : 'suggestion_file';
     const sha256 = createHash('sha256').update(content).digest('hex');
-    const storagePath = `${casePlan.caseId}/attachment.${report ? 'png' : 'pdf'}`;
+    const storagePath = `demo/${casePlan.caseId}/attachment.${report ? 'png' : 'pdf'}`;
     const attachmentId = stableUuid(`${DEMO_CONSULTATION_REVISION}:attachment:${casePlan.caseId}`);
     const existingAttachment = await requireResult(
       client
@@ -2027,7 +2030,7 @@ async function seedCaseAttachments(client, runtime, casePlans) {
         client.storage.from('consultation-case-attachments').upload(
           storagePath,
           new Blob([content], { type: mimeType }),
-          { contentType: mimeType, upsert: runtime.mode !== 'production' },
+          { contentType: mimeType, upsert: true },
         ),
         'No se pudo cargar un adjunto demostrativo',
       );
