@@ -1043,6 +1043,16 @@ async function uploadPdf(client, runtime, storagePath, title, versionNumber) {
   return { pdf, sha256 };
 }
 
+async function verifyStorageObject(client, bucket, storagePath, expectedSize, expectedSha256, label) {
+  const { data, error } = await client.storage.from(bucket).download(storagePath);
+  if (error || !data) failure(`${label}: no se pudo descargar el objeto almacenado.`);
+  const content = Buffer.from(await data.arrayBuffer());
+  const actualSha256 = createHash('sha256').update(content).digest('hex');
+  if (content.byteLength !== Number(expectedSize) || actualSha256 !== expectedSha256) {
+    failure(`${label}: el tamaño o hash del objeto almacenado no coincide con la base de datos.`);
+  }
+}
+
 function sqlSmallint(value) {
   return value === null || value === undefined ? 'null::smallint' : `${Number(value)}::smallint`;
 }
@@ -1111,18 +1121,49 @@ async function ensureDocumentVersions(client, runtime, plan, actorId, moduleIds)
     const file = await uploadPdf(client, runtime, storagePath, plan, 1);
     createGovernedDocument(runtime, plan, actorId, moduleIds, file, storagePath);
     document = { id: plan.documentId, current_version_id: plan.versionId };
+  } else {
+    const initialVersion = await requireResult(
+      client
+        .from('document_versions')
+        .select('storage_path, file_size_bytes, sha256')
+        .eq('id', plan.versionId)
+        .eq('document_id', plan.documentId)
+        .maybeSingle(),
+      `No se pudo revisar la versión inicial de ${plan.title}`,
+    );
+    if (!initialVersion) failure(`Falta la versión inicial de ${plan.title}.`);
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      initialVersion.storage_path,
+      initialVersion.file_size_bytes,
+      initialVersion.sha256,
+      `La versión inicial de ${plan.title}`,
+    );
   }
 
   for (let versionNumber = 2; versionNumber <= plan.versionCount; versionNumber += 1) {
     const versionId = stableUuid(`${plan.key}:version-${versionNumber}`);
     const existingVersion = await requireResult(
-      client.from('document_versions').select('id, document_id').eq('id', versionId).maybeSingle(),
+      client
+        .from('document_versions')
+        .select('id, document_id, storage_path, file_size_bytes, sha256')
+        .eq('id', versionId)
+        .maybeSingle(),
       `No se pudo revisar la versión ${versionNumber} de ${plan.title}`,
     );
     if (existingVersion) {
       if (existingVersion.document_id !== plan.documentId) {
         failure(`La versión ${versionNumber} de ${plan.title} pertenece a otro documento.`);
       }
+      await verifyStorageObject(
+        client,
+        'normative-documents',
+        existingVersion.storage_path,
+        existingVersion.file_size_bytes,
+        existingVersion.sha256,
+        `La versión ${versionNumber} de ${plan.title}`,
+      );
       continue;
     }
     const storagePath = `demo/${plan.documentId}/version-${versionNumber}.pdf`;
@@ -1148,22 +1189,44 @@ async function ensureUnreadableDemoVersion(client, runtime, plan, actorId) {
   const currentVersion = await requireResult(
     client
       .from('document_versions')
-      .select('ingestion_status')
+      .select('ingestion_status, storage_path, file_size_bytes, sha256')
       .eq('id', document.current_version_id)
       .maybeSingle(),
     `No se pudo leer el estado de ${plan.title}`,
   );
-  if (currentVersion?.ingestion_status === 'failed') return;
+  if (currentVersion?.ingestion_status === 'failed') {
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      currentVersion.storage_path,
+      currentVersion.file_size_bytes,
+      currentVersion.sha256,
+      `La versión ilegible de ${plan.title}`,
+    );
+    return;
+  }
 
   const errorVersionId = stableUuid(`${plan.key}:unreadable-version`);
   const existingVersion = await requireResult(
-    client.from('document_versions').select('id, document_id').eq('id', errorVersionId).maybeSingle(),
+    client
+      .from('document_versions')
+      .select('id, document_id, storage_path, file_size_bytes, sha256')
+      .eq('id', errorVersionId)
+      .maybeSingle(),
     `No se pudo revisar la versión ilegible de ${plan.title}`,
   );
   if (existingVersion) {
     if (existingVersion.document_id !== plan.documentId) {
       failure(`La versión ilegible de ${plan.title} pertenece a otro documento.`);
     }
+    await verifyStorageObject(
+      client,
+      'normative-documents',
+      existingVersion.storage_path,
+      existingVersion.file_size_bytes,
+      existingVersion.sha256,
+      `La versión ilegible de ${plan.title}`,
+    );
     return;
   }
   const storagePath = `demo/${plan.documentId}/unreadable-version.pdf`;
@@ -1593,6 +1656,19 @@ async function ensureConsultationTurn(client, input) {
   }
   const needsCompletion = !answerMessageId;
 
+  if (answerMessageId) {
+    // Earlier demo revisions could attach synthetic citations before the RAG
+    // isolation guard existed.  A rerun must remove those links from this
+    // deterministic demo answer so they cannot leak through chat history.
+    await requireResult(
+      client
+        .from('chat_message_sources')
+        .delete()
+        .eq('message_id', answerMessageId),
+      'No se pudieron limpiar las citas sintéticas de la consulta demostrativa',
+    );
+  }
+
   if (!userMessageId) {
     const started = await callRpc(client, 'begin_chat_turn_with_consultation_routing', {
       p_conversation_id: input.conversationId,
@@ -2011,7 +2087,7 @@ async function seedCaseAttachments(client, runtime, casePlans) {
     const existingAttachment = await requireResult(
       client
         .from('consultation_case_attachments')
-        .select('id, consultation_case_id, storage_path')
+        .select('id, consultation_case_id, storage_path, file_size_bytes, sha256')
         .eq('id', attachmentId)
         .maybeSingle(),
       'No se pudo validar un adjunto demostrativo existente',
@@ -2024,6 +2100,16 @@ async function seedCaseAttachments(client, runtime, casePlans) {
       )
     ) {
       failure(`El identificador de adjunto ${attachmentId} no pertenece a la demostración.`);
+    }
+    if (existingAttachment) {
+      await verifyStorageObject(
+        client,
+        'consultation-case-attachments',
+        existingAttachment.storage_path,
+        existingAttachment.file_size_bytes,
+        existingAttachment.sha256,
+        `El adjunto de la consulta ${casePlan.caseId}`,
+      );
     }
     if (!existingAttachment) {
       await requireResult(
@@ -2372,6 +2458,28 @@ async function verifyDemo(client, runtime, state) {
   if (!state.demoConversationIds?.length) {
     failure('No se identificaron las conversaciones demostrativas para la verificación.');
   }
+  const demoAnswerMessages = await selectRowsInChunks(
+    client,
+    'chat_messages',
+    'id',
+    'conversation_id',
+    state.demoConversationIds,
+    'No se pudieron verificar respuestas demostrativas',
+  );
+  const demoAnswerIds = demoAnswerMessages.map((message) => message.id);
+  if (demoAnswerIds.length) {
+    const demoSources = await selectRowsInChunks(
+      client,
+      'chat_message_sources',
+      'id, message_id, document_id',
+      'message_id',
+      demoAnswerIds,
+      'No se pudieron verificar citas demostrativas',
+    );
+    if (demoSources.length) {
+      failure('Las respuestas demostrativas conservan citas documentales que deben permanecer vacías.');
+    }
+  }
   const cases = await requireResult(
     client
       .from('consultation_cases')
@@ -2543,9 +2651,14 @@ export async function runDemoSeed(runtime, { verifyOnly = false, verifyActiveLog
   if (verifyOnly) {
     const users = demoUsers();
     const existing = await listAllAuthUsers(client);
-    const idsByKey = new Map(
-      users.map((user) => [user.key, existing.find((candidate) => candidate.email === user.email)?.id]).filter(([, id]) => id),
-    );
+    const idsByKey = new Map();
+    for (const user of users) {
+      const identity = existing.find((candidate) => candidate.email === user.email);
+      if (!identity || identity.app_metadata?.demoSeed !== DEMO_MARKER) {
+        failure(`La identidad ${user.email} no pertenece al seed de demostración.`);
+      }
+      idsByKey.set(user.key, identity.id);
+    }
     const superadministratorId = idsByKey.get('superadmin');
     if (!superadministratorId) failure('La superadministradora demostrativa no existe. Ejecute primero demo:seed.');
     const moduleMap = await loadModuleMap(client, runtime);
