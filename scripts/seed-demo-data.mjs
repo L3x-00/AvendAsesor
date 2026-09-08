@@ -425,7 +425,9 @@ function statusForTeacher(index) {
 function teacherAccess(status, index) {
   if (status === 'expiring') {
     return {
-      accessExpiresAt: isoDaysFromNow((index - 32) % EXPIRING_SOON_DAYS + 1, 23),
+      // Keep every demo expiry at least one full day inside the seven-day
+      // window so the dashboard count does not flap at the UTC boundary.
+      accessExpiresAt: isoDaysFromNow((index - 32) % (EXPIRING_SOON_DAYS - 1) + 1, 23),
       accessStartAt: isoDaysFromNow(-180, 8),
     };
   }
@@ -770,7 +772,7 @@ function sqlUuid(value) {
   return `${sqlText(value)}::uuid`;
 }
 
-function applyProfilePatch(runtime, userId, profile) {
+function profilePatchSql(userId, profile) {
   const assignments = [
     `access_expires_at = ${sqlText(profile.accessExpiresAt)}::timestamptz`,
     `access_start_at = ${sqlText(profile.accessStartAt)}::timestamptz`,
@@ -787,10 +789,15 @@ function applyProfilePatch(runtime, userId, profile) {
     `updated_by = ${sqlUuid(profile.updatedBy)}`,
     'updated_at = now()',
   ];
+  return `update public.profiles set ${assignments.join(', ')} where id = ${sqlUuid(userId)};`;
+}
+
+function applyProfilePatches(runtime, patches) {
+  if (!patches.length) return;
   executeSql(
     runtime,
-    `update public.profiles set ${assignments.join(', ')} where id = ${sqlUuid(userId)};`,
-    `No se pudo completar el perfil de demostración ${userId}`,
+    patches.map(({ userId, profile }) => profilePatchSql(userId, profile)).join('\n'),
+    'No se pudieron completar los perfiles de demostración',
   );
 }
 
@@ -808,7 +815,7 @@ async function seedUsers(client, runtime) {
 
   const bootstrapProfile = await getProfile(client, superadministratorId);
   if (!bootstrapProfile) failure('El trigger de perfiles no creó la superadministradora local.');
-  applyProfilePatch(runtime, superadministratorId, {
+  const profilePatches = [{ userId: superadministratorId, profile: {
     accessExpiresAt: null,
     accessStartAt: isoDaysFromNow(-365, 8),
     accountStatus: 'active',
@@ -822,7 +829,7 @@ async function seedUsers(client, runtime) {
     statusChangedBy: null,
     statusReason: null,
     updatedBy: superadministratorId,
-  });
+  } }];
 
   for (const [index, user] of users.entries()) {
     if (user.key === 'superadmin') continue;
@@ -848,7 +855,7 @@ async function seedUsers(client, runtime) {
       });
     }
 
-    applyProfilePatch(runtime, userId, {
+    profilePatches.push({ userId, profile: {
       accessExpiresAt: user.accessExpiresAt,
       accessStartAt: user.accessStartAt,
       accountStatus: mustSuspend ? 'suspended' : 'active',
@@ -862,8 +869,12 @@ async function seedUsers(client, runtime) {
       statusChangedBy: mustSuspend ? superadministratorId : null,
       statusReason: mustSuspend ? 'Pausa temporal para demostración local.' : null,
       updatedBy: superadministratorId,
-    });
+    } });
   }
+
+  // A single guarded SQL batch avoids one remote Management API round-trip per
+  // profile while keeping the same deterministic ownership values.
+  applyProfilePatches(runtime, profilePatches);
 
   for (const administrator of administrativeUsers.filter((user) => user.key !== 'superadmin')) {
     const userId = idsByKey.get(administrator.key);
@@ -1108,6 +1119,7 @@ function addGovernedDocumentVersion(runtime, plan, actorId, versionId, versionNu
 }
 
 async function ensureDocumentVersions(client, runtime, plan, actorId, moduleIds) {
+  let created = false;
   let document = await requireResult(
     client.from('documents').select('id, current_version_id, metadata').eq('id', plan.documentId).maybeSingle(),
     `No se pudo buscar ${plan.title}`,
@@ -1117,6 +1129,7 @@ async function ensureDocumentVersions(client, runtime, plan, actorId, moduleIds)
   }
 
   if (!document) {
+    created = true;
     const storagePath = `demo/${plan.documentId}/version-1.pdf`;
     const file = await uploadPdf(client, runtime, storagePath, plan, 1);
     createGovernedDocument(runtime, plan, actorId, moduleIds, file, storagePath);
@@ -1170,6 +1183,7 @@ async function ensureDocumentVersions(client, runtime, plan, actorId, moduleIds)
     const file = await uploadPdf(client, runtime, storagePath, plan, versionNumber);
     addGovernedDocumentVersion(runtime, plan, actorId, versionId, versionNumber, file, storagePath);
   }
+  return { created };
 }
 
 async function ensureUnreadableDemoVersion(client, runtime, plan, actorId) {
@@ -1234,10 +1248,11 @@ async function ensureUnreadableDemoVersion(client, runtime, plan, actorId) {
   addGovernedDocumentVersion(runtime, plan, actorId, errorVersionId, 99, file, storagePath);
 }
 
-function synchronizeDemoDocumentPlan(runtime, plan, actorId, moduleIds) {
+function synchronizeDemoDocumentPlans(runtime, repairs) {
+  if (!repairs.length) return;
   executeSql(
     runtime,
-    `
+    repairs.map(({ plan, actorId, moduleIds }) => `
 do $$
 begin
   if not exists (
@@ -1269,8 +1284,8 @@ where exists (
     and metadata ->> 'demoSeed' = ${sqlText(DEMO_MARKER)}
 )
 on conflict (document_id, module_id) do nothing;
-`,
-    `No se pudo sincronizar ${plan.title} en la base de demostración`,
+`).join('\n'),
+    'No se pudieron sincronizar documentos existentes de la demostración',
   );
 }
 
@@ -1511,16 +1526,21 @@ async function seedDocuments(client, runtime, moduleMap, superadministratorId, i
     const rank = { current: 0, replaced: 1, archived: 2 };
     return rank[first.situation] - rank[second.situation];
   });
+  const repairs = [];
   for (const [index, plan] of orderedPlans.entries()) {
     const moduleIds = plan.moduleCodes.map((code) => moduleMap.get(code)?.id).filter(Boolean);
     if (moduleIds.length !== plan.moduleCodes.length) {
       failure(`Falta una asociación de módulo para ${plan.key}.`);
     }
     const actorId = authors[index % authors.length] ?? superadministratorId;
-    await ensureDocumentVersions(client, runtime, plan, actorId, moduleIds);
+    const documentState = await ensureDocumentVersions(client, runtime, plan, actorId, moduleIds);
     await ensureUnreadableDemoVersion(client, runtime, plan, actorId);
-    synchronizeDemoDocumentPlan(runtime, plan, actorId, moduleIds);
+    // The governed creation RPC already persists metadata and associations for
+    // a new document.  Keep the repair statement for reruns, where it protects
+    // existing demo rows without adding one remote SQL call to every insert.
+    if (!documentState.created) repairs.push({ actorId, moduleIds, plan });
   }
+  synchronizeDemoDocumentPlans(runtime, repairs);
 
   await synchronizeDemoDocumentTechnicalStates(client, runtime, plans, superadministratorId);
   await indexReadyDocuments(client, runtime, superadministratorId);

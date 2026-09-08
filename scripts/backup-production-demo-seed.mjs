@@ -31,13 +31,17 @@ function runCli(argumentsList, label) {
   const commandArguments = isWindows
     ? ['/d', '/c', 'supabase.cmd', ...argumentsList]
     : argumentsList;
-  const result = spawnSync(command, commandArguments, {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status !== 0) failure(`${label}.`);
-  return result.stdout;
+  let lastResult;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    lastResult = spawnSync(command, commandArguments, {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (lastResult.status === 0) return lastResult.stdout;
+  }
+  const detail = (lastResult?.stderr || lastResult?.stdout || '').trim().replaceAll(/\s+/gu, ' ');
+  failure(`${label}${detail ? `: ${detail.slice(0, 500)}` : '.'}`);
 }
 
 function parseCliJson(raw, label) {
