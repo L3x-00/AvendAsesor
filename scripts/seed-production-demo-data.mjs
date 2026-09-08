@@ -150,6 +150,21 @@ begin
     or position('demoSeed' in pg_get_functiondef('public.search_document_chunks(extensions.vector,text,uuid,real,integer)'::regprocedure)) = 0 then
     raise exception 'DEMO_SEED_RAG_ISOLATION_MISSING';
   end if;
+  if to_regprocedure('private.preserve_demo_seed_marker()') is null
+    or to_regprocedure('private.validate_chat_message_source_live_evidence()') is null
+    or not exists (
+      select 1
+      from pg_catalog.pg_trigger as trigger_row
+      join pg_catalog.pg_class as relation_row on relation_row.oid = trigger_row.tgrelid
+      join pg_catalog.pg_namespace as namespace_row on namespace_row.oid = relation_row.relnamespace
+      where trigger_row.tgname = 'documents_preserve_demo_seed_marker'
+        and relation_row.relname = 'documents'
+        and namespace_row.nspname = 'public'
+        and not trigger_row.tgisinternal
+    )
+    or position('demoSeed' in pg_get_functiondef('private.validate_chat_message_source_live_evidence()'::regprocedure)) = 0 then
+    raise exception 'DEMO_SEED_MARKER_GUARD_MISSING';
+  end if;
 end;
 $$;
 `, 'No se cumplieron los prerrequisitos de producción del seed');
