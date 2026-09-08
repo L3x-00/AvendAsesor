@@ -403,6 +403,37 @@ update public.documents
 set metadata = jsonb_build_object('demoSeed', 'isolated-test')
 where id = '00000000-0000-0000-0000-000000003201';
 
+-- Keep a real indexed chunk in place while the marker is active.  The earlier
+-- chunk is intentionally removed above to prove citation snapshot durability;
+-- this dedicated row makes the retrieval exclusion assertions exercise the
+-- marker predicate instead of passing vacuously on an empty vector table.
+insert into public.document_chunks (
+  id,
+  document_id,
+  document_version_id,
+  chunk_index,
+  chunk_content,
+  token_count,
+  page_start,
+  page_end,
+  section_title,
+  article_reference,
+  embedding
+)
+values (
+  '00000000-0000-0000-0000-000000003302',
+  '00000000-0000-0000-0000-000000003201',
+  '00000000-0000-0000-0000-000000003202',
+  1,
+  'Artículo 6. La licencia docente mantiene el procedimiento institucional vigente.',
+  18,
+  1,
+  1,
+  'Artículo 6',
+  'Artículo 6',
+  array_fill(0.01::real, array[1536])::extensions.vector
+);
+
 select is(
   (
     select count(*)
