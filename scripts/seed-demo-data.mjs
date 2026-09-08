@@ -1015,6 +1015,8 @@ async function ensureModules(client, runtime, superadministratorId) {
       );
     } else if (existing) {
       if (
+        runtime.mode === 'production'
+        ||
         existing.parent_module_id !== parentModuleId
         || existing.is_deleted
         || !existing.is_active
