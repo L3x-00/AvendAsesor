@@ -27,7 +27,7 @@ import type {
 const DOCUMENT_COLUMNS =
   'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
 const DOCUMENT_VERSION_COLUMNS =
-  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,uploaded_at,uploaded_by';
+  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by';
 const NORMATIVE_DOCUMENTS_BUCKET = 'normative-documents';
 
 type DocumentRow = SupabaseDatabase['public']['Tables']['documents']['Row'];

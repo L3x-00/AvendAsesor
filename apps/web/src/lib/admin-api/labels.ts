@@ -1,4 +1,8 @@
-import type { AdministrativeUser, OperationalAuditEvent } from "./types";
+import type {
+  AdministrativeUser,
+  ManagedDocumentVersion,
+  OperationalAuditEvent,
+} from "./types";
 
 const userRoleLabels = {
   admin: "Administrador",
@@ -10,6 +14,31 @@ const accountStatusLabels = {
   active: "Activa",
   suspended: "Suspendida",
 } as const satisfies Record<AdministrativeUser["accountStatus"], string>;
+
+const documentIngestionStatusContent = {
+  failed: {
+    description:
+      "Esta versión no está disponible para consultas. Carga una nueva versión si el problema persiste.",
+    label: "No se pudo indexar",
+  },
+  indexed: {
+    description: "Esta versión ya está disponible para consultas en el asistente.",
+    label: "Indexado",
+  },
+  pending: {
+    description:
+      "Esta versión está pendiente de procesamiento. Estará disponible para consultas cuando termine la indexación.",
+    label: "Pendiente",
+  },
+  processing: {
+    description:
+      "Estamos preparando esta versión. Estará disponible para consultas cuando termine la indexación.",
+    label: "Procesando",
+  },
+} as const satisfies Record<
+  ManagedDocumentVersion["ingestionStatus"],
+  { description: string; label: string }
+>;
 
 const operationalAuditActionLabels = {
   chat_history_deleted: "Historial de conversación eliminado",
@@ -32,6 +61,12 @@ export function formatAccountStatus(
   status: AdministrativeUser["accountStatus"],
 ): string {
   return accountStatusLabels[status];
+}
+
+export function getDocumentIngestionStatusContent(
+  status: ManagedDocumentVersion["ingestionStatus"],
+): { description: string; label: string } {
+  return documentIngestionStatusContent[status];
 }
 
 export function formatOperationalAuditAction(

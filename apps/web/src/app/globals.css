@@ -81,7 +81,7 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    transition: none !important;
   }
 }
 
@@ -189,7 +189,7 @@ body {
 }
 
 .avend-eyebrow {
-  color: var(--avend-accent);
+  color: var(--avend-navy);
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -281,7 +281,7 @@ body {
     transform 150ms ease-out;
 }
 
-.avend-button:hover {
+.avend-button:not(:disabled):hover {
   transform: translateY(-1px);
 }
 
@@ -296,7 +296,7 @@ body {
   color: var(--avend-surface);
 }
 
-.avend-button--primary:hover {
+.avend-button--primary:not(:disabled):hover {
   background: var(--avend-navy);
 }
 
@@ -306,7 +306,7 @@ body {
   color: var(--avend-text);
 }
 
-.avend-button--secondary:hover {
+.avend-button--secondary:not(:disabled):hover {
   background: var(--avend-soft-blue);
   border-color: var(--avend-accent);
 }
@@ -340,6 +340,13 @@ body {
   display: grid;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.avend-auth-links .avend-text-link {
+  align-items: center;
+  display: inline-flex;
+  min-height: 2.75rem;
+  padding-block: 0.375rem;
 }
 
 .avend-text-link {
@@ -623,7 +630,7 @@ body {
     border-color 150ms ease-out;
 }
 
-.avend-chat-module:hover,
+.avend-chat-module:not(:disabled):hover,
 .avend-chat-module[aria-pressed="true"] {
   background: var(--avend-soft-blue);
   border-color: var(--avend-accent);
@@ -910,6 +917,9 @@ body {
   box-shadow: 0 12px 24px rgb(13 27 61 / 12%);
   display: grid;
   gap: 0.25rem;
+  max-height: calc(100dvh - 7rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.5rem;
   position: absolute;
   right: 0;
@@ -946,7 +956,7 @@ body {
   margin-bottom: 0.875rem;
 }
 
-.avend-teacher-navigation-link:hover,
+.avend-teacher-navigation-link:not(:disabled):hover,
 .avend-teacher-navigation-link[aria-current="page"] {
   background: var(--avend-soft-blue);
   border-left-color: var(--avend-accent);

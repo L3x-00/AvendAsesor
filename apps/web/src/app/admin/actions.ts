@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { AdminApiError, type AdminApiClient } from "@/lib/admin-api/client";
 import { type AdminActionState } from "@/lib/admin-api/action-state";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
@@ -154,10 +154,20 @@ function requiredPdf(formData: FormData): File {
   return file;
 }
 
-function modulePayload(formData: FormData): Record<string, unknown> {
+function modulePayload(
+  formData: FormData,
+  options: { allowClearingDescription?: boolean } = {},
+): Record<string, unknown> {
   const sortOrder = optionalInteger(formData, "sortOrder", "El orden");
   const metadata = optionalJsonObject(formData, "metadata");
   const parentModuleId = optionalText(formData, "parentModuleId");
+  const description = optionalText(formData, "description");
+  const descriptionPayload =
+    description !== undefined
+      ? { description }
+      : options.allowClearingDescription && formData.has("description")
+        ? { description: null }
+        : {};
 
   const parentPayload =
     parentModuleId === "__root__"
@@ -170,9 +180,7 @@ function modulePayload(formData: FormData): Record<string, unknown> {
     ...(optionalText(formData, "code")
       ? { code: optionalText(formData, "code") }
       : {}),
-    ...(optionalText(formData, "description")
-      ? { description: optionalText(formData, "description") }
-      : {}),
+    ...descriptionPayload,
     ...(metadata ? { metadata } : {}),
     ...(optionalText(formData, "name")
       ? { name: optionalText(formData, "name") }
@@ -228,6 +236,7 @@ export async function createModuleAction(
     payload.code = requiredText(formData, "code", "El código");
     payload.name = requiredText(formData, "name", "El nombre");
     await client.createModule(payload);
+    updateTag("chat-modules");
     revalidatePath("/admin/modules");
     revalidatePath("/admin/documents");
 
@@ -241,7 +250,7 @@ export async function updateModuleAction(
 ): Promise<AdminActionState> {
   return withApi(async (client) => {
     const moduleId = requiredText(formData, "moduleId", "El módulo");
-    const payload = modulePayload(formData);
+    const payload = modulePayload(formData, { allowClearingDescription: true });
 
     if (Object.keys(payload).length === 0) {
       throw new FormValidationError(
@@ -250,6 +259,7 @@ export async function updateModuleAction(
     }
 
     await client.updateModule(moduleId, payload);
+    updateTag("chat-modules");
     revalidatePath("/admin/modules");
     revalidatePath("/admin/documents");
 
@@ -271,6 +281,7 @@ export async function setModuleStatusAction(
     }
 
     await client.setModuleStatus(moduleId, isActive, reason);
+    updateTag("chat-modules");
     revalidatePath("/admin/modules");
 
     return {
@@ -288,6 +299,7 @@ export async function deleteModuleAction(
     const moduleId = requiredText(formData, "moduleId", "El módulo");
     const reason = requiredText(formData, "reason", "El motivo de baja");
     await client.deleteModule(moduleId, reason);
+    updateTag("chat-modules");
     revalidatePath("/admin/modules");
     revalidatePath("/admin/documents");
 

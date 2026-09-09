@@ -47,6 +47,8 @@ const documentRecord: ManagedDocument = {
 const versionRecord: StoredDocumentVersion = {
   fileSizeBytes: 512,
   id: documentRecord.currentVersionId!,
+  ingestionStatus: 'indexed',
+  ingestionUpdatedAt: '2026-08-10T00:00:00.000Z',
   mimeType: 'application/pdf',
   originalFileName: 'documento.pdf',
   pageCount: 1,
@@ -272,6 +274,8 @@ describe('DocumentsService', () => {
         {
           fileSizeBytes: versionRecord.fileSizeBytes,
           id: versionRecord.id,
+          ingestionStatus: versionRecord.ingestionStatus,
+          ingestionUpdatedAt: versionRecord.ingestionUpdatedAt,
           originalFileName: versionRecord.originalFileName,
           pageCount: versionRecord.pageCount,
           uploadedAt: versionRecord.uploadedAt,

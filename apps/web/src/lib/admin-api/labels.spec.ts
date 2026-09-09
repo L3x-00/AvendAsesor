@@ -4,6 +4,7 @@ import {
   formatOperationalAuditAction,
   formatOperationalAuditResourceType,
   formatUserRole,
+  getDocumentIngestionStatusContent,
 } from "./labels";
 
 describe("administrative display labels", () => {
@@ -37,5 +38,28 @@ describe("administrative display labels", () => {
     expect(formatOperationalAuditResourceType("profile")).toBe(
       "Perfil de usuario",
     );
+  });
+
+  it("explains every document ingestion state in Spanish without technical errors", () => {
+    expect(getDocumentIngestionStatusContent("pending")).toEqual({
+      description:
+        "Esta versión está pendiente de procesamiento. Estará disponible para consultas cuando termine la indexación.",
+      label: "Pendiente",
+    });
+    expect(getDocumentIngestionStatusContent("processing")).toEqual({
+      description:
+        "Estamos preparando esta versión. Estará disponible para consultas cuando termine la indexación.",
+      label: "Procesando",
+    });
+    expect(getDocumentIngestionStatusContent("indexed")).toEqual({
+      description:
+        "Esta versión ya está disponible para consultas en el asistente.",
+      label: "Indexado",
+    });
+    expect(getDocumentIngestionStatusContent("failed")).toEqual({
+      description:
+        "Esta versión no está disponible para consultas. Carga una nueva versión si el problema persiste.",
+      label: "No se pudo indexar",
+    });
   });
 });

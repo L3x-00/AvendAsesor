@@ -77,6 +77,15 @@ export default async function ModulesPage() {
                           name="code"
                           required
                         />
+                        <label className="block text-base font-medium" htmlFor={`module-description-${module.id}`}>
+                          Descripción (opcional)
+                        </label>
+                        <textarea
+                          className="mt-1 min-h-20 w-full rounded-md border border-avend-border px-3 py-2"
+                          defaultValue={module.description ?? ''}
+                          id={`module-description-${module.id}`}
+                          name="description"
+                        />
                         <label className="block text-base font-medium" htmlFor={`module-order-${module.id}`}>
                           Orden
                         </label>
