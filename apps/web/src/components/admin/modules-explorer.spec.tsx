@@ -128,7 +128,8 @@ describe("ModulesExplorer", () => {
     ).toBeInTheDocument();
   });
 
-  it("presets the parent when creating inside a module", () => {
+  it("presets the parent when creating inside a module", async () => {
+    const user = userEvent.setup();
     const child: ModuleView[] = [
       {
         code: "CONTRAT_DOC",
@@ -143,7 +144,7 @@ describe("ModulesExplorer", () => {
       },
     ];
 
-    const { container } = render(
+    render(
       <ModulesExplorer
         context={{
           kind: "module",
@@ -156,11 +157,12 @@ describe("ModulesExplorer", () => {
     );
 
     expect(screen.getByText("+ Crear submódulo")).toBeVisible();
+    await user.click(screen.getByText("+ Crear submódulo"));
     // No parent chooser inside a module; parent is preset via a hidden field.
     expect(
       screen.queryByRole("option", { name: "Selecciona un módulo principal" }),
     ).not.toBeInTheDocument();
-    const hidden = container.querySelector<HTMLInputElement>(
+    const hidden = document.querySelector<HTMLInputElement>(
       'input[type="hidden"][name="parentModuleId"]',
     );
     expect(hidden?.value).toBe("m1");
@@ -213,7 +215,13 @@ describe("ModulesExplorer", () => {
 
   it("keeps edit, deactivate and delete field errors separate", async () => {
     const user = userEvent.setup();
-    const { container } = render(<ModuleManageDetails module={rootModules[0]} parents={parents} />);
+    const { container } = render(
+      <ModuleManageDetails
+        module={rootModules[0]}
+        parents={parents}
+        summary="Editar, ordenar o cambiar estado"
+      />,
+    );
     await user.click(screen.getByText("Editar, ordenar o cambiar estado"));
     await user.clear(screen.getByLabelText("Nombre"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
