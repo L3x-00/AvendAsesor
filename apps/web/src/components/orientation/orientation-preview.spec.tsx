@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OrientationContext } from "@/lib/orientation-document/model";
+import { ToastProvider } from "@/components/ui/toast";
+import { ORIENTATION_FIELD_LIMITS, type OrientationContext } from "@/lib/orientation-document/model";
 import { OrientationPreview } from "./orientation-preview";
 
 const context: OrientationContext = {
@@ -164,8 +165,78 @@ describe("OrientationPreview", () => {
 
     await user.click(screen.getByRole("button", { name: "Descargar PDF" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      `/api/chat/conversations/${context.conversationId}/messages/${context.messageId}/orientacion/pdf`,
+    );
     const formData = vi.mocked(fetch).mock.calls[0]?.[1]?.body as FormData;
     expect(formData.get("teacherName")).toBe("");
+  });
+
+  it("identifies every oversized optional field and clears each error when corrected", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetch).mockResolvedValue(new Response(new Blob(["PK-binary"]), { status: 200 }));
+    render(<OrientationPreview context={context} initialTeacherName="María Pérez" />);
+    const fields = [
+      [screen.getByLabelText("Nombre del docente"), ORIENTATION_FIELD_LIMITS.teacherName],
+      [screen.getByLabelText("Institución educativa"), ORIENTATION_FIELD_LIMITS.institution],
+      [screen.getByLabelText("Título del caso"), ORIENTATION_FIELD_LIMITS.caseTitle],
+      [screen.getByLabelText("Notas del caso"), ORIENTATION_FIELD_LIMITS.caseNotes],
+    ] as const;
+    for (const [field, max] of fields) {
+      fireEvent.change(field, { target: { value: "a".repeat(max + 1) } });
+    }
+
+    await user.click(screen.getByRole("button", { name: "Descargar DOCX" }));
+
+    expect(fetch).not.toHaveBeenCalled();
+    for (const [field, max] of fields) {
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription(new RegExp(`no puede superar ${max} caracteres`));
+      expect(field).toHaveValue("a".repeat(max + 1));
+    }
+    await waitFor(() => expect(fields[0][0]).toHaveFocus());
+    for (const [field] of fields) {
+      fireEvent.change(field, { target: { value: "" } });
+      await waitFor(() => expect(field).not.toHaveAttribute("aria-invalid"));
+    }
+    expect(fields[3][0]).toHaveAccessibleDescription(/Evita incluir datos personales sensibles/);
+    await user.click(screen.getByRole("button", { name: "Descargar DOCX" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  });
+
+  it("announces success only after receiving the complete downloadable file", async () => {
+    const user = userEvent.setup();
+    let completeFile!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        completeFile = () => {
+          controller.enqueue(new TextEncoder().encode("%PDF"));
+          controller.close();
+        };
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
+    const { container } = render(
+      <ToastProvider>
+        <OrientationPreview context={context} initialTeacherName="María Pérez" />
+      </ToastProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Descargar PDF" }));
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(downloadedNames).toEqual([]);
+    expect(screen.queryByText("La descarga PDF está lista.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preparando PDF…" })).toBeDisabled();
+
+    completeFile();
+
+    await waitFor(() => expect(downloadedNames).toEqual(["ficha-orientacion-avend.pdf"]));
+    const toast = container.querySelector<HTMLElement>(".avend-toast--success")!;
+    expect(toast).toBeVisible();
+    expect(within(toast).getByText("La descarga PDF está lista.")).toBeVisible();
+    const feedback = container.querySelector<HTMLElement>(".avend-feedback--success")!;
+    expect(feedback).toHaveAttribute("role", "status");
+    expect(feedback.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument();
   });
 
   it("keeps visible busy feedback while a PDF is being prepared", async () => {
@@ -185,6 +256,9 @@ describe("OrientationPreview", () => {
     expect(
       screen.getByRole("button", { name: "Descargar DOCX" }),
     ).toBeDisabled();
+    const form = screen.getByLabelText("Nombre del docente").closest("form")!;
+    fireEvent.submit(form);
+    expect(fetch).toHaveBeenCalledOnce();
 
     finish(new Response(new Blob(["%PDF"]), { status: 200 }));
     expect(
@@ -209,6 +283,10 @@ describe("OrientationPreview", () => {
     await user.click(screen.getByRole("button", { name: "Descargar PDF" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByRole("alert")).toHaveClass("avend-feedback--error");
+    expect(screen.getByLabelText("Nombre del docente")).toHaveValue("María Pérez");
+    expect(screen.getByLabelText("Título del caso")).toHaveValue("Licencia docente");
+    expect(screen.getByRole("button", { name: "Descargar PDF" })).toBeEnabled();
     expect(downloadedNames).toEqual([]);
   });
 

@@ -278,7 +278,7 @@ export function DocumentLibraryView({
               placeholder="Buscar documento..."
               type="search"
             />
-            <span className="mt-1 block text-sm text-avend-text-muted">
+            <span className="mt-1 block text-base text-avend-text-muted">
               Busca por título, número, entidad o palabras clave.
             </span>
           </label>
@@ -307,7 +307,7 @@ export function DocumentLibraryView({
               </option>
               <option value="module">Módulo / submódulo</option>
             </select>
-            <span className="mt-1 block text-sm text-avend-text-muted">
+            <span className="mt-1 block text-base text-avend-text-muted">
               «Más recientes» usa la fecha de la última versión subida; «Fecha
               de carga» usa la fecha en que se registró el documento.
             </span>

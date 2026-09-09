@@ -5,6 +5,11 @@ import { UsersImportForm } from "./users-import-form";
 
 const refresh = vi.fn();
 const getSession = vi.fn();
+const showToast = vi.fn();
+
+vi.mock("@/components/ui/toast", () => ({
+  useToast: () => ({ showToast }),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -65,7 +70,7 @@ describe("UsersImportForm", () => {
     fireEvent.click(submit);
 
     // El aviso ya no es general: cuelga del campo del archivo.
-    expect(await screen.findByText(/Elige el archivo Excel/)).toBeVisible();
+    expect(await screen.findByText(/El archivo Excel es obligatorio/)).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -76,7 +81,7 @@ describe("UsersImportForm", () => {
     fireEvent.click(submit);
 
     expect(
-      await screen.findByText(/supera el tamaño permitido/),
+      await screen.findByText(/máximo de 2 MB/),
     ).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -137,9 +142,9 @@ describe("UsersImportForm", () => {
 
     fireEvent.click(submit);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "supera el tamaño permitido",
-    );
+    expect(await screen.findByText(/supera el tamaño permitido/)).toBeVisible();
+    await waitFor(() => expect(file).toHaveAttribute("aria-invalid", "true"));
+    expect(file.files?.[0]?.name).toBe("usuarios.xlsx");
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -150,9 +155,56 @@ describe("UsersImportForm", () => {
 
     fireEvent.click(submit);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "sesión expiró",
     );
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("rejects the wrong file type and clears the inline error when a valid Excel is selected", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const { file, submit } = openForm();
+    await user.upload(file, new File(["texto"], "usuarios.csv", { type: "text/csv" }));
+    await user.click(submit);
+    expect(await screen.findByText(/XLSX válido/)).toBeVisible();
+    await waitFor(() => expect(file).toHaveFocus());
+    expect(file).toHaveAccessibleDescription(/XLSX válido/);
+    expect(fetch).not.toHaveBeenCalled();
+    await attach(file);
+    expect(file).not.toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText(/XLSX válido/)).not.toBeInTheDocument();
+  });
+
+  it("retains a rejected roster and never announces success when zero users were imported", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
+      considered: 1,
+      errors: [{ email: "duplicado@example.test", message: "El correo ya existe.", rowNumber: 2 }],
+      imported: 0,
+      truncated: false,
+    })));
+    const { file, submit } = openForm();
+    await attach(file);
+    fireEvent.click(submit);
+    expect(await screen.findByText(/No se registró ningún usuario/)).toBeVisible();
+    expect(screen.getByText(/Fila 2/)).toHaveTextContent("El correo ya existe.");
+    expect(file.files?.[0]?.name).toBe("usuarios.xlsx");
+    expect(showToast).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("blocks repeated submits while importing and reports a partial result accurately", async () => {
+    let finish: ((response: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const { file, submit } = openForm();
+    await attach(file);
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(submit.closest("form")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Importando usuarios");
+    finish?.(new Response(JSON.stringify({ considered: 2, imported: 1, truncated: false, errors: [{ rowNumber: 3, email: null, message: "Falta correo." }] })));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith("Se registró 1 usuario. Revisa las filas pendientes."));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(file.files?.[0]?.name).toBe("usuarios.xlsx");
+  });
+
 });

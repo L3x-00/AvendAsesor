@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChatSources } from "@/components/chat/chat-sources";
+import { useToast } from "@/components/ui/toast";
+import { ValidatedForm } from "@/components/ui/validated-form";
 import {
   ORIENTATION_DISCLAIMER,
   ORIENTATION_FIELD_LIMITS,
@@ -10,9 +12,17 @@ import {
   sanitizePresentationText,
   type OrientationContext,
 } from "@/lib/orientation-document/model";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import styles from "./orientation-preview.module.css";
 
 type DownloadFormat = "docx" | "pdf";
+
+const PRESENTATION_RULES: FieldRules = {
+  teacherName: [{ kind: "maxLength", label: "El nombre del docente", max: ORIENTATION_FIELD_LIMITS.teacherName }],
+  institution: [{ kind: "maxLength", label: "La institución educativa", max: ORIENTATION_FIELD_LIMITS.institution }],
+  caseTitle: [{ kind: "maxLength", label: "El título del caso", max: ORIENTATION_FIELD_LIMITS.caseTitle }],
+  caseNotes: [{ kind: "maxLength", label: "Las notas del caso", max: ORIENTATION_FIELD_LIMITS.caseNotes }],
+};
 
 interface OrientationPreviewProps {
   context: OrientationContext;
@@ -49,6 +59,8 @@ export function OrientationPreview({
   context,
   initialTeacherName,
 }: OrientationPreviewProps) {
+  const { showToast } = useToast();
+  const downloadInFlight = useRef(false);
   const [teacherName, setTeacherName] = useState(
     sanitizePresentationText(initialTeacherName).slice(
       0,
@@ -72,16 +84,14 @@ export function OrientationPreview({
   const previewTitle = sanitizePresentationText(caseTitle);
   const previewNotes = sanitizePresentationText(caseNotes, true);
 
-  async function download(format: DownloadFormat) {
-    if (downloading) return;
+  async function download(formData: FormData) {
+    if (downloadInFlight.current) return;
+    downloadInFlight.current = true;
+    const format: DownloadFormat = formData.get("format") === "pdf" ? "pdf" : "docx";
+    formData.delete("format");
 
     setDownloading(format);
     setFeedback(null);
-    const formData = new FormData();
-    formData.set("caseNotes", caseNotes);
-    formData.set("caseTitle", caseTitle);
-    formData.set("institution", institution);
-    formData.set("teacherName", teacherName);
 
     try {
       const response = await fetch(
@@ -106,10 +116,9 @@ export function OrientationPreview({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
-      setFeedback({
-        kind: "success",
-        message: `La descarga ${format.toUpperCase()} está lista.`,
-      });
+      const message = `La descarga ${format.toUpperCase()} está lista.`;
+      setFeedback({ kind: "success", message });
+      showToast(message);
     } catch {
       setFeedback({
         kind: "error",
@@ -117,6 +126,7 @@ export function OrientationPreview({
           "Se interrumpió la descarga. Revisa tu conexión e inténtalo nuevamente.",
       });
     } finally {
+      downloadInFlight.current = false;
       setDownloading(null);
     }
   }
@@ -137,10 +147,11 @@ export function OrientationPreview({
       </aside>
 
       <div className={styles.layout}>
-        <form
+        <ValidatedForm
           aria-busy={downloading !== null}
-          className={styles.form}
-          onSubmit={(event) => event.preventDefault()}
+          className={`${styles.form} avend-form-surface`}
+          onValidSubmit={(formData) => void download(formData)}
+          rules={PRESENTATION_RULES}
         >
           <div>
             <h2>Datos opcionales</h2>
@@ -156,6 +167,7 @@ export function OrientationPreview({
               autoComplete="name"
               id="orientation-teacher-name"
               maxLength={ORIENTATION_FIELD_LIMITS.teacherName}
+              name="teacherName"
               onChange={(event) => setTeacherName(event.target.value)}
               placeholder="Ejemplo: María Pérez"
               value={teacherName}
@@ -168,6 +180,7 @@ export function OrientationPreview({
               autoComplete="organization"
               id="orientation-institution"
               maxLength={ORIENTATION_FIELD_LIMITS.institution}
+              name="institution"
               onChange={(event) => setInstitution(event.target.value)}
               placeholder="Nombre de la institución"
               value={institution}
@@ -179,6 +192,7 @@ export function OrientationPreview({
             <input
               id="orientation-case-title"
               maxLength={ORIENTATION_FIELD_LIMITS.caseTitle}
+              name="caseTitle"
               onChange={(event) => setCaseTitle(event.target.value)}
               placeholder="Ficha de orientación AVEND"
               value={caseTitle}
@@ -191,6 +205,7 @@ export function OrientationPreview({
               aria-describedby="orientation-notes-help"
               id="orientation-case-notes"
               maxLength={ORIENTATION_FIELD_LIMITS.caseNotes}
+              name="caseNotes"
               onChange={(event) => setCaseNotes(event.target.value)}
               placeholder="Añade solo información necesaria para presentar la ficha."
               rows={6}
@@ -205,24 +220,35 @@ export function OrientationPreview({
             <button
               className="avend-button avend-button--primary"
               disabled={downloading !== null}
-              onClick={() => void download("docx")}
-              type="button"
+              name="format"
+              type="submit"
+              value="docx"
             >
               {downloading === "docx" ? "Preparando DOCX…" : "Descargar DOCX"}
             </button>
             <button
               className="avend-button avend-button--secondary"
               disabled={downloading !== null}
-              onClick={() => void download("pdf")}
-              type="button"
+              name="format"
+              type="submit"
+              value="pdf"
             >
               {downloading === "pdf" ? "Preparando PDF…" : "Descargar PDF"}
             </button>
           </div>
 
-          <div aria-live="polite" className={styles.feedback}>
+          <div className={styles.feedback}>
             {feedback ? (
-              <p role={feedback.kind === "error" ? "alert" : "status"}>
+              <p
+                className={`avend-feedback avend-feedback--${feedback.kind}`}
+                role={feedback.kind === "error" ? "alert" : "status"}
+              >
+                {feedback.kind === "success" ? (
+                  <svg aria-hidden="true" className={styles.feedbackIcon} fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8 12.5 2.5 2.5L16 9.5" />
+                  </svg>
+                ) : null}
                 {feedback.message}
               </p>
             ) : null}
@@ -234,7 +260,7 @@ export function OrientationPreview({
           >
             Volver a la conversación
           </Link>
-        </form>
+        </ValidatedForm>
 
         <article
           aria-label="Vista previa de la ficha"

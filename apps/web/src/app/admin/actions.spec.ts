@@ -61,6 +61,28 @@ describe("admin server actions", () => {
     expect(client.createModule).not.toHaveBeenCalled();
   });
 
+  it("shows a confirmed duplicate email below the email field", async () => {
+    client.createAdministrativeUser.mockRejectedValue(new AdminApiError(409, "email"));
+    const formData = new FormData();
+    formData.set("email", "ana@example.test");
+    formData.set("fullName", "Ana Quispe");
+    const result = await createAdministrativeUserAction(initialState, formData);
+    expect(result.fieldErrors?.email).toMatch(/ya tiene una cuenta/);
+    expect(result.message).toBeUndefined();
+  });
+
+  it.each(["[]", "{invalid"])("attributes invalid metadata %s to its field", async (metadata) => {
+    const formData = new FormData();
+    formData.set("name", "Módulo de prueba");
+    formData.set("code", "MODULO_PRUEBA");
+    formData.set("metadata", metadata);
+    const state = await createModuleAction(initialState, formData);
+    expect(state.status).toBe("error");
+    expect(state.fieldErrors?.metadata).toMatch(/objeto JSON/);
+    expect(state.message).toBeUndefined();
+    expect(client.createModule).not.toHaveBeenCalled();
+  });
+
   it("sends validated module data and invalidates the affected administrative lists", async () => {
     client.createModule.mockResolvedValue({});
     const formData = new FormData();
@@ -397,8 +419,8 @@ describe("admin server actions", () => {
     const state = await updateAccessWindowAction(initialState, formData);
 
     expect(state.status).toBe("error");
-    expect(state.message).toMatch(/ya pasó/);
-    expect(state.message).toMatch(/pausa la cuenta/i);
+    expect(state.fieldErrors?.accessExpiresAt).toMatch(/ya pasó/);
+    expect(state.fieldErrors?.accessExpiresAt).toMatch(/pausa la cuenta/i);
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
   });
 
@@ -412,7 +434,7 @@ describe("admin server actions", () => {
     const state = await updateAccessWindowAction(initialState, formData);
 
     expect(state).toEqual({
-      message: "La fecha de inicio no puede ser posterior a la de fin.",
+      fieldErrors: { accessExpiresAt: "La fecha de inicio no puede ser posterior a la de fin." },
       status: "error",
     });
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();

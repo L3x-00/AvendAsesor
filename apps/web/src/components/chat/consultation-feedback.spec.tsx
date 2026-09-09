@@ -1,13 +1,21 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsultationFeedback } from "./consultation-feedback";
 
 const answerMessageId = "19000000-0000-4000-8000-000000000001";
 const conversationId = "19000000-0000-4000-8000-000000000002";
+const showToast = vi.fn();
+
+vi.mock("@/components/ui/toast", () => ({
+  useToast: () => ({ showToast }),
+}));
 
 describe("ConsultationFeedback", () => {
-  beforeEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    showToast.mockClear();
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it("sends only the canonical answer id with a report and confirms success", async () => {
@@ -48,6 +56,7 @@ describe("ConsultationFeedback", () => {
       await screen.findByText("Gracias. Tu reporte fue enviado para revisión."),
     ).toBeVisible();
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(showToast).toHaveBeenCalledWith("Gracias. Tu reporte fue enviado para revisión.");
   });
 
   it("retains report input after a failed submission and supports Escape/focus restore", async () => {
@@ -69,7 +78,9 @@ describe("ConsultationFeedback", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "No se pudo guardar el comentario por el momento.",
     );
+    expect(within(screen.getByRole("dialog")).getByRole("alert")).toBeVisible();
     expect(comment).toHaveValue("Necesita una revisión humana.");
+    expect(showToast).not.toHaveBeenCalled();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(opener).toHaveFocus());
@@ -106,6 +117,7 @@ describe("ConsultationFeedback", () => {
         "Gracias por tu sugerencia. La tendremos en cuenta para seguir mejorando AVEND ASESOR.",
       ),
     ).toBeVisible();
+    expect(showToast).toHaveBeenCalledWith("Gracias por tu sugerencia. Ya la registramos.");
   });
 
   it("keeps reporting unavailable until a canonical response exists", () => {
@@ -117,4 +129,88 @@ describe("ConsultationFeedback", () => {
       screen.getByText("Podrás reportar cuando recibas una respuesta del asistente."),
     ).toBeVisible();
   });
+  it("shows every suggestion error inline and preserves a valid draft after correcting the attachment", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    render(<ConsultationFeedback conversationId={conversationId} />);
+    await user.click(screen.getByRole("button", { name: "Sugerencia" }));
+    const comment = screen.getByRole("textbox", { name: "Sugerencia" });
+    const upload = screen.getByLabelText<HTMLInputElement>("Adjuntar archivo");
+    await user.upload(upload, new File(["texto"], "adjunto.txt", { type: "text/plain" }));
+    await user.click(screen.getByRole("button", { name: "Enviar sugerencia" }));
+    await waitFor(() => expect(comment).toHaveFocus());
+    expect(comment).toHaveAttribute("aria-invalid", "true");
+    expect(upload).toHaveAttribute("aria-invalid", "true");
+    await user.type(comment, "Una sugerencia pendiente");
+    expect(comment).not.toHaveAttribute("aria-invalid", "true");
+    expect(upload).toHaveAttribute("aria-invalid", "true");
+    await user.upload(upload, new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }));
+    expect(upload).not.toHaveAttribute("aria-invalid", "true");
+    expect(comment).toHaveValue("Una sugerencia pendiente");
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("places a server attachment error inside the dialog and retains the draft and file", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 413 })));
+    render(<ConsultationFeedback conversationId={conversationId} />);
+    await user.click(screen.getByRole("button", { name: "Sugerencia" }));
+    const comment = screen.getByRole("textbox", { name: "Sugerencia" });
+    const upload = screen.getByLabelText<HTMLInputElement>("Adjuntar archivo");
+    await user.type(comment, "Revisar este documento");
+    await user.upload(upload, new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }));
+    await user.click(screen.getByRole("button", { name: "Enviar sugerencia" }));
+    expect(await within(screen.getByRole("dialog")).findByText("El archivo supera el tamaño máximo permitido de 10 MB.")).toBeVisible();
+    await waitFor(() => expect(upload).toHaveFocus());
+    expect(upload).toHaveAttribute("aria-invalid", "true");
+    expect(comment).toHaveValue("Revisar este documento");
+    expect(upload.files?.[0]?.name).toBe("norma.pdf");
+  });
+
+  it("blocks duplicate requests and Escape during submission without moving focus to the close button", async () => {
+    const user = userEvent.setup();
+    let finish: ((response: Response) => void) | undefined;
+    const request = vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    vi.stubGlobal("fetch", request);
+    render(<ConsultationFeedback conversationId={conversationId} />);
+    await user.click(screen.getByRole("button", { name: "Sugerencia" }));
+    await user.type(screen.getByRole("textbox", { name: "Sugerencia" }), "Revisar la explicación");
+    const submit = screen.getByRole("button", { name: "Enviar sugerencia" });
+    await user.click(submit);
+    fireEvent.submit(submit.closest("form")!);
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(submit.closest("form")).toHaveAttribute("aria-busy", "true");
+    expect(submit).toHaveFocus();
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Cerrar sugerencia" })).not.toHaveFocus();
+    expect(request).toHaveBeenCalledTimes(1);
+    finish?.(new Response(JSON.stringify({ ok: true })));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps the modal above the page, traps keyboard focus and restores page scrolling", async () => {
+    const user = userEvent.setup();
+    render(<ConsultationFeedback conversationId={conversationId} />);
+    const opener = screen.getByRole("button", { name: "Sugerencia" });
+    const initialOverflow = document.body.style.overflow;
+    await user.click(opener);
+    const dialog = screen.getByRole("dialog");
+    const first = screen.getByRole("button", { name: "Cerrar sugerencia" });
+    const last = screen.getByRole("button", { name: "Enviar sugerencia" });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(first).toHaveFocus();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(last).toHaveFocus();
+    await user.keyboard("{Tab}");
+    expect(first).toHaveFocus();
+    opener.focus();
+    expect(first).toHaveFocus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(opener).toHaveFocus());
+    expect(document.body.style.overflow).toBe(initialOverflow);
+  });
+
 });

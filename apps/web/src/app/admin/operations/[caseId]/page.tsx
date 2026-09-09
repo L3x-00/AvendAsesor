@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { FieldError } from "@/components/ui/form-field";
 import { ConsultationRouteFields } from "@/components/admin/consultation-route-fields";
 import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
@@ -212,6 +213,7 @@ export default async function ConsultationCasePage({
           <AdminActionForm
             action={updateConsultationCaseAction}
             className={styles.compactForm}
+            rules={{ note: [{ kind: "maxLength", label: "La nota de revisión", max: 2000 }] }}
             submitLabel="Guardar cambios"
           >
             <input name="caseId" type="hidden" value={caseId} />
@@ -235,6 +237,7 @@ export default async function ConsultationCasePage({
                   name="note"
                   rows={3}
                 />
+                <FieldError name="note" />
               </label>
             </div>
             {access.modulesAccess ? (
@@ -334,6 +337,7 @@ export default async function ConsultationCasePage({
             <AdminActionForm
               action={linkConsultationCaseDocumentAction}
               className={styles.compactForm}
+              rules={{ documentId: [{ kind: "required", label: "El documento" }] }}
               submitLabel="Vincular documento"
             >
               <input name="caseId" type="hidden" value={caseId} />
@@ -349,6 +353,7 @@ export default async function ConsultationCasePage({
                       </option>
                     ))}
                 </select>
+                <FieldError name="documentId" />
               </label>
             </AdminActionForm>
           ) : null}
@@ -397,6 +402,10 @@ export default async function ConsultationCasePage({
                     <AdminActionForm
                       action={decideConsultationAttachmentAction}
                       className={styles.compactForm}
+                      rules={{
+                        documentId: [{ kind: "requiredWhen", field: "disposition", value: "incorporated", label: "El documento vinculado" }],
+                        note: [{ kind: "maxLength", label: "La nota", max: 2000 }],
+                      }}
                       submitLabel="Registrar decisión"
                     >
                       <input name="caseId" type="hidden" value={caseId} />
@@ -434,6 +443,7 @@ export default async function ConsultationCasePage({
                                   </option>
                                 ))}
                               </select>
+                              <FieldError name="documentId" />
                             </label>
                           </>
                         ) : (
@@ -452,6 +462,7 @@ export default async function ConsultationCasePage({
                         <label>
                           Nota{" "}
                           <textarea maxLength={2000} name="note" rows={2} />
+                          <FieldError name="note" />
                         </label>
                       </div>
                     </AdminActionForm>

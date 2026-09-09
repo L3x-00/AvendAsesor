@@ -68,10 +68,11 @@ describe("validateField", () => {
 
     expect(
       validateValues(rules, { end: "2026-01-01", start: "2026-06-01" }).end,
-    ).toBe("La fecha de fin debe ser posterior a la fecha de inicio.");
+    ).toBe("La fecha de fin debe ser igual o posterior a la fecha de inicio.");
     expect(
       validateValues(rules, { end: "2026-06-01", start: "2026-01-01" }).end,
     ).toBeUndefined();
+    expect(validateValues(rules, { end: "2026-06-01", start: "2026-06-01" })).toEqual({});
   });
 
   it("does not complain about the order while the start date is empty", () => {
@@ -132,6 +133,18 @@ describe("validateField", () => {
 });
 
 describe("validateFormData", () => {
+  it.each(["[]", "null", "42", "{invalid"])("rejects non-object JSON %s at the metadata field", (value) => {
+    const formData = new FormData();
+    formData.set("metadata", value);
+    expect(validateFormData({ metadata: [{ kind: "jsonObject", label: "Los metadatos" }] }, formData))
+      .toEqual({ metadata: "Los metadatos: ingresa un objeto JSON válido." });
+  });
+
+  it.each(["", '{"keywords": "docencia"}'])("accepts optional object metadata %s", (value) => {
+    const formData = new FormData();
+    formData.set("metadata", value);
+    expect(validateFormData({ metadata: [{ kind: "jsonObject", label: "Los metadatos" }] }, formData)).toEqual({});
+  });
   it("marks every failing field, not just the first one", () => {
     const formData = new FormData();
     formData.set("email", "no-es-correo");

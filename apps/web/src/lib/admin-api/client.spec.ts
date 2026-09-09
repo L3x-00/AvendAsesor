@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { AdminApiClient, AdminApiError } from "./client";
 
+it.each([
+  ["That email address already has an account.", "email"],
+  ["The administrative user change cannot be applied.", undefined],
+])("maps only the known duplicate-email conflict to its field", async (message, field) => {
+  const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message }), { status: 409 }));
+  const client = new AdminApiClient("test-token", "http://localhost:3001", request);
+  await expect(client.createAdministrativeUser({ email: "ana@example.test", fullName: "Ana Quispe" }))
+    .rejects.toMatchObject({ status: 409, field });
+});
+
 const moduleRecord = {
   code: "NORMATIVA",
   createdAt: "2026-08-09T00:00:00.000Z",

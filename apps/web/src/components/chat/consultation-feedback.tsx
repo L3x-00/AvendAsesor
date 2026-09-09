@@ -7,10 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { FormField } from "@/components/ui/form-field";
 import { useToast } from "@/components/ui/toast";
 import { ValidatedForm } from "@/components/ui/validated-form";
-import type { FieldRules } from "@/lib/ui/field-validation";
+import type { FieldErrors, FieldRules } from "@/lib/ui/field-validation";
 import styles from "./consultation-feedback.module.css";
 
 const reportReasons = [
@@ -37,6 +38,7 @@ type FeedbackDialog = "report" | "suggestion" | null;
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 const REPORT_RULES: FieldRules = {
+  comment: [{ kind: "maxLength", label: "El comentario", max: 2000 }],
   file: [
     {
       accept: [".jpg", ".jpeg", ".png", ".webp"],
@@ -49,7 +51,10 @@ const REPORT_RULES: FieldRules = {
 };
 
 const SUGGESTION_RULES: FieldRules = {
-  comment: [{ kind: "required", label: "La sugerencia" }],
+  comment: [
+    { kind: "required", label: "La sugerencia" },
+    { kind: "maxLength", label: "La sugerencia", max: 2000 },
+  ],
   file: [
     {
       accept: [".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx"],
@@ -111,6 +116,8 @@ export function ConsultationFeedback({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [serverErrors, setServerErrors] = useState<FieldErrors>({});
+  const pendingRef = useRef(false);
   const { showToast } = useToast();
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -130,6 +137,7 @@ export function ConsultationFeedback({
   ) {
     setMessage(null);
     setIsError(false);
+    setServerErrors({});
     openerRef.current = opener;
     if (nextDialog === "report") {
       reportSubmissionIdRef.current = submissionId();
@@ -144,14 +152,22 @@ export function ConsultationFeedback({
 
     const target = dialogRef.current;
     if (!target) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const focusable = () =>
       [...target.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
       )].filter((element) => !element.hasAttribute("hidden"));
     focusable()[0]?.focus();
 
+    function containFocus(event: FocusEvent) {
+      if (event.target instanceof Node && !target?.contains(event.target)) {
+        focusable()[0]?.focus();
+      }
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
+      if (event.key === "Escape" && !pendingRef.current) {
         event.preventDefault();
         closeDialog();
         return;
@@ -172,15 +188,22 @@ export function ConsultationFeedback({
     }
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [closeDialog, dialog, isSubmitting]);
+    document.addEventListener("focusin", containFocus);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", containFocus);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [closeDialog, dialog]);
 
   async function submitReport(data: FormData, form: HTMLFormElement) {
-    if (!answerMessageId || isSubmitting) return;
+    if (!answerMessageId || pendingRef.current) return;
 
     data.set("answerMessageId", answerMessageId);
     data.set("submissionId", reportSubmissionIdRef.current ?? submissionId());
+    pendingRef.current = true;
     setIsSubmitting(true);
+    setServerErrors({});
     setMessage(null);
 
     try {
@@ -189,6 +212,10 @@ export function ConsultationFeedback({
         method: "POST",
       });
       if (!response.ok) {
+        if (response.status === 413) {
+          setServerErrors({ file: await requestMessage(response) });
+          return;
+        }
         setIsError(true);
         setMessage(await requestMessage(response));
         return;
@@ -205,19 +232,22 @@ export function ConsultationFeedback({
         "No se pudo enviar el reporte. Conservamos tus datos para que lo intentes nuevamente.",
       );
     } finally {
+      pendingRef.current = false;
       setIsSubmitting(false);
     }
   }
 
   async function submitSuggestion(data: FormData, form: HTMLFormElement) {
-    if (isSubmitting) return;
+    if (pendingRef.current) return;
 
     if (conversationId) data.set("conversationId", conversationId);
     data.set(
       "submissionId",
       suggestionSubmissionIdRef.current ?? submissionId(),
     );
+    pendingRef.current = true;
     setIsSubmitting(true);
+    setServerErrors({});
     setMessage(null);
 
     try {
@@ -226,6 +256,10 @@ export function ConsultationFeedback({
         method: "POST",
       });
       if (!response.ok) {
+        if (response.status === 413) {
+          setServerErrors({ file: await requestMessage(response) });
+          return;
+        }
         setIsError(true);
         setMessage(await requestMessage(response));
         return;
@@ -244,6 +278,7 @@ export function ConsultationFeedback({
         "No se pudo enviar la sugerencia. Conservamos tus datos para que lo intentes nuevamente.",
       );
     } finally {
+      pendingRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -280,7 +315,7 @@ export function ConsultationFeedback({
           Podrás reportar cuando recibas una respuesta del asistente.
         </p>
       ) : null}
-      {message ? (
+      {message && !dialog ? (
         <p
           className={
             isError
@@ -293,7 +328,7 @@ export function ConsultationFeedback({
         </p>
       ) : null}
 
-      {dialog === "report" ? (
+      {dialog === "report" ? createPortal(
         <div className={styles.overlay} role="presentation">
           <section
             aria-labelledby={reportTitleId}
@@ -321,9 +356,11 @@ export function ConsultationFeedback({
               </button>
             </div>
             <ValidatedForm
-              className={styles.form}
+              aria-busy={isSubmitting}
+              className={`avend-form-surface ${styles.form}`}
               onValidSubmit={submitReport}
               rules={REPORT_RULES}
+              serverErrors={serverErrors}
             >
               <FormField label="Motivo del reporte" name="reason" required>
                 <select defaultValue="" name="reason" required>
@@ -359,6 +396,16 @@ export function ConsultationFeedback({
                 Puedes adjuntar una captura o foto para ayudarnos a revisar el
                 problema.
               </p>
+              {message && isError ? (
+                <p className="avend-feedback avend-feedback--error" role="alert">
+                  {message}
+                </p>
+              ) : null}
+              {isSubmitting ? (
+                <p className={styles.hint} role="status">
+                  Enviando. Espera mientras guardamos tu comentario.
+                </p>
+              ) : null}
               <div className={styles.dialogActions}>
                 <button
                   className="avend-button avend-button--secondary"
@@ -369,8 +416,8 @@ export function ConsultationFeedback({
                   Cancelar
                 </button>
                 <button
+                  aria-disabled={isSubmitting}
                   className="avend-button avend-button--primary"
-                  disabled={isSubmitting}
                   type="submit"
                 >
                   {isSubmitting ? "Enviando…" : "Enviar reporte"}
@@ -378,10 +425,11 @@ export function ConsultationFeedback({
               </div>
             </ValidatedForm>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
-      {dialog === "suggestion" ? (
+      {dialog === "suggestion" ? createPortal(
         <div className={styles.overlay} role="presentation">
           <section
             aria-labelledby={suggestionTitleId}
@@ -409,9 +457,11 @@ export function ConsultationFeedback({
               </button>
             </div>
             <ValidatedForm
-              className={styles.form}
+              aria-busy={isSubmitting}
+              className={`avend-form-surface ${styles.form}`}
               onValidSubmit={submitSuggestion}
               rules={SUGGESTION_RULES}
+              serverErrors={serverErrors}
             >
               <FormField label="Sugerencia" name="comment" required>
                 <textarea
@@ -438,6 +488,16 @@ export function ConsultationFeedback({
                 imagen, PDF o archivo Word. No se usa este contenido para
                 responder consultas ni se añade a la biblioteca automáticamente.
               </p>
+              {message && isError ? (
+                <p className="avend-feedback avend-feedback--error" role="alert">
+                  {message}
+                </p>
+              ) : null}
+              {isSubmitting ? (
+                <p className={styles.hint} role="status">
+                  Enviando. Espera mientras guardamos tu comentario.
+                </p>
+              ) : null}
               <div className={styles.dialogActions}>
                 <button
                   className="avend-button avend-button--secondary"
@@ -448,8 +508,8 @@ export function ConsultationFeedback({
                   Cancelar
                 </button>
                 <button
+                  aria-disabled={isSubmitting}
                   className="avend-button avend-button--primary"
-                  disabled={isSubmitting}
                   type="submit"
                 >
                   {isSubmitting ? "Enviando…" : "Enviar sugerencia"}
@@ -457,7 +517,8 @@ export function ConsultationFeedback({
               </div>
             </ValidatedForm>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </section>
   );

@@ -34,6 +34,12 @@ function actionFailure(error: unknown): AdminActionState {
   }
 
   if (error instanceof AdminApiError) {
+    if (error.status === 409 && error.field === "email") {
+      return {
+        fieldErrors: { email: "Este correo electrónico ya tiene una cuenta. Usa otro correo o revisa el usuario existente." },
+        status: "error",
+      };
+    }
     if (error.status === 401) {
       return {
         message: "Tu sesión expiró. Inicia sesión nuevamente.",
@@ -151,7 +157,7 @@ function optionalJsonObject(
     const parsed: unknown = JSON.parse(value);
 
     if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-      throw new FormValidationError("Los metadatos deben ser un objeto JSON.");
+      throw new FormValidationError("Los metadatos deben ser un objeto JSON.", name);
     }
 
     return parsed as Record<string, unknown>;
@@ -162,6 +168,7 @@ function optionalJsonObject(
 
     throw new FormValidationError(
       "Los metadatos deben ser un objeto JSON válido.",
+      name,
     );
   }
 }
@@ -454,6 +461,7 @@ export async function setDocumentSituationAction(
       ) {
         throw new FormValidationError(
           "Indica el motivo y la fecha o año del reemplazo.",
+          !reason ? "reason" : "replacementYear",
         );
       }
 
@@ -498,6 +506,7 @@ export async function setDocumentTechnicalStatusAction(
       ) {
         throw new FormValidationError(
           "El estado Error solo puede asignarlo el procesamiento automático.",
+          "technicalStatus",
         );
       }
 
@@ -704,6 +713,7 @@ export async function createAdministrativeUserAction(
       if (phone.length < 6 || phone.length > 20) {
         throw new FormValidationError(
           "El celular debe tener entre 6 y 20 caracteres.",
+          "phone",
         );
       }
       payload.phone = phone;
@@ -732,6 +742,7 @@ export async function createAdministrativeUserAction(
       if (Date.parse(expiryInstant) < Date.now()) {
         throw new FormValidationError(
           "La fecha de fin ya pasó. Elige una fecha de hoy en adelante.",
+          "accessExpiresAt",
         );
       }
       payload.accessExpiresAt = expiryInstant;
@@ -793,6 +804,7 @@ export async function updateAccessWindowAction(
       if (Date.parse(expiryInstant) < Date.now()) {
         throw new FormValidationError(
           "La fecha de fin ya pasó. Elige una fecha de hoy en adelante para extender la vigencia, o pausa la cuenta desde «Editar acceso» si quieres bloquear el acceso ahora.",
+          "accessExpiresAt",
         );
       }
       payload.accessExpiresAt = expiryInstant;
@@ -805,6 +817,7 @@ export async function updateAccessWindowAction(
     ) {
       throw new FormValidationError(
         "La fecha de inicio no puede ser posterior a la de fin.",
+        "accessExpiresAt",
       );
     }
 

@@ -22,8 +22,8 @@
   margin: 0;
 }
 
-.feedback p,
-.dialog p,
+.feedback p:not(:global(.avend-feedback)):not(:global(.avend-field-error)),
+.dialog p:not(:global(.avend-feedback)):not(:global(.avend-field-error)),
 .hint,
 .notice {
   color: var(--avend-text-muted);
@@ -62,7 +62,8 @@
   max-height: calc(100dvh - 2rem);
   max-width: 38rem;
   overflow: auto;
-  padding: 1.25rem;
+  overscroll-behavior: contain;
+  padding: clamp(1rem, 3vw, 1.5rem);
   width: 100%;
 }
 
@@ -93,6 +94,7 @@
   display: grid;
   gap: 1rem;
   margin-top: 1.25rem;
+  min-width: 0;
 }
 
 .form label {
@@ -118,6 +120,8 @@
   border-radius: 0.625rem;
   color: var(--avend-text);
   font: inherit;
+  font-size: 1rem;
+  min-width: 0;
   min-height: 2.875rem;
   padding: 0.625rem 0.75rem;
   width: 100%;

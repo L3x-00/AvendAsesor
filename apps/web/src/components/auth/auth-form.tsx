@@ -53,6 +53,7 @@ const FIELD_LABELS: Record<AuthFieldName, string> = {
  */
 function rulesForFields(fields: AuthField[]): FieldRules {
   const rules: FieldRules = {};
+  const setsPassword = fields.some((field) => field.name === 'passwordConfirmation');
 
   for (const field of fields) {
     const label = FIELD_LABELS[field.name];
@@ -62,8 +63,26 @@ function rulesForFields(fields: AuthField[]): FieldRules {
       rules[field.name].push({ kind: 'email', label });
     }
 
-    if (field.name === 'password' || field.name === 'passwordConfirmation') {
-      rules[field.name].push({ kind: 'minLength', label, min: 8 });
+    if (field.name === 'fullName') {
+      rules[field.name].push(
+        { kind: 'minLength', label, min: 2 },
+        { kind: 'maxLength', label, max: 160 },
+      );
+    }
+
+    // El acceso acepta contraseñas ya existentes; la política de creación se
+    // aplica solo al registro y al cambio, igual que en el contrato vigente.
+    if (field.name === 'password' && setsPassword) {
+      rules[field.name].push(
+        { kind: 'minLength', label, min: 8, trim: false },
+        { kind: 'pattern', label, regexp: /[a-z]/, message: 'La contraseña debe incluir una letra minúscula.' },
+        { kind: 'pattern', label, regexp: /[A-Z]/, message: 'La contraseña debe incluir una letra mayúscula.' },
+        { kind: 'pattern', label, regexp: /[0-9]/, message: 'La contraseña debe incluir un número.' },
+      );
+    }
+
+    if (field.name === 'passwordConfirmation') {
+      rules[field.name].push({ kind: 'matchesField', field: 'password', message: 'Las contraseñas no coinciden.' });
     }
   }
 
@@ -128,6 +147,7 @@ export function AuthForm({
           className="avend-auth-form"
           rules={rules}
           serverErrors={state.fieldErrors}
+          submissionState={state}
         >
           {fields.map((field) => (
             <FormField key={field.name} label={field.label} name={field.name} required>

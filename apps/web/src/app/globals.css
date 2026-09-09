@@ -9,6 +9,7 @@
   --avend-surface: #ffffff;
   --avend-surface-muted: #f3f5f9;
   --avend-border: #e5e7eb;
+  --avend-control-border: #8995a8;
   --avend-text: #111827;
   --avend-text-muted: #667085;
   --avend-focus: #1677ff;
@@ -55,6 +56,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 ::selection {
@@ -347,7 +350,7 @@ textarea[aria-invalid="true"]:focus,
     transform 150ms ease-out;
 }
 
-.avend-button:not(:disabled):hover {
+.avend-button:not(:disabled):not([aria-disabled="true"]):hover {
   transform: translateY(-1px);
 }
 

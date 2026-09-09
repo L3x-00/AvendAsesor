@@ -8,6 +8,7 @@
   border: 1px solid var(--avend-border);
   border-radius: 0.875rem;
   padding: 1.25rem;
+  min-width: 0;
 }
 
 .sectionHeader {
@@ -100,7 +101,7 @@
 .metrics {
   display: grid;
   gap: 0.875rem;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
@@ -146,14 +147,14 @@
 
 .metric small {
   color: var(--avend-text-muted);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
 .rankings {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   margin-top: 1rem;
 }
 
@@ -234,7 +235,7 @@
   border: 1px solid var(--avend-border);
   border-radius: 999px;
   color: var(--avend-text);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 650;
   line-height: 1.25;
   padding: 0.35rem 0.625rem;
@@ -342,7 +343,7 @@
 .detailGrid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
 }
 
 .detailBlock {
@@ -350,6 +351,8 @@
   border: 1px solid var(--avend-border);
   border-radius: 0.75rem;
   padding: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .detailBlock h3 {
@@ -377,6 +380,8 @@
   border: 1px solid var(--avend-border);
   border-radius: 0.625rem;
   padding: 0.875rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .source h3,
@@ -396,6 +401,10 @@
 @media (max-width: 42rem) {
   .section {
     padding: 1rem;
+  }
+  .pagination {
+    grid-template-columns: minmax(0, 1fr);
+    text-align: center;
   }
   .periodForm,
   .filters,

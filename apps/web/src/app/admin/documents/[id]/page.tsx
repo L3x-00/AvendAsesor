@@ -305,7 +305,7 @@ export default async function DocumentDetailPage({
             <p className="mt-2 text-lg font-bold text-avend-navy">
               {technicalContent.label}
             </p>
-            <p className="mt-1 text-sm text-avend-text-muted">
+            <p className="mt-1 text-base text-avend-text-muted">
               {technicalContent.description}
             </p>
           </article>
@@ -445,6 +445,14 @@ export default async function DocumentDetailPage({
                 <AdminActionForm
                   action={updateDocumentAction}
                   className="mt-4 grid gap-3 sm:grid-cols-2"
+                  rules={{
+                    title: [
+                      { kind: "required", label: "El título" },
+                      { kind: "minLength", label: "El título", min: 2 },
+                      { kind: "maxLength", label: "El título", max: 500 },
+                    ],
+                    metadata: [{ kind: "jsonObject", label: "Los metadatos" }],
+                  }}
                   submitLabel="Guardar cambios"
                 >
                   <input name="documentId" type="hidden" value={document.id} />
@@ -552,12 +560,12 @@ export default async function DocumentDetailPage({
                           </div>
                           <div className="flex flex-wrap justify-end gap-2">
                             {version.id === document.currentVersionId ? (
-                              <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-900">
+                              <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-base font-semibold text-blue-900">
                                 Versión más reciente
                               </span>
                             ) : null}
                             {version.id === document.approvedVersionId ? (
-                              <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-900">
+                              <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-base font-semibold text-emerald-900">
                                 Aprobada para consultas
                               </span>
                             ) : null}
@@ -638,14 +646,14 @@ export default async function DocumentDetailPage({
                       <h3 className="text-base font-bold">
                         {auditActionLabel(event.action, event.details)}
                       </h3>
-                      <p className="mt-1 text-sm text-avend-text-muted">
+                      <p className="mt-1 text-base text-avend-text-muted">
                         <time dateTime={event.occurredAt}>
                           {dateTimeFormatter.format(new Date(event.occurredAt))}
                         </time>{" "}
                         · {event.actorName ?? "Sistema"}
                       </p>
                       {Object.keys(event.details).length ? (
-                        <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md bg-avend-surface-muted p-3 text-sm">
+                        <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md bg-avend-surface-muted p-3 text-base">
                           {JSON.stringify(event.details, null, 2)}
                         </pre>
                       ) : null}
@@ -699,7 +707,7 @@ export default async function DocumentDetailPage({
                     </select>
                   </label>
                   {currentVersion?.ingestionStatus !== "indexed" ? (
-                    <p className="text-sm text-avend-text-muted">
+                    <p className="text-base text-avend-text-muted">
                       La versión debe terminar de indexarse antes de aprobarse.
                     </p>
                   ) : null}
@@ -779,7 +787,7 @@ export default async function DocumentDetailPage({
                           />
                         </AdminActionForm>
                       ) : (
-                        <p className="mt-1 text-sm text-avend-text-muted">
+                        <p className="mt-1 text-base text-avend-text-muted">
                           Asociación principal; agrega otra antes de quitarla.
                         </p>
                       )}
@@ -796,6 +804,7 @@ export default async function DocumentDetailPage({
                   action={linkDocumentModuleAction}
                   className="mt-4 space-y-3"
                   submitLabel="Agregar asociación"
+                  rules={{ moduleId: [{ kind: "required", label: "La ubicación" }] }}
                 >
                   <input name="documentId" type="hidden" value={document.id} />
                   <label className="block" htmlFor="detail-module">
@@ -831,6 +840,10 @@ export default async function DocumentDetailPage({
                 className="mt-4 space-y-3"
                 confirmMessage="¿Confirmas la eliminación lógica de este documento?"
                 submitLabel="Eliminar lógicamente"
+                rules={{ reason: [
+                  { kind: "required", label: "El motivo" },
+                  { kind: "minLength", label: "El motivo", min: 2 },
+                ] }}
               >
                 <input name="documentId" type="hidden" value={document.id} />
                 <label className="block" htmlFor="detail-delete-reason">

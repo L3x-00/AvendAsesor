@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 import { useFieldError } from "./validated-form";
 
 export { FieldErrorProvider } from "./validated-form";
@@ -42,21 +42,24 @@ export function FormField({
   required = false,
 }: FormFieldProps) {
   const contextError = useFieldError(name);
+  const instanceId = useId();
   const message = error ?? contextError;
-  const errorId = `${name}-error`;
-  const hintId = `${name}-hint`;
-  const describedBy = [hint ? hintId : null, message ? errorId : null]
+  const errorId = `${instanceId}-${name}-error`;
+  const hintId = `${instanceId}-${name}-hint`;
+  const child = isValidElement<ControlProps>(children) ? children : null;
+  const controlId = child?.props.id ?? `${instanceId}-${name}`;
+  const describedBy = [child?.props["aria-describedby"], hint ? hintId : null, message ? errorId : null]
     .filter(Boolean)
     .join(" ");
 
-  const control = isValidElement<ControlProps>(children)
-    ? cloneElement(children, {
+  const control = child
+    ? cloneElement(child, {
         "aria-describedby": describedBy || undefined,
-        "aria-invalid": message ? true : undefined,
-        className: [children.props.className, message ? "avend-field--invalid" : null]
+        "aria-invalid": message ? true : child.props["aria-invalid"],
+        className: [child.props.className, message ? "avend-field--invalid" : null]
           .filter(Boolean)
           .join(" "),
-        id: children.props.id ?? name,
+        id: controlId,
       })
     : children;
 
@@ -67,7 +70,7 @@ export function FormField({
           leería el lector de pantalla como parte de la etiqueta. */}
       <label
         className={`avend-field-label${required ? " avend-field-label--required" : ""}`}
-        htmlFor={name}
+        htmlFor={controlId}
       >
         {label}
       </label>
@@ -78,7 +81,7 @@ export function FormField({
       ) : null}
       {control}
       {message ? (
-        <p className="avend-field-error" id={errorId}>
+        <p aria-live="polite" className="avend-field-error" data-field-error={name} id={errorId}>
           <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7.5v5.5M12 16.2v.3" />
@@ -101,10 +104,11 @@ export function FormField({
  */
 export function FieldError({ name }: { name: string }) {
   const message = useFieldError(name);
+  const instanceId = useId();
   if (!message) return null;
 
   return (
-    <p className="avend-field-error" id={`${name}-error`}>
+    <p aria-live="polite" className="avend-field-error" data-field-error={name} id={`${instanceId}-${name}-error`}>
       <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7.5v5.5M12 16.2v.3" />
@@ -123,15 +127,23 @@ export function FormFieldGroup({
   name,
 }: Omit<FormFieldProps, "required">): ReactElement {
   const contextError = useFieldError(name);
+  const instanceId = useId();
   const message = error ?? contextError;
+  const errorId = `${instanceId}-${name}-error`;
+  const hintId = `${instanceId}-${name}-hint`;
 
   return (
-    <fieldset className="avend-form-field" name={name}>
+    <fieldset
+      aria-describedby={[hint ? hintId : null, message ? errorId : null].filter(Boolean).join(" ") || undefined}
+      aria-invalid={message ? true : undefined}
+      className="avend-form-field"
+      name={name}
+    >
       <legend className="avend-field-label">{label}</legend>
-      {hint ? <p className="avend-field-hint">{hint}</p> : null}
+      {hint ? <p className="avend-field-hint" id={hintId}>{hint}</p> : null}
       {children}
       {message ? (
-        <p className="avend-field-error">
+        <p aria-live="polite" className="avend-field-error" data-field-error={name} id={errorId}>
           <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7.5v5.5M12 16.2v.3" />

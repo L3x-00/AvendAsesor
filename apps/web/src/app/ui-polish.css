@@ -3,6 +3,177 @@
   --avend-shadow-raised: 0 14px 28px rgb(13 27 61 / 14%);
   --avend-ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
   --avend-ease-interaction: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --avend-shadow-surface: 0 3px 14px rgb(13 27 61 / 5%);
+}
+
+/* Controles y ritmo compartidos por autenticación y ambos paneles. */
+:is(.avend-auth-content, .avend-admin-content, .avend-teacher-main) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:is(.avend-auth-content form, .avend-admin-content form, .avend-teacher-main form, form.avend-form-surface)
+  :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border: 1px solid var(--avend-control-border);
+  border-radius: 0.625rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  max-width: 100%;
+  min-height: 2.875rem;
+  min-width: 0;
+  padding: 0.625rem 0.875rem;
+  scroll-margin-block: 5rem;
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+:is(.avend-auth-content form, .avend-admin-content form, .avend-teacher-main form, form.avend-form-surface)
+  :is(input, select, textarea):not(:disabled):not([aria-invalid="true"]):hover {
+  border-color: var(--avend-accent-strong);
+}
+
+:is(.avend-auth-content form, .avend-admin-content form, .avend-teacher-main form, form.avend-form-surface)
+  :is(input, select, textarea):focus-visible {
+  border-color: var(--avend-accent-strong);
+  box-shadow: 0 0 0 3px var(--avend-soft-blue);
+  outline: 2px solid var(--avend-accent-strong);
+  outline-offset: 2px;
+}
+
+:is(.avend-auth-content form, .avend-admin-content form, .avend-teacher-main form, form.avend-form-surface)
+  :is(input, select, textarea)[aria-invalid="true"] {
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger);
+}
+
+:is(.avend-auth-content form, .avend-admin-content form, .avend-teacher-main form, form.avend-form-surface)
+  :is(input, select, textarea)[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px var(--avend-danger-soft-ring);
+  outline-color: var(--avend-danger);
+}
+
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--avend-accent-strong);
+}
+
+input[type="file"]::file-selector-button {
+  background: var(--avend-soft-blue);
+  border: 1px solid var(--avend-control-border);
+  border-radius: 0.5rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin-right: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+select.avend-field {
+  appearance: auto;
+}
+
+.avend-field-hint,
+.avend-auth-pending,
+.avend-auth-links .avend-text-link {
+  font-size: 1rem;
+}
+
+.avend-admin-content form > .avend-feedback,
+.avend-admin-content form > .avend-admin-submit {
+  grid-column: 1 / -1;
+}
+
+.avend-admin-content form > .avend-admin-submit {
+  justify-self: start;
+}
+
+.avend-admin-content details > summary {
+  align-items: center;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding-block: 0.5rem;
+}
+
+.avend-admin-content details[open] > summary {
+  border-bottom: 1px solid var(--avend-border);
+  margin-bottom: 1rem;
+}
+
+.avend-admin-content :is(h2, h3),
+.avend-content-page :is(h1, h2),
+.avend-chat-header h1 {
+  text-wrap: balance;
+}
+
+.avend-admin-content :is(label, fieldset),
+.avend-admin-content form > div {
+  min-width: 0;
+}
+
+.avend-admin-content tbody tr:focus-within,
+.avend-admin-content tbody tr:hover {
+  background: var(--avend-soft-blue);
+}
+
+.avend-history-item,
+.avend-profile-summary > div,
+.avend-guide-page ol,
+.avend-content-empty {
+  box-shadow: var(--avend-shadow-surface);
+}
+
+@media (min-width: 48rem) and (max-width: 63.999rem) {
+  .avend-auth-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .avend-auth-aside {
+    align-items: center;
+    flex-direction: row;
+    gap: 1.5rem;
+    padding: 1.5rem 2rem;
+  }
+
+  .avend-auth-logo {
+    max-width: 4.75rem;
+  }
+
+  .avend-auth-aside-copy p,
+  .avend-auth-principles {
+    display: none;
+  }
+
+  .avend-auth-content {
+    padding: 2rem;
+  }
+
+  .avend-admin-shell {
+    display: block;
+  }
+
+  .avend-admin-sidebar {
+    display: none;
+  }
+
+  .avend-admin-mobile-bar {
+    display: flex;
+  }
+
+  .avend-admin-main {
+    padding: 1.5rem;
+  }
+}
+
+@media (min-width: 48rem) {
+  .avend-auth-links {
+    flex-wrap: nowrap;
+  }
+
+  .avend-auth-links .avend-text-link {
+    white-space: nowrap;
+  }
 }
 
 @keyframes avend-page-enter {
@@ -49,7 +220,7 @@
   box-shadow: 0 12px 22px rgb(13 27 61 / 20%);
 }
 
-.avend-button:not(:disabled):active,
+.avend-button:not(:disabled):not([aria-disabled="true"]):active,
 .avend-chat-module:not(:disabled):active,
 .avend-teacher-navigation-link:not(:disabled):active,
 .avend-teacher-new-chat:not(:disabled):active,
@@ -613,6 +784,7 @@ button.avend-teacher-new-chat:disabled,
   flex: 1;
   font-weight: 600;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* 44px de zona táctil sin agrandar el aviso: el relleno se compensa con un
@@ -624,6 +796,8 @@ button.avend-teacher-new-chat:disabled,
   color: inherit;
   cursor: pointer;
   flex: none;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
   margin: -0.625rem -0.5rem -0.625rem 0;
   padding: 0.625rem 0.5rem;
 }
