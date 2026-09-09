@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   createModuleAction,
   deleteModuleAction,
@@ -86,7 +87,7 @@ function submoduleWord(count: number): string {
 export function ModuleManageDetails({
   module,
   parents,
-  summary = "Editar, ordenar o cambiar estado",
+  summary = "",
 }: {
   module: ModuleView;
   parents: ModuleParentOption[];
@@ -250,6 +251,99 @@ export function ModuleManageDetails({
 }
 
 /**
+ * Modal accesible y autónomo para el formulario de creación. Encapsula el
+ * formulario que antes se desplegaba al final del listado: se abre desde el
+ * botón de la cabecera y se cierra con Escape, al hacer clic fuera o en el botón
+ * de cerrar. Atrapa el foco, bloquea el desplazamiento del fondo y lo devuelve
+ * al control que lo abrió. No cambia la lógica del formulario que envuelve.
+ */
+function CreateModal({
+  children,
+  onClose,
+  title,
+  titleId,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  title: string;
+  titleId: string;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      opener?.focus?.();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className={styles.modalOverlay}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className={styles.modalDialog}
+        ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <div className={styles.modalHeader}>
+          <h2 className={styles.modalTitle} id={titleId}>
+            {title}
+          </h2>
+          <button
+            aria-label="Cerrar"
+            className={styles.modalClose}
+            onClick={onClose}
+            type="button"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <div className={styles.modalBody}>{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
  * Hierarchical, searchable view of modules or the submodules of a module.
  * Navigation only: it reuses the existing module Server Actions and links to
  * the documents view; it performs no document management itself.
@@ -263,7 +357,10 @@ export function ModulesExplorer({
   const [createKind, setCreateKind] = useState<"module" | "submodule">(
     isRootContext(context) ? "module" : "submodule",
   );
+  const [isCreateOpen, setCreateOpen] = useState(false);
+  const closeCreate = useCallback(() => setCreateOpen(false), []);
   const searchId = useId();
+  const modalTitleId = `${searchId}-create-title`;
   const isRoot = context.kind === "root";
   const normalized = query.trim().toLocaleLowerCase("es");
 
@@ -285,26 +382,35 @@ export function ModulesExplorer({
           <h2 className={styles.title}>{isRoot ? "Módulos" : "Submódulos"}</h2>
           <span className={styles.count}>{modules.length} en total</span>
         </div>
-        <input
-          aria-label={
-            isRoot
-              ? "Buscar módulo por nombre o código"
-              : "Buscar submódulo por nombre o código"
-          }
-          className={styles.search}
-          id={`${searchId}-search`}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={isRoot ? "Buscar módulo…" : "Buscar submódulo…"}
-          type="search"
-          value={query}
-        />
+        <div className={styles.toolbarActions}>
+          <input
+            aria-label={
+              isRoot
+                ? "Buscar módulo por nombre o código"
+                : "Buscar submódulo por nombre o código"
+            }
+            className={styles.search}
+            id={`${searchId}-search`}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={isRoot ? "Buscar módulo…" : "Buscar submódulo…"}
+            type="search"
+            value={query}
+          />
+          <button
+            className={`avend-button avend-button--primary ${styles.createButton}`}
+            onClick={() => setCreateOpen(true)}
+            type="button"
+          >
+            {isRoot ? "+ Crear módulo o submódulo" : "+ Crear submódulo"}
+          </button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <p className={styles.empty}>
           {modules.length === 0
             ? isRoot
-              ? "Aún no hay módulos. Crea el primero con el formulario de abajo."
+              ? "Aún no hay módulos. Crea el primero con el botón «Crear módulo o submódulo»."
               : "Este módulo aún no tiene submódulos. Puedes crear uno o ver sus documentos."
             : "Ningún resultado coincide con la búsqueda."}
         </p>
@@ -352,17 +458,19 @@ export function ModulesExplorer({
         </ul>
       )}
 
-      <details className={styles.createPanel}>
-        <summary className={styles.createTitle} id={`${searchId}-create`}>
-          {isRoot ? "+ Crear módulo o submódulo" : "+ Crear submódulo"}
-        </summary>
-        <AdminActionForm
-          action={createModuleAction}
-          className={styles.createForm}
-          rules={MODULE_RULES}
-          submitLabel={isRoot ? "Crear" : "Crear submódulo"}
-          successMessage="Módulo creado con éxito."
+      {isCreateOpen ? (
+        <CreateModal
+          onClose={closeCreate}
+          title={isRoot ? "Crear módulo o submódulo" : "Crear submódulo"}
+          titleId={modalTitleId}
         >
+          <AdminActionForm
+            action={createModuleAction}
+            className={styles.createForm}
+            rules={MODULE_RULES}
+            submitLabel={isRoot ? "Crear" : "Crear submódulo"}
+            successMessage="Módulo creado con éxito."
+          >
           {isRoot ? (
             <label className={styles.fieldLabel} htmlFor={`${searchId}-kind`}>
               Tipo de elemento
@@ -487,8 +595,9 @@ export function ModulesExplorer({
               Módulo padre: <strong>{context.moduleName}</strong>
             </p>
           )}
-        </AdminActionForm>
-      </details>
+          </AdminActionForm>
+        </CreateModal>
+      ) : null}
     </div>
   );
 }
