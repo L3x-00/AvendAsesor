@@ -81,6 +81,7 @@ export function AdminActionForm({
       className={className}
       rules={rules}
       serverErrors={state.fieldErrors}
+      submissionState={state}
     >
       {children}
       {generalMessage ? (

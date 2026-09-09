@@ -17,10 +17,13 @@ export type FieldRule =
   | { kind: "required"; label: string }
   | { kind: "email"; label: string; optional?: boolean }
   | { kind: "phone"; label: string; optional?: boolean }
-  | { kind: "minLength"; label: string; min: number; optional?: boolean }
+  | { kind: "minLength"; label: string; min: number; optional?: boolean; trim?: boolean }
   | { kind: "maxLength"; label: string; max: number }
   | { kind: "pattern"; label: string; regexp: RegExp; message: string; optional?: boolean }
   | { kind: "dateOrder"; label: string; startField: string; startLabel: string }
+  | { kind: "matchesField"; field: string; message: string }
+  | { kind: "requiredWhen"; field: string; value: string; label: string }
+  | { kind: "jsonObject"; label: string }
   | { kind: "file"; label: string; accept: string[]; maxBytes: number; optional?: boolean };
 
 export type FieldRules = Record<string, FieldRule[]>;
@@ -74,6 +77,10 @@ function checkRule(
     return empty ? `${rule.label} es obligatorio.` : null;
   }
 
+  if (rule.kind === "requiredWhen") {
+    return values[rule.field] === rule.value && empty ? `${rule.label} es obligatorio.` : null;
+  }
+
   // El resto de reglas solo se aplican cuando hay algo que validar: la
   // obligatoriedad es una regla aparte, para no repetir dos mensajes sobre el
   // mismo campo vacío.
@@ -86,12 +93,12 @@ function checkRule(
         : "El correo electrónico no es válido.";
 
     case "phone":
-      return PHONE_PATTERN.test(asText(value))
+      return PHONE_PATTERN.test(asText(value)) && asText(value).replace(/\D/g, "").length >= 7
         ? null
         : "El número de celular no es válido. Usa solo dígitos, por ejemplo 987654321.";
 
     case "minLength":
-      return asText(value).length >= rule.min
+      return (rule.trim === false && typeof value === "string" ? value : asText(value)).length >= rule.min
         ? null
         : `${rule.label} debe tener al menos ${rule.min} caracteres.`;
 
@@ -101,18 +108,35 @@ function checkRule(
         : `${rule.label} no puede superar ${rule.max} caracteres.`;
 
     case "pattern":
-      return rule.regexp.test(asText(value)) ? null : rule.message;
+      // Las expresiones globales conservan lastIndex entre validaciones.
+      return new RegExp(rule.regexp.source, rule.regexp.flags).test(asText(value))
+        ? null
+        : rule.message;
+
+    case "matchesField":
+      return value === values[rule.field] ? null : rule.message;
+
+    case "jsonObject": {
+      try {
+        const parsed: unknown = JSON.parse(asText(value));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return null;
+      } catch {
+        // El texto del error identifica el campo sin revelar datos ingresados.
+      }
+      return `${rule.label}: ingresa un objeto JSON válido.`;
+    }
 
     case "dateOrder": {
       const start = asText(values[rule.startField]);
       if (!start) return null;
       return asText(value) >= start
         ? null
-        : `${rule.label} debe ser posterior a ${rule.startLabel.toLocaleLowerCase("es-PE")}.`;
+        : `${rule.label} debe ser igual o posterior a ${rule.startLabel.toLocaleLowerCase("es-PE")}.`;
     }
 
     case "file": {
       if (!(value instanceof File)) return null;
+      if (value.size === 0) return "El archivo está vacío. Selecciona un archivo con contenido.";
       const extension = fileExtension(value.name);
       if (!rule.accept.includes(extension)) {
         const readable = rule.accept
@@ -174,7 +198,19 @@ export function validateFormData(
   rules: FieldRules,
   formData: FormData,
 ): FieldErrors {
-  return validateValues(rules, valuesFromFormData(formData));
+  const values = valuesFromFormData(formData);
+  const errors = validateValues(rules, values);
+  for (const [name, fieldRules] of Object.entries(rules)) {
+    if (!fieldRules.some((rule) => rule.kind === "file")) continue;
+    for (const file of formData.getAll(name)) {
+      const error = validateField(fieldRules, file, values);
+      if (error) {
+        errors[name] = error;
+        break;
+      }
+    }
+  }
+  return errors;
 }
 
 export function hasErrors(errors: FieldErrors): boolean {

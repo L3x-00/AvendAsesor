@@ -1,9 +1,19 @@
 "use client";
 
 import { useId } from "react";
+import { FieldError } from "@/components/ui/form-field";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import { setAdminModulePermissionAction } from "@/app/admin/actions";
 import type { AdminModulePermission } from "@/lib/admin-api/types";
 import { AdminActionForm } from "./admin-action-form";
+
+const PERMISSION_RULES: FieldRules = {
+  reason: [
+    { kind: "required", label: "El motivo" },
+    { kind: "minLength", label: "El motivo", min: 4 },
+    { kind: "maxLength", label: "El motivo", max: 500 },
+  ],
+};
 
 export function ModulePermissionsManager({
   permissions,
@@ -55,6 +65,7 @@ export function ModulePermissionsManager({
               </div>
               <AdminActionForm
                 action={setAdminModulePermissionAction}
+                rules={PERMISSION_RULES}
                 className="mt-3 grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)_auto] md:items-end"
                 confirmMessage="¿Confirmas cambiar el acceso de este administrador a Módulos y Documentos?"
                 submitLabel="Guardar permiso"
@@ -90,6 +101,7 @@ export function ModulePermissionsManager({
                     name="reason"
                     required
                   />
+                  <FieldError name="reason" />
                 </label>
               </AdminActionForm>
             </li>

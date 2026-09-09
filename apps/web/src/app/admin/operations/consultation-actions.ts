@@ -5,12 +5,16 @@ import type { AdminActionState } from "@/lib/admin-api/action-state";
 import { ConsultationReportsApiError } from "@/lib/consultation-reports-api/client";
 import { createAuthorizedConsultationReportsApiContext } from "@/lib/consultation-reports-api/authorized-client";
 
-class FormValidationError extends Error {}
+class FormValidationError extends Error {
+  constructor(message: string, readonly field?: string) {
+    super(message);
+  }
+}
 
 function requiredText(formData: FormData, name: string, label: string): string {
   const value = formData.get(name);
   if (typeof value !== "string" || !value.trim()) {
-    throw new FormValidationError(`${label} es obligatorio.`);
+    throw new FormValidationError(`${label} es obligatorio.`, name);
   }
   return value.trim();
 }
@@ -22,6 +26,9 @@ function optionalText(formData: FormData, name: string): string | undefined {
 
 function actionFailure(error: unknown): AdminActionState {
   if (error instanceof FormValidationError) {
+    if (error.field) {
+      return { fieldErrors: { [error.field]: error.message }, status: "error" };
+    }
     return { message: error.message, status: "error" };
   }
   if (error instanceof ConsultationReportsApiError) {
@@ -81,6 +88,7 @@ export async function updateConsultationCaseAction(
     if (changeRouting && detectedSubmoduleId && !detectedModuleId) {
       throw new FormValidationError(
         "El submódulo requiere seleccionar primero su módulo principal.",
+        "detectedModuleId",
       );
     }
     const { client } = await createAuthorizedConsultationReportsApiContext();
@@ -134,6 +142,7 @@ export async function decideConsultationAttachmentAction(
     if (disposition === "incorporated" && !documentId) {
       throw new FormValidationError(
         "Para incorporar el adjunto, enlaza primero el documento registrado.",
+        "documentId",
       );
     }
     const { client } = await createAuthorizedConsultationReportsApiContext();

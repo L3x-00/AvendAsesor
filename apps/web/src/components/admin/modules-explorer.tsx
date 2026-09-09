@@ -58,10 +58,21 @@ const MODULE_RULES: FieldRules = {
       regexp: /^[A-Za-z][A-Za-z0-9_]{1,63}$/u,
     },
   ],
-  description: [{ kind: "maxLength", label: "La descripción", max: 500 }],
+  description: [
+    { kind: "minLength", label: "La descripción", min: 2 },
+    { kind: "maxLength", label: "La descripción", max: 500 },
+  ],
   name: [
     { kind: "required", label: "El nombre" },
-    { kind: "maxLength", label: "El nombre", max: 160 },
+    { kind: "minLength", label: "El nombre", min: 2 },
+    { kind: "maxLength", label: "El nombre", max: 255 },
+  ],
+};
+const MODULE_REASON_RULES: FieldRules = {
+  reason: [
+    { kind: "required", label: "El motivo" },
+    { kind: "minLength", label: "El motivo", min: 2 },
+    { kind: "maxLength", label: "El motivo", max: 500 },
   ],
 };
 const CODE_TITLE =
@@ -101,6 +112,8 @@ export function ModuleManageDetails({
             className={styles.input}
             defaultValue={module.name}
             id={`${fieldId}-name`}
+            maxLength={255}
+            minLength={2}
             name="name"
             required
           />
@@ -167,7 +180,8 @@ export function ModuleManageDetails({
                       {parent.name} ({parent.code})
                     </option>
                   ))}
-              </select>
+                </select>
+                <FieldError name="parentModuleId" />
             </>
           ) : (
             <p className={styles.presetParent}>
@@ -179,6 +193,7 @@ export function ModuleManageDetails({
         <div className={styles.manageSide}>
           <AdminActionForm
             action={setModuleStatusAction}
+            rules={module.isActive ? MODULE_REASON_RULES : {}}
             submitLabel={module.isActive ? "Desactivar" : "Activar"}
           >
             <input name="moduleId" type="hidden" value={module.id} />
@@ -196,15 +211,19 @@ export function ModuleManageDetails({
                 <input
                   className={styles.input}
                   id={`${fieldId}-status-reason`}
+                  maxLength={500}
+                  minLength={2}
                   name="reason"
                   required
                 />
+                <FieldError name="reason" />
               </label>
             ) : null}
           </AdminActionForm>
 
           <AdminActionForm
             action={deleteModuleAction}
+            rules={MODULE_REASON_RULES}
             submitLabel="Eliminar (lógico)"
           >
             <input name="moduleId" type="hidden" value={module.id} />
@@ -216,9 +235,12 @@ export function ModuleManageDetails({
               <input
                 className={styles.input}
                 id={`${fieldId}-delete-reason`}
+                maxLength={500}
+                minLength={2}
                 name="reason"
                 required
               />
+              <FieldError name="reason" />
             </label>
           </AdminActionForm>
         </div>
@@ -370,6 +392,8 @@ export function ModulesExplorer({
           <input
             className={styles.input}
             id={`${searchId}-new-name`}
+            maxLength={255}
+            minLength={2}
             name="name"
             required
           />
@@ -454,6 +478,7 @@ export function ModulesExplorer({
                   </option>
                 ))}
               </select>
+              <FieldError name="parentModuleId" />
             </>
           ) : isRoot ? (
             <input name="parentModuleId" type="hidden" value="__root__" />

@@ -1,12 +1,20 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { FieldErrorProvider } from "@/components/ui/form-field";
+import { ValidatedForm } from "@/components/ui/validated-form";
+import type { FieldErrors, FieldRules } from "@/lib/ui/field-validation";
 import { useToast } from "@/components/ui/toast";
 
 export const MAX_ADMIN_PDF_BYTES = 20 * 1024 * 1024;
+
+const PDF_RULES: FieldRules = {
+  file: [
+    { kind: "required", label: "El archivo PDF" },
+    { kind: "file", label: "El PDF", accept: [".pdf"], maxBytes: MAX_ADMIN_PDF_BYTES },
+  ],
+};
 
 interface DocumentPdfUploadFormProps {
   apiBaseUrl: string;
@@ -54,35 +62,42 @@ function getUploadErrorMessage(status: number): string {
   return "No fue posible cargar el PDF. Comprueba tu conexión e inténtalo nuevamente; tus datos se conservaron.";
 }
 
-function isFileEntry(value: FormDataEntryValue | null): value is File {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "name" in value &&
-    typeof value.name === "string" &&
-    "size" in value &&
-    typeof value.size === "number" &&
-    "type" in value &&
-    typeof value.type === "string"
-  );
-}
+async function pdfErrorMessage(response: Response): Promise<string | undefined> {
+  if (response.status === 413) return getUploadErrorMessage(response.status);
+  if (response.status !== 400 && response.status !== 422) return undefined;
 
-function validatePdf(formData: FormData): string | undefined {
-  const file = formData.get("file");
-
-  if (!isFileEntry(file) || file.size === 0) {
-    return "Selecciona un archivo PDF no vacío.";
+  try {
+    const result: unknown = await response.json();
+    if (!result || typeof result !== "object" || !("message" in result)) return;
+    const messages = typeof result.message === "string"
+      ? [result.message]
+      : Array.isArray(result.message) ? result.message : [];
+    for (const message of messages) {
+      if (typeof message !== "string") continue;
+      if (message === "PDF files cannot exceed 300 pages.") {
+        return "El PDF no puede superar las 300 páginas.";
+      }
+      if (message === "PDF files cannot exceed 20 MiB.") {
+        return getUploadErrorMessage(413);
+      }
+      if (message === "The uploaded file name is invalid.") {
+        return "El nombre del archivo no es válido. Cambia el nombre y vuelve a seleccionarlo.";
+      }
+      if ([
+        "A PDF file is required.",
+        "A non-empty PDF file is required.",
+        "The PDF does not contain any pages.",
+        "The uploaded PDF could not be read or processed.",
+        "Only files with a .pdf extension are allowed.",
+        "The uploaded file type must be PDF.",
+        "The uploaded file is not a valid PDF.",
+      ].includes(message)) {
+        return "El archivo debe ser un PDF válido, no vacío y legible. Selecciona otro archivo.";
+      }
+    }
+  } catch {
+    // Una respuesta sin JSON conserva el mensaje general del servicio.
   }
-
-  if (!file.name.toLocaleLowerCase("es").endsWith(".pdf")) {
-    return "El archivo seleccionado debe tener extensión .pdf.";
-  }
-
-  if (file.size > MAX_ADMIN_PDF_BYTES) {
-    return "El PDF no puede superar los 20 MiB.";
-  }
-
-  return undefined;
 }
 
 export function DocumentPdfUploadForm({
@@ -93,44 +108,17 @@ export function DocumentPdfUploadForm({
   submitLabel,
   successMessage,
 }: DocumentPdfUploadFormProps) {
-  const formRef = useRef<HTMLFormElement>(null);
   const pendingRef = useRef(false);
   const router = useRouter();
   const [feedback, setFeedback] = useState<UploadFeedback>({ status: "idle" });
   const [pending, setPending] = useState(false);
-  const [fileError, setFileError] = useState<string | undefined>();
+  const [serverErrors, setServerErrors] = useState<FieldErrors>({});
   const { showToast } = useToast();
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function submit(formData: FormData, form: HTMLFormElement) {
     if (pendingRef.current) return;
-
-    const form = event.currentTarget;
-
-    // Native validation is disabled on the form (noValidate) so this custom
-    // handler always runs — otherwise the browser silently blocks the submit
-    // and scrolls to the first invalid field, and the button appears to do
-    // nothing. Surface any constraint error explicitly instead.
-    if (!form.reportValidity()) {
-      setFeedback({
-        message:
-          "Revisa los campos marcados: falta el PDF o algún dato no cumple el formato solicitado.",
-        status: "error",
-      });
-      return;
-    }
-
-    const formData = new window.FormData(form);
-    const fileInput = form.elements.namedItem("file");
-    const selectedFile =
-      fileInput instanceof window.HTMLInputElement
-        ? fileInput.files?.item(0)
-        : null;
-
-    if (selectedFile) {
-      formData.set("file", selectedFile, selectedFile.name);
-    }
+    // Selector auxiliar de interfaz; el contrato multipart solo recibe el año.
+    formData.delete("issuanceYearMode");
 
     if (form.elements.namedItem("moduleId")) {
       const moduleIds = formData
@@ -156,17 +144,7 @@ export function DocumentPdfUploadForm({
       }
     }
 
-    const validationMessage = validatePdf(formData);
-
-    if (validationMessage) {
-      // El problema es del campo del archivo, así que se señala ahí y no en un
-      // aviso general al pie del formulario.
-      setFileError(validationMessage);
-      setFeedback({ status: "idle" });
-      return;
-    }
-
-    setFileError(undefined);
+    setServerErrors({});
 
     setFeedback({ status: "idle" });
     pendingRef.current = true;
@@ -198,6 +176,11 @@ export function DocumentPdfUploadForm({
       });
 
       if (!response.ok) {
+        const fileError = await pdfErrorMessage(response);
+        if (fileError) {
+          setServerErrors({ file: fileError });
+          return;
+        }
         setFeedback({
           message: getUploadErrorMessage(response.status),
           status: "error",
@@ -205,7 +188,7 @@ export function DocumentPdfUploadForm({
         return;
       }
 
-      formRef.current?.reset();
+      form.reset();
       setFeedback({ message: successMessage, status: "success" });
       showToast(successMessage);
       router.refresh();
@@ -227,16 +210,14 @@ export function DocumentPdfUploadForm({
       : "avend-feedback--error";
 
   return (
-    <form
+    <ValidatedForm
       aria-busy={pending}
       className={className}
-      noValidate
-      onSubmit={(event) => void submit(event)}
-      ref={formRef}
+      onValidSubmit={submit}
+      rules={PDF_RULES}
+      serverErrors={serverErrors}
     >
-      <FieldErrorProvider errors={fileError ? { file: fileError } : {}}>
-        {children}
-      </FieldErrorProvider>
+      {children}
       {feedback.message ? (
         <p
           aria-live="polite"
@@ -247,7 +228,7 @@ export function DocumentPdfUploadForm({
         </p>
       ) : null}
       {pending ? (
-        <p aria-live="polite" className="sr-only" role="status">
+        <p aria-live="polite" className="avend-feedback" role="status">
           Cargando PDF. Espera mientras se valida y registra el documento.
         </p>
       ) : null}
@@ -258,6 +239,6 @@ export function DocumentPdfUploadForm({
       >
         {pending ? "Cargando PDF…" : submitLabel}
       </button>
-    </form>
+    </ValidatedForm>
   );
 }

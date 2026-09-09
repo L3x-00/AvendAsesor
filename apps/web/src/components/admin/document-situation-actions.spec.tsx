@@ -193,4 +193,44 @@ describe("DocumentSituationActions", () => {
     expect(submitted.get("replacementYear")).toBe("2026");
     expect(confirm).toHaveBeenCalledTimes(1);
   });
+
+  it("marks replacement fields together and accepts either date or year reactively", async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<DocumentSituationActions documentId="document-id" replacementCandidates={replacementCandidates} situation="current" />);
+    await user.click(screen.getByText("Archivar / Desactivar"));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "REPLACED_BY_NEWER");
+    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
+    expect(screen.getByLabelText("Fecha del reemplazo")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("spinbutton", { name: "Año del reemplazo" })).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("textbox", { name: /Motivo del cambio/ })).toHaveAttribute("aria-invalid", "true");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(setDocumentSituationAction).not.toHaveBeenCalled();
+
+    await user.type(screen.getByRole("spinbutton", { name: "Año del reemplazo" }), "2026");
+    await waitFor(() => {
+      expect(screen.getByLabelText("Fecha del reemplazo")).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByRole("spinbutton", { name: "Año del reemplazo" })).not.toHaveAttribute("aria-invalid");
+    });
+    expect(screen.getByRole("textbox", { name: /Motivo del cambio/ })).toHaveAttribute("aria-invalid", "true");
+    await user.type(screen.getByRole("textbox", { name: /Motivo del cambio/ }), "Norma sustituida");
+    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
+    await waitFor(() => expect(setDocumentSituationAction).toHaveBeenCalledTimes(1));
+  });
+
+  it("validates the Other reason and removes hidden replacement errors when the reason changes", async () => {
+    const user = userEvent.setup();
+    render(<DocumentSituationActions documentId="document-id" replacementCandidates={replacementCandidates} situation="current" />);
+    await user.click(screen.getByText("Archivar / Desactivar"));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "REPLACED_BY_NEWER");
+    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "OTHER");
+    expect(screen.queryByText("El motivo del cambio es obligatorio.")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Archivar documento" }));
+    expect(screen.getByText("El motivo del archivo es obligatorio.")).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: /Especificar motivo/ }), "A");
+    expect(screen.getByText("El motivo del archivo debe tener al menos 2 caracteres.")).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: /Especificar motivo/ }), "rchivo revisado");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Especificar motivo/ })).not.toHaveAttribute("aria-invalid"));
+  });
 });

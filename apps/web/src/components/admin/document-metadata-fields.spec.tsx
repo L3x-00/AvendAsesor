@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
@@ -31,6 +31,21 @@ function renderFields() {
 }
 
 describe("DocumentMetadataFields", () => {
+  it("preserves controlled metadata when a failed submission cancels the reset", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <form onResetCapture={(event) => event.preventDefault()}>
+        <DocumentMetadataFields required />
+      </form>,
+    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "Tipo documental" }), "LEY");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Año del documento" }), "2026");
+    fireEvent.reset(container.querySelector("form")!);
+    expect(screen.getByRole("combobox", { name: "Tipo documental" })).toHaveValue("LEY");
+    expect(screen.getByRole("combobox", { name: "Año del documento" })).toHaveValue("2026");
+    expect(screen.getByRole("combobox", { name: "Año del documento" })).toHaveAttribute("name", "issuanceYearMode");
+  });
+
   it("offers the exact governed taxonomies and a dynamic year range", () => {
     renderFields();
 

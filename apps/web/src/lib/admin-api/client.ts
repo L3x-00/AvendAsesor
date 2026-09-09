@@ -43,7 +43,7 @@ import {
 } from "./types";
 
 export class AdminApiError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly field?: "email") {
     super("Administrative API request failed.");
   }
 }
@@ -519,6 +519,13 @@ export class AdminApiClient {
     });
 
     if (!response.ok) {
+      if (path === "/admin/users" && options.method === "POST" && response.status === 409) {
+        const payload: unknown = await response.json().catch(() => null);
+        if (payload && typeof payload === "object" && "message" in payload &&
+          payload.message === "That email address already has an account.") {
+          throw new AdminApiError(response.status, "email");
+        }
+      }
       throw new AdminApiError(response.status);
     }
 

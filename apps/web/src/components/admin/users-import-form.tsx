@@ -1,15 +1,23 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { FieldError } from "@/components/ui/form-field";
 import { useToast } from "@/components/ui/toast";
-import { FieldErrorProvider } from "@/components/ui/validated-form";
+import { ValidatedForm } from "@/components/ui/validated-form";
+import type { FieldErrors, FieldRules } from "@/lib/ui/field-validation";
 import styles from "./users-manager.module.css";
 
 /** Matches the ceiling the API enforces for one roster. */
 export const MAX_USER_IMPORT_BYTES = 2 * 1024 * 1024;
+
+const IMPORT_RULES: FieldRules = {
+  file: [
+    { kind: "required", label: "El archivo Excel" },
+    { kind: "file", label: "El archivo Excel", accept: [".xlsx"], maxBytes: MAX_USER_IMPORT_BYTES },
+  ],
+};
 
 interface ImportRowError {
   email: string | null;
@@ -45,40 +53,21 @@ function importErrorMessage(status: number): string {
  * Action because those cap the body far below a real spreadsheet.
  */
 export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const pendingRef = useRef(false);
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | undefined>();
+  const [serverErrors, setServerErrors] = useState<FieldErrors>({});
   const { showToast } = useToast();
   const [report, setReport] = useState<ImportReport | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending) return;
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    // Se lee del propio input: FormData reconstruye la entrada y no es la
-    // fuente fiable para inspeccionar el archivo antes de enviarlo.
-    const input = form.elements.namedItem("file") as HTMLInputElement | null;
-    const file = input?.files?.[0];
-
-    if (!file) {
-      setReport(null);
-      setFileError("Elige el archivo Excel con los usuarios.");
-      return;
-    }
-
-    if (file.size > MAX_USER_IMPORT_BYTES) {
-      setReport(null);
-      setFileError("El archivo supera el tamaño permitido para una importación.");
-      return;
-    }
+  async function handleSubmit(formData: FormData, form: HTMLFormElement) {
+    if (pendingRef.current) return;
 
     setMessage(null);
-    setFileError(undefined);
+    setServerErrors({});
     setReport(null);
+    pendingRef.current = true;
     setPending(true);
 
     try {
@@ -106,18 +95,30 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
       );
 
       if (!response.ok) {
-        setMessage(importErrorMessage(response.status));
+        if (response.status === 400 || response.status === 413) {
+          setServerErrors({ file: importErrorMessage(response.status) });
+        } else {
+          setMessage(importErrorMessage(response.status));
+        }
         return;
       }
 
       const result = (await response.json()) as ImportReport;
       setReport(result);
-      showToast("Importación completada con éxito.");
-      formRef.current?.reset();
-      if (result.imported > 0) router.refresh();
+      if (result.imported > 0) {
+        const hasPendingRows = result.errors.length > 0 || result.truncated;
+        showToast(
+          hasPendingRows
+            ? `${result.imported === 1 ? "Se registró 1 usuario" : `Se registraron ${result.imported} usuarios`}. Revisa las filas pendientes.`
+            : "Importación completada con éxito.",
+        );
+        if (!hasPendingRows) form.reset();
+        router.refresh();
+      }
     } catch {
       setMessage("No se pudo completar la importación. Inténtalo de nuevo.");
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
@@ -125,13 +126,12 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
   return (
     <details className={styles.create}>
       <summary className={styles.createSummary}>Importar Excel</summary>
-      {/* noValidate: la validación nativa bloqueaba el envío sin decir por qué. */}
-      <FieldErrorProvider errors={fileError ? { file: fileError } : {}}>
-      <form
+      <ValidatedForm
+        aria-busy={pending}
         className={styles.form}
-        noValidate
-        onSubmit={handleSubmit}
-        ref={formRef}
+        onValidSubmit={handleSubmit}
+        rules={IMPORT_RULES}
+        serverErrors={serverErrors}
       >
         <p className={styles.formHint}>
           La primera fila debe tener las columnas <strong>Nombre y
@@ -143,7 +143,11 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
         <label className={styles.fieldLabel} htmlFor="users-import-file">
           Archivo Excel
         </label>
+        <p className={styles.formHint} id="users-import-file-hint">
+          Formato .xlsx; máximo 2 MB.
+        </p>
         <input
+          aria-describedby="users-import-file-hint"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className={styles.input}
           id="users-import-file"
@@ -152,21 +156,32 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
         />
         <FieldError name="file" />
         <button
+          aria-disabled={pending}
           className={styles.searchButton}
-          disabled={pending}
           type="submit"
         >
           {pending ? "Importando…" : "Importar usuarios"}
         </button>
 
+        {pending ? (
+          <p className={styles.formHint} role="status">
+            Importando usuarios. Espera mientras se revisan las filas del archivo.
+          </p>
+        ) : null}
+
         {message ? (
-          <p aria-live="polite" className={styles.importError} role="status">
+          <p className="avend-feedback avend-feedback--error" role="alert">
             {message}
           </p>
         ) : null}
 
         {report ? (
           <div aria-live="polite" className={styles.importReport}>
+            {report.imported === 0 ? (
+              <p className="avend-feedback avend-feedback--error">
+                No se registró ningún usuario. Revisa las filas indicadas y corrige el archivo antes de volver a importarlo.
+              </p>
+            ) : null}
             <p className={styles.importSummary}>
               Se registraron <strong>{report.imported}</strong> de{" "}
               <strong>{report.considered}</strong> filas.
@@ -195,8 +210,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
             ) : null}
           </div>
         ) : null}
-      </form>
-      </FieldErrorProvider>
+      </ValidatedForm>
     </details>
   );
 }

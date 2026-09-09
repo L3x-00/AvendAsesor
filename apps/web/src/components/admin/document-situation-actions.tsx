@@ -1,6 +1,8 @@
 "use client";
 
 import { useId, useState } from "react";
+import { FieldError } from "@/components/ui/form-field";
+import type { FieldRules } from "@/lib/ui/field-validation";
 import { setDocumentSituationAction } from "@/app/admin/actions";
 import {
   ARCHIVE_REASON_OPTIONS,
@@ -38,6 +40,32 @@ export function DocumentSituationActions({
     ? reasonCode
     : availableReasons[0].value;
   const isReplacement = selectedReason === "REPLACED_BY_NEWER";
+  const rules: FieldRules = {
+    observation: [
+      { kind: "minLength", label: "La observación", min: 2 },
+      { kind: "maxLength", label: "La observación", max: 1000 },
+    ],
+  };
+  if (selectedReason === "OTHER") {
+    rules.archiveReasonDetail = [
+      { kind: "required", label: "El motivo del archivo" },
+      { kind: "minLength", label: "El motivo del archivo", min: 2 },
+      { kind: "maxLength", label: "El motivo del archivo", max: 500 },
+    ];
+  }
+  if (isReplacement) {
+    rules.reason = [
+      { kind: "required", label: "El motivo del cambio" },
+      { kind: "minLength", label: "El motivo del cambio", min: 2 },
+      { kind: "maxLength", label: "El motivo del cambio", max: 500 },
+    ];
+    if (!replacementYear) {
+      rules.replacementDate = [{ kind: "required", label: "La fecha o el año del reemplazo" }];
+    }
+    if (!replacementDate) {
+      rules.replacementYear = [{ kind: "required", label: "El año o la fecha del reemplazo" }];
+    }
+  }
 
   return (
     <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
@@ -70,6 +98,7 @@ export function DocumentSituationActions({
         <AdminActionForm
           action={setDocumentSituationAction}
           className="mt-4 grid gap-3 sm:grid-cols-2"
+          rules={rules}
           confirmMessage={
             isReplacement
               ? "¿Confirmas registrar el reemplazo de este documento con el motivo indicado?"
@@ -118,6 +147,7 @@ export function DocumentSituationActions({
                 name="archiveReasonDetail"
                 required
               />
+              <FieldError name="archiveReasonDetail" />
             </label>
           ) : null}
 
@@ -158,6 +188,7 @@ export function DocumentSituationActions({
                   type="date"
                   value={replacementDate}
                 />
+                <FieldError name="replacementDate" />
               </label>
               <label className="block" htmlFor={`${prefix}-replacement-year`}>
                 <span className="text-base font-semibold">
@@ -176,6 +207,7 @@ export function DocumentSituationActions({
                   type="number"
                   value={replacementYear}
                 />
+                <FieldError name="replacementYear" />
                 <span
                   className="mt-1 block text-sm text-avend-text-muted"
                   id={`${prefix}-replacement-year-help`}
@@ -198,6 +230,7 @@ export function DocumentSituationActions({
                   name="reason"
                   required
                 />
+                <FieldError name="reason" />
               </label>
             </>
           ) : null}
@@ -216,6 +249,7 @@ export function DocumentSituationActions({
               minLength={2}
               name="observation"
             />
+            <FieldError name="observation" />
           </label>
         </AdminActionForm>
       </details>

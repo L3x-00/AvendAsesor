@@ -104,7 +104,15 @@ export function DocumentMetadataFields({
     return [...new Set([...canonical, ...suggestions.specificDependencies])];
   }, [entity, suggestions.specificDependencies]);
 
-  function resetControlledFields() {
+  function notifySuggestedValue(name: string) {
+    queueMicrotask(() => {
+      containerRef.current?.querySelector<HTMLInputElement>(`input[name="${name}"]`)
+        ?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  function resetControlledFields(event: Event) {
+    if (event.defaultPrevented) return;
     setDocumentType(initialType(initial));
     setEntity(initialEntity(initial));
     setSpecificDependency(initial?.specificDependency ?? "");
@@ -173,6 +181,7 @@ export function DocumentMetadataFields({
         <select
           className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
           id={`${prefix}-year-mode`}
+          name="issuanceYearMode"
           onChange={(event) => setYearMode(event.target.value)}
           required={required}
           value={yearMode}
@@ -298,7 +307,10 @@ export function DocumentMetadataFields({
                 <button
                   className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
                   key={value}
-                  onClick={() => setSpecificDependency(value)}
+                  onClick={() => {
+                    setSpecificDependency(value);
+                    notifySuggestedValue("specificDependency");
+                  }}
                   type="button"
                 >
                   {value}
@@ -339,7 +351,10 @@ export function DocumentMetadataFields({
               <button
                 className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
                 key={value}
-                onClick={() => setAdditionalDetail(value)}
+                onClick={() => {
+                  setAdditionalDetail(value);
+                  notifySuggestedValue("additionalDetail");
+                }}
                 type="button"
               >
                 {value}
