@@ -64,7 +64,7 @@ describe("ModulesExplorer", () => {
     ).toBeVisible();
     expect(within(evaluation).getByText("Activo")).toBeVisible();
     expect(
-      within(evaluation).getByRole("link", { name: "Ver submódulos" }),
+      within(evaluation).getByRole("link", { name: /Ingresar/ }),
     ).toHaveAttribute("href", "/admin/modules/m1");
 
     const contrato = screen
@@ -76,7 +76,7 @@ describe("ModulesExplorer", () => {
     ).toBeVisible();
     expect(within(contrato).getByText("Inactivo")).toBeVisible();
     expect(
-      within(contrato).getByRole("link", { name: "Gestionar documentos" }),
+      within(contrato).getByRole("link", { name: /Ingresar/ }),
     ).toHaveAttribute("href", "/admin/modules/m2");
   });
 

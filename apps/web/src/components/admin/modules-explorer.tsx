@@ -417,14 +417,11 @@ export function ModulesExplorer({
       ) : (
         <ul className={styles.grid} role="list">
           {filtered.map((module) => {
-            const hasSubmodules = module.submoduleCount > 0;
-            const primaryHref = `/admin/modules/${module.id}`;
-            const primaryLabel = hasSubmodules
-              ? "Ver submódulos"
-              : "Gestionar documentos";
-
             return (
               <li className={styles.card} key={module.id}>
+                <div className={styles.moduleTag}>
+                  Módulo: {module.name}
+                </div>
                 <div className={styles.cardHeader}>
                   <h3 className={styles.cardTitle}>{module.name}</h3>
                   <span
@@ -448,10 +445,12 @@ export function ModulesExplorer({
                     ? `${module.submoduleCount} ${submoduleWord(module.submoduleCount)} · ${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`
                     : `${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`}
                 </p>
-                <Link className={styles.cardLink} href={primaryHref}>
-                  {primaryLabel}
+                <Link
+                  className={styles.cardLink}
+                  href={`/admin/modules/${module.id}`}
+                >
+                  Ingresar <span aria-hidden="true">→</span>
                 </Link>
-                <ModuleManageDetails module={module} parents={parents} />
               </li>
             );
           })}
