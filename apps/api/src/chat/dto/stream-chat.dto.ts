@@ -3,11 +3,11 @@ import { trimText } from '../../modules/dto/module.dto-helpers';
 
 export class StreamChatDto {
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   conversationId?: string;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   moduleId?: string;
 
   @IsString()

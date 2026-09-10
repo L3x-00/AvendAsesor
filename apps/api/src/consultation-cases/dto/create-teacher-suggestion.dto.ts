@@ -13,9 +13,9 @@ export class CreateTeacherSuggestionDto {
   comment!: string;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   conversationId?: string;
 
-  @IsUUID('4')
+  @IsUUID()
   submissionId!: string;
 }
