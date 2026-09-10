@@ -1,6 +1,12 @@
 "use client";
 
-import { type ReactNode, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { ValidatedForm } from "@/components/ui/validated-form";
@@ -40,34 +46,34 @@ type UploadFeedback = {
 
 function getUploadErrorMessage(status: number): string {
   if (status === 400 || status === 422) {
-    return "El documento o los datos ingresados no son válidos. Revísalos; el formulario conserva toda la información.";
+    return "Revisa los campos marcados en rojo y vuelve a intentarlo. El formulario conservó todo lo que escribiste.";
   }
 
   if (status === 401) {
-    return "Tu sesión expiró. Inicia sesión nuevamente antes de cargar el documento.";
+    return "Tu sesión se cerró por inactividad. Inicia sesión de nuevo y vuelve a cargar el documento.";
   }
 
   if (status === 403) {
-    return "No tienes permiso para cargar documentos.";
+    return "Tu cuenta no tiene permiso para cargar documentos. Pide acceso a un administrador.";
   }
 
   if (status === 409) {
-    return "La carga entra en conflicto con el estado actual. Los datos se conservaron para que puedas revisarlos.";
+    return "Este documento ya existía o cambió mientras lo cargabas. Revisa el listado; tus datos se conservaron.";
   }
 
   if (status === 413) {
-    return "El documento supera el límite permitido de 50 MiB.";
+    return "El documento pesa más de 50 MB. Reduce su tamaño o divídelo y vuelve a intentarlo.";
   }
 
   if (status === 429) {
-    return "Se alcanzó el límite temporal de cargas. Espera un minuto; tus datos permanecen en el formulario.";
+    return "Hiciste varias cargas muy seguidas. Espera un minuto y vuelve a intentarlo; tus datos siguen en el formulario.";
   }
 
   if (status === 503) {
-    return "No se pudo confirmar la carga. Revisa el listado antes de volver a enviarla; tus datos permanecen en el formulario.";
+    return "El servicio tardó en responder, seguramente porque se estaba reactivando tras un rato sin uso. Espera unos segundos y vuelve a pulsar el botón: tus datos siguen aquí.";
   }
 
-  return "No fue posible cargar el documento. Comprueba tu conexión e inténtalo nuevamente; tus datos se conservaron.";
+  return "No se pudo cargar el documento. Revisa tu conexión a internet y vuelve a intentarlo; tus datos se conservaron.";
 }
 
 async function pdfErrorMessage(response: Response): Promise<string | undefined> {
@@ -125,10 +131,14 @@ export function DocumentPdfUploadForm({
   const [feedback, setFeedback] = useState<UploadFeedback>({ status: "idle" });
   const [pending, setPending] = useState(false);
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
+  const [showSuccess, setShowSuccess] = useState(false);
   const { showToast } = useToast();
+
+  const closeSuccess = useCallback(() => setShowSuccess(false), []);
 
   async function submit(formData: FormData, form: HTMLFormElement) {
     if (pendingRef.current) return;
+    setShowSuccess(false);
     // Selector auxiliar de interfaz; el contrato multipart solo recibe el año.
     formData.delete("issuanceYearMode");
 
@@ -202,12 +212,13 @@ export function DocumentPdfUploadForm({
 
       form.reset();
       setFeedback({ message: successMessage, status: "success" });
+      setShowSuccess(true);
       showToast(successMessage);
       router.refresh();
     } catch {
       setFeedback({
         message:
-          "No fue posible conectar con el servicio de documentos. Tus datos se conservaron para volver a intentarlo.",
+          "No se pudo conectar con el servicio, que puede estar reactivándose. Espera unos segundos y vuelve a pulsar el botón: tus datos siguen aquí.",
         status: "error",
       });
     } finally {
@@ -222,13 +233,15 @@ export function DocumentPdfUploadForm({
       : "avend-feedback--error";
 
   return (
-    <ValidatedForm
-      aria-busy={pending}
-      className={className}
-      onValidSubmit={submit}
-      rules={PDF_RULES}
-      serverErrors={serverErrors}
-    >
+    <>
+      {showSuccess ? <UploadSuccessModal onClose={closeSuccess} /> : null}
+      <ValidatedForm
+        aria-busy={pending}
+        className={className}
+        onValidSubmit={submit}
+        rules={PDF_RULES}
+        serverErrors={serverErrors}
+      >
       {children}
       {feedback.message ? (
         <p
@@ -251,6 +264,68 @@ export function DocumentPdfUploadForm({
       >
         {pending ? "Cargando…" : submitLabel}
       </button>
-    </ValidatedForm>
+      </ValidatedForm>
+    </>
+  );
+}
+
+/**
+ * Confirmación visual de carga: una ventana emergente accesible con un check
+ * verde animado. Se cierra sola a los pocos segundos, con Escape, al pulsar
+ * fuera o con el botón. El texto no repite el `successMessage` del aviso en
+ * línea para no duplicar contenido ni romper búsquedas por texto en pruebas.
+ */
+function UploadSuccessModal({ onClose }: { onClose: () => void }) {
+  const acceptRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    acceptRef.current?.focus();
+    const timer = globalThis.setTimeout(onClose, 3000);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      globalThis.clearTimeout(timer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="avend-success-overlay" onClick={onClose}>
+      <div
+        aria-labelledby="avend-upload-success-title"
+        aria-modal="true"
+        className="avend-success-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <svg
+          aria-hidden="true"
+          className="avend-success-check"
+          viewBox="0 0 60 60"
+        >
+          <circle cx="30" cy="30" r="26" />
+          <path d="M18 31l8 8 16-18" />
+        </svg>
+        <h2
+          className="text-xl font-bold text-avend-navy"
+          id="avend-upload-success-title"
+        >
+          ¡Documento cargado correctamente!
+        </h2>
+        <p className="mt-1 text-base text-avend-text-muted">
+          El documento se registró y ya aparece en el listado.
+        </p>
+        <button
+          className="avend-button avend-button--primary mt-4"
+          onClick={onClose}
+          ref={acceptRef}
+          type="button"
+        >
+          Aceptar
+        </button>
+      </div>
+    </div>
   );
 }

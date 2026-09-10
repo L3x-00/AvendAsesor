@@ -135,7 +135,7 @@ describe("DocumentPdfUploadForm", () => {
 
     // El tamaño es un problema del campo del archivo, así que se señala ahí y
     // no en el aviso general del formulario.
-    expect(await screen.findByText(/50 MiB/)).toBeVisible();
+    expect(await screen.findByText(/50 MB/)).toBeVisible();
     expect(titleInput).toHaveValue("Norma que debe conservarse");
     expect(fileInput.files?.[0]?.name).toBe("norma.pdf");
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -442,7 +442,7 @@ describe("DocumentPdfUploadForm", () => {
     await user.upload(upload, new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }));
     await user.type(screen.getByLabelText("Título"), "Documento pendiente");
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo confirmar la carga");
+    expect(await screen.findByRole("alert")).toHaveTextContent("tardó en responder");
     expect(upload).not.toHaveAttribute("aria-invalid", "true");
     expect(upload.files?.[0]?.name).toBe("norma.pdf");
     expect(screen.getByLabelText("Título")).toHaveValue("Documento pendiente");
