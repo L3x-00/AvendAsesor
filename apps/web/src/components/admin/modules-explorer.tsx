@@ -419,11 +419,10 @@ export function ModulesExplorer({
           {filtered.map((module) => {
             return (
               <li className={styles.card} key={module.id}>
-                <div className={styles.moduleTag}>
-                  Módulo: {module.name}
-                </div>
                 <div className={styles.cardHeader}>
-                  <h3 className={styles.cardTitle}>{module.name}</h3>
+                  <div className={styles.moduleTag}>
+                    Módulo: {module.name}
+                  </div>
                   <span
                     className={
                       module.isActive
@@ -434,6 +433,7 @@ export function ModulesExplorer({
                     {module.isActive ? "Activo" : "Inactivo"}
                   </span>
                 </div>
+                <h3 className={styles.cardTitle}>{module.name}</h3>
                 <p className={styles.cardMeta}>
                   Código {module.code} · Orden {module.sortOrder}
                 </p>
@@ -445,12 +445,14 @@ export function ModulesExplorer({
                     ? `${module.submoduleCount} ${submoduleWord(module.submoduleCount)} · ${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`
                     : `${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`}
                 </p>
-                <Link
-                  className={styles.cardLink}
-                  href={`/admin/modules/${module.id}`}
-                >
-                  Ingresar <span aria-hidden="true">→</span>
-                </Link>
+                <div className={styles.cardFooter}>
+                  <Link
+                    className={styles.cardLink}
+                    href={`/admin/modules/${module.id}`}
+                  >
+                    Ingresar <span aria-hidden="true">→</span>
+                  </Link>
+                </div>
               </li>
             );
           })}

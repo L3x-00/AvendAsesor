@@ -137,11 +137,11 @@ export default async function ModuleDetailPage({
             </span>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-2 flex justify-end">
             <ModuleManageDetails
               module={currentView}
               parents={parents}
-              summary="Editar este módulo, cambiar estado o darlo de baja"
+              summary="Editar ese módulo"
             />
           </div>
 

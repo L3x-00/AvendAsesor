@@ -135,7 +135,7 @@
 }
 
 .cardLink {
-  align-self: flex-start;
+  align-self: flex-end;
   min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
@@ -341,4 +341,19 @@
 
 .presetParent strong {
   color: var(--avend-text);
+}
+.moduleTag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.cardFooter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
 }
