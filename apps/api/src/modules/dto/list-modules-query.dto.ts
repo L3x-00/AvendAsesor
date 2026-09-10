@@ -3,7 +3,7 @@ import type { ModuleActivityFilter } from '../domain/module';
 
 export class ListModulesQueryDto {
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   parentModuleId?: string;
 
   @IsOptional()

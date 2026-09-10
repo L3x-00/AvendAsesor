@@ -6,6 +6,6 @@ export class DocumentDownloadUrlDto {
   disposition?: 'attachment' | 'inline';
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   versionId?: string;
 }

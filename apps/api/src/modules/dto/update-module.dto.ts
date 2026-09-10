@@ -35,7 +35,7 @@ export class UpdateModuleDto {
   name?: string;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   parentModuleId?: string | null;
 
   @IsOptional()

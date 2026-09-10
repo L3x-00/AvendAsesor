@@ -49,7 +49,7 @@ export class SetDocumentSituationDto {
   replacementDate?: string;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim().length === 0 ? undefined : value,
   )
