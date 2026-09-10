@@ -24,7 +24,7 @@ const optionalTrimmedText = Transform(({ value }: { value: unknown }) => {
 
 export class ListDocumentLibraryQueryDto {
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   createdBy?: string;
 
   @IsOptional()
@@ -71,7 +71,7 @@ export class ListDocumentLibraryQueryDto {
   limit?: number;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   moduleId?: string;
 
   @IsOptional()
@@ -106,7 +106,7 @@ export class ListDocumentLibraryQueryDto {
   sort?: DocumentLibrarySort;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   submoduleId?: string;
 
   @IsOptional()

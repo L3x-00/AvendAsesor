@@ -2,7 +2,7 @@ import { IsDefined, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class UpdateModulePositionDto {
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   parentModuleId?: string | null;
 
   @IsDefined()

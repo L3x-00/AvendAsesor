@@ -42,7 +42,7 @@ export class CreateModuleDto {
   name!: string;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   parentModuleId?: string;
 
   @IsOptional()

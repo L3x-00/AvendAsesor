@@ -125,7 +125,7 @@ export class CreateDocumentUploadDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' && value.trim().length === 0 ? undefined : value,
   )
-  @IsUUID('4')
+  @IsUUID()
   replacementDocumentId?: string;
 
   @IsOptional()
