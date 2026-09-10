@@ -93,7 +93,7 @@ export class CreateDocumentUploadDto {
   @IsArray()
   @ArrayNotEmpty()
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsUUID(undefined, { each: true })
   @parseJsonArray
   moduleIds!: string[];
 
