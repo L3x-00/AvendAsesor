@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { PdfInspectionService, MAX_PDF_BYTES } from './pdf-inspection.service';
+import {
+  PdfInspectionService,
+  MAX_PDF_BYTES,
+  MAX_PDF_PARSE_BYTES,
+} from './pdf-inspection.service';
 
 const mockDestroy = jest.fn();
 const mockGetInfo = jest.fn();
@@ -129,6 +133,25 @@ describe('PdfInspectionService', () => {
     await expect(
       service.inspect(createFile(Buffer.from([0x00, 0x01, 0x02]), 'nota.md')),
     ).rejects.toThrow('not a valid Markdown');
+  });
+
+  it('skips page parsing for a large PDF to stay within memory limits', async () => {
+    // Cabecera PDF válida + relleno para superar el umbral de análisis.
+    const largePdf = Buffer.concat([
+      Buffer.from('%PDF-1.7\n'),
+      Buffer.alloc(MAX_PDF_PARSE_BYTES, 0x20),
+    ]);
+
+    const result = await service.inspect(createFile(largePdf, 'grande.pdf'));
+
+    expect(result).toMatchObject({
+      format: 'pdf',
+      mimeType: 'application/pdf',
+      pageCount: 1,
+      sizeBytes: largePdf.length,
+    });
+    // El PDF grande no se analiza: el parser nunca se invoca.
+    expect(mockGetInfo).not.toHaveBeenCalled();
   });
 
   it('rejects malformed or over-page PDFs after parser inspection', async () => {

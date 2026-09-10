@@ -16,6 +16,16 @@ export const MAX_PDF_BYTES = MAX_DOCUMENT_BYTES;
 export const MAX_DOCUMENT_MIB = 50;
 export const MAX_PDF_PAGES = 300;
 
+/**
+ * Analizar un PDF (contar páginas) carga todo su contenido en memoria y, en el
+ * plan Free de Render (512 MB), un PDF de decenas de MB agota la RAM y reinicia
+ * la instancia (503 en la carga y luego el módulo caído por el reinicio). Por
+ * eso, un PDF por encima de este umbral se guarda SIN conteo de páginas y sin
+ * aplicar el tope de 300; los que pesan hasta este umbral se validan igual que
+ * siempre. 20 MiB es el límite histórico que ya funcionaba con análisis.
+ */
+export const MAX_PDF_PARSE_BYTES = 20 * 1024 * 1024;
+
 export type DocumentFormat = 'doc' | 'docx' | 'md' | 'pdf';
 
 interface DocumentFormatSpec {
@@ -146,6 +156,12 @@ export class PdfInspectionService {
     // Solo el PDF tiene conteo de páginas; los demás formatos se almacenan
     // sin analizar (el conteo real llegaría con la indexación).
     if (basic.format !== 'pdf') {
+      return { ...basic, pageCount: 1 };
+    }
+
+    // Un PDF grande no se analiza: mantiene la instancia dentro de los 512 MB.
+    // Se guarda sin conteo de páginas; el tope de 300 no aplica a estos.
+    if (basic.sizeBytes > MAX_PDF_PARSE_BYTES) {
       return { ...basic, pageCount: 1 };
     }
 
