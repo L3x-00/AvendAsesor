@@ -708,7 +708,9 @@ export default async function DocumentDetailPage({
                   </label>
                   {currentVersion?.ingestionStatus !== "indexed" ? (
                     <p className="text-base text-avend-text-muted">
-                      La versión debe terminar de indexarse antes de aprobarse.
+                      Para aprobarla como Listo, la versión debe estar indexada.
+                      Si el procesamiento automático no está activo o aún no
+                      termina, permanecerá en Pendiente.
                     </p>
                   ) : null}
                 </AdminActionForm>

@@ -176,48 +176,57 @@ export function DocumentMetadataFields({
         </label>
       ) : null}
 
-      <label className="block" htmlFor={`${prefix}-year-mode`}>
-        <span className="text-base font-semibold">Año del documento</span>
-        <select
-          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-          id={`${prefix}-year-mode`}
-          name="issuanceYearMode"
-          onChange={(event) => setYearMode(event.target.value)}
-          required={required}
-          value={yearMode}
+      <div className="block lg:col-span-2">
+        <div
+          className={`grid gap-4 transition-all duration-300 ease-in-out ${
+            yearMode === "before-2014" ? "grid-cols-2" : "grid-cols-1"
+          }`}
         >
-          <option disabled={required} value="">
-            Sin año registrado
-          </option>
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-          <option value="before-2014">Anterior a 2014</option>
-        </select>
-      </label>
-      {yearMode === "before-2014" ? (
-        <label className="block" htmlFor={`${prefix}-exact-year`}>
-          <span className="text-base font-semibold">Año exacto</span>
-          <input
-            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-            defaultValue={
-              initial?.issuanceYear && initial.issuanceYear < 2014
-                ? initial.issuanceYear
-                : ""
-            }
-            id={`${prefix}-exact-year`}
-            max="2013"
-            min="1800"
-            name="issuanceYear"
-            required
-            type="number"
-          />
-        </label>
-      ) : yearMode ? (
-        <input name="issuanceYear" type="hidden" value={yearMode} />
-      ) : null}
+          <label className="block" htmlFor={`${prefix}-year-mode`}>
+            <span className="text-base font-semibold">Año del documento</span>
+            <select
+              className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+              id={`${prefix}-year-mode`}
+              name="issuanceYearMode"
+              onChange={(event) => setYearMode(event.target.value)}
+              required={required}
+              value={yearMode}
+            >
+              <option disabled={required} value="">
+                Sin año registrado
+              </option>
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+              <option value="before-2014">Anterior a 2014</option>
+            </select>
+          </label>
+          {yearMode === "before-2014" ? (
+            <label className="block" htmlFor={`${prefix}-exact-year`}>
+              <span className="text-base font-semibold">Año exacto</span>
+              <input
+                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                defaultValue={
+                  initial?.issuanceYear && initial.issuanceYear < 2014
+                    ? initial.issuanceYear
+                    : ""
+                }
+                id={`${prefix}-exact-year`}
+                max="2013"
+                min="1800"
+                name="issuanceYear"
+                required
+                type="number"
+              />
+            </label>
+          ) : null}
+        </div>
+        {yearMode && yearMode !== "before-2014" ? (
+          <input name="issuanceYear" type="hidden" value={yearMode} />
+        ) : null}
+      </div>
 
       <label className="block" htmlFor={`${prefix}-entity`}>
         <span className="text-base font-semibold">Entidad emisora</span>
