@@ -19,7 +19,7 @@ export class MulterExceptionFilter implements ExceptionFilter {
     response.json({
       error: isFileSizeError ? 'Payload Too Large' : 'Bad Request',
       message: isFileSizeError
-        ? 'PDF files cannot exceed 20 MiB.'
+        ? 'Documents cannot exceed 50 MiB.'
         : 'The uploaded file is invalid.',
       statusCode: isFileSizeError
         ? HttpStatus.PAYLOAD_TOO_LARGE

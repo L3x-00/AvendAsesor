@@ -51,6 +51,9 @@ describe('PdfInspectionService', () => {
     );
 
     expect(result).toEqual({
+      extension: '.pdf',
+      format: 'pdf',
+      mimeType: 'application/pdf',
       originalFileName: 'norma documental.pdf',
       pageCount: 1,
       sha256: createHash('sha256').update(pdf).digest('hex'),
@@ -59,28 +62,73 @@ describe('PdfInspectionService', () => {
     expect(mockDestroy).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects absent, empty, oversized and non-PDF upload content', async () => {
+  it('rejects absent, empty, oversized, mismatched and unsupported content', async () => {
     await expect(service.inspect(undefined)).rejects.toBeInstanceOf(
       BadRequestException,
     );
     await expect(service.inspect(createFile(Buffer.alloc(0)))).rejects.toThrow(
-      'non-empty PDF',
+      'non-empty document',
     );
     await expect(
       service.inspect(createFile(Buffer.alloc(MAX_PDF_BYTES + 1, 0x61))),
-    ).rejects.toThrow('20 MiB');
+    ).rejects.toThrow('50 MiB');
     await expect(
       service.inspect(createFile(Buffer.from('not a PDF'))),
     ).rejects.toThrow('not a valid PDF');
     await expect(
+      service.inspect(createFile(Buffer.from('<xml/>'), 'archivo.xml')),
+    ).rejects.toThrow('Only .pdf');
+  });
+
+  it('accepts Word and Markdown by content and derives their MIME', async () => {
+    const docx = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      Buffer.from('rest-of-zip'),
+    ]);
+    await expect(
       service.inspect(
-        createFile(
-          Buffer.from(validPdfBase64, 'base64'),
-          'norma.pdf',
-          'text/plain',
-        ),
+        createFile(docx, 'plan.docx', 'application/octet-stream'),
       ),
-    ).rejects.toThrow('file type must be PDF');
+    ).resolves.toMatchObject({
+      extension: '.docx',
+      format: 'docx',
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      pageCount: 1,
+    });
+
+    const doc = Buffer.concat([
+      Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+      Buffer.from('rest-of-ole'),
+    ]);
+    await expect(
+      service.inspect(createFile(doc, 'oficio.doc')),
+    ).resolves.toMatchObject({
+      format: 'doc',
+      mimeType: 'application/msword',
+      pageCount: 1,
+    });
+
+    const md = Buffer.from('# Título\nContenido del documento');
+    await expect(
+      service.inspect(createFile(md, 'nota.md')),
+    ).resolves.toMatchObject({
+      format: 'md',
+      mimeType: 'text/markdown',
+      pageCount: 1,
+    });
+  });
+
+  it('rejects content that does not match the declared document format', async () => {
+    await expect(
+      service.inspect(createFile(Buffer.from('not a zip'), 'plan.docx')),
+    ).rejects.toThrow('not a valid Word (.docx)');
+    await expect(
+      service.inspect(createFile(Buffer.from('not ole'), 'oficio.doc')),
+    ).rejects.toThrow('not a valid Word (.doc)');
+    await expect(
+      service.inspect(createFile(Buffer.from([0x00, 0x01, 0x02]), 'nota.md')),
+    ).rejects.toThrow('not a valid Markdown');
   });
 
   it('rejects malformed or over-page PDFs after parser inspection', async () => {

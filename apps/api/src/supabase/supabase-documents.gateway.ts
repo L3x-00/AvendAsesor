@@ -569,12 +569,16 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     return this.parseDocument(data);
   }
 
-  async uploadPdf(storagePath: string, content: Buffer): Promise<void> {
+  async uploadPdf(
+    storagePath: string,
+    content: Buffer,
+    contentType = 'application/pdf',
+  ): Promise<void> {
     const { error } = await this.requireClient()
       .storage.from(NORMATIVE_DOCUMENTS_BUCKET)
       .upload(storagePath, content, {
         cacheControl: '31536000',
-        contentType: 'application/pdf',
+        contentType,
         upsert: false,
       });
 

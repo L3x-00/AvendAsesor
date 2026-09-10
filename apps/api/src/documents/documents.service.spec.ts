@@ -147,12 +147,18 @@ describe('DocumentsService', () => {
     documentsGateway.listAuditEvents.mockResolvedValue([]);
     pdfInspectionService = {
       inspect: jest.fn().mockResolvedValue({
+        extension: '.pdf',
+        format: 'pdf',
+        mimeType: 'application/pdf',
         originalFileName: 'documento.pdf',
         pageCount: 1,
         sha256: 'a'.repeat(64),
         sizeBytes: 512,
       }),
       inspectUnreadable: jest.fn().mockReturnValue({
+        extension: '.pdf',
+        format: 'pdf',
+        mimeType: 'application/pdf',
         originalFileName: 'documento.pdf',
         pageCount: 1,
         sha256: 'a'.repeat(64),
@@ -182,6 +188,7 @@ describe('DocumentsService', () => {
         /^documents\/[0-9a-f-]+\/versions\/[0-9a-f-]+\.pdf$/,
       ),
       file.buffer,
+      'application/pdf',
     );
     expect(documentsGateway.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -209,6 +216,7 @@ describe('DocumentsService', () => {
     expect(documentsGateway.uploadPdf).toHaveBeenCalledWith(
       expect.any(String),
       file.buffer,
+      'application/pdf',
     );
     expect(documentsGateway.create).toHaveBeenCalledWith(
       expect.objectContaining({
