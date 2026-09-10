@@ -13,7 +13,7 @@ export class DecideConsultationAttachmentDto {
   disposition!: (typeof dispositions)[number];
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   documentId?: string;
 
   @IsOptional()

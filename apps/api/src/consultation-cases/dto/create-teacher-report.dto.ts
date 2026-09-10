@@ -17,7 +17,7 @@ const reportReasons: ConsultationReportReason[] = [
 ];
 
 export class CreateTeacherReportDto {
-  @IsUUID('4')
+  @IsUUID()
   answerMessageId!: string;
 
   @IsOptional()
@@ -28,6 +28,6 @@ export class CreateTeacherReportDto {
   @IsEnum(reportReasons)
   reason!: ConsultationReportReason;
 
-  @IsUUID('4')
+  @IsUUID()
   submissionId!: string;
 }

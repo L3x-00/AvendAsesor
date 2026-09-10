@@ -21,11 +21,11 @@ export class UpdateConsultationCaseDto {
   changeRouting?: boolean;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   detectedModuleId?: string | null;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   detectedSubmoduleId?: string | null;
 
   @IsOptional()

@@ -58,7 +58,7 @@ export class ListConsultationCasesQueryDto {
   limit?: number;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   moduleId?: string;
 
   @IsOptional()
@@ -81,6 +81,6 @@ export class ListConsultationCasesQueryDto {
   status?: ConsultationCaseStatus;
 
   @IsOptional()
-  @IsUUID('4')
+  @IsUUID()
   submoduleId?: string;
 }
