@@ -273,13 +273,21 @@ export class DocumentsService {
     const content = file?.buffer;
 
     if (!content) {
-      throw new BadRequestException('A PDF file is required.');
+      throw new BadRequestException('A document file is required.');
     }
 
     const versionId = randomUUID();
-    const storagePath = this.buildStoragePath(documentId, versionId);
+    const storagePath = this.buildStoragePath(
+      documentId,
+      versionId,
+      inspectedPdf.extension,
+    );
 
-    await this.documentsGateway.uploadPdf(storagePath, content);
+    await this.documentsGateway.uploadPdf(
+      storagePath,
+      content,
+      inspectedPdf.mimeType,
+    );
 
     try {
       return await this.documentsGateway.addVersion({
@@ -330,14 +338,22 @@ export class DocumentsService {
     const content = file?.buffer;
 
     if (!content) {
-      throw new BadRequestException('A PDF file is required.');
+      throw new BadRequestException('A document file is required.');
     }
 
     const documentId = randomUUID();
     const versionId = randomUUID();
-    const storagePath = this.buildStoragePath(documentId, versionId);
+    const storagePath = this.buildStoragePath(
+      documentId,
+      versionId,
+      inspectedPdf.extension,
+    );
 
-    await this.documentsGateway.uploadPdf(storagePath, content);
+    await this.documentsGateway.uploadPdf(
+      storagePath,
+      content,
+      inspectedPdf.mimeType,
+    );
 
     try {
       return await this.documentsGateway.create({
@@ -734,8 +750,12 @@ export class DocumentsService {
     );
   }
 
-  private buildStoragePath(documentId: string, versionId: string): string {
-    return `documents/${documentId}/versions/${versionId}.pdf`;
+  private buildStoragePath(
+    documentId: string,
+    versionId: string,
+    extension: string,
+  ): string {
+    return `documents/${documentId}/versions/${versionId}${extension}`;
   }
 
   private async inspectPdfForPersistence(

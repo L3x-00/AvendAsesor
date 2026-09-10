@@ -135,7 +135,7 @@ describe("DocumentPdfUploadForm", () => {
 
     // El tamaño es un problema del campo del archivo, así que se señala ahí y
     // no en el aviso general del formulario.
-    expect(await screen.findByText(/20 MiB/)).toBeVisible();
+    expect(await screen.findByText(/50 MiB/)).toBeVisible();
     expect(titleInput).toHaveValue("Norma que debe conservarse");
     expect(fileInput.files?.[0]?.name).toBe("norma.pdf");
     expect(mocks.refresh).not.toHaveBeenCalled();
@@ -164,13 +164,13 @@ describe("DocumentPdfUploadForm", () => {
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
     const pendingButton = screen.getByRole("button", {
-      name: "Cargando PDF…",
+      name: "Cargando…",
     });
     expect(pendingButton).toHaveAttribute("aria-disabled", "true");
     expect(pendingButton).toHaveFocus();
     expect(pendingButton.closest("form")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Cargando PDF. Espera mientras se valida y registra el documento.",
+      "Cargando el documento. Espera mientras se valida y registra.",
     );
     await user.click(pendingButton);
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -221,7 +221,7 @@ describe("DocumentPdfUploadForm", () => {
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/20 MB/)).toBeVisible();
+      expect(screen.getByText(/50 MB/)).toBeVisible();
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(mocks.getSession).not.toHaveBeenCalled();
@@ -401,7 +401,7 @@ describe("DocumentPdfUploadForm", () => {
     const upload = screen.getByLabelText<HTMLInputElement>("Archivo");
     await user.upload(upload, new File(["contenido"], "norma.txt", { type: "text/plain" }));
     await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
-    expect(await screen.findByText(/PDF válido/)).toBeVisible();
+    expect(await screen.findByText(/PDF o DOCX o DOC o MD válido/)).toBeVisible();
     await waitFor(() => expect(upload).toHaveFocus());
     expect(upload).toHaveAttribute("aria-invalid", "true");
 

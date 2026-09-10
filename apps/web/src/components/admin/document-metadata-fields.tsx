@@ -129,6 +129,12 @@ export function DocumentMetadataFields({
     return () => form.removeEventListener("reset", resetControlledFields);
   });
 
+  // El asterisco de obligatorio se pinta desde CSS (`::after`), así no forma
+  // parte del textContent de la etiqueta ni rompe getByLabelText.
+  const requiredLabelClass = `text-base font-semibold${
+    required ? " avend-field-label--required" : ""
+  }`;
+
   return (
     <div
       className="contents"
@@ -136,7 +142,7 @@ export function DocumentMetadataFields({
       ref={containerRef}
     >
       <label className="block" htmlFor={`${prefix}-type`}>
-        <span className="text-base font-semibold">Tipo documental</span>
+        <span className={requiredLabelClass}>Tipo documental</span>
         <select
           className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
           id={`${prefix}-type`}
@@ -158,7 +164,9 @@ export function DocumentMetadataFields({
 
       {documentType === "OTRO" ? (
         <label className="block" htmlFor={`${prefix}-type-other`}>
-          <span className="text-base font-semibold">Especificar tipo</span>
+          <span className="text-base font-semibold avend-field-label--required">
+            Especificar tipo
+          </span>
           <input
             className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
             defaultValue={
@@ -183,7 +191,7 @@ export function DocumentMetadataFields({
           }`}
         >
           <label className="block" htmlFor={`${prefix}-year-mode`}>
-            <span className="text-base font-semibold">Año del documento</span>
+            <span className={requiredLabelClass}>Año del documento</span>
             <select
               className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
               id={`${prefix}-year-mode`}
@@ -205,7 +213,9 @@ export function DocumentMetadataFields({
           </label>
           {yearMode === "before-2014" ? (
             <label className="block" htmlFor={`${prefix}-exact-year`}>
-              <span className="text-base font-semibold">Año exacto</span>
+              <span className="text-base font-semibold avend-field-label--required">
+                Año exacto
+              </span>
               <input
                 className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
                 defaultValue={
@@ -229,7 +239,7 @@ export function DocumentMetadataFields({
       </div>
 
       <label className="block" htmlFor={`${prefix}-entity`}>
-        <span className="text-base font-semibold">Entidad emisora</span>
+        <span className={requiredLabelClass}>Entidad emisora</span>
         <select
           className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
           id={`${prefix}-entity`}
@@ -254,7 +264,7 @@ export function DocumentMetadataFields({
 
       {entity === "OTRA_INSTITUCION" ? (
         <label className="block" htmlFor={`${prefix}-entity-other`}>
-          <span className="text-base font-semibold">
+          <span className="text-base font-semibold avend-field-label--required">
             Nombre de la institución
           </span>
           <input
@@ -276,10 +286,7 @@ export function DocumentMetadataFields({
 
       {entity ? (
         <div className="block">
-          <label
-            className="text-base font-semibold"
-            htmlFor={`${prefix}-dependency`}
-          >
+          <label className={requiredLabelClass} htmlFor={`${prefix}-dependency`}>
             {entity === "DRE_GRE"
               ? "DRE/GRE específica"
               : "Dependencia específica"}

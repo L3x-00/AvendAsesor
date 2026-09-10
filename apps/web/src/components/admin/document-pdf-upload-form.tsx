@@ -7,12 +7,20 @@ import { ValidatedForm } from "@/components/ui/validated-form";
 import type { FieldErrors, FieldRules } from "@/lib/ui/field-validation";
 import { useToast } from "@/components/ui/toast";
 
-export const MAX_ADMIN_PDF_BYTES = 20 * 1024 * 1024;
+export const MAX_ADMIN_PDF_BYTES = 50 * 1024 * 1024;
+
+/** Formatos admitidos para carga (deben coincidir con la validación del API). */
+export const ACCEPTED_DOCUMENT_EXTENSIONS = [".pdf", ".docx", ".doc", ".md"];
 
 const PDF_RULES: FieldRules = {
   file: [
-    { kind: "required", label: "El archivo PDF" },
-    { kind: "file", label: "El PDF", accept: [".pdf"], maxBytes: MAX_ADMIN_PDF_BYTES },
+    { kind: "required", label: "El archivo" },
+    {
+      kind: "file",
+      label: "El documento",
+      accept: ACCEPTED_DOCUMENT_EXTENSIONS,
+      maxBytes: MAX_ADMIN_PDF_BYTES,
+    },
   ],
 };
 
@@ -32,11 +40,11 @@ type UploadFeedback = {
 
 function getUploadErrorMessage(status: number): string {
   if (status === 400 || status === 422) {
-    return "El PDF o los datos ingresados no son válidos. Revísalos; el formulario conserva toda la información.";
+    return "El documento o los datos ingresados no son válidos. Revísalos; el formulario conserva toda la información.";
   }
 
   if (status === 401) {
-    return "Tu sesión expiró. Inicia sesión nuevamente antes de cargar el PDF.";
+    return "Tu sesión expiró. Inicia sesión nuevamente antes de cargar el documento.";
   }
 
   if (status === 403) {
@@ -48,7 +56,7 @@ function getUploadErrorMessage(status: number): string {
   }
 
   if (status === 413) {
-    return "El PDF supera el límite permitido de 20 MiB.";
+    return "El documento supera el límite permitido de 50 MiB.";
   }
 
   if (status === 429) {
@@ -59,7 +67,7 @@ function getUploadErrorMessage(status: number): string {
     return "No se pudo confirmar la carga. Revisa el listado antes de volver a enviarla; tus datos permanecen en el formulario.";
   }
 
-  return "No fue posible cargar el PDF. Comprueba tu conexión e inténtalo nuevamente; tus datos se conservaron.";
+  return "No fue posible cargar el documento. Comprueba tu conexión e inténtalo nuevamente; tus datos se conservaron.";
 }
 
 async function pdfErrorMessage(response: Response): Promise<string | undefined> {
@@ -77,22 +85,26 @@ async function pdfErrorMessage(response: Response): Promise<string | undefined> 
       if (message === "PDF files cannot exceed 300 pages.") {
         return "El PDF no puede superar las 300 páginas.";
       }
-      if (message === "PDF files cannot exceed 20 MiB.") {
+      if (message === "Documents cannot exceed 50 MiB.") {
         return getUploadErrorMessage(413);
       }
       if (message === "The uploaded file name is invalid.") {
         return "El nombre del archivo no es válido. Cambia el nombre y vuelve a seleccionarlo.";
       }
+      if (message === "Only .pdf, .docx, .doc or .md files are allowed.") {
+        return "El formato no es válido. Sube un PDF, Word (.docx o .doc) o Markdown (.md).";
+      }
       if ([
-        "A PDF file is required.",
-        "A non-empty PDF file is required.",
+        "A document file is required.",
+        "A non-empty document file is required.",
         "The PDF does not contain any pages.",
         "The uploaded PDF could not be read or processed.",
-        "Only files with a .pdf extension are allowed.",
-        "The uploaded file type must be PDF.",
         "The uploaded file is not a valid PDF.",
+        "The uploaded file is not a valid Word (.docx) document.",
+        "The uploaded file is not a valid Word (.doc) document.",
+        "The uploaded file is not a valid Markdown (.md) document.",
       ].includes(message)) {
-        return "El archivo debe ser un PDF válido, no vacío y legible. Selecciona otro archivo.";
+        return "El archivo debe ser un documento válido, no vacío y legible (PDF, Word o Markdown). Selecciona otro archivo.";
       }
     }
   } catch {
@@ -158,7 +170,7 @@ export function DocumentPdfUploadForm({
       if (error || !accessToken) {
         setFeedback({
           message:
-            "Tu sesión expiró. Inicia sesión nuevamente antes de cargar el PDF.",
+            "Tu sesión expiró. Inicia sesión nuevamente antes de cargar el documento.",
           status: "error",
         });
         return;
@@ -229,7 +241,7 @@ export function DocumentPdfUploadForm({
       ) : null}
       {pending ? (
         <p aria-live="polite" className="avend-feedback" role="status">
-          Cargando PDF. Espera mientras se valida y registra el documento.
+          Cargando el documento. Espera mientras se valida y registra.
         </p>
       ) : null}
       <button
@@ -237,7 +249,7 @@ export function DocumentPdfUploadForm({
         className="avend-button avend-button--primary avend-admin-submit"
         type="submit"
       >
-        {pending ? "Cargando PDF…" : submitLabel}
+        {pending ? "Cargando…" : submitLabel}
       </button>
     </ValidatedForm>
   );

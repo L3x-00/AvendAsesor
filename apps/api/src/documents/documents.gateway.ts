@@ -167,5 +167,9 @@ export interface DocumentsGateway {
     patch: DocumentMetadataPatch,
     actorId: string,
   ): Promise<ManagedDocument>;
-  uploadPdf(storagePath: string, content: Buffer): Promise<void>;
+  uploadPdf(
+    storagePath: string,
+    content: Buffer,
+    contentType?: string,
+  ): Promise<void>;
 }

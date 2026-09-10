@@ -60,6 +60,12 @@ function fileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
+// Solo el PDF se puede previsualizar en un iframe; Word y Markdown se ofrecen
+// para descarga. La extensión del nombre original es la fuente fiable.
+function isPdfVersion(version: ManagedDocumentVersion): boolean {
+  return version.originalFileName.toLocaleLowerCase("en").endsWith(".pdf");
+}
+
 function technicalStatus(
   document: ManagedDocumentDetails,
   version: ManagedDocumentVersion | undefined,
@@ -342,11 +348,17 @@ export default async function DocumentDetailPage({
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold">Visor PDF integrado</h2>
+              <h2 className="text-xl font-bold">Vista del documento</h2>
               <p className="mt-1 text-base text-avend-text-muted">
                 {viewerVersion
-                  ? `Versión ${viewerVersion.versionNumber} · ${viewerVersion.pageCount} páginas`
-                  : "No hay un PDF disponible."}
+                  ? `Versión ${viewerVersion.versionNumber} · ${
+                      viewerVersion.originalFileName
+                    }${
+                      isPdfVersion(viewerVersion)
+                        ? ` · ${viewerVersion.pageCount} páginas`
+                        : ""
+                    }`
+                  : "No hay un documento disponible."}
               </p>
             </div>
             {viewerVersion ? (
@@ -358,12 +370,25 @@ export default async function DocumentDetailPage({
               </a>
             ) : null}
           </div>
-          {viewerVersion ? (
+          {viewerVersion && isPdfVersion(viewerVersion) ? (
             <iframe
               className="mt-4 h-[70vh] min-h-[32rem] w-full rounded-lg border border-avend-border bg-white"
               src={accessHref(document.id, "inline", viewerVersion.id)}
               title={`PDF de ${document.title}, versión ${viewerVersion.versionNumber}`}
             />
+          ) : viewerVersion ? (
+            <div className="mt-4 rounded-lg border border-dashed border-avend-border p-6 text-center">
+              <p className="text-base text-avend-text-muted">
+                La vista previa integrada solo está disponible para PDF.
+                Descarga el archivo para abrirlo en tu equipo.
+              </p>
+              <a
+                className="avend-button mt-4 inline-flex"
+                href={accessHref(document.id, "attachment", viewerVersion.id)}
+              >
+                Descargar {viewerVersion.originalFileName}
+              </a>
+            </div>
           ) : (
             <p className="mt-4 rounded-lg border border-dashed border-avend-border p-4 text-base text-avend-text-muted">
               El registro no tiene una versión visualizable.
@@ -457,7 +482,9 @@ export default async function DocumentDetailPage({
                 >
                   <input name="documentId" type="hidden" value={document.id} />
                   <label className="block sm:col-span-2" htmlFor="detail-title">
-                    <span className="text-base font-semibold">Título</span>
+                    <span className="text-base font-semibold avend-field-label--required">
+                      Título
+                    </span>
                     <input
                       className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
                       defaultValue={document.title}
@@ -554,7 +581,9 @@ export default async function DocumentDetailPage({
                               {version.originalFileName}
                             </h3>
                             <p className="mt-1 text-base text-avend-text-muted">
-                              {version.pageCount} páginas ·{" "}
+                              {isPdfVersion(version)
+                                ? `${version.pageCount} páginas · `
+                                : ""}
                               {fileSize(version.fileSizeBytes)}
                             </p>
                           </div>
@@ -742,9 +771,11 @@ export default async function DocumentDetailPage({
                 successMessage="Nueva versión creada."
               >
                 <label className="block" htmlFor="detail-file">
-                  <span className="text-base font-semibold">Archivo PDF</span>
+                  <span className="text-base font-semibold avend-field-label--required">
+                    Archivo (PDF, Word o Markdown)
+                  </span>
                   <input
-                    accept="application/pdf,.pdf"
+                    accept=".pdf,.docx,.doc,.md,application/pdf"
                     className="mt-1 block min-h-11 w-full text-base"
                     id="detail-file"
                     name="file"

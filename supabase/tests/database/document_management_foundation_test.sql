@@ -77,13 +77,18 @@ select is(
 );
 select is(
   (select file_size_limit from storage.buckets where id = 'normative-documents'),
-  20_971_520::bigint,
-  'The normative document bucket is limited to 20 MiB'
+  52_428_800::bigint,
+  'The normative document bucket is limited to 50 MiB'
 );
 select is(
   (select allowed_mime_types from storage.buckets where id = 'normative-documents'),
-  array['application/pdf']::text[],
-  'The normative document bucket accepts PDFs only'
+  array[
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'text/markdown'
+  ]::text[],
+  'The normative document bucket accepts PDF, Word and Markdown'
 );
 select is(
   (
