@@ -845,3 +845,83 @@ button.avend-teacher-new-chat:disabled,
     animation: none;
   }
 }
+
+/* Ventana emergente de carga correcta, con check verde animado. */
+.avend-success-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--avend-navy, #0b2545) 55%, transparent);
+}
+
+.avend-success-modal {
+  width: 100%;
+  max-width: 24rem;
+  padding: 2rem 1.75rem;
+  text-align: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  animation: avend-success-pop 240ms ease-out;
+}
+
+@keyframes avend-success-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.avend-success-check {
+  display: block;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 0.75rem;
+}
+
+.avend-success-check circle {
+  fill: none;
+  stroke: var(--avend-success, #05713d);
+  stroke-width: 3;
+  stroke-dasharray: 164;
+  stroke-dashoffset: 164;
+  animation: avend-check-draw 520ms ease-out forwards;
+}
+
+.avend-success-check path {
+  fill: none;
+  stroke: var(--avend-success, #05713d);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: avend-check-draw 300ms 360ms ease-out forwards;
+}
+
+@keyframes avend-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-success-modal,
+  .avend-success-check circle,
+  .avend-success-check path {
+    animation: none;
+  }
+
+  .avend-success-check circle,
+  .avend-success-check path {
+    stroke-dashoffset: 0;
+  }
+}
