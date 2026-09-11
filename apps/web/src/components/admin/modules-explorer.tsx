@@ -401,7 +401,7 @@ export function ModulesExplorer({
             onClick={() => setCreateOpen(true)}
             type="button"
           >
-            {isRoot ? "+ Crear módulo o submódulo" : "+ Crear submódulo"}
+            {isRoot ? "+ Crear módulo" : "+ Crear submódulo"}
           </button>
         </div>
       </div>
@@ -421,7 +421,7 @@ export function ModulesExplorer({
               <li className={styles.card} key={module.id}>
                 <div className={styles.cardHeader}>
                   <div className={styles.moduleTag}>
-                    Módulo: {module.name}
+                    Sub Módulo: {module.name}
                   </div>
                   <span
                     className={
