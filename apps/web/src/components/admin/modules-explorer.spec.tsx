@@ -115,7 +115,7 @@ describe("ModulesExplorer", () => {
       />,
     );
 
-    await user.click(screen.getByText("+ Crear módulo o submódulo"));
+    await user.click(screen.getByText("+ Crear módulo"));
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Tipo de elemento" }),
       "submodule",
@@ -171,7 +171,7 @@ describe("ModulesExplorer", () => {
   it("marks every missing submodule field and clears the corrected parent", async () => {
     const user = userEvent.setup();
     render(<ModulesExplorer context={{ kind: "root" }} modules={[]} parents={parents} />);
-    await user.click(screen.getByText("+ Crear módulo o submódulo"));
+    await user.click(screen.getByText("+ Crear módulo"));
     await user.selectOptions(screen.getByRole("combobox", { name: "Tipo de elemento" }), "submodule");
     await user.click(screen.getByRole("button", { name: "Crear" }));
 
@@ -192,7 +192,7 @@ describe("ModulesExplorer", () => {
   it("explains name, description and order constraints before submitting the module", async () => {
     const user = userEvent.setup();
     render(<ModulesExplorer context={{ kind: "root" }} modules={[]} parents={parents} />);
-    await user.click(screen.getByText("+ Crear módulo o submódulo"));
+    await user.click(screen.getByText("+ Crear módulo"));
     await user.type(screen.getByLabelText("Nombre"), "A");
     await user.type(screen.getByLabelText("Código"), "modulo invalido");
     await user.type(screen.getByLabelText("Descripción (opcional)"), "A");
