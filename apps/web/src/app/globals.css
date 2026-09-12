@@ -601,15 +601,20 @@ textarea[aria-invalid="true"]:focus,
 .avend-admin-mobile-bar {
   align-items: center;
   display: flex;
+  gap: 0.75rem;
   justify-content: space-between;
   margin-bottom: 1.5rem;
+  min-width: 0;
 }
 
 .avend-admin-mobile-logo {
+  flex: none;
   max-width: 3.25rem;
 }
 
 .avend-admin-mobile-menu {
+  flex: 0 1 auto;
+  min-width: 0;
   position: relative;
 }
 
@@ -623,7 +628,11 @@ textarea[aria-invalid="true"]:focus,
   font-size: 1rem;
   font-weight: 600;
   min-height: 2.875rem;
+  min-width: 0;
+  overflow: hidden;
   padding: 0.625rem 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avend-admin-mobile-menu[open] .avend-admin-mobile-panel {
