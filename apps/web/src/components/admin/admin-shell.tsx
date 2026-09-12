@@ -298,7 +298,9 @@ export function AdminShellFrame({
       <main className="avend-admin-main" id="main-content">
         <div className="avend-admin-mobile-bar">
           <details className="avend-admin-mobile-menu">
-            <summary>Menú administrativo</summary>
+            <summary aria-label="Menú administrativo">
+              <span aria-hidden="true">☰</span>
+            </summary>
             <div className="avend-admin-mobile-panel">
               <AdminNavigation
                 activeSection={activeSection}
