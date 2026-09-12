@@ -297,7 +297,6 @@ export function AdminShellFrame({
 
       <main className="avend-admin-main" id="main-content">
         <div className="avend-admin-mobile-bar">
-          <BrandLogo className="avend-admin-mobile-logo" />
           <details className="avend-admin-mobile-menu">
             <summary>Menú administrativo</summary>
             <div className="avend-admin-mobile-panel">
@@ -309,6 +308,7 @@ export function AdminShellFrame({
               <AdminAccount userName={userName} userRole={userRole} />
             </div>
           </details>
+          <BrandLogo className="avend-admin-mobile-logo" />
         </div>
         {children}
       </main>
