@@ -9,7 +9,8 @@ import {
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminPage } from "@/components/admin/admin-page";
-import { DocumentDetailEditSection } from "@/components/admin/document-detail-edit-section";
+import { DocumentEditButton } from "@/components/admin/document-edit-button";
+import { DocumentEditSection } from "@/components/admin/document-edit-section";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
 import { DocumentSituationActions } from "@/components/admin/document-situation-actions";
@@ -256,12 +257,7 @@ export default async function DocumentDetailPage({
         </nav>
 
         <div aria-label="Acciones principales" className="flex flex-wrap gap-2">
-          <a
-            className="avend-button avend-button--primary"
-            href={`/admin/documents/${document.id}?edit=1`}
-          >
-            Editar
-          </a>
+          <DocumentEditButton />
           <a className="avend-button" href="#pdf-viewer">
             Ver PDF
           </a>
@@ -460,7 +456,7 @@ export default async function DocumentDetailPage({
                 </div>
               </dl>
 
-              <DocumentDetailEditSection id="edit-document">
+              <DocumentEditSection id="edit-document">
                 <AdminActionForm
                   action={updateDocumentAction}
                   className="grid gap-3 sm:grid-cols-2"
@@ -539,14 +535,19 @@ export default async function DocumentDetailPage({
                       name="metadata"
                     />
                   </label>
-                  <Link
+                  <button
                     className="avend-button"
-                    href={`/admin/documents/${document.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      (document.getElementById("edit-document") as HTMLDetailsElement | null)
+                        ?.removeAttribute("open");
+                    }}
+                    type="button"
                   >
                     Cancelar
-                  </Link>
+                  </button>
                 </AdminActionForm>
-              </DocumentDetailEditSection>
+              </DocumentEditSection>
             </section>
 
             <section
