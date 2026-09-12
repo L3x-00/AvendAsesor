@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminPage } from "@/components/admin/admin-page";
+import { DocumentDetailEditSection } from "@/components/admin/document-detail-edit-section";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
 import { DocumentSituationActions } from "@/components/admin/document-situation-actions";
@@ -257,7 +258,7 @@ export default async function DocumentDetailPage({
         <div aria-label="Acciones principales" className="flex flex-wrap gap-2">
           <a
             className="avend-button avend-button--primary"
-            href={`/admin/documents/${document.id}?edit=1#edit-document`}
+            href={`/admin/documents/${document.id}?edit=1`}
           >
             Editar
           </a>
@@ -372,7 +373,7 @@ export default async function DocumentDetailPage({
           </div>
           {viewerVersion && isPdfVersion(viewerVersion) ? (
             <iframe
-              className="mt-4 h-[70vh] min-h-[32rem] w-full rounded-lg border border-avend-border bg-white"
+              className="mt-4 h-[50vh] min-h-[24rem] w-full rounded-lg border border-avend-border bg-white md:h-[70vh] md:min-h-[32rem]"
               src={accessHref(document.id, "inline", viewerVersion.id)}
               title={`PDF de ${document.title}, versión ${viewerVersion.versionNumber}`}
             />
@@ -459,17 +460,10 @@ export default async function DocumentDetailPage({
                 </div>
               </dl>
 
-              <details
-                className="mt-5 rounded-lg border border-avend-border p-4"
-                id="edit-document"
-                open={editMode}
-              >
-                <summary className="cursor-pointer text-base font-bold">
-                  Editar datos del documento
-                </summary>
+              <DocumentDetailEditSection id="edit-document">
                 <AdminActionForm
                   action={updateDocumentAction}
-                  className="mt-4 grid gap-3 sm:grid-cols-2"
+                  className="grid gap-3 sm:grid-cols-2"
                   rules={{
                     title: [
                       { kind: "required", label: "El título" },
@@ -547,12 +541,12 @@ export default async function DocumentDetailPage({
                   </label>
                   <Link
                     className="avend-button"
-                    href={`/admin/documents/${document.id}#edit-document`}
+                    href={`/admin/documents/${document.id}`}
                   >
                     Cancelar
                   </Link>
                 </AdminActionForm>
-              </details>
+              </DocumentDetailEditSection>
             </section>
 
             <section

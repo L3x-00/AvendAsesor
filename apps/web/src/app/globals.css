@@ -627,12 +627,10 @@ textarea[aria-invalid="true"]:focus,
   display: flex;
   font-size: 1rem;
   font-weight: 600;
+  justify-content: center;
   min-height: 2.875rem;
-  min-width: 0;
-  overflow: hidden;
+  min-width: 2.875rem;
   padding: 0.625rem 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .avend-admin-mobile-menu[open] .avend-admin-mobile-panel {
