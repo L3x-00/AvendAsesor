@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import { formatUserRole } from "@/lib/admin-api/labels";
 import type { AdministrativeRole } from "@/lib/authorization/policy";
@@ -254,6 +254,27 @@ export function AdminShellFrame({
 }: AdminShellFrameProps) {
   const pathname = usePathname();
   const activeSection = adminSectionFromPathname(pathname ?? "/admin");
+  const mobileMenuRef = useRef<HTMLDetailsElement>(null);
+
+  // El <details> nativo no se cierra al tocar fuera de él, así que el menú
+  // móvil se queda abierto encima del contenido hasta que se toca el mismo
+  // botón otra vez. Se cierra manualmente al detectar un clic o toque fuera.
+  useEffect(() => {
+    function handleOutsideInteraction(event: MouseEvent | TouchEvent) {
+      const menu = mobileMenuRef.current;
+      if (!menu || !menu.open) return;
+      if (event.target instanceof Node && !menu.contains(event.target)) {
+        menu.open = false;
+      }
+    }
+
+    document.addEventListener("click", handleOutsideInteraction);
+    document.addEventListener("touchstart", handleOutsideInteraction);
+    return () => {
+      document.removeEventListener("click", handleOutsideInteraction);
+      document.removeEventListener("touchstart", handleOutsideInteraction);
+    };
+  }, []);
 
   return (
     <div
@@ -297,7 +318,7 @@ export function AdminShellFrame({
 
       <main className="avend-admin-main" id="main-content">
         <div className="avend-admin-mobile-bar">
-          <details className="avend-admin-mobile-menu">
+          <details className="avend-admin-mobile-menu" ref={mobileMenuRef}>
             <summary aria-label="Menú administrativo">
               <span aria-hidden="true">☰</span>
             </summary>
