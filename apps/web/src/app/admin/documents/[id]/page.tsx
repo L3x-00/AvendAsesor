@@ -10,6 +10,7 @@ import {
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentEditButton } from "@/components/admin/document-edit-button";
+import { DocumentEditCancelButton } from "@/components/admin/document-edit-cancel-button";
 import { DocumentEditSection } from "@/components/admin/document-edit-section";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
@@ -132,9 +133,6 @@ export default async function DocumentDetailPage({
   const requestedVersionId = Array.isArray(requestedVersion)
     ? requestedVersion[0]
     : requestedVersion;
-  const requestedEdit = rawSearchParams.edit;
-  const editMode =
-    (Array.isArray(requestedEdit) ? requestedEdit[0] : requestedEdit) === "1";
   const { client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
@@ -535,17 +533,7 @@ export default async function DocumentDetailPage({
                       name="metadata"
                     />
                   </label>
-                  <button
-                    className="avend-button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      (document.getElementById("edit-document") as HTMLDetailsElement | null)
-                        ?.removeAttribute("open");
-                    }}
-                    type="button"
-                  >
-                    Cancelar
-                  </button>
+                  <DocumentEditCancelButton />
                 </AdminActionForm>
               </DocumentEditSection>
             </section>
