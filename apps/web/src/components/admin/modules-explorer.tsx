@@ -421,7 +421,7 @@ export function ModulesExplorer({
               <li className={styles.card} key={module.id}>
                 <div className={styles.cardHeader}>
                   <div className={styles.moduleTag}>
-                    Sub Módulo: {module.name}
+                    {isRoot ? "Módulo" : "Sub Módulo"}: {module.name}
                   </div>
                   <span
                     className={
