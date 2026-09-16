@@ -84,6 +84,7 @@ function submoduleWord(count: number): string {
 }
 
 /** Collapsible edit / status / logical-delete controls for a single module. */
+/** Collapsible edit / status / logical-delete controls for a single module. */
 export function ModuleManageDetails({
   module,
   parents,
@@ -94,9 +95,16 @@ export function ModuleManageDetails({
   summary?: string;
 }) {
   const fieldId = useId();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const closeForm = useCallback(() => setIsOpen(false), []);
 
   return (
-    <details className={styles.manage}>
+    <details
+      className={styles.manage}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      open={isOpen}
+    >
       <summary className={styles.manageSummary}>{summary}</summary>
       <div className={styles.manageGrid}>
         <AdminActionForm
@@ -104,6 +112,7 @@ export function ModuleManageDetails({
           rules={MODULE_RULES}
           submitLabel="Guardar cambios"
           successMessage="Módulo actualizado con éxito."
+          onSuccess={closeForm}
         >
           <input name="moduleId" type="hidden" value={module.id} />
           <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
@@ -181,14 +190,23 @@ export function ModuleManageDetails({
                       {parent.name} ({parent.code})
                     </option>
                   ))}
-                </select>
-                <FieldError name="parentModuleId" />
+              </select>
+              <FieldError name="parentModuleId" />
             </>
           ) : (
             <p className={styles.presetParent}>
               Módulo padre: <strong>Sin padre</strong>
             </p>
           )}
+          <div style={{ marginTop: "1rem" }}>
+            <button
+              className="avend-button"
+              onClick={closeForm}
+              type="button"
+            >
+              Cancelar
+            </button>
+          </div>
         </AdminActionForm>
 
         <div className={styles.manageSide}>
@@ -196,6 +214,7 @@ export function ModuleManageDetails({
             action={setModuleStatusAction}
             rules={module.isActive ? MODULE_REASON_RULES : {}}
             submitLabel={module.isActive ? "Desactivar" : "Activar"}
+            onSuccess={closeForm}
           >
             <input name="moduleId" type="hidden" value={module.id} />
             <input
@@ -226,6 +245,7 @@ export function ModuleManageDetails({
             action={deleteModuleAction}
             rules={MODULE_REASON_RULES}
             submitLabel="Eliminar (lógico)"
+            onSuccess={closeForm}
           >
             <input name="moduleId" type="hidden" value={module.id} />
             <label

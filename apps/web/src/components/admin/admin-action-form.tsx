@@ -21,6 +21,7 @@ interface AdminActionFormProps {
   children: ReactNode;
   className?: string;
   confirmMessage?: string;
+  onSuccess?: () => void;
   /** Reglas por campo. Sin ellas el formulario sigue funcionando, pero pierde
    * la validación inmediata y solo muestra lo que responda el servidor. */
   rules?: FieldRules;
@@ -48,6 +49,7 @@ export function AdminActionForm({
   children,
   className = "space-y-3",
   confirmMessage,
+  onSuccess,
   rules = {},
   submitLabel,
   successMessage,
@@ -63,7 +65,8 @@ export function AdminActionForm({
     if (state.status !== "success" || announced.current === state) return;
     announced.current = state;
     showToast(state.message ?? successMessage ?? "Guardado con éxito.");
-  }, [showToast, state, successMessage]);
+    onSuccess?.();
+  }, [showToast, state, successMessage, onSuccess]);
 
   // Solo queda visible el aviso general: lo que pertenece a un campo lo pinta
   // el propio campo, debajo de él.
