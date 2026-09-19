@@ -187,6 +187,48 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'conversational')).toBe(false);
   });
 
+  it('keeps a social turn inside an existing conversation ephemeral', async () => {
+    const events = await collect(service, {
+      question: 'gracias',
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('conversational');
+    expect(historyGateway.getConversationContext).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('reads a conversation scoped to the authenticated user (owner-only)', async () => {
+    historyGateway.getConversation.mockResolvedValue({
+      conversation: { id: '9c8b56af-6d0c-4fef-881e-7c00907540dd' },
+      messages: [],
+    });
+
+    await service.getConversation(
+      '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      authorization,
+    );
+
+    expect(historyGateway.getConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        userId: authorization.userId,
+      }),
+    );
+  });
+
+  it('lists conversations scoped to the authenticated user', async () => {
+    historyGateway.listConversations.mockResolvedValue([]);
+
+    await service.listConversations(10, undefined, authorization);
+
+    expect(historyGateway.listConversations).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: authorization.userId }),
+    );
+  });
+
   it('records ambiguity without calling the answer provider', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
