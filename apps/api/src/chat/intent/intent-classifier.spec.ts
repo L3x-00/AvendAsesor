@@ -47,7 +47,6 @@ describe('classifyTurnIntent', () => {
       '¿Quién eres?',
       '¿en qué me puedes ayudar?',
       '¿para qué sirves?',
-      'necesito ayuda',
       'ayuda',
     ])('clasifica "%s" como pregunta de capacidad', (message) => {
       expect(classifyTurnIntent(message)).toEqual({
@@ -119,6 +118,20 @@ describe('classifyTurnIntent', () => {
 
     it('un término corto del dominio envuelto en agradecimiento prevalece', () => {
       expect(classifyTurnIntent('gracias, ¿la papeleta?')).toEqual({
+        lane: 'domain',
+        subtype: 'domain_query',
+      });
+    });
+
+    it.each([
+      // Seguimiento corto envuelto en cortesía: una pregunta con sustancia
+      // manda al RAG aunque el residuo no esté en el léxico (fail-closed).
+      'gracias, ¿cuánto es?',
+      'gracias, ¿y cuánto tiempo?',
+      // Petición de ayuda con sustancia (ya no la captura CAPABILITIES).
+      'necesito ayuda con mi caso',
+    ])('enruta al RAG una consulta envuelta en cortesía: "%s"', (message) => {
+      expect(classifyTurnIntent(message)).toEqual({
         lane: 'domain',
         subtype: 'domain_query',
       });

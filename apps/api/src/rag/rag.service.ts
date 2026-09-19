@@ -13,6 +13,7 @@ import type {
   RetrievedModuleAssociation,
   RetrievalScope,
 } from './retrieval.gateway';
+import { normalizeSpanishText } from './text-normalization';
 
 export interface ResolvedModule {
   id: string;
@@ -247,15 +248,6 @@ function contextualQuery(
     : question;
 }
 
-function normalizedIntentText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('es')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 const ARCHIVED_INTENT_PATTERNS = [
   /\barchivad[oa]s?\b/u,
   /\bantecedentes? historicos? especificos?\b/u,
@@ -282,7 +274,7 @@ export function detectRetrievalScope(
   question: string,
   currentYear = new Date().getUTCFullYear(),
 ): RetrievalScope {
-  const normalized = normalizedIntentText(question);
+  const normalized = normalizeSpanishText(question);
 
   if (ARCHIVED_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return 'archived_explicit';

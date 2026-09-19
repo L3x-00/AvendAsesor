@@ -2,7 +2,7 @@ export const RAG_NO_EVIDENCE_MESSAGE =
   'No encontré sustento suficiente en los documentos disponibles para responderte con seguridad. Para no darte información sin respaldo, ¿podrías contarme un poco más o precisar tu consulta? Así puedo buscar mejor.';
 
 export const RAG_AMBIGUITY_MESSAGE =
-  'Encontré información relacionada con más de un tema y quiero orientarte con precisión. Para darte la respuesta correcta, ayúdame confirmando a cuál corresponde tu consulta.';
+  'Encontré información relacionada con más de un tema y quiero orientarte con precisión.';
 
 export const MAX_RAG_ANSWER_CHARS = 20_000;
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;

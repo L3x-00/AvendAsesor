@@ -13,6 +13,8 @@
  * solo enruta. La respuesta amable y el cableado al stream son de la Fase 2.
  */
 
+import { normalizeSpanishText } from '../../rag/text-normalization';
+
 export type TurnIntentLane = 'social' | 'domain' | 'out_of_scope';
 
 export type SocialSubtype = 'greeting' | 'thanks' | 'farewell' | 'capabilities';
@@ -25,16 +27,6 @@ export type TurnIntent =
   | { lane: 'social'; subtype: SocialSubtype }
   | { lane: 'domain'; subtype: 'domain_query' }
   | { lane: 'out_of_scope'; subtype: 'out_of_domain' };
-
-/** Minúsculas, sin tildes y espacios colapsados (público 30+ suele omitir tildes). */
-function normalizeIntentText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('es')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 /**
  * Léxico del ámbito educativo (docentes, auxiliares de educación, directivos).
@@ -77,7 +69,7 @@ const THANKS =
 const FAREWELL =
   /\b(adios|hasta luego|hasta pronto|nos vemos|chau|chao|bye|me despido|hasta la proxima)\b/u;
 const CAPABILITIES =
-  /\b(que puedes hacer|que sabes hacer|que haces|quien eres|que eres|para que sirves|en que (?:me )?puedes ayudar|como funcionas|que es avend|cual es tu funcion|de que puedes hablar|como me puedes ayudar|necesito ayuda|^ayuda$)\b/u;
+  /\b(que puedes hacer|que sabes hacer|que haces|quien eres|que eres|para que sirves|en que (?:me )?puedes ayudar|como funcionas|que es avend|cual es tu funcion|de que puedes hablar|como me puedes ayudar|^ayuda$)\b/u;
 
 /** Temas inequívocamente ajenos al ámbito de AVEND. Conservador a propósito. */
 const OUT_OF_SCOPE_PATTERNS: readonly RegExp[] = [
@@ -123,6 +115,10 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
     .replace(/\s+/g, ' ')
     .trim();
   const residueWords = residue ? residue.split(' ').filter(Boolean) : [];
+  // Una pregunta con sustancia (residuo no vacío + signo de interrogación) es
+  // una consulta, no charla pura: sale del carril social para que el RAG la
+  // atienda (fail-closed hacia dominio). Cubre "gracias, ¿cuánto es?".
+  if (residueWords.length > 0 && /[?¿]/u.test(normalized)) return null;
   if (residueWords.length > 2) return null;
 
   if (thanks) return 'thanks';
@@ -136,7 +132,7 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
  * cualquier duda, dominio (para que el RAG resuelva con sustento).
  */
 export function classifyTurnIntent(message: string): TurnIntent {
-  const normalized = normalizeIntentText(message);
+  const normalized = normalizeSpanishText(message);
   if (!normalized) {
     return { lane: 'domain', subtype: 'domain_query' };
   }

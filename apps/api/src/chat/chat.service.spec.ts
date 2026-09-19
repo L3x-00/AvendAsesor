@@ -326,9 +326,16 @@ describe('ChatService', () => {
       clarification.data.message.indexOf(source.chunkContent),
     ).toBeLessThan(
       clarification.data.message.indexOf(
-        '¿sobre cuál de ellos es tu consulta?',
+        '¿Sobre cuál de ellos es tu consulta?',
       ),
     );
+    // Sin frases duplicadas al concatenar la constante y la clarificación.
+    expect(
+      clarification.data.message.match(/orientarte con precisión/gu),
+    ).toHaveLength(1);
+    expect(
+      clarification.data.message.match(/¿Sobre cuál de ellos/gu),
+    ).toHaveLength(1);
     expect(clarification.data.modules).toEqual([
       { id: source.moduleIds[0], name: 'Licencias' },
     ]);
