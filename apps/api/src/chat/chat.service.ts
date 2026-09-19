@@ -22,7 +22,7 @@ import {
   type ResolvedModule,
 } from '../rag/rag.service';
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
-import type { RetrievedChunk } from '../rag/retrieval.gateway';
+import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
 import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
 import type {
   ActiveChatModule,
@@ -375,6 +375,19 @@ function ambiguityMessage(
     .join(' ');
 }
 
+/**
+ * Mensaje de "sin evidencia" (Hito 3, Fase 9). Amable y sin suposiciones. Cuando
+ * la consulta se resolvió con alcance vigente (`current`), invita a revisar
+ * antecedentes/versiones anteriores por si la intención era histórica, ya que el
+ * alcance se detecta de forma heurística. NUNCA completa la respuesta.
+ */
+export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
+  if (retrievalScope === 'current') {
+    return `${RAG_NO_EVIDENCE_MESSAGE} Si tu consulta se refiere a una norma anterior o a un antecedente histórico, indícamelo y con gusto lo reviso.`;
+  }
+  return RAG_NO_EVIDENCE_MESSAGE;
+}
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -573,8 +586,9 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
+      const message = noEvidenceMessage(retrievalScope);
       const completed = await this.historyGateway.completeTurn({
-        answer: RAG_NO_EVIDENCE_MESSAGE,
+        answer: message,
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: null,
@@ -588,7 +602,7 @@ export class ChatService {
         userId: input.authorization.userId,
         userMessageId: turn.userMessageId,
       });
-      yield { data: { message: RAG_NO_EVIDENCE_MESSAGE }, type: 'no_evidence' };
+      yield { data: { message }, type: 'no_evidence' };
       yield {
         data: {
           conversationId: turn.conversationId,

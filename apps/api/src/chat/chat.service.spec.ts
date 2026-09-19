@@ -9,6 +9,7 @@ import {
   ChatService,
   evaluateAnswerCitationQuality,
   evaluateAnswerCitationQualityDetails,
+  noEvidenceMessage,
   type ChatStreamEvent,
 } from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
@@ -125,7 +126,7 @@ describe('ChatService', () => {
         },
         type: 'conversation',
       },
-      { data: { message: RAG_NO_EVIDENCE_MESSAGE }, type: 'no_evidence' },
+      { data: { message: noEvidenceMessage('current') }, type: 'no_evidence' },
       {
         data: {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -144,6 +145,40 @@ describe('ChatService', () => {
         unansweredReason: 'insufficient_evidence',
       }),
     );
+  });
+
+  it('offers to check historical antecedents on a current-scope no-evidence', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuál es el plazo para presentar la solicitud?',
+    });
+
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+    expect(noEvidence.data.message).toContain('antecedente');
+  });
+
+  it('does not repeat the antecedents offer when the scope is already historical', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Qué decía la norma anterior sobre el plazo?',
+    });
+
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+    expect(noEvidence.data.message).toBe(RAG_NO_EVIDENCE_MESSAGE);
   });
 
   it('answers a social greeting conversationally without RAG or persistence', async () => {
