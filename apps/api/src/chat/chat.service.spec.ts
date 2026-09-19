@@ -291,7 +291,7 @@ describe('ChatService', () => {
       clarification.data.message.indexOf(source.chunkContent),
     ).toBeLessThan(
       clarification.data.message.indexOf(
-        '¿A cuál de estos temas corresponde tu consulta?',
+        '¿sobre cuál de ellos es tu consulta?',
       ),
     );
     expect(clarification.data.modules).toEqual([

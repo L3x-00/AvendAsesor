@@ -367,8 +367,8 @@ function ambiguityMessage(
     .join(', ');
   const orientation = evidenceOrientation(sources);
   const clarification = names
-    ? `Los documentos recuperados se relacionan con: ${names}. ¿A cuál de estos temas corresponde tu consulta?`
-    : '¿Qué tema específico deseas consultar?';
+    ? `Encontré información relacionada con varios temas: ${names}. Para orientarte con precisión, ¿sobre cuál de ellos es tu consulta?`
+    : '¿Sobre qué tema específico deseas que te oriente?';
 
   return [RAG_AMBIGUITY_MESSAGE, orientation, clarification]
     .filter(Boolean)
