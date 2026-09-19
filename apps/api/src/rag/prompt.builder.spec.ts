@@ -33,6 +33,14 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).not.toContain(source.documentTitle);
     expect(prompt).not.toContain(source.chunkContent);
   });
+
+  it('declares the educational scope (docentes, auxiliares y directivos)', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('AVEND ASESOR');
+    expect(prompt).toContain('auxiliares de educación');
+    expect(prompt).toContain('directivos');
+  });
 });
 
 describe('buildEvidenceUserPrompt', () => {
