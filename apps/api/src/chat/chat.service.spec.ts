@@ -9,6 +9,7 @@ import {
   ChatService,
   evaluateAnswerCitationQuality,
   evaluateAnswerCitationQualityDetails,
+  noEvidenceMessage,
   type ChatStreamEvent,
 } from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
@@ -125,7 +126,7 @@ describe('ChatService', () => {
         },
         type: 'conversation',
       },
-      { data: { message: RAG_NO_EVIDENCE_MESSAGE }, type: 'no_evidence' },
+      { data: { message: noEvidenceMessage('current') }, type: 'no_evidence' },
       {
         data: {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -143,6 +144,157 @@ describe('ChatService', () => {
         sources: [],
         unansweredReason: 'insufficient_evidence',
       }),
+    );
+  });
+
+  it('offers to check historical antecedents on a current-scope no-evidence', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuál es el plazo para presentar la solicitud?',
+    });
+
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+    expect(noEvidence.data.message).toContain('antecedente');
+  });
+
+  it('does not repeat the antecedents offer when the scope is already historical', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Qué decía la norma anterior sobre el plazo?',
+    });
+
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+    expect(noEvidence.data.message).toBe(RAG_NO_EVIDENCE_MESSAGE);
+  });
+
+  it('answers a social greeting conversationally without RAG or persistence', async () => {
+    const events = await collect(service, { question: 'Hola, buenos días' });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('AVEND ASESOR');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(faqMemoryService.prepare).not.toHaveBeenCalled();
+  });
+
+  it('answers a capabilities question by explaining the educational scope', async () => {
+    const events = await collect(service, { question: '¿Qué puedes hacer?' });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('docentes');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
+  it('declines an out-of-scope question and reorients without RAG (point 10)', async () => {
+    const events = await collect(service, {
+      question: '¿Qué tiempo hace hoy?',
+    });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('educativo');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(faqMemoryService.prepare).not.toHaveBeenCalled();
+  });
+
+  it('routes a greeting that carries a query through the RAG (query prevails)', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: 'Hola, ¿cuál es el plazo para una reasignación?',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === 'conversational')).toBe(false);
+  });
+
+  it('prioritizes the query over the greeting in the client point-11 example', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    const question =
+      'Buenos días, quisiera saber cuánto tiempo tiene un director para responder esta solicitud.';
+
+    const events = await collect(service, { question });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      question,
+      null,
+      expect.any(Array),
+    );
+    expect(events.some((event) => event.type === 'conversational')).toBe(false);
+  });
+
+  it('keeps a social turn inside an existing conversation ephemeral', async () => {
+    const events = await collect(service, {
+      question: 'gracias',
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('conversational');
+    expect(historyGateway.getConversationContext).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('reads a conversation scoped to the authenticated user (owner-only)', async () => {
+    historyGateway.getConversation.mockResolvedValue({
+      conversation: { id: '9c8b56af-6d0c-4fef-881e-7c00907540dd' },
+      messages: [],
+    });
+
+    await service.getConversation(
+      '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      authorization,
+    );
+
+    expect(historyGateway.getConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        userId: authorization.userId,
+      }),
+    );
+  });
+
+  it('lists conversations scoped to the authenticated user', async () => {
+    historyGateway.listConversations.mockResolvedValue([]);
+
+    await service.listConversations(10, undefined, authorization);
+
+    expect(historyGateway.listConversations).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: authorization.userId }),
     );
   });
 
@@ -174,9 +326,16 @@ describe('ChatService', () => {
       clarification.data.message.indexOf(source.chunkContent),
     ).toBeLessThan(
       clarification.data.message.indexOf(
-        '¿A cuál de estos temas corresponde tu consulta?',
+        '¿Sobre cuál de ellos es tu consulta?',
       ),
     );
+    // Sin frases duplicadas al concatenar la constante y la clarificación.
+    expect(
+      clarification.data.message.match(/orientarte con precisión/gu),
+    ).toHaveLength(1);
+    expect(
+      clarification.data.message.match(/¿Sobre cuál de ellos/gu),
+    ).toHaveLength(1);
     expect(clarification.data.modules).toEqual([
       { id: source.moduleIds[0], name: 'Licencias' },
     ]);
@@ -248,6 +407,45 @@ describe('ChatService', () => {
       },
       type: 'done',
     });
+  });
+
+  it('infers the module from an educational query that names no module (point 3)', async () => {
+    const inferredModule = { id: source.moduleIds[0], name: 'Licencias' };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: inferredModule,
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Respuesta con sustento. [1]';
+      },
+    });
+
+    const events = await collect(service, {
+      question: '¿Quién reemplaza al director cuando está de licencia?',
+      selectedModuleId: null,
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Quién reemplaza al director cuando está de licencia?',
+      null,
+      expect.any(Array),
+    );
+    const conversation = events[0];
+    if (!conversation || conversation.type !== 'conversation') {
+      throw new Error('Expected a conversation event.');
+    }
+    expect(conversation.data.moduleId).toBe(inferredModule.id);
+    expect(conversation.data.startedNewConversation).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
   });
 
   it('persists the exact unsupported answer fragment for administrator review', async () => {

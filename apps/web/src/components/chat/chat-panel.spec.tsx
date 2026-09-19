@@ -706,10 +706,40 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
   });
 
+  it("answers a greeting conversationally without RAG sources", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          'event: conversational\ndata: {"message":"¡Hola! Soy AVEND ASESOR. ¿En qué puedo ayudarte hoy?"}\n\n',
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText(
+        "¡Hola! Soy AVEND ASESOR. ¿En qué puedo ayudarte hoy?",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toBeEnabled();
+  });
+
   it.each([
     [
       "event: conversation\ndata: {}\n\n",
       "La conversación recibida no tiene un formato válido.",
+    ],
+    [
+      "event: conversational\ndata: {}\n\n",
+      "La respuesta recibida no tiene un formato válido.",
     ],
     [
       `${conversationEvent()}event: sources\ndata: {"sources":[{}]}\n\n`,

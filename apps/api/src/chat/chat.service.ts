@@ -22,7 +22,7 @@ import {
   type ResolvedModule,
 } from '../rag/rag.service';
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
-import type { RetrievedChunk } from '../rag/retrieval.gateway';
+import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
 import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
 import type {
   ActiveChatModule,
@@ -37,6 +37,8 @@ import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
 } from './chat-history-cursor';
+import { buildConversationalReply } from './intent/conversational-replies';
+import { classifyTurnIntent } from './intent/intent-classifier';
 
 export interface ChatSource {
   articleReference: string | null;
@@ -72,6 +74,7 @@ export type ChatStreamEvent =
       type: 'clarification';
     }
   | { data: { message: string }; type: 'no_evidence' }
+  | { data: { message: string }; type: 'conversational' }
   | {
       data: {
         conversationId: string;
@@ -364,12 +367,25 @@ function ambiguityMessage(
     .join(', ');
   const orientation = evidenceOrientation(sources);
   const clarification = names
-    ? `Los documentos recuperados se relacionan con: ${names}. ¿A cuál de estos temas corresponde tu consulta?`
-    : '¿Qué tema específico deseas consultar?';
+    ? `Los temas relacionados son: ${names}. ¿Sobre cuál de ellos es tu consulta?`
+    : '¿Sobre qué tema específico deseas que te oriente?';
 
   return [RAG_AMBIGUITY_MESSAGE, orientation, clarification]
     .filter(Boolean)
     .join(' ');
+}
+
+/**
+ * Mensaje de "sin evidencia" (Hito 3, Fase 9). Amable y sin suposiciones. Cuando
+ * la consulta se resolvió con alcance vigente (`current`), invita a revisar
+ * antecedentes/versiones anteriores por si la intención era histórica, ya que el
+ * alcance se detecta de forma heurística. NUNCA completa la respuesta.
+ */
+export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
+  if (retrievalScope === 'current') {
+    return `${RAG_NO_EVIDENCE_MESSAGE} Si tu consulta se refiere a una norma anterior o a un antecedente histórico, indícamelo y con gusto lo reviso.`;
+  }
+  return RAG_NO_EVIDENCE_MESSAGE;
 }
 
 @Injectable()
@@ -466,6 +482,22 @@ export class ChatService {
     question: string;
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
+    // Carriles no-RAG (Hito 3, Fases 2 y 10): los turnos sociales
+    // (saludo/agradecimiento/despedida/capacidad) se responden con calidez y los
+    // ajenos al ámbito se declinan con cortesía reorientando — ambos SIN activar
+    // el RAG, sin persistir turno y sin ensuciar las colas (efímeros). Fail-closed:
+    // cualquier señal de dominio, mezcla o duda la enruta `classifyTurnIntent` a
+    // `domain`, que sigue el flujo evidence-only de abajo. No crear conversación por
+    // "hola"/"gracias" cumple el lineamiento de historial.
+    const intent = classifyTurnIntent(input.question);
+    if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
+      yield {
+        data: { message: buildConversationalReply(intent.subtype) },
+        type: 'conversational',
+      };
+      return;
+    }
+
     const faqMemory = this.faqMemoryService.prepare(input.question);
     const storedContext = input.conversationId
       ? await this.historyGateway.getConversationContext({
@@ -554,8 +586,9 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
+      const message = noEvidenceMessage(retrievalScope);
       const completed = await this.historyGateway.completeTurn({
-        answer: RAG_NO_EVIDENCE_MESSAGE,
+        answer: message,
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: null,
@@ -569,7 +602,7 @@ export class ChatService {
         userId: input.authorization.userId,
         userMessageId: turn.userMessageId,
       });
-      yield { data: { message: RAG_NO_EVIDENCE_MESSAGE }, type: 'no_evidence' };
+      yield { data: { message }, type: 'no_evidence' };
       yield {
         data: {
           conversationId: turn.conversationId,

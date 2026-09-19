@@ -1,7 +1,6 @@
 import type { AuthorizationContext } from '../authorization';
 import type { EmbeddingsGateway } from '../ingestion/embeddings.gateway';
 import type { AnswerGateway, AnswerGatewayInput } from '../rag/answer.gateway';
-import { RAG_NO_EVIDENCE_MESSAGE } from '../rag/rag.constants';
 import { RagService } from '../rag/rag.service';
 import type {
   RetrievalGateway,
@@ -13,7 +12,11 @@ import type {
   ChatTurnCompletion,
   ChatTurnStart,
 } from './chat-history.gateway';
-import { ChatService, type ChatStreamEvent } from './chat.service';
+import {
+  ChatService,
+  noEvidenceMessage,
+  type ChatStreamEvent,
+} from './chat.service';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -412,7 +415,7 @@ describe('ChatService + RagService integration', () => {
     });
 
     expect(events).toContainEqual({
-      data: { message: RAG_NO_EVIDENCE_MESSAGE },
+      data: { message: noEvidenceMessage('current') },
       type: 'no_evidence',
     });
     expect(history.completions[0]).toMatchObject({

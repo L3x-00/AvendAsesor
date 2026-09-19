@@ -13,6 +13,7 @@ import type {
   RetrievedModuleAssociation,
   RetrievalScope,
 } from './retrieval.gateway';
+import { normalizeSpanishText } from './text-normalization';
 
 export interface ResolvedModule {
   id: string;
@@ -247,15 +248,6 @@ function contextualQuery(
     : question;
 }
 
-function normalizedIntentText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('es')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 const ARCHIVED_INTENT_PATTERNS = [
   /\barchivad[oa]s?\b/u,
   /\bantecedentes? historicos? especificos?\b/u,
@@ -282,7 +274,7 @@ export function detectRetrievalScope(
   question: string,
   currentYear = new Date().getUTCFullYear(),
 ): RetrievalScope {
-  const normalized = normalizedIntentText(question);
+  const normalized = normalizeSpanishText(question);
 
   if (ARCHIVED_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return 'archived_explicit';
@@ -315,11 +307,9 @@ export class RagService {
     priorUserQuestions: string[] = [],
   ): Promise<RetrievalResult> {
     const followUpQuery = contextualQuery(question, priorUserQuestions);
+    const isFollowUp = followUpQuery !== question;
     const retrievalScope = detectRetrievalScope(question);
-    const queries =
-      selectedModuleId && followUpQuery !== question
-        ? [question, followUpQuery]
-        : [question];
+    const queries = isFollowUp ? [question, followUpQuery] : [question];
     const embeddings = await this.embeddings.embed(queries);
     const currentEmbedding = embeddings[0];
     const contextualEmbedding = embeddings.at(-1);
@@ -337,10 +327,15 @@ export class RagService {
       matchCount: this.config.get<number>('RAG_MATCH_COUNT') ?? 5,
       matchThreshold: this.config.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7,
     };
+    // Sin módulo seleccionado, la búsqueda global es la recuperación principal:
+    // un seguimiento ("¿y el plazo?") debe conservar el tema, por lo que usa la
+    // consulta contextual. Con módulo seleccionado la global se reserva para
+    // detectar cambios de tema, así que mantiene la pregunta actual tal cual.
+    const globalUsesContext = !selectedModuleId && isFollowUp;
     const globalSearch = this.gateway.search({
       ...searchBase,
-      embedding: currentEmbedding,
-      query: question,
+      embedding: globalUsesContext ? contextualEmbedding : currentEmbedding,
+      query: globalUsesContext ? followUpQuery : question,
       retrievalScope,
       selectedModuleId: null,
     });

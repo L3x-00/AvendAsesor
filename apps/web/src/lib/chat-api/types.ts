@@ -101,6 +101,9 @@ export const chatStreamPayloadSchemas = {
     conversationId: z.string().uuid(),
     userMessageId: z.string().uuid(),
   }),
+  conversational: z.object({
+    message: z.string().min(1).max(20_000),
+  }),
   done: z.object({
     conversationId: z.string().uuid(),
     inReplyToMessageId: z.string().uuid(),
