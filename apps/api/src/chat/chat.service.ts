@@ -469,14 +469,15 @@ export class ChatService {
     question: string;
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
-    // Carril social (Hito 3, Fase 2): saludos, agradecimientos, despedidas y
-    // preguntas de capacidad se responden con calidez SIN activar el RAG, sin
-    // persistir turno y sin ensuciar las colas. Fail-closed: cualquier señal de
-    // dominio, mezcla o duda la enruta `classifyTurnIntent` a `domain`, que sigue
-    // el flujo evidence-only de abajo. El turno social es efímero (no crea
-    // conversación) — cumple el lineamiento de no guardar "hola"/"gracias".
+    // Carriles no-RAG (Hito 3, Fases 2 y 10): los turnos sociales
+    // (saludo/agradecimiento/despedida/capacidad) se responden con calidez y los
+    // ajenos al ámbito se declinan con cortesía reorientando — ambos SIN activar
+    // el RAG, sin persistir turno y sin ensuciar las colas (efímeros). Fail-closed:
+    // cualquier señal de dominio, mezcla o duda la enruta `classifyTurnIntent` a
+    // `domain`, que sigue el flujo evidence-only de abajo. No crear conversación por
+    // "hola"/"gracias" cumple el lineamiento de historial.
     const intent = classifyTurnIntent(input.question);
-    if (intent.lane === 'social') {
+    if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
       yield {
         data: { message: buildConversationalReply(intent.subtype) },
         type: 'conversational',

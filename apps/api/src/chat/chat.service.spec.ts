@@ -173,6 +173,22 @@ describe('ChatService', () => {
     expect(ragService.retrieve).not.toHaveBeenCalled();
   });
 
+  it('declines an out-of-scope question and reorients without RAG (point 10)', async () => {
+    const events = await collect(service, {
+      question: '¿Qué tiempo hace hoy?',
+    });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('educativo');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(faqMemoryService.prepare).not.toHaveBeenCalled();
+  });
+
   it('routes a greeting that carries a query through the RAG (query prevails)', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
