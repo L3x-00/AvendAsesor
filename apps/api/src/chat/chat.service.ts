@@ -37,6 +37,8 @@ import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
 } from './chat-history-cursor';
+import { buildConversationalReply } from './intent/conversational-replies';
+import { classifyTurnIntent } from './intent/intent-classifier';
 
 export interface ChatSource {
   articleReference: string | null;
@@ -72,6 +74,7 @@ export type ChatStreamEvent =
       type: 'clarification';
     }
   | { data: { message: string }; type: 'no_evidence' }
+  | { data: { message: string }; type: 'conversational' }
   | {
       data: {
         conversationId: string;
@@ -466,6 +469,21 @@ export class ChatService {
     question: string;
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
+    // Carril social (Hito 3, Fase 2): saludos, agradecimientos, despedidas y
+    // preguntas de capacidad se responden con calidez SIN activar el RAG, sin
+    // persistir turno y sin ensuciar las colas. Fail-closed: cualquier señal de
+    // dominio, mezcla o duda la enruta `classifyTurnIntent` a `domain`, que sigue
+    // el flujo evidence-only de abajo. El turno social es efímero (no crea
+    // conversación) — cumple el lineamiento de no guardar "hola"/"gracias".
+    const intent = classifyTurnIntent(input.question);
+    if (intent.lane === 'social') {
+      yield {
+        data: { message: buildConversationalReply(intent.subtype) },
+        type: 'conversational',
+      };
+      return;
+    }
+
     const faqMemory = this.faqMemoryService.prepare(input.question);
     const storedContext = input.conversationId
       ? await this.historyGateway.getConversationContext({

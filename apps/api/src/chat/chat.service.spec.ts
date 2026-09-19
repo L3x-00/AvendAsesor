@@ -146,6 +146,47 @@ describe('ChatService', () => {
     );
   });
 
+  it('answers a social greeting conversationally without RAG or persistence', async () => {
+    const events = await collect(service, { question: 'Hola, buenos días' });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('AVEND ASESOR');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(faqMemoryService.prepare).not.toHaveBeenCalled();
+  });
+
+  it('answers a capabilities question by explaining the educational scope', async () => {
+    const events = await collect(service, { question: '¿Qué puedes hacer?' });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('docentes');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
+  it('routes a greeting that carries a query through the RAG (query prevails)', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: 'Hola, ¿cuál es el plazo para una reasignación?',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === 'conversational')).toBe(false);
+  });
+
   it('records ambiguity without calling the answer provider', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',

@@ -17,13 +17,14 @@ export type TurnIntentLane = 'social' | 'domain' | 'out_of_scope';
 
 export type SocialSubtype = 'greeting' | 'thanks' | 'farewell' | 'capabilities';
 
-export type TurnIntentSubtype =
-  SocialSubtype | 'domain_query' | 'out_of_domain';
-
-export interface TurnIntent {
-  lane: TurnIntentLane;
-  subtype: TurnIntentSubtype;
-}
+/**
+ * Unión discriminada por `lane`: si `lane` es `social`, `subtype` es un
+ * `SocialSubtype` (permite despachar la respuesta amable sin castear).
+ */
+export type TurnIntent =
+  | { lane: 'social'; subtype: SocialSubtype }
+  | { lane: 'domain'; subtype: 'domain_query' }
+  | { lane: 'out_of_scope'; subtype: 'out_of_domain' };
 
 /** Minúsculas, sin tildes y espacios colapsados (público 30+ suele omitir tildes). */
 function normalizeIntentText(value: string): string {

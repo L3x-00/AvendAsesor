@@ -650,6 +650,31 @@ export function ChatPanel({
             continue;
           }
 
+          if (frame.event === "conversational") {
+            const result =
+              chatStreamPayloadSchemas.conversational.safeParse(payload);
+            if (!result.success) {
+              discardCurrentRequest(
+                "La respuesta recibida no tiene un formato válido.",
+              );
+              return;
+            }
+            setMessages((current) => [
+              ...current,
+              {
+                content: result.data.message,
+                id: nextLocalId("conversational"),
+                inReplyToMessageId: null,
+                role: "assistant",
+                sources: [],
+              },
+            ]);
+            completionStatus = "Listo.";
+            setStatus(completionStatus);
+            completed = true;
+            continue;
+          }
+
           if (frame.event === "no_evidence") {
             const result =
               chatStreamPayloadSchemas.no_evidence.safeParse(payload);
