@@ -146,7 +146,38 @@ describe('RagService', () => {
     });
   });
 
-  it('uses prior user questions only for selected-module follow-up retrieval', async () => {
+  it('keeps the prior topic on a module-free follow-up (global uses context)', async () => {
+    gateway.search.mockResolvedValue([source]);
+
+    await expect(
+      service.retrieve('¿Y cuál es el plazo?', null, [
+        'Necesito una reasignación por unidad familiar.',
+      ]),
+    ).resolves.toMatchObject({ kind: 'evidence', sources: [source] });
+
+    const embeddingCalls = embeddings.embed.mock.calls as Array<[string[]]>;
+    const embeddedQueries = embeddingCalls[0]?.[0];
+    expect(embeddedQueries?.[0]).toBe('¿Y cuál es el plazo?');
+    expect(embeddedQueries?.[1]).toContain(
+      'Necesito una reasignación por unidad familiar.',
+    );
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    const globalSearch = searchCalls[0]?.[0];
+    expect(globalSearch?.selectedModuleId).toBeNull();
+    expect(globalSearch?.query).toContain(
+      'Pregunta actual: ¿Y cuál es el plazo?',
+    );
+    expect(globalSearch?.query).toContain(
+      'Necesito una reasignación por unidad familiar.',
+    );
+    // La global usa el embedding contextual (segunda consulta), no el escueto.
+    expect(globalSearch?.embedding[0]).toBeCloseTo(0.11);
+  });
+
+  it('uses the contextual query for selected-module follow-up retrieval', async () => {
     gateway.search.mockImplementation(
       (input: { selectedModuleId: string | null }) =>
         Promise.resolve(input.selectedModuleId ? [source] : []),

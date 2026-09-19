@@ -315,11 +315,9 @@ export class RagService {
     priorUserQuestions: string[] = [],
   ): Promise<RetrievalResult> {
     const followUpQuery = contextualQuery(question, priorUserQuestions);
+    const isFollowUp = followUpQuery !== question;
     const retrievalScope = detectRetrievalScope(question);
-    const queries =
-      selectedModuleId && followUpQuery !== question
-        ? [question, followUpQuery]
-        : [question];
+    const queries = isFollowUp ? [question, followUpQuery] : [question];
     const embeddings = await this.embeddings.embed(queries);
     const currentEmbedding = embeddings[0];
     const contextualEmbedding = embeddings.at(-1);
@@ -337,10 +335,15 @@ export class RagService {
       matchCount: this.config.get<number>('RAG_MATCH_COUNT') ?? 5,
       matchThreshold: this.config.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7,
     };
+    // Sin módulo seleccionado, la búsqueda global es la recuperación principal:
+    // un seguimiento ("¿y el plazo?") debe conservar el tema, por lo que usa la
+    // consulta contextual. Con módulo seleccionado la global se reserva para
+    // detectar cambios de tema, así que mantiene la pregunta actual tal cual.
+    const globalUsesContext = !selectedModuleId && isFollowUp;
     const globalSearch = this.gateway.search({
       ...searchBase,
-      embedding: currentEmbedding,
-      query: question,
+      embedding: globalUsesContext ? contextualEmbedding : currentEmbedding,
+      query: globalUsesContext ? followUpQuery : question,
       retrievalScope,
       selectedModuleId: null,
     });
