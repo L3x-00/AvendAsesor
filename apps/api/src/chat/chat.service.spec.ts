@@ -187,6 +187,24 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'conversational')).toBe(false);
   });
 
+  it('prioritizes the query over the greeting in the client point-11 example', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    const question =
+      'Buenos días, quisiera saber cuánto tiempo tiene un director para responder esta solicitud.';
+
+    const events = await collect(service, { question });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      question,
+      null,
+      expect.any(Array),
+    );
+    expect(events.some((event) => event.type === 'conversational')).toBe(false);
+  });
+
   it('keeps a social turn inside an existing conversation ephemeral', async () => {
     const events = await collect(service, {
       question: 'gracias',
