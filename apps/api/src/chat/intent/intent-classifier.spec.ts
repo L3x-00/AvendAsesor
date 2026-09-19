@@ -106,6 +106,23 @@ describe('classifyTurnIntent', () => {
         },
       );
     });
+
+    it.each([
+      '¿Puedo pedir una comisión de servicios?',
+      '¿Cómo funciona la adjudicación de plazas?',
+      '¿Me corresponde la gratificación de fiestas patrias?',
+      'consulta sobre hostigamiento laboral',
+      '¿procede el abandono de cargo en mi caso?',
+    ])('enruta consultas del régimen educativo a dominio: "%s"', (message) => {
+      expect(classifyTurnIntent(message).lane).toBe('domain');
+    });
+
+    it('un término corto del dominio envuelto en agradecimiento prevalece', () => {
+      expect(classifyTurnIntent('gracias, ¿la papeleta?')).toEqual({
+        lane: 'domain',
+        subtype: 'domain_query',
+      });
+    });
   });
 
   describe('carril fuera de ámbito', () => {

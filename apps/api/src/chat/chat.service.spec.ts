@@ -333,6 +333,45 @@ describe('ChatService', () => {
     });
   });
 
+  it('infers the module from an educational query that names no module (point 3)', async () => {
+    const inferredModule = { id: source.moduleIds[0], name: 'Licencias' };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: inferredModule,
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Respuesta con sustento. [1]';
+      },
+    });
+
+    const events = await collect(service, {
+      question: '¿Quién reemplaza al director cuando está de licencia?',
+      selectedModuleId: null,
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Quién reemplaza al director cuando está de licencia?',
+      null,
+      expect.any(Array),
+    );
+    const conversation = events[0];
+    if (!conversation || conversation.type !== 'conversation') {
+      throw new Error('Expected a conversation event.');
+    }
+    expect(conversation.data.moduleId).toBe(inferredModule.id);
+    expect(conversation.data.startedNewConversation).toBe(true);
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
+  });
+
   it('persists the exact unsupported answer fragment for administrator review', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',

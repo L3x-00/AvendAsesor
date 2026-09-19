@@ -63,6 +63,10 @@ const DOMAIN_PATTERNS: readonly RegExp[] = [
   /\b(ugel|minedu|dre|gerencia regional de educacion|institucion educativa|matricula)\b/u,
   // Acción administrativa típica sobre un cargo
   /\b(reemplaz[ao]|reemplazar|sustituy[eo]|sustituir|encarga(?:r|do|tura)?)\b/u,
+  // Procesos y beneficios adicionales del régimen educativo
+  /\b(designacion|designaciones|adjudicacion|adjudicaciones|cuadro de meritos|comision de servicios?|abandono de (?:cargo|puesto)|gratificacion|gratificaciones|escolaridad|asignacion|sepelio|papeleta)\b/u,
+  // Situaciones, condiciones laborales y sistemas del sector
+  /\b(hostigamiento|acoso|maltrato|interin[oa]s?|provisional(?:es)?|cas|mesa de partes|siagie)\b/u,
 ];
 
 /** Saludos, agradecimientos, despedidas y preguntas de capacidad (puramente sociales). */
