@@ -8,6 +8,11 @@ import { EMBEDDINGS_GATEWAY } from './ingestion.tokens';
 import { OcrService } from './ocr.service';
 import { PdfExtractionService } from './pdf-extraction.service';
 
+/** Tope de páginas sometidas a OCR local por trabajo (acota rasterizado + CPU). */
+const MAX_OCR_PAGES = 40;
+/** Páginas rasterizadas por lote: mantiene pocos PNG en memoria a la vez. */
+const OCR_RENDER_BATCH = 5;
+
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
@@ -32,15 +37,37 @@ export class IngestionService {
         job.storagePath,
       );
       const pages = await this.pdf.extract(file);
-      const sparse = pages
+      const sparsePages = pages
         .filter((page) => page.text.replace(/\s/g, '').length < 50)
         .map((page) => page.pageNumber);
+      // Guardas de memoria para Render Free (512 MB): acotar el nº de páginas
+      // OCR y renderizar en lotes pequeños (no todos los PNG a escala 2 a la
+      // vez), con un único worker Tesseract reutilizado por el job.
+      const sparse = sparsePages.slice(0, MAX_OCR_PAGES);
+      if (sparse.length < sparsePages.length) {
+        this.logger.warn(
+          `OCR local acotado a ${MAX_OCR_PAGES} de ${sparsePages.length} páginas para el job ${job.jobId}.`,
+        );
+      }
       if (sparse.length) {
-        const images = await this.pdf.render(file, sparse);
-        for (const page of pages) {
-          const image = images.get(page.pageNumber);
-          if (image) page.text = await this.ocr.recognize(image);
-        }
+        const pageByNumber = new Map(
+          pages.map((page) => [page.pageNumber, page]),
+        );
+        await this.ocr.withWorker(async (recognize) => {
+          for (
+            let offset = 0;
+            offset < sparse.length;
+            offset += OCR_RENDER_BATCH
+          ) {
+            const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
+            const images = await this.pdf.render(file, batch);
+            for (const pageNumber of batch) {
+              const image = images.get(pageNumber);
+              const page = pageByNumber.get(pageNumber);
+              if (image && page) page.text = await recognize(image);
+            }
+          }
+        });
       }
       const chunks = this.chunking.chunk(pages);
       if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');

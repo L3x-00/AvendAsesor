@@ -46,7 +46,7 @@ describe('IngestionService', () => {
   let gateway: jest.Mocked<IngestionGateway>;
   let embeddings: { embed: jest.Mock };
   let pdf: { extract: jest.Mock; render: jest.Mock };
-  let ocr: { recognize: jest.Mock };
+  let ocr: { withWorker: jest.Mock };
   let chunking: { chunk: jest.Mock };
   let service: IngestionService;
 
@@ -55,7 +55,7 @@ describe('IngestionService', () => {
     gateway = createGateway();
     embeddings = { embed: jest.fn() };
     pdf = { extract: jest.fn(), render: jest.fn() };
-    ocr = { recognize: jest.fn() };
+    ocr = { withWorker: jest.fn() };
     chunking = { chunk: jest.fn() };
     service = new IngestionService(
       gateway,
@@ -121,14 +121,17 @@ describe('IngestionService', () => {
     gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
     pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '  ' }]);
     pdf.render.mockResolvedValue(new Map([[1, Buffer.from('image')]]));
-    ocr.recognize.mockResolvedValue('Texto recuperado por OCR');
+    const recognize = jest.fn().mockResolvedValue('Texto recuperado por OCR');
+    ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
+      run(recognize),
+    );
     chunking.chunk.mockReturnValue([chunk]);
     embeddings.embed.mockResolvedValue([vector()]);
 
     await expect(service.processNext()).resolves.toBe(true);
 
     expect(pdf.render).toHaveBeenCalledWith(expect.any(Buffer), [1]);
-    expect(ocr.recognize).toHaveBeenCalledWith(Buffer.from('image'));
+    expect(recognize).toHaveBeenCalledWith(Buffer.from('image'));
     expect(chunking.chunk).toHaveBeenCalledWith([
       { pageNumber: 1, text: 'Texto recuperado por OCR' },
     ]);
@@ -139,11 +142,45 @@ describe('IngestionService', () => {
     gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
     pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '  ' }]);
     pdf.render.mockResolvedValue(new Map());
+    const recognize = jest.fn();
+    ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
+      run(recognize),
+    );
     chunking.chunk.mockReturnValue([chunk]);
     embeddings.embed.mockResolvedValue([vector()]);
 
     await expect(service.processNext()).resolves.toBe(true);
-    expect(ocr.recognize).not.toHaveBeenCalled();
+    expect(recognize).not.toHaveBeenCalled();
+  });
+
+  it('bounds OCR pages and renders them in small batches (memory guard)', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    pdf.extract.mockResolvedValue(
+      Array.from({ length: 45 }, (_, index) => ({
+        pageNumber: index + 1,
+        text: '  ',
+      })),
+    );
+    pdf.render.mockImplementation((_buffer: Buffer, batch: number[]) =>
+      Promise.resolve(new Map(batch.map((n) => [n, Buffer.from(`img-${n}`)]))),
+    );
+    const recognize = jest.fn().mockResolvedValue('ocr');
+    ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
+      run(recognize),
+    );
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(service.processNext()).resolves.toBe(true);
+
+    // 40 páginas (tope) en lotes de 5 = 8 render; un solo worker Tesseract.
+    expect(ocr.withWorker).toHaveBeenCalledTimes(1);
+    expect(pdf.render).toHaveBeenCalledTimes(8);
+    expect(recognize).toHaveBeenCalledTimes(40);
+    for (const call of pdf.render.mock.calls as Array<[Buffer, number[]]>) {
+      expect(call[1].length).toBeLessThanOrEqual(5);
+    }
   });
 
   it('records empty parsed content as a retryable failure', async () => {
