@@ -651,7 +651,7 @@ describe('ChatService', () => {
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });
 
-  it('caps generated output before it can be persisted', async () => {
+  it('caps generated output gracefully and persists the truncated answer (M6)', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       sources: [source],
@@ -664,10 +664,15 @@ describe('ChatService', () => {
       },
     });
 
-    await expect(collect(service)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-    expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+    const events = await collect(service);
+
+    // Ya no lanza 503: termina en 'done' con la respuesta recortada al tope.
+    expect(events.at(-1)?.type).toBe('done');
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    expect(completion?.answer.length).toBe(MAX_RAG_ANSWER_CHARS);
   });
 
   it('retains only unambiguous source-module associations and bounds scores', async () => {

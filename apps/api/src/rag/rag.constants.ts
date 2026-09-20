@@ -5,6 +5,9 @@ export const RAG_AMBIGUITY_MESSAGE =
   'Encontré información relacionada con más de un tema y quiero orientarte con precisión.';
 
 export const MAX_RAG_ANSWER_CHARS = 20_000;
+/** Tope de tokens de salida del proveedor: acota coste/latencia y mantiene la
+ * respuesta muy por debajo de MAX_RAG_ANSWER_CHARS (evita el corte por longitud). */
+export const MAX_RAG_ANSWER_TOKENS = 1_500;
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;
 export const MAX_CHAT_CONTEXT_CHARS = 10_000;
 export const MAX_CHAT_CONTEXT_MESSAGES = 12;

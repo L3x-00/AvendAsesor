@@ -7,6 +7,7 @@ import {
   buildEvidenceSystemPrompt,
   buildEvidenceUserPrompt,
 } from './prompt.builder';
+import { MAX_RAG_ANSWER_TOKENS } from './rag.constants';
 
 @Injectable()
 export class OpenAiAnswerGateway implements AnswerGateway {
@@ -66,6 +67,7 @@ export class OpenAiAnswerGateway implements AnswerGateway {
         model,
         stream: true,
         temperature: 0,
+        max_tokens: MAX_RAG_ANSWER_TOKENS,
       },
       { signal: input.abortSignal },
     );

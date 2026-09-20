@@ -75,6 +75,7 @@ describe('OpenAiAnswerGateway', () => {
         model: 'gpt-4o-mini',
         stream: true,
         temperature: 0,
+        max_tokens: 1_500,
       }),
       expect.any(Object),
     );
