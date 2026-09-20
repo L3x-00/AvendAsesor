@@ -46,6 +46,7 @@ describe('IngestionService', () => {
   let gateway: jest.Mocked<IngestionGateway>;
   let embeddings: { embed: jest.Mock };
   let pdf: { extract: jest.Mock; render: jest.Mock };
+  let docx: { extract: jest.Mock };
   let ocr: { withWorker: jest.Mock };
   let chunking: { chunk: jest.Mock };
   let service: IngestionService;
@@ -55,12 +56,14 @@ describe('IngestionService', () => {
     gateway = createGateway();
     embeddings = { embed: jest.fn() };
     pdf = { extract: jest.fn(), render: jest.fn() };
+    docx = { extract: jest.fn() };
     ocr = { withWorker: jest.fn() };
     chunking = { chunk: jest.fn() };
     service = new IngestionService(
       gateway,
       embeddings,
       pdf,
+      docx,
       ocr,
       chunking as never,
       { get: jest.fn().mockReturnValue(300) } as never,
@@ -81,6 +84,7 @@ describe('IngestionService', () => {
       defaultGateway,
       embeddings,
       pdf,
+      docx,
       ocr,
       chunking as never,
       { get: jest.fn().mockReturnValue(undefined) } as never,
@@ -114,6 +118,56 @@ describe('IngestionService', () => {
     expect(insertedChunk.embedding).toHaveLength(1536);
     expect(gateway.refreshLease).toHaveBeenCalledWith(job, 300);
     expect(gateway.complete).toHaveBeenCalledWith(job);
+  });
+
+  it('extracts a docx via mammoth without touching the PDF path', async () => {
+    const docxFile = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]);
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(docxFile);
+    docx.extract.mockResolvedValue('Texto del documento Word.');
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(service.processNext()).resolves.toBe(true);
+
+    expect(docx.extract).toHaveBeenCalledWith(docxFile);
+    expect(pdf.extract).not.toHaveBeenCalled();
+    expect(chunking.chunk).toHaveBeenCalledWith([
+      { pageNumber: 1, text: 'Texto del documento Word.' },
+    ]);
+    expect(gateway.complete).toHaveBeenCalledWith(job);
+  });
+
+  it('extracts a markdown file as plain text', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(
+      Buffer.from('# Título\n\nCuerpo normativo.'),
+    );
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(service.processNext()).resolves.toBe(true);
+
+    expect(pdf.extract).not.toHaveBeenCalled();
+    expect(docx.extract).not.toHaveBeenCalled();
+    expect(chunking.chunk).toHaveBeenCalledWith([
+      { pageNumber: 1, text: '# Título\n\nCuerpo normativo.' },
+    ]);
+  });
+
+  it('rejects a legacy .doc (OLE2) as an unsupported format', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(
+      Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+    );
+
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_FAILED',
+      'INGESTION_UNSUPPORTED_FORMAT',
+      true,
+    );
   });
 
   it('uses local OCR only for sparse pages before chunking', async () => {

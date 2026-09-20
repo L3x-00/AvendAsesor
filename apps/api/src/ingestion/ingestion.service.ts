@@ -1,9 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SUPABASE_INGESTION_GATEWAY } from '../supabase/supabase.constants';
-import { ChunkingService } from './chunking.service';
+import { ChunkingService, type ExtractedPage } from './chunking.service';
+import { DocxExtractionService } from './docx-extraction.service';
+import { detectIngestionFormat, type IngestionFormat } from './document-format';
 import type { EmbeddingsGateway } from './embeddings.gateway';
-import type { IngestionGateway } from './ingestion.gateway';
+import type {
+  ClaimedIngestionJob,
+  IngestionGateway,
+} from './ingestion.gateway';
 import { EMBEDDINGS_GATEWAY } from './ingestion.tokens';
 import { OcrService } from './ocr.service';
 import { PdfExtractionService } from './pdf-extraction.service';
@@ -21,6 +26,7 @@ export class IngestionService {
     private readonly gateway: IngestionGateway,
     @Inject(EMBEDDINGS_GATEWAY) private readonly embeddings: EmbeddingsGateway,
     private readonly pdf: PdfExtractionService,
+    private readonly docx: DocxExtractionService,
     private readonly ocr: OcrService,
     private readonly chunking: ChunkingService,
     private readonly config: ConfigService,
@@ -36,39 +42,11 @@ export class IngestionService {
         job.storageBucket,
         job.storagePath,
       );
-      const pages = await this.pdf.extract(file);
-      const sparsePages = pages
-        .filter((page) => page.text.replace(/\s/g, '').length < 50)
-        .map((page) => page.pageNumber);
-      // Guardas de memoria para Render Free (512 MB): acotar el nº de páginas
-      // OCR y renderizar en lotes pequeños (no todos los PNG a escala 2 a la
-      // vez), con un único worker Tesseract reutilizado por el job.
-      const sparse = sparsePages.slice(0, MAX_OCR_PAGES);
-      if (sparse.length < sparsePages.length) {
-        this.logger.warn(
-          `OCR local acotado a ${MAX_OCR_PAGES} de ${sparsePages.length} páginas para el job ${job.jobId}.`,
-        );
-      }
-      if (sparse.length) {
-        const pageByNumber = new Map(
-          pages.map((page) => [page.pageNumber, page]),
-        );
-        await this.ocr.withWorker(async (recognize) => {
-          for (
-            let offset = 0;
-            offset < sparse.length;
-            offset += OCR_RENDER_BATCH
-          ) {
-            const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
-            const images = await this.pdf.render(file, batch);
-            for (const pageNumber of batch) {
-              const image = images.get(pageNumber);
-              const page = pageByNumber.get(pageNumber);
-              if (image && page) page.text = await recognize(image);
-            }
-          }
-        });
-      }
+      const pages = await this.extractPages(
+        detectIngestionFormat(file),
+        file,
+        job,
+      );
       const chunks = this.chunking.chunk(pages);
       if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');
       const vectors = await this.embeddings.embed(
@@ -112,5 +90,58 @@ export class IngestionService {
       this.logger.error(`Document ingestion failed for job ${job.jobId}.`);
       return false;
     }
+  }
+
+  private async extractPages(
+    format: IngestionFormat,
+    file: Buffer,
+    job: ClaimedIngestionJob,
+  ): Promise<ExtractedPage[]> {
+    if (format === 'docx') {
+      return [{ pageNumber: 1, text: await this.docx.extract(file) }];
+    }
+    if (format === 'md') {
+      return [{ pageNumber: 1, text: file.toString('utf8').trim() }];
+    }
+    if (format === 'doc') {
+      // .doc heredado (OLE2) no tiene extractor: se rechaza de forma explícita
+      // en vez de intentar parsearlo como PDF y fallar de forma opaca.
+      throw new Error('INGESTION_UNSUPPORTED_FORMAT');
+    }
+
+    // PDF: extracción por página + OCR local de páginas casi vacías, con guardas
+    // de memoria para Render Free (512 MB): tope de páginas, lotes de render y un
+    // único worker Tesseract reutilizado por trabajo.
+    const pages = await this.pdf.extract(file);
+    const sparsePages = pages
+      .filter((page) => page.text.replace(/\s/g, '').length < 50)
+      .map((page) => page.pageNumber);
+    const sparse = sparsePages.slice(0, MAX_OCR_PAGES);
+    if (sparse.length < sparsePages.length) {
+      this.logger.warn(
+        `OCR local acotado a ${MAX_OCR_PAGES} de ${sparsePages.length} páginas para el job ${job.jobId}.`,
+      );
+    }
+    if (sparse.length) {
+      const pageByNumber = new Map(
+        pages.map((page) => [page.pageNumber, page]),
+      );
+      await this.ocr.withWorker(async (recognize) => {
+        for (
+          let offset = 0;
+          offset < sparse.length;
+          offset += OCR_RENDER_BATCH
+        ) {
+          const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
+          const images = await this.pdf.render(file, batch);
+          for (const pageNumber of batch) {
+            const image = images.get(pageNumber);
+            const page = pageByNumber.get(pageNumber);
+            if (image && page) page.text = await recognize(image);
+          }
+        }
+      });
+    }
+    return pages;
   }
 }
