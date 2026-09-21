@@ -96,7 +96,7 @@ describe('IngestionService', () => {
 
   it('ingests extracted PDF text, stores vectors and completes the leased job', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([
       {
         pageNumber: 1,
@@ -170,9 +170,27 @@ describe('IngestionService', () => {
     );
   });
 
+  it('fails closed when a misclassified binary would fall to the markdown path', async () => {
+    // Bytes binarios (con NUL) que no son PDF/PK/OLE2 caen al caso 'md'. NO deben
+    // decodificarse como texto e indexarse como basura en el índice evidence-only.
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(
+      Buffer.from([0x00, 0x01, 0x02, 0x03]),
+    );
+
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(chunking.chunk).not.toHaveBeenCalled();
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_FAILED',
+      'INGESTION_UNSUPPORTED_FORMAT',
+      true,
+    );
+  });
+
   it('uses local OCR only for sparse pages before chunking', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '  ' }]);
     pdf.render.mockResolvedValue(new Map([[1, Buffer.from('image')]]));
     const recognize = jest.fn().mockResolvedValue('Texto recuperado por OCR');
@@ -193,7 +211,7 @@ describe('IngestionService', () => {
 
   it('keeps a sparse page unchanged when local rendering does not return it', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '  ' }]);
     pdf.render.mockResolvedValue(new Map());
     const recognize = jest.fn();
@@ -209,7 +227,7 @@ describe('IngestionService', () => {
 
   it('bounds OCR pages and renders them in small batches (memory guard)', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue(
       Array.from({ length: 45 }, (_, index) => ({
         pageNumber: index + 1,
@@ -239,7 +257,7 @@ describe('IngestionService', () => {
 
   it('records empty parsed content as a retryable failure', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([
       {
         pageNumber: 1,
@@ -265,7 +283,7 @@ describe('IngestionService', () => {
       chunkIndex,
     }));
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([
       {
         pageNumber: 1,
@@ -285,7 +303,7 @@ describe('IngestionService', () => {
 
   it('marks the job as retryable when extraction or vectors are invalid', async () => {
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF'));
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([
       {
         pageNumber: 1,

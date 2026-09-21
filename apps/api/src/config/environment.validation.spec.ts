@@ -89,7 +89,7 @@ describe('validateEnvironment', () => {
     );
   });
 
-  it('accepts the ingestion worker when a provider key is present', () => {
+  it('accepts the ingestion worker when OPENROUTER_API_KEY is present', () => {
     expect(
       validateEnvironment({
         RAG_INGESTION_WORKER_ENABLED: 'true',
@@ -98,6 +98,21 @@ describe('validateEnvironment', () => {
     ).toMatchObject({
       RAG_INGESTION_WORKER_ENABLED: true,
       OPENROUTER_API_KEY: 'sk-or-test-key',
+    });
+  });
+
+  // Rama documentada: sin OpenRouter se usa OPENAI_API_KEY directo. La guarda H2
+  // acepta CUALQUIERA de las dos claves; esta rama antes no se probaba, así que
+  // una regresión que exigiera OPENROUTER específicamente pasaba verde.
+  it('accepts the ingestion worker when only OPENAI_API_KEY is present', () => {
+    expect(
+      validateEnvironment({
+        RAG_INGESTION_WORKER_ENABLED: 'true',
+        OPENAI_API_KEY: 'sk-openai-test-key',
+      }),
+    ).toMatchObject({
+      RAG_INGESTION_WORKER_ENABLED: true,
+      OPENAI_API_KEY: 'sk-openai-test-key',
     });
   });
 });

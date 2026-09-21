@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { SUPABASE_INGESTION_GATEWAY } from '../supabase/supabase.constants';
 import { ChunkingService, type ExtractedPage } from './chunking.service';
 import { DocxExtractionService } from './docx-extraction.service';
-import { detectIngestionFormat, type IngestionFormat } from './document-format';
+import {
+  detectIngestionFormat,
+  isProbablyText,
+  MAX_EXTRACTED_CHARS,
+  type IngestionFormat,
+} from './document-format';
 import type { EmbeddingsGateway } from './embeddings.gateway';
 import type {
   ClaimedIngestionJob,
@@ -101,7 +106,16 @@ export class IngestionService {
       return [{ pageNumber: 1, text: await this.docx.extract(file) }];
     }
     if (format === 'md') {
-      return [{ pageNumber: 1, text: file.toString('utf8').trim() }];
+      // Fail-closed: un binario mal clasificado como 'md' NO debe decodificarse
+      // como texto e indexarse como basura en el índice evidence-only.
+      if (!isProbablyText(file)) {
+        throw new Error('INGESTION_UNSUPPORTED_FORMAT');
+      }
+      const text = file.toString('utf8').trim();
+      if (text.length > MAX_EXTRACTED_CHARS) {
+        throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
+      }
+      return [{ pageNumber: 1, text }];
     }
     if (format === 'doc') {
       // .doc heredado (OLE2) no tiene extractor: se rechaza de forma explícita
