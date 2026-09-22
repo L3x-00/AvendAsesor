@@ -651,7 +651,7 @@ describe('ChatService', () => {
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });
 
-  it('caps generated output before it can be persisted', async () => {
+  it('caps generated output gracefully and persists the truncated answer (M6)', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       sources: [source],
@@ -664,10 +664,55 @@ describe('ChatService', () => {
       },
     });
 
-    await expect(collect(service)).rejects.toBeInstanceOf(
-      ServiceUnavailableException,
-    );
-    expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+    const events = await collect(service);
+
+    // Ya no lanza 503: termina en 'done' con la respuesta recortada al tope.
+    expect(events.at(-1)?.type).toBe('done');
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    expect(completion?.answer.length).toBe(MAX_RAG_ANSWER_CHARS);
+  });
+
+  it('truncates the token that straddles the cap and keeps stream and persistence consistent (M6)', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    let pulled = 0;
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        pulled += 1;
+        yield 'a'.repeat(MAX_RAG_ANSWER_CHARS - 10);
+        pulled += 1;
+        yield 'b'.repeat(100); // cruza el tope: solo caben 10, luego se corta
+        pulled += 1;
+        yield 'c'.repeat(50); // no debe emitirse: el bucle se corta antes
+      },
+    });
+
+    const events = await collect(service);
+
+    expect(events.at(-1)?.type).toBe('done');
+    const streamed = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    // El tope se aplica al token que cruza el límite, no solo a uno gigante.
+    expect(completion?.answer.length).toBe(MAX_RAG_ANSWER_CHARS);
+    // Lo transmitido al cliente coincide EXACTAMENTE con lo persistido.
+    expect(streamed).toBe(completion?.answer);
+    // Tras cruzar el tope se corta el bucle: el token posterior no se transmite
+    // y el generador ni siquiera se consume más allá del token que cruzó.
+    expect(streamed).not.toContain('c');
+    expect(pulled).toBe(2);
   });
 
   it('retains only unambiguous source-module associations and bounds scores', async () => {

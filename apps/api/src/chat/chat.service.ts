@@ -668,13 +668,17 @@ export class ChatService {
     })) {
       if (input.abortSignal?.aborted) return;
 
-      answer += token;
-      if (answer.length > MAX_RAG_ANSWER_CHARS) {
-        throw new ServiceUnavailableException(
-          'The generated answer is too long.',
-        );
+      // Truncado con gracia (M6): al llegar al tope de longitud cerramos el
+      // turno con lo generado, sin lanzar 503 a mitad del stream. `max_tokens`
+      // en el proveedor hace que este tope casi nunca se alcance.
+      const remaining = MAX_RAG_ANSWER_CHARS - answer.length;
+      const piece =
+        token.length > remaining ? token.slice(0, remaining) : token;
+      if (piece) {
+        answer += piece;
+        yield { data: { text: piece }, type: 'token' };
       }
-      yield { data: { text: token }, type: 'token' };
+      if (token.length > remaining) break;
     }
 
     if (input.abortSignal?.aborted) return;

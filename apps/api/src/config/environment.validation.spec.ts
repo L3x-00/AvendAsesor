@@ -80,9 +80,39 @@ describe('validateEnvironment', () => {
     { CHAT_HISTORY_LIMIT: '51' },
     { RAG_ANSWER_MODEL: ' ' },
     { FAQ_MEMORY_FINGERPRINT_SECRET: 'short' },
+    // Worker de ingesta encendido sin ninguna clave de proveedor (H2): fallo
+    // de arranque explícito en vez de fallar cada job silenciosamente.
+    { RAG_INGESTION_WORKER_ENABLED: 'true' },
   ])('rejects an unsafe configuration: %o', (configuration) => {
     expect(() => validateEnvironment(configuration)).toThrow(
       'Invalid environment configuration.',
     );
+  });
+
+  it('accepts the ingestion worker when OPENROUTER_API_KEY is present', () => {
+    expect(
+      validateEnvironment({
+        RAG_INGESTION_WORKER_ENABLED: 'true',
+        OPENROUTER_API_KEY: 'sk-or-test-key',
+      }),
+    ).toMatchObject({
+      RAG_INGESTION_WORKER_ENABLED: true,
+      OPENROUTER_API_KEY: 'sk-or-test-key',
+    });
+  });
+
+  // Rama documentada: sin OpenRouter se usa OPENAI_API_KEY directo. La guarda H2
+  // acepta CUALQUIERA de las dos claves; esta rama antes no se probaba, así que
+  // una regresión que exigiera OPENROUTER específicamente pasaba verde.
+  it('accepts the ingestion worker when only OPENAI_API_KEY is present', () => {
+    expect(
+      validateEnvironment({
+        RAG_INGESTION_WORKER_ENABLED: 'true',
+        OPENAI_API_KEY: 'sk-openai-test-key',
+      }),
+    ).toMatchObject({
+      RAG_INGESTION_WORKER_ENABLED: true,
+      OPENAI_API_KEY: 'sk-openai-test-key',
+    });
   });
 });

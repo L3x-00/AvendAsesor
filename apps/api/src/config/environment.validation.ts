@@ -73,6 +73,19 @@ const environmentSchema = z
         path: ['WEB_ORIGIN'],
       });
     }
+
+    if (
+      environment.RAG_INGESTION_WORKER_ENABLED &&
+      !environment.OPENROUTER_API_KEY &&
+      !environment.OPENAI_API_KEY
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'RAG_INGESTION_WORKER_ENABLED requires OPENROUTER_API_KEY or OPENAI_API_KEY.',
+        path: ['RAG_INGESTION_WORKER_ENABLED'],
+      });
+    }
   })
   .passthrough();
 
