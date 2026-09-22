@@ -1,4 +1,5 @@
 import { revalidatePath, updateTag } from "next/cache";
+import { redirect } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminApiError } from "@/lib/admin-api/client";
 import { createAuthorizedAdminApiClient } from "@/lib/admin-api/authorized-client";
@@ -18,6 +19,13 @@ import {
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   updateTag: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn((url: string) => {
+    // Reproduce el comportamiento real: `redirect()` corta el flujo lanzando.
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
 }));
 
 vi.mock("@/lib/admin-api/authorized-client", () => ({
@@ -171,20 +179,38 @@ describe("admin server actions", () => {
     expect(state.status).toBe("success");
   });
 
-  it("invalidates the teacher module catalog after a successful logical deletion", async () => {
+  it("redirects to the parent and invalidates the catalog after a successful logical deletion", async () => {
     client.deleteModule.mockResolvedValue({});
     const formData = new FormData();
     formData.set("moduleId", "module-id");
     formData.set("reason", "Catálogo retirado");
+    formData.set("redirectTo", "/admin/modules/parent-id");
 
-    const state = await deleteModuleAction(initialState, formData);
+    // Al borrar sale de la ruta del módulo eliminado (evita el 404); el redirect
+    // corta el flujo lanzando, por eso la acción no devuelve estado.
+    await expect(
+      deleteModuleAction(initialState, formData),
+    ).rejects.toThrow("NEXT_REDIRECT:/admin/modules/parent-id");
 
     expect(client.deleteModule).toHaveBeenCalledWith(
       "module-id",
       "Catálogo retirado",
     );
     expect(updateTag).toHaveBeenCalledWith("chat-modules");
-    expect(state.status).toBe("success");
+    expect(redirect).toHaveBeenCalledWith("/admin/modules/parent-id");
+  });
+
+  it("falls back to the module list when the redirect target is not an admin modules path", async () => {
+    client.deleteModule.mockResolvedValue({});
+    const formData = new FormData();
+    formData.set("moduleId", "module-id");
+    formData.set("reason", "Catálogo retirado");
+    formData.set("redirectTo", "https://evil.example/phishing");
+
+    await expect(
+      deleteModuleAction(initialState, formData),
+    ).rejects.toThrow("NEXT_REDIRECT:/admin/modules");
+    expect(redirect).toHaveBeenCalledWith("/admin/modules");
   });
 
   it("does not invalidate the teacher catalog after rejected module mutations", async () => {
