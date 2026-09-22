@@ -217,7 +217,7 @@ describe("ModulesExplorer", () => {
     const user = userEvent.setup();
     const { container } = render(
       <ModuleManageDetails
-        module={rootModules[0]}
+        module={{ ...rootModules[0], submoduleCount: 0 }}
         parents={parents}
         summary="Editar, ordenar o cambiar estado"
       />,
@@ -242,5 +242,24 @@ describe("ModulesExplorer", () => {
     await user.type(screen.getByLabelText(/Motivo de desactivación/), "probado");
     await waitFor(() => expect(screen.getByLabelText(/Motivo de desactivación/)).not.toHaveAttribute("aria-invalid"));
     expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("blocks deleting a module that still has submodules and says why", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModuleManageDetails
+        module={rootModules[0]}
+        parents={parents}
+        summary="Editar, ordenar o cambiar estado"
+      />,
+    );
+    await user.click(screen.getByText("Editar, ordenar o cambiar estado"));
+
+    expect(
+      screen.queryByRole("button", { name: "Eliminar (lógico)" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Elimina primero sus submódulos/i),
+    ).toBeVisible();
   });
 });

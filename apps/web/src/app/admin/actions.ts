@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, updateTag } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   accessExpiryInstant,
   accessStartInstant,
@@ -344,7 +345,8 @@ export async function deleteModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(
+  const requestedRedirect = optionalText(formData, "redirectTo");
+  const result = await withApi(
     async (client) => {
       const moduleId = requiredText(formData, "moduleId", "El módulo");
       const reason = requiredText(formData, "reason", "El motivo de baja");
@@ -357,6 +359,21 @@ export async function deleteModuleAction(
     },
     { requireModulesAccess: true },
   );
+
+  // Tras el borrado hay que SALIR de la ruta del módulo recién eliminado: al
+  // padre si era submódulo, al listado si era módulo principal. Sin esto la ruta
+  // `/admin/modules/[moduleId]` revalida sin el módulo y cae en 404 o en el
+  // boundary de error. El redirect va fuera del try/catch de `withApi` porque
+  // `redirect()` lanza NEXT_REDIRECT y allí se confundiría con un fallo.
+  if (result.status === "success") {
+    const target =
+      requestedRedirect && requestedRedirect.startsWith("/admin/modules")
+        ? requestedRedirect
+        : "/admin/modules";
+    redirect(target);
+  }
+
+  return result;
 }
 
 export async function updateDocumentAction(

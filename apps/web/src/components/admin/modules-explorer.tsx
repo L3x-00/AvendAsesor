@@ -241,29 +241,48 @@ export function ModuleManageDetails({
             ) : null}
           </AdminActionForm>
 
-          <AdminActionForm
-            action={deleteModuleAction}
-            rules={MODULE_REASON_RULES}
-            submitLabel="Eliminar (lógico)"
-            onSuccess={closeForm}
-          >
-            <input name="moduleId" type="hidden" value={module.id} />
-            <label
-              className={styles.fieldLabel}
-              htmlFor={`${fieldId}-delete-reason`}
+          {module.submoduleCount > 0 ? (
+            <p className={styles.presetParent} role="note">
+              Este módulo tiene {module.submoduleCount}{" "}
+              {submoduleWord(module.submoduleCount)}. Elimina primero sus
+              submódulos para poder eliminar el módulo.
+            </p>
+          ) : (
+            <AdminActionForm
+              action={deleteModuleAction}
+              rules={MODULE_REASON_RULES}
+              submitLabel="Eliminar (lógico)"
+              onSuccess={closeForm}
             >
-              Motivo de baja
+              <input name="moduleId" type="hidden" value={module.id} />
+              {/* Tras el borrado, el servidor redirige aquí para no quedar en la
+                  ruta del módulo eliminado (que daría 404). */}
               <input
-                className={styles.input}
-                id={`${fieldId}-delete-reason`}
-                maxLength={500}
-                minLength={2}
-                name="reason"
-                required
+                name="redirectTo"
+                type="hidden"
+                value={
+                  module.parentModuleId
+                    ? `/admin/modules/${module.parentModuleId}`
+                    : "/admin/modules"
+                }
               />
-              <FieldError name="reason" />
-            </label>
-          </AdminActionForm>
+              <label
+                className={styles.fieldLabel}
+                htmlFor={`${fieldId}-delete-reason`}
+              >
+                Motivo de baja
+                <input
+                  className={styles.input}
+                  id={`${fieldId}-delete-reason`}
+                  maxLength={500}
+                  minLength={2}
+                  name="reason"
+                  required
+                />
+                <FieldError name="reason" />
+              </label>
+            </AdminActionForm>
+          )}
         </div>
       </div>
     </details>
