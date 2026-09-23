@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RAG_DEFAULT_MATCH_THRESHOLD } from '../rag/rag.constants';
 import { SUPABASE_RAG_READINESS_GATEWAY } from '../supabase/supabase.constants';
 import type {
   RagIngestionCounts,
@@ -61,7 +62,9 @@ export class RagReadinessService {
         this.config.get<string>('RAG_EMBEDDING_MODEL') ??
         'text-embedding-3-small',
       answerModel: this.config.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini',
-      matchThreshold: this.config.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7,
+      matchThreshold:
+        this.config.get<number>('RAG_MATCH_THRESHOLD') ??
+        RAG_DEFAULT_MATCH_THRESHOLD,
       counts,
       ready: workerEnabled && provider !== 'none' && counts !== null,
     };

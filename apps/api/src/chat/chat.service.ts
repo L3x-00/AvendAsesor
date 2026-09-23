@@ -13,6 +13,7 @@ import {
   MAX_CHAT_CONTEXT_MESSAGES,
   MAX_RAG_ANSWER_CHARS,
   RAG_AMBIGUITY_MESSAGE,
+  RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
 import {
@@ -697,7 +698,9 @@ export class ChatService {
     const qualitySignals = new Set<string>(citationQuality.signals);
     if (
       retrieval.topRelevanceScore <
-      (this.configService.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7) + 0.05
+      (this.configService.get<number>('RAG_MATCH_THRESHOLD') ??
+        RAG_DEFAULT_MATCH_THRESHOLD) +
+        0.05
     ) {
       qualitySignals.add('low_confidence');
     }

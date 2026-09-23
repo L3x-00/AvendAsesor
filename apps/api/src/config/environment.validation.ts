@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RAG_DEFAULT_MATCH_THRESHOLD } from '../rag/rag.constants';
 
 const webOriginSchema = z
   .string()
@@ -42,7 +43,11 @@ const environmentSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     RAG_MATCH_COUNT: z.coerce.number().int().min(1).max(10).default(5),
-    RAG_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
+    RAG_MATCH_THRESHOLD: z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .default(RAG_DEFAULT_MATCH_THRESHOLD),
     RAG_EMBEDDING_MODEL: z
       .string()
       .trim()

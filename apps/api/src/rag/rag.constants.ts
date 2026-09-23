@@ -13,3 +13,13 @@ export const MAX_CHAT_CONTEXT_CHARS = 10_000;
 export const MAX_CHAT_CONTEXT_MESSAGES = 12;
 export const MAX_CONTEXT_MESSAGE_CHARS = 2_000;
 export const RAG_TOPIC_SWITCH_SCORE_MARGIN = 0.08;
+/**
+ * Umbral de similitud coseno por defecto, calibrado con el corpus real de
+ * producción (2026-09-23, text-embedding-3-small): las consultas con sustento
+ * puntuaron 0.57–0.76 y las que no tienen documento (destaque, reasignación,
+ * inasistencia de auxiliar, reemplazo del director) 0.33–0.45. Con el valor
+ * anterior (0.70) casi toda consulta real caía en «sin evidencia». Los falsos
+ * positivos por encima del umbral los contiene la marca de «sin sustento» que
+ * emite el modelo. Se ajusta con `RAG_MATCH_THRESHOLD` sin desplegar código.
+ */
+export const RAG_DEFAULT_MATCH_THRESHOLD = 0.5;

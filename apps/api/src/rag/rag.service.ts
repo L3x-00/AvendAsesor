@@ -5,6 +5,7 @@ import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
 import {
   MAX_CHAT_CONTEXT_CHARS,
+  RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_TOPIC_SWITCH_SCORE_MARGIN,
 } from './rag.constants';
 import type {
@@ -325,7 +326,9 @@ export class RagService {
 
     const searchBase = {
       matchCount: this.config.get<number>('RAG_MATCH_COUNT') ?? 5,
-      matchThreshold: this.config.get<number>('RAG_MATCH_THRESHOLD') ?? 0.7,
+      matchThreshold:
+        this.config.get<number>('RAG_MATCH_THRESHOLD') ??
+        RAG_DEFAULT_MATCH_THRESHOLD,
     };
     // Sin módulo seleccionado, la búsqueda global es la recuperación principal:
     // un seguimiento ("¿y el plazo?") debe conservar el tema, por lo que usa la

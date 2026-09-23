@@ -70,7 +70,7 @@ describe('RagReadinessService', () => {
       ready: false,
       embeddingModel: 'text-embedding-3-small',
       answerModel: 'gpt-4o-mini',
-      matchThreshold: 0.7,
+      matchThreshold: 0.5,
     });
   });
 });

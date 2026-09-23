@@ -11,7 +11,7 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_LEASE_SECONDS: 300,
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
-      RAG_MATCH_THRESHOLD: 0.7,
+      RAG_MATCH_THRESHOLD: 0.5,
       WEB_ORIGIN: 'http://localhost:3000',
     });
   });
@@ -32,7 +32,7 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_LEASE_SECONDS: 300,
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
-      RAG_MATCH_THRESHOLD: 0.7,
+      RAG_MATCH_THRESHOLD: 0.5,
       WEB_ORIGIN: 'http://localhost:3100',
     });
   });
