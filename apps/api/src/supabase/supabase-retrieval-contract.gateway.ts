@@ -50,8 +50,11 @@ export class SupabaseRetrievalContractGatewayAdapter implements RetrievalContrac
       };
     }
 
-    // Vector unitario (no nulo, para no indefinir la distancia coseno) + umbral
-    // imposible: la RPC no devuelve filas, solo confirma que existe y es invocable.
+    // Argumentos VÁLIDOS pero inocuos: la RPC valida su entrada (texto 1..8000,
+    // umbral en [0,1]) y lanza 22023 si no se cumplen, así que el probe debe
+    // pasar esa guarda. Vector unitario (no nulo, para no indefinir el coseno),
+    // texto mínimo no vacío y umbral 1: la RPC ejecuta y no devuelve filas (nada
+    // puntúa >= 1 contra este vector), confirmando solo que existe y es invocable.
     const embedding = new Array<number>(1536).fill(0);
     embedding[0] = 1;
 
@@ -59,9 +62,9 @@ export class SupabaseRetrievalContractGatewayAdapter implements RetrievalContrac
       const { error } = await (client as unknown as ProbeableClient)
         .rpc(RETRIEVAL_RPC_NAME, {
           p_query_embedding: embedding,
-          p_query_text: '',
+          p_query_text: 'probe',
           p_selected_module_id: null,
-          p_match_threshold: 2,
+          p_match_threshold: 1,
           p_match_count: 1,
           p_retrieval_scope: 'current',
         })

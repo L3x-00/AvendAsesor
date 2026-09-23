@@ -18,8 +18,11 @@ function latestFunctionParamBlock(fnName: string): string | null {
   let block: string | null = null;
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+    // Ancla en `create [or replace] function`, no en el `function` de
+    // `revoke/grant ... on function ...(<tipos>)`, que no lleva nombres de
+    // parámetros y podría capturar un bloque espurio.
     const pattern = new RegExp(
-      `function\\s+public\\.${fnName}\\s*\\(([\\s\\S]*?)\\)\\s*returns`,
+      `create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.${fnName}\\s*\\(([\\s\\S]*?)\\)\\s*returns`,
       'gi',
     );
     let match: RegExpExecArray | null;
@@ -40,5 +43,9 @@ describe('contrato de la RPC de retrieval (M7)', () => {
       // en CI antes de desplegar (en vez de un 503 silencioso en producción).
       expect(params).toContain(argument);
     }
+    // La dimensión del embedding es parte del contrato: el gateway envía un
+    // number[] de 1536; un cambio de modelo que altere la dimensión rompería el
+    // runtime aunque los nombres de argumentos no cambien.
+    expect(params).toMatch(/vector\s*\(\s*1536\s*\)/i);
   });
 });
