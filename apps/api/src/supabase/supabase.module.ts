@@ -13,6 +13,7 @@ import {
   SUPABASE_MODULE_PERMISSIONS_GATEWAY,
   SUPABASE_OPERATIONS_GATEWAY,
   SUPABASE_PROFILES_GATEWAY,
+  SUPABASE_RAG_READINESS_GATEWAY,
   SUPABASE_RETRIEVAL_GATEWAY,
   SUPABASE_SERVER_CLIENT,
   SUPABASE_USER_ADMINISTRATION_GATEWAY,
@@ -29,6 +30,7 @@ import { SupabaseModulesGatewayAdapter } from './supabase-modules.gateway';
 import { SupabaseModulePermissionsGatewayAdapter } from './supabase-module-permissions.gateway';
 import { SupabaseOperationsGatewayAdapter } from './supabase-operations.gateway';
 import { SupabaseProfilesGatewayAdapter } from './supabase-profiles.gateway';
+import { SupabaseRagReadinessGatewayAdapter } from './supabase-rag-readiness.gateway';
 import { SupabaseRetrievalGatewayAdapter } from './supabase-retrieval.gateway';
 import { SupabaseUserAdministrationGatewayAdapter } from './supabase-user-administration.gateway';
 import {
@@ -151,6 +153,12 @@ import {
       useFactory: (client: SupabaseServerClient | null) =>
         new SupabaseUserAdministrationGatewayAdapter(client),
     },
+    {
+      provide: SUPABASE_RAG_READINESS_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseRagReadinessGatewayAdapter(client),
+    },
   ],
   exports: [
     SUPABASE_ADMIN_DASHBOARD_GATEWAY,
@@ -165,6 +173,7 @@ import {
     SUPABASE_MODULE_PERMISSIONS_GATEWAY,
     SUPABASE_OPERATIONS_GATEWAY,
     SUPABASE_PROFILES_GATEWAY,
+    SUPABASE_RAG_READINESS_GATEWAY,
     SUPABASE_RETRIEVAL_GATEWAY,
     SUPABASE_USER_ADMINISTRATION_GATEWAY,
   ],
