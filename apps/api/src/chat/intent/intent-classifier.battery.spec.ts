@@ -1,4 +1,8 @@
-import { classifyTurnIntent } from './intent-classifier';
+import {
+  announcesNewTopic,
+  classifyTurnIntent,
+  hasEducationalSignal,
+} from './intent-classifier';
 
 /**
  * Batería de aceptación del clasificador (Hito 3, puntos 1, 2, 3, 10 y 11),
@@ -213,4 +217,30 @@ describe('classifyTurnIntent — batería de aceptación', () => {
       );
     },
   );
+});
+
+describe('announcesNewTopic', () => {
+  it.each([
+    'otra consulta: ¿cuántos días de vacaciones tengo?',
+    'Cambiando de tema, ¿cómo pido mi CTS?',
+    'Ahora quiero saber sobre la permuta',
+  ])('detecta el cambio de tema explícito: "%s"', (message) => {
+    expect(announcesNewTopic(message)).toBe(true);
+  });
+
+  it.each(['¿Y cuál es el plazo?', '¿y para una permuta?', 'gracias'])(
+    'un seguimiento no es un cambio de tema anunciado: "%s"',
+    (message) => {
+      expect(announcesNewTopic(message)).toBe(false);
+    },
+  );
+});
+
+describe('hasEducationalSignal', () => {
+  it('distingue una consulta del ámbito de un pedido sin relación aparente', () => {
+    expect(hasEducationalSignal('¿qué es el CNEB?')).toBe(true);
+    expect(
+      hasEducationalSignal('¿cuál es la mejor época para sembrar papa?'),
+    ).toBe(false);
+  });
 });

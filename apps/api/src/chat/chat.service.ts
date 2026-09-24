@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
+import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CHAT_CONTEXT_MESSAGES,
@@ -38,8 +39,22 @@ import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
 } from './chat-history-cursor';
-import { buildConversationalReply } from './intent/conversational-replies';
-import { classifyTurnIntent } from './intent/intent-classifier';
+import {
+  buildConversationalReply,
+  type ConversationalReplyKind,
+} from './intent/conversational-replies';
+import {
+  announcesNewTopic,
+  classifyTurnIntent,
+  hasEducationalSignal,
+} from './intent/intent-classifier';
+
+/** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
+export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
+
+/** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
+export const RAG_TRUNCATION_NOTE =
+  '(La respuesta se acortó por su extensión. Si necesitas más detalle, pregúntame por un punto específico).';
 
 export interface ChatSource {
   articleReference: string | null;
@@ -166,6 +181,22 @@ function sourceSupportsClaim(claim: string, source: RetrievedChunk): boolean {
 }
 
 /**
+ * Cifras de la afirmación (días, plazos, N.° de ley o artículo) que no figuran en
+ * ninguna fuente citada: señal de que el modelo pudo completar de memoria. Solo
+ * marca el caso para revisión humana; no decide la verdad jurídica.
+ */
+function claimNumbersAppearInSources(
+  claim: string,
+  citedSources: RetrievedChunk[],
+): boolean {
+  const numbers =
+    claim.replace(CITATION_PATTERN, ' ').match(/\d+(?:[.,]\d+)*/gu) ?? [];
+  return numbers.every((number) =>
+    citedSources.some((source) => source.chunkContent.includes(number)),
+  );
+}
+
+/**
  * A deterministic post-generation control complements the evidence-only
  * prompt. It cannot decide legal truth, so it flags a case for human review
  * whenever a substantive claim lacks a source marker or its cited evidence has
@@ -211,7 +242,8 @@ export function evaluateAnswerCitationQualityDetails(
       .filter((source): source is RetrievedChunk => Boolean(source));
     if (
       citedSources.length !== citationIndexes.length ||
-      !citedSources.some((source) => sourceSupportsClaim(claim, source))
+      !citedSources.some((source) => sourceSupportsClaim(claim, source)) ||
+      !claimNumbersAppearInSources(claim, citedSources)
     ) {
       signals.add('citation_insufficient');
       excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
@@ -267,6 +299,26 @@ function selectCitationModule(
   return source.moduleIds.length === 1 ? (source.moduleIds[0] ?? null) : null;
 }
 
+/**
+ * Nombre del módulo con el que se guarda la cita. Antes la fuente en vivo decía
+ * «No especificado» cuando el documento tenía varios módulos, y el historial
+ * mostraba el módulo guardado: la misma fuente cambiaba de «Proceso».
+ */
+function citationModuleName(
+  source: RetrievedChunk,
+  moduleId: string | null,
+): string | null {
+  if (!moduleId) return null;
+  for (const association of source.moduleAssociations ?? []) {
+    if (association.submoduleId === moduleId) return association.submoduleName;
+    if (association.rootModuleId === moduleId) {
+      return association.rootModuleName;
+    }
+  }
+  const index = source.moduleIds.indexOf(moduleId);
+  return index >= 0 ? (source.moduleNames[index] ?? null) : null;
+}
+
 function toCitationBundle(
   retrieved: RetrievedChunk[],
   selectedModuleId: string | null,
@@ -279,13 +331,14 @@ function toCitationBundle(
   retrieved.forEach((source, index) => {
     const sourceId = randomUUID();
     const relevanceScore = clampScore(source.semanticScore);
+    const citationModuleId = selectCitationModule(
+      source,
+      selectedModuleId,
+      relatedSubmodule?.id ?? null,
+    );
     inputs.push({
       chunkId: source.chunkId,
-      moduleId: selectCitationModule(
-        source,
-        selectedModuleId,
-        relatedSubmodule?.id ?? null,
-      ),
+      moduleId: citationModuleId,
       relevanceScore,
       sourceId,
     });
@@ -294,10 +347,7 @@ function toCitationBundle(
       documentSituation: source.documentSituation,
       documentTitle: source.documentTitle,
       id: sourceId,
-      moduleName:
-        source.moduleNames.length === 1
-          ? (source.moduleNames[0] ?? null)
-          : null,
+      moduleName: citationModuleName(source, citationModuleId),
       numeralReference: source.numeralReference,
       pageEnd: source.pageEnd,
       pageStart: source.pageStart,
@@ -404,9 +454,12 @@ export class ChatService {
     conversationId: string,
     authorization: AuthorizationContext,
   ): Promise<unknown> {
+    // Al retomar una conversación se muestran hasta 100 mensajes (tope de la
+    // RPC y del esquema web). Con el límite del listado (20) las primeras
+    // respuestas de una consulta larga y sus fuentes quedaban inaccesibles.
     return this.historyGateway.getConversation({
       conversationId,
-      limit: this.historyLimit(),
+      limit: CHAT_CONVERSATION_MESSAGE_LIMIT,
       userId: authorization.userId,
     });
   }
@@ -484,43 +537,53 @@ export class ChatService {
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
     // Carriles no-RAG (Hito 3, Fases 2 y 10): los turnos sociales
-    // (saludo/agradecimiento/despedida/capacidad) se responden con calidez y los
-    // ajenos al ámbito se declinan con cortesía reorientando — ambos SIN activar
-    // el RAG, sin persistir turno y sin ensuciar las colas (efímeros). Fail-closed:
-    // cualquier señal de dominio, mezcla o duda la enruta `classifyTurnIntent` a
-    // `domain`, que sigue el flujo evidence-only de abajo. No crear conversación por
-    // "hola"/"gracias" cumple el lineamiento de historial.
-    const intent = classifyTurnIntent(input.question);
+    // (saludo/agradecimiento/acuse/despedida/anuncio/capacidad) se responden con
+    // calidez y los ajenos al ámbito se declinan con cortesía reorientando —
+    // ambos SIN activar el RAG, sin persistir turno y sin ensuciar las colas
+    // (efímeros). Fail-closed: cualquier señal de dominio, mezcla o duda la
+    // enruta `classifyTurnIntent` a `domain`, que sigue el flujo evidence-only
+    // de abajo. No crear conversación por "hola"/"gracias" cumple el lineamiento
+    // de historial.
+    const intent = classifyTurnIntent(input.question, {
+      inConversation: Boolean(input.conversationId),
+    });
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
-      yield {
-        data: { message: buildConversationalReply(intent.subtype) },
-        type: 'conversational',
-      };
+      yield await this.conversationalReply(
+        intent.lane === 'social' ? intent.subtype : 'out_of_domain',
+      );
       return;
     }
 
+    // "Otra consulta: …" o "cambiando de tema…": la consulta se busca y se
+    // responde en una conversación nueva, sin arrastrar el tema anterior.
+    const explicitTopicChange =
+      Boolean(input.conversationId) && announcesNewTopic(input.question);
     const faqMemory = this.faqMemoryService.prepare(input.question);
-    const storedContext = input.conversationId
-      ? await this.historyGateway.getConversationContext({
-          characterLimit: MAX_CHAT_CONTEXT_CHARS,
-          conversationId: input.conversationId,
-          messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
-          userId: input.authorization.userId,
-        })
-      : null;
+    const storedContext =
+      input.conversationId && !explicitTopicChange
+        ? await this.historyGateway.getConversationContext({
+            characterLimit: MAX_CHAT_CONTEXT_CHARS,
+            conversationId: input.conversationId,
+            messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
+            userId: input.authorization.userId,
+          })
+        : null;
     const manuallyChangedModule = Boolean(
       storedContext &&
       input.selectedModuleId !== null &&
       input.selectedModuleId !== storedContext.selectedModuleId,
     );
-    let startedNewConversation = !input.conversationId || manuallyChangedModule;
-    let conversationContext: ChatContextMessage[] = manuallyChangedModule
-      ? []
-      : (storedContext?.messages ?? []);
-    let selectedModuleId = manuallyChangedModule
-      ? input.selectedModuleId
-      : (storedContext?.selectedModuleId ?? input.selectedModuleId);
-    let conversationId = manuallyChangedModule ? null : input.conversationId;
+    const continuesConversation = Boolean(
+      storedContext && !manuallyChangedModule,
+    );
+    let startedNewConversation = !continuesConversation;
+    let conversationContext: ChatContextMessage[] = continuesConversation
+      ? (storedContext?.messages ?? [])
+      : [];
+    let selectedModuleId = continuesConversation
+      ? (storedContext?.selectedModuleId ?? null)
+      : input.selectedModuleId;
+    let conversationId = continuesConversation ? input.conversationId : null;
     const priorUserQuestions = conversationContext
       .filter((message) => message.role === 'user')
       .map((message) => message.content);
@@ -531,6 +594,19 @@ export class ChatService {
     );
 
     if (input.abortSignal?.aborted) return;
+
+    // Sin sustento, fuera de una conversación y sin ninguna señal del ámbito
+    // educativo ("¿qué es la fotosíntesis?"): se orienta sobre el alcance sin
+    // crear conversación ni ensuciar la cola de consultas sin respuesta. El RAG
+    // ya buscó primero, así que ninguna consulta con documentos se pierde.
+    if (
+      retrieval.kind === 'no_evidence' &&
+      !conversationId &&
+      !hasEducationalSignal(input.question)
+    ) {
+      yield await this.conversationalReply('unrelated_no_evidence');
+      return;
+    }
 
     const retrievalScope = detectRetrievalScope(input.question);
 
@@ -547,13 +623,13 @@ export class ChatService {
     } else if (
       retrieval.kind === 'evidence' &&
       !selectedModuleId &&
-      retrieval.resolvedModule
+      retrieval.resolvedModule &&
+      !conversationId
     ) {
-      if (storedContext) {
-        conversationId = null;
-        conversationContext = [];
-        startedNewConversation = true;
-      }
+      // Solo una conversación NUEVA adopta el módulo detectado. Una
+      // conversación general (sin módulo) sigue siéndolo: antes se partía en
+      // otra y la precisión del usuario ("de reasignación") llegaba al modelo
+      // sin la pregunta original.
       selectedModuleId = retrieval.resolvedModule.id;
     }
 
@@ -587,32 +663,14 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
-      const message = noEvidenceMessage(retrievalScope);
-      const completed = await this.historyGateway.completeTurn({
-        answer: message,
+      yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: null,
-        detectedSubmoduleId: null,
-        qualitySignals: [],
-        replyRole: 'no_evidence',
         retrievalScope,
-        sources: [],
         topRelevanceScore: retrieval.topRelevanceScore,
-        unansweredReason: 'insufficient_evidence',
         userId: input.authorization.userId,
         userMessageId: turn.userMessageId,
       });
-      yield { data: { message }, type: 'no_evidence' };
-      yield {
-        data: {
-          conversationId: turn.conversationId,
-          inReplyToMessageId: turn.userMessageId,
-          messageId: completed.answerMessageId,
-          provider: 'rule',
-        },
-        type: 'done',
-      };
       return;
     }
 
@@ -658,31 +716,74 @@ export class ChatService {
       relatedModule,
       relatedSubmodule,
     );
-    yield { data: { sources: citations.sources }, type: 'sources' };
 
+    // Las fuentes se emiten junto con el primer fragmento real de la respuesta:
+    // si el modelo declara que ninguna fuente responde (marca de «sin
+    // sustento»), el turno se cierra como «sin evidencia» y el usuario nunca ve
+    // una tabla de «documentos que sustentan» que no sustentan nada.
+    const marker = new NoSupportMarkerFilter();
+    let sourcesEmitted = false;
     let answer = '';
+    let cutByLength = false;
+    let finishReason: string | null = null;
+    // Se reserva el espacio del aviso de corte para que lo transmitido y lo
+    // guardado coincidan exactamente y nunca superen MAX_RAG_ANSWER_CHARS.
+    const truncationNote = `\n\n${RAG_TRUNCATION_NOTE}`;
+    const answerCap = MAX_RAG_ANSWER_CHARS - truncationNote.length;
+    const takePiece = (text: string): string => {
+      // Truncado con gracia (M6): al llegar al tope de longitud se cierra el
+      // turno con lo generado, sin lanzar 503 a mitad del stream.
+      const remaining = answerCap - answer.length;
+      const piece = text.length > remaining ? text.slice(0, remaining) : text;
+      if (text.length > remaining) cutByLength = true;
+      answer += piece;
+      return piece;
+    };
+
     for await (const token of this.answerGateway.generate({
       abortSignal: input.abortSignal,
       conversationContext,
+      onFinish: (reason) => {
+        finishReason = reason;
+      },
       question: input.question,
       sources: retrieval.sources,
     })) {
       if (input.abortSignal?.aborted) return;
 
-      // Truncado con gracia (M6): al llegar al tope de longitud cerramos el
-      // turno con lo generado, sin lanzar 503 a mitad del stream. `max_tokens`
-      // en el proveedor hace que este tope casi nunca se alcance.
-      const remaining = MAX_RAG_ANSWER_CHARS - answer.length;
-      const piece =
-        token.length > remaining ? token.slice(0, remaining) : token;
-      if (piece) {
-        answer += piece;
-        yield { data: { text: piece }, type: 'token' };
+      const visible = marker.push(token);
+      if (!visible) continue;
+      if (!sourcesEmitted) {
+        sourcesEmitted = true;
+        yield { data: { sources: citations.sources }, type: 'sources' };
       }
-      if (token.length > remaining) break;
+      const piece = takePiece(visible);
+      if (piece) yield { data: { text: piece }, type: 'token' };
+      if (cutByLength) break;
     }
 
     if (input.abortSignal?.aborted) return;
+
+    const ending = marker.finish();
+    if (ending.noSupport) {
+      yield* this.completeWithoutEvidence({
+        conversationId: turn.conversationId,
+        faqMemory,
+        retrievalScope,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      return;
+    }
+    if (ending.tail && !cutByLength) {
+      if (!sourcesEmitted) {
+        sourcesEmitted = true;
+        yield { data: { sources: citations.sources }, type: 'sources' };
+      }
+      const piece = takePiece(ending.tail);
+      if (piece) yield { data: { text: piece }, type: 'token' };
+    }
 
     const normalizedAnswer = answer.trim();
     if (!normalizedAnswer) {
@@ -691,11 +792,20 @@ export class ChatService {
       );
     }
 
+    // Una respuesta cortada por su extensión se avisa en lenguaje llano en vez
+    // de mostrarse (y guardarse) como si estuviera completa.
+    let finalAnswer = normalizedAnswer;
+    if (cutByLength || finishReason === 'length') {
+      finalAnswer = `${normalizedAnswer}${truncationNote}`;
+      yield { data: { text: truncationNote }, type: 'token' };
+    }
+
     const citationQuality = evaluateAnswerCitationQualityDetails(
-      normalizedAnswer,
+      finalAnswer,
       retrieval.sources,
     );
     const qualitySignals = new Set<string>(citationQuality.signals);
+    if (marker.partialSupport) qualitySignals.add('support_partial');
     if (
       retrieval.topRelevanceScore <
       (this.configService.get<number>('RAG_MATCH_THRESHOLD') ??
@@ -706,7 +816,7 @@ export class ChatService {
     }
 
     const completed = await this.historyGateway.completeTurn({
-      answer: normalizedAnswer,
+      answer: finalAnswer,
       conversationId: turn.conversationId,
       faqMemory,
       detectedModuleId: relatedModule?.id ?? null,
@@ -730,6 +840,70 @@ export class ChatService {
       },
       type: 'done',
     };
+  }
+
+  /** Cierra el turno como «sin evidencia»: mensaje claro, sin fuentes. */
+  private async *completeWithoutEvidence(input: {
+    conversationId: string;
+    faqMemory: ReturnType<FaqMemoryService['prepare']>;
+    retrievalScope: RetrievalScope;
+    topRelevanceScore: number | null;
+    userId: string;
+    userMessageId: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    const message = noEvidenceMessage(input.retrievalScope);
+    const completed = await this.historyGateway.completeTurn({
+      answer: message,
+      conversationId: input.conversationId,
+      faqMemory: input.faqMemory,
+      detectedModuleId: null,
+      detectedSubmoduleId: null,
+      qualitySignals: [],
+      replyRole: 'no_evidence',
+      retrievalScope: input.retrievalScope,
+      sources: [],
+      topRelevanceScore: input.topRelevanceScore,
+      unansweredReason: 'insufficient_evidence',
+      userId: input.userId,
+      userMessageId: input.userMessageId,
+    });
+    yield { data: { message }, type: 'no_evidence' };
+    yield {
+      data: {
+        conversationId: input.conversationId,
+        inReplyToMessageId: input.userMessageId,
+        messageId: completed.answerMessageId,
+        provider: 'rule',
+      },
+      type: 'done',
+    };
+  }
+
+  /** Respuesta amable efímera; la capacidad y el anuncio listan los temas reales. */
+  private async conversationalReply(
+    kind: ConversationalReplyKind,
+  ): Promise<ChatStreamEvent> {
+    const topics =
+      kind === 'capabilities' || kind === 'ask_announcement'
+        ? await this.activeTopics()
+        : undefined;
+    return {
+      data: { message: buildConversationalReply(kind, { topics }) },
+      type: 'conversational',
+    };
+  }
+
+  /** Módulos raíz activos, en su orden; si la lista falla, la respuesta sigue sin ellos. */
+  private async activeTopics(): Promise<string[] | undefined> {
+    try {
+      const modules = await this.historyGateway.listActiveModules();
+      return modules
+        .filter((module) => module.parentModuleId === null)
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((module) => module.name);
+    } catch {
+      return undefined;
+    }
   }
 
   private historyLimit(): number {

@@ -314,3 +314,14 @@ export function classifyTurnIntent(
 export function hasEducationalSignal(message: string): boolean {
   return hasDomainSignal(normalizeSpanishText(message));
 }
+
+const EXPLICIT_TOPIC_CHANGE =
+  /\b(otra consulta|otra pregunta|nueva consulta|nueva pregunta|otro tema|cambiando de tema|cambio de tema|aparte de eso|dejando eso de lado|ahora (?:quiero|quisiera|necesito|deseo) (?:saber|consultar|preguntar))\b/u;
+
+/**
+ * El usuario anuncia que cambia de tema ("otra consulta: …", "cambiando de
+ * tema…"). La consulta se busca y responde sin arrastrar el tema anterior.
+ */
+export function announcesNewTopic(message: string): boolean {
+  return EXPLICIT_TOPIC_CHANGE.test(normalizeSpanishText(message));
+}

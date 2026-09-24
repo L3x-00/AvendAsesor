@@ -4,6 +4,7 @@ import {
   MAX_CONTEXT_MESSAGE_CHARS,
   MAX_EVIDENCE_CHARS_PER_CHUNK,
 } from './rag.constants';
+import { RAG_NO_SUPPORT_MARKER } from './no-support-marker';
 import type { RetrievedChunk } from './retrieval.gateway';
 
 const RESERVED_PROMPT_MARKERS = [
@@ -14,6 +15,8 @@ const RESERVED_PROMPT_MARKERS = [
   /FIN\s+DE\s+FUENTES/giu,
   /FIN\s+FUENTE\s*\[\s*\d+\s*\]/giu,
   /FUENTE\s*\[\s*\d+\s*\]/giu,
+  // La marca de «sin sustento» solo puede venir de la política, nunca de datos.
+  /\[\[\s*SIN_SUSTENTO\s*\]\]/giu,
 ];
 
 function neutralizeReservedMarker(marker: string): string {
@@ -88,6 +91,9 @@ export function buildEvidenceSystemPrompt(): string {
     'Usa documentos Vigentes como sustento de la situación actual. Presenta documentos Reemplazados o Archivados únicamente como antecedentes históricos y nunca como regla actual.',
     'Escribe en español claro, con viñetas solo cuando ayuden a la lectura.',
     'Cita cada afirmación normativa relevante usando [n], donde n es el número de fuente suministrada.',
+    `Si ninguna fuente contiene información que responda la pregunta actual, responde únicamente con la marca ${RAG_NO_SUPPORT_MARKER} y nada más.`,
+    'Si las fuentes responden solo una parte, responde esa parte con sus citas y di con claridad qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
+    'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',
   ].join('\n');
 }
 

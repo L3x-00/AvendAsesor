@@ -98,6 +98,35 @@ describe('OpenAiAnswerGateway', () => {
     expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
   });
 
+  it('reports the provider finish reason (e.g. length) when the stream ends', async () => {
+    mockCreate.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield { choices: [{ delta: { content: 'Respuesta' } }] };
+        yield { choices: [{ delta: {}, finish_reason: 'length' }] };
+      },
+    });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : 'gpt-4o-mini',
+      ),
+    } as never);
+    const onFinish = jest.fn();
+
+    const tokens: string[] = [];
+    for await (const token of gateway.generate({
+      conversationContext: [],
+      onFinish,
+      question: 'Consulta',
+      sources: [source],
+    })) {
+      tokens.push(token);
+    }
+
+    expect(tokens).toEqual(['Respuesta']);
+    expect(onFinish).toHaveBeenCalledWith('length');
+  });
+
   it('falls back to the paid model only when the primary provider fails technically', async () => {
     mockCreate
       .mockRejectedValueOnce(new Error('rate limited'))
