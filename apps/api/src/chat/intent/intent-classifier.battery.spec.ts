@@ -265,3 +265,44 @@ describe('isTopiclessQuestion', () => {
     expect(isTopiclessQuestion(message)).toBe(false);
   });
 });
+
+describe('regresiones de la revisión independiente (2026-09-24)', () => {
+  it.each([
+    '¿Qué sabes de la carrera pública magisterial?',
+    '¿Qué sabes sobre el CNEB?',
+    '¿Cómo se usa el SIAGIE para registrar las notas?',
+    '¿Cómo me puedes ayudar con un alumno que sufre bullying?',
+    '¿Para qué sirve la plataforma SIAGIE?',
+    'Tengo covid, ¿debo ir a trabajar?',
+    'Tengo fiebre, ¿tengo que ir a laborar mañana?',
+    '¿Me pueden obligar a usar mi celular personal para comunicarme con los padres?',
+    '¿Qué dice el DS 004-2013-ED?',
+  ])('va al RAG: "%s"', (message) => {
+    expect(classifyTurnIntent(message).lane).toBe('domain');
+  });
+
+  it.each([
+    '¿Qué sabes?',
+    'Soy docente, ¿en qué me puedes ayudar?',
+    '¿cómo se usa?',
+  ])('sigue siendo pregunta de capacidad: "%s"', (message) => {
+    expect(classifyTurnIntent(message)).toEqual({
+      lane: 'social',
+      subtype: 'capabilities',
+    });
+  });
+
+  it.each([
+    '¿Cuáles son los requisitos para ser director?',
+    '¿Cuáles son los requisitos para ser auxiliar de educación?',
+    '¿Qué documentos piden para la PUN?',
+    '¿Cuánto tiempo dura el periodo de prueba?',
+  ])('una consulta con tema no pide precisar el tema: "%s"', (message) => {
+    expect(isTopiclessQuestion(message)).toBe(false);
+  });
+
+  it('las abreviaturas y normas del sector cuentan como señal educativa', () => {
+    expect(hasEducationalSignal('¿Qué dice el DS 004-2013-ED?')).toBe(true);
+    expect(hasEducationalSignal('¿Qué beneficios da el CAFAE?')).toBe(true);
+  });
+});

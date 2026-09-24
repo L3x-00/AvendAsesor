@@ -190,6 +190,85 @@ describe('ChatService — lineamientos del cliente', () => {
     });
   });
 
+  describe('puntos 4 y 9: negativas del modelo sin citas', () => {
+    beforeEach(() => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'evidence',
+        resolvedModule: { id: MODULE_ID, name: 'Licencias' },
+        sources: [source],
+        topRelevanceScore: 0.56,
+      });
+    });
+
+    it.each([
+      [
+        'marca tras una frase sin citas',
+        [
+          'Las fuentes proporcionadas no contienen información sobre el plazo. ',
+          '[[SIN_SUSTENTO]]',
+        ],
+      ],
+      [
+        'negativa sin la marca',
+        ['Las fuentes no mencionan el plazo de la permuta.'],
+      ],
+      ['marca envuelta en formato', ['**[[SIN_SUSTENTO]]**']],
+      ['variante de la marca', ['[[SIN SUSTENTO]]']],
+    ])('%s → «sin evidencia», sin mostrar fuentes', async (_case, parts) => {
+      answerGateway.generate.mockReturnValue(tokens(...parts));
+
+      const events = await collect();
+
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'no_evidence',
+        'done',
+      ]);
+      expect(completion()).toMatchObject({
+        replyRole: 'no_evidence',
+        sources: [],
+      });
+    });
+
+    it('una respuesta que cita no se confunde con una negativa', async () => {
+      answerGateway.generate.mockReturnValue(
+        tokens(
+          'Los documentos indican que la licencia se solicita dentro de 5 días [1].',
+        ),
+      );
+
+      const events = await collect();
+
+      expect(events.map((event) => event.type)).toContain('sources');
+      expect(completion()?.replyRole).toBe('assistant');
+    });
+  });
+
+  it('una aclaración con coincidencias débiles no cita documentos como orientación', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [
+        { id: 'a', name: 'Licencias' },
+        { id: 'b', name: 'Remuneraciones' },
+      ],
+      sources: [{ ...source, semanticScore: 0.52 }],
+      topRelevanceScore: 0.52,
+    });
+
+    const events = await collect();
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events[1] as { data: { message: string } };
+    expect(clarification.data.message).not.toContain(
+      'Como orientación inicial',
+    );
+    expect(completion()?.sources).toEqual([]);
+  });
+
   it('avisa en lenguaje llano cuando el proveedor corta la respuesta por su extensión', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
@@ -233,7 +312,9 @@ describe('ChatService — lineamientos del cliente', () => {
   });
 
   describe('punto 10: pedido sin relación aparente y sin sustento', () => {
-    it('orienta sobre el alcance sin crear conversación ni cola de pendientes', async () => {
+    it('orienta sobre el alcance y la registra igual como pendiente', async () => {
+      // Puede ser una consulta del ámbito con un término que el léxico no
+      // conoce (p. ej. «DS 004-2013-ED»): no debe perderse de la cola.
       ragService.retrieve.mockResolvedValue({
         kind: 'no_evidence',
         topRelevanceScore: null,
@@ -243,10 +324,14 @@ describe('ChatService — lineamientos del cliente', () => {
         question: '¿Cuál es la mejor época para sembrar papa?',
       });
 
-      expect(events).toHaveLength(1);
-      expect(events[0]?.type).toBe('conversational');
-      expect(historyGateway.beginTurn).not.toHaveBeenCalled();
-      expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+      const noEvidence = events.find(
+        (event) => event.type === 'no_evidence',
+      ) as { data: { message: string } } | undefined;
+      expect(noEvidence?.data.message).toContain('estoy especializado');
+      expect(completion()).toMatchObject({
+        replyRole: 'no_evidence',
+        unansweredReason: 'insufficient_evidence',
+      });
     });
 
     it('una consulta del ámbito sin documentos sí se registra como pendiente', async () => {

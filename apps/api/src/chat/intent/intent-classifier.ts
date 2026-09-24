@@ -18,6 +18,7 @@ import {
   hasDomainSignal,
   hasStrongDomainSignal,
   hasTopicTerm,
+  hasWeakDomainSignal,
 } from '../../rag/domain-lexicon';
 import { normalizeSpanishText } from '../../rag/text-normalization';
 
@@ -139,7 +140,7 @@ const ASK_ANNOUNCEMENT =
 
 /** Preguntas sobre la identidad o el alcance de AVEND. */
 const CAPABILITIES =
-  /\b(que puedes hacer|que sabes hacer|que haces|que sabes|quien eres|que eres|eres (?:un|una) (?:robot|persona|humano|humana|bot|ia|inteligencia artificial|maquina|asistente)|eres (?:chatgpt|gpt|real)|con quien (?:hablo|estoy hablando)|para que sirves|para que sirve (?:esto|esta pagina|este chat|avend|la aplicacion|esta aplicacion|esta app|este sistema|la plataforma|esta plataforma)|en que (?:me )?(?:puedes ayudar(?:me)?|ayudas|me ayudas)|en que temas (?:me )?(?:ayudas|puedes ayudar)|con que (?:me )?puedes ayudar|como (?:me )?(?:puedes ayudar|ayudas)|como funcionas|como te uso|como se usa|que es avend|cual es tu funcion|de que puedes hablar|que temas (?:manejas|conoces|sabes|abarcas|tratas|atiendes|cubres)|de que temas sabes|que (?:tipo|clase) de (?:preguntas|consultas) (?:respondes|atiendes|puedo hacer(?:te)?)|sobre que (?:te )?puedo (?:preguntar(?:te)?|consultar(?:te)?)|que (?:modulos|temas) (?:hay|tienes)|^ayuda(?:me)?(?: por favor)?$|^(?:menu|opciones)$)\b/u;
+  /\b(que puedes hacer|que sabes hacer|que haces$|que sabes$|quien eres|que eres|eres (?:un|una) (?:robot|persona|humano|humana|bot|ia|inteligencia artificial|maquina|asistente)|eres (?:chatgpt|gpt|real)|con quien (?:hablo|estoy hablando)|para que sirves|para que sirve (?:esto|esta pagina|este chat|avend|la aplicacion|esta aplicacion|esta app|este sistema|la plataforma$|esta plataforma$)|en que (?:me )?(?:puedes ayudar(?:me)?|ayudas|me ayudas)|en que temas (?:me )?(?:ayudas|puedes ayudar)|con que (?:me )?puedes ayudar|como (?:me )?(?:puedes ayudar|ayudas)$|como funcionas|como te uso|como se usa$|que es avend|cual es tu funcion|de que puedes hablar|que temas (?:manejas|conoces|sabes|abarcas|tratas|atiendes|cubres)|de que temas sabes|que (?:tipo|clase) de (?:preguntas|consultas) (?:respondes|atiendes|puedo hacer(?:te)?)|sobre que (?:te )?puedo (?:preguntar(?:te)?|consultar(?:te)?)|que (?:modulos|temas) (?:hay|tienes)|^ayuda(?:me)?(?: por favor)?$|^(?:menu|opciones)$)\b/u;
 
 /** Cláusula condicional/causal: convierte una pregunta en consulta ("…si no me pagan"). */
 const CONDITIONAL_CLAUSE = /\b(si|cuando|en caso|porque|aunque)\b/u;
@@ -286,10 +287,14 @@ export function classifyTurnIntent(
     return { lane: 'social', subtype: 'ask_announcement' };
   }
 
+  // Una pregunta de capacidad que además nombra algo del ámbito («¿qué sabes
+  // de la carrera pública magisterial?») es una consulta: va al RAG. La
+  // presentación del usuario («soy directora, ¿en qué me ayudas?») no cuenta.
   if (
     CAPABILITIES.test(plain) &&
     !CONDITIONAL_CLAUSE.test(normalized) &&
-    !/^(?:y|e|pero)\b/u.test(plain)
+    !/^(?:y|e|pero)\b/u.test(plain) &&
+    !hasWeakDomainSignal(stripped(normalized, GREETING, COURTESY, INTRODUCTION))
   ) {
     return { lane: 'social', subtype: 'capabilities' };
   }
@@ -320,6 +325,25 @@ export function hasEducationalSignal(message: string): boolean {
 const TOPICLESS_ASPECT =
   /\b(requisitos?|plazos?|tramites?|procedimientos?|pasos|documentos?|formatos?|costos?|solicitud(?:es)?|como (?:lo |la )?(?:solicito|pido|tramito|presento|hago)|donde (?:lo |la )?(?:presento|solicito|pido|tramito)|a quien (?:le )?(?:presento|solicito|pido)|cuanto (?:tiempo )?(?:demora|tarda|dura))\b/u;
 const MAX_TOPICLESS_WORDS = 9;
+/**
+ * Palabras que no dicen de qué trámite se trata: interrogativos, artículos,
+ * preposiciones, verbos genéricos y los propios aspectos del trámite. Si al
+ * quitarlas queda algo («para ser director», «la PUN», «periodo de prueba»),
+ * la consulta tiene tema y va al RAG.
+ */
+const TOPICLESS_FILLER = new Set(
+  (
+    'cual cuales que como donde cuando cuanto cuanta cuantos cuantas quien quienes ' +
+    'a al de del el la los las lo le les un una unos unas para por en con sobre ante ' +
+    'y o u es son ser sera esta estan este ese esa eso hay se me mi mis tu su sus mas ' +
+    'requisito requisitos plazo plazos tramite tramites procedimiento procedimientos ' +
+    'paso pasos documento documentos formato formatos costo costos solicitud solicitudes ' +
+    'presentar presento presenta pedir pido piden solicitar solicito tramitar tramito ' +
+    'hacer hago necesito necesita necesitan necesarios necesarias exige exigen debo debe ' +
+    'deben puedo puede tengo tiene tienen tiempo demora tarda dura entregar entrego llevar ' +
+    'llevo adjuntar cumplir cumplo minimo maximo exactamente dias habiles hay'
+  ).split(' '),
+);
 
 /**
  * Primera consulta que pregunta por un aspecto de trámite sin decir de qué
@@ -337,7 +361,10 @@ export function isTopiclessQuestion(message: string): boolean {
     .trim()
     .split(/\s+/u)
     .filter(Boolean);
-  return words.length <= MAX_TOPICLESS_WORDS;
+  return (
+    words.length <= MAX_TOPICLESS_WORDS &&
+    words.every((word) => TOPICLESS_FILLER.has(word))
+  );
 }
 
 const EXPLICIT_TOPIC_CHANGE =

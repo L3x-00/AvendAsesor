@@ -31,13 +31,18 @@ const ASPECT_PATTERNS: readonly RegExp[] = [
   /\b(tramite|tramites|solicitud|solicitudes|expediente|procedimiento|procedimientos|requisito|requisitos|plazo|plazos|constancia|certificad[oa]s?|mesa de partes|informe escalafonario)\b/u,
   /\b(derecho|derechos|obligacion|obligaciones|deber|deberes|funcion|funciones|cargo)\b/u,
   /\b(reemplaz[ao]|reemplazar|sustituy[eo]|sustituir)\b/u,
+  // Referencia a una norma por su número («DS 004-2013-ED», «RVM N.° 045»).
+  /\b(?:d\.?\s?s|r\.?\s?v\.?\s?m|r\.?\s?m|r\.?\s?s\.?\s?g|r\.?\s?d|d\.?\s?l|d\.?\s?u)\.?\s*(?:n\.?\s*[°o]?\.?\s*)?\d/u,
 ];
 
 const WEAK_PATTERNS: readonly RegExp[] = [
   // Roles y condición laboral del sector
   /\b(docentes?|profesor(?:a|es|as)?|profes?|maestr[oa]s?|auxiliar(?:es)?|directiv[oa]s?|director(?:a|es|as)?|dire|subdirector(?:a|es|as)?|jerarquic[oa]s?|coordinador(?:a|es|as)?|especialistas?|nombrad[oa]s?|contratad[oa]s?|cesantes?|pensionistas?|interin[oa]s?|provisional(?:es)?)\b/u,
   // Instituciones y contexto escolar
-  /\b(ugel|minedu|dre|gerencia regional de educacion|institucion(?:es)? educativas?|ie|colegios?|cole|escuelas?|aulas?|clases?|alumn[oa]s?|estudiantes?|escolar(?:es)?|institucional|pedagogic[oa]s?|padres de familia|apoderad[oa]s?|matricula|siagie|siseve|cneb|curriculo|pei|mbdd|conei|magisterial|magisterio|carrera publica|sesion(?:es)? de aprendizaje|unidad(?:es)? didacticas?|programacion anual|prueba unica nacional|actuacion(?:es)?|actividad(?:es)? (?:escolar(?:es)?|del colegio|de la ie|institucional(?:es)?)|dia de la madre|dia del padre|dia del logro|dia del maestro)\b/u,
+  /\b(ugel|minedu|dre|gerencia regional de educacion|institucion(?:es)? educativas?|ie|colegios?|cole|escuelas?|aulas?|clases?|alumn[oa]s?|estudiantes?|escolar(?:es)?|institucional|pedagogic[oa]s?|padres de familia|apoderad[oa]s?|matricula|siagie|siseve|cneb|curriculo|pei|mbdd|conei|magisterial|magisterio|carrera publica|sesion(?:es)? de aprendizaje|unidad(?:es)? didacticas?|programacion anual|prueba unica nacional|actuacion(?:es)?|actividad(?:es)? (?:escolar(?:es)?|del colegio|de la ie|institucional(?:es)?)|dia de la madre|dia del padre|dia del logro|dia del maestro|sutep|cafae|pronoei|cetpro|ceba|cebe|jec|tutoria|fut|pun|periodo de prueba|ingreso a la carrera)\b/u,
+  // Condición laboral: una consulta sobre el propio trabajo es del ámbito
+  // («Tengo covid, ¿debo ir a trabajar?», «¿me pueden obligar a…?»).
+  /\b(trabaj(?:ar|o|os|ando)|labor(?:ar|al|ales)|centro de trabajo|empleador|obliga(?:r|rme|rnos|n|do|da)?|me corresponden?)\b/u,
 ];
 
 function matchesAny(patterns: readonly RegExp[], normalized: string): boolean {

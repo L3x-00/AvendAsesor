@@ -64,3 +64,34 @@ describe('NoSupportMarkerFilter', () => {
     });
   });
 });
+
+describe('NoSupportMarkerFilter — variantes del modelo', () => {
+  it.each([['[[SIN SUSTENTO]]'], ['[[ sin_sustento ]]'], ['[[Sin-Sustento]]']])(
+    'reconoce la variante %s',
+    (marker) => {
+      expect(run([marker]).end.noSupport).toBe(true);
+    },
+  );
+
+  it('trata la marca envuelta en formato como «sin sustento»', () => {
+    const result = run(['**', '[[SIN_SUSTENTO]]', '**']);
+    expect(result.end.noSupport).toBe(true);
+    expect(result.text).toBe('');
+  });
+
+  it('no deja una marca re-formada al quitar una anidada', () => {
+    const result = run([
+      'Texto x',
+      '[[SIN_SUS[[SIN_SUSTENTO]]TENTO]]',
+      ' fin.',
+    ]);
+    expect(result.text).not.toMatch(/SIN_SUSTENTO/u);
+    expect(result.partial).toBe(true);
+  });
+
+  it('libera una cita doble [[4]] cuando se cierra', () => {
+    const result = run(['Según la norma ', '[[4', ']] el plazo es breve.']);
+    expect(result.text).toBe('Según la norma [[4]] el plazo es breve.');
+    expect(result.end.noSupport).toBe(false);
+  });
+});

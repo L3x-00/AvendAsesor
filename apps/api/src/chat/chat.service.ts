@@ -16,6 +16,7 @@ import {
   RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
+  RAG_ORIENTATION_SCORE_MARGIN,
   RAG_TOPIC_CLARIFICATION_MESSAGE,
 } from '../rag/rag.constants';
 import {
@@ -50,6 +51,14 @@ import {
   hasEducationalSignal,
   isTopiclessQuestion,
 } from './intent/intent-classifier';
+
+/** Texto con al menos una cita [n] (o [[n]]). */
+const CITED_TEXT = /\[\[?\d+\]\]?/u;
+/** Caracteres sin cita tras los cuales la respuesta empieza a mostrarse. */
+const LEAD_IN_WINDOW_CHARS = 400;
+/** Negativa del modelo sin la marca («Las fuentes no contienen…»). */
+const DECLINE_PATTERN =
+  /^(?:lo siento[,.]?\s*)?(?:las fuentes|los documentos|la informaci[oó]n (?:proporcionada|disponible|entregada)|no (?:encuentro|encontr[eé]|hay|dispongo|cuento|se (?:menciona|especifica|indica|encuentra|detalla|precisa)))/iu;
 
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
@@ -613,19 +622,6 @@ export class ChatService {
 
     if (input.abortSignal?.aborted) return;
 
-    // Sin sustento, fuera de una conversación y sin ninguna señal del ámbito
-    // educativo ("¿qué es la fotosíntesis?"): se orienta sobre el alcance sin
-    // crear conversación ni ensuciar la cola de consultas sin respuesta. El RAG
-    // ya buscó primero, así que ninguna consulta con documentos se pierde.
-    if (
-      retrieval.kind === 'no_evidence' &&
-      !conversationId &&
-      !hasEducationalSignal(input.question)
-    ) {
-      yield await this.conversationalReply('unrelated_no_evidence');
-      return;
-    }
-
     const retrievalScope = detectRetrievalScope(input.question);
 
     if (retrieval.kind === 'topic_change') {
@@ -681,9 +677,18 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
+      // Primera consulta sin sustento ni señal del ámbito ("¿qué es la
+      // fotosíntesis?"): además de decir que no hay sustento, se orienta sobre
+      // el alcance. Se guarda igual como pendiente: puede ser una consulta del
+      // ámbito con un término que el léxico no conoce ("DS 004-2013-ED").
+      const unrelated =
+        !input.conversationId && !hasEducationalSignal(input.question);
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
+        message: unrelated
+          ? buildConversationalReply('unrelated_no_evidence')
+          : undefined,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -693,9 +698,17 @@ export class ChatService {
     }
 
     if (retrieval.kind === 'ambiguous') {
-      const citations = toCitationBundle(retrieval.sources, null, null, null);
-      const message = ambiguityMessage(retrieval.modules, retrieval.sources);
-      yield { data: { sources: citations.sources }, type: 'sources' };
+      // Solo se citan fragmentos como «orientación inicial» si son claramente
+      // pertinentes; con coincidencias débiles se pide precisar sin citarlos.
+      const orient =
+        retrieval.topRelevanceScore >=
+        this.matchThreshold() + RAG_ORIENTATION_SCORE_MARGIN;
+      const orientationSources = orient ? retrieval.sources : [];
+      const citations = toCitationBundle(orientationSources, null, null, null);
+      const message = ambiguityMessage(retrieval.modules, orientationSources);
+      if (orient) {
+        yield { data: { sources: citations.sources }, type: 'sources' };
+      }
       if (input.abortSignal?.aborted) return;
       const completed = await this.historyGateway.completeTurn({
         answer: message,
@@ -740,7 +753,13 @@ export class ChatService {
     // sustento»), el turno se cierra como «sin evidencia» y el usuario nunca ve
     // una tabla de «documentos que sustentan» que no sustentan nada.
     const marker = new NoSupportMarkerFilter();
-    let sourcesEmitted = false;
+    // Ventana inicial: hasta ver una cita [n] (o suficiente texto) no se
+    // muestra nada. Así una negativa breve sin citas («Las fuentes no contienen
+    // …», con o sin la marca) se cierra como «sin evidencia» antes de exhibir
+    // fuentes que no sustentan nada.
+    let leadIn = '';
+    let streaming = false;
+    let declined = false;
     let answer = '';
     let cutByLength = false;
     let finishReason: string | null = null;
@@ -770,11 +789,24 @@ export class ChatService {
       if (input.abortSignal?.aborted) return;
 
       const visible = marker.push(token);
-      if (!visible) continue;
-      if (!sourcesEmitted) {
-        sourcesEmitted = true;
+      if (!streaming) {
+        leadIn += visible;
+        if (marker.partialSupport && !CITED_TEXT.test(leadIn)) {
+          declined = true;
+          break;
+        }
+        if (!CITED_TEXT.test(leadIn) && leadIn.length < LEAD_IN_WINDOW_CHARS) {
+          continue;
+        }
+        streaming = true;
         yield { data: { sources: citations.sources }, type: 'sources' };
+        const piece = takePiece(leadIn);
+        leadIn = '';
+        if (piece) yield { data: { text: piece }, type: 'token' };
+        if (cutByLength) break;
+        continue;
       }
+      if (!visible) continue;
       const piece = takePiece(visible);
       if (piece) yield { data: { text: piece }, type: 'token' };
       if (cutByLength) break;
@@ -783,7 +815,14 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     const ending = marker.finish();
-    if (ending.noSupport) {
+    const unstreamed = streaming ? '' : `${leadIn}${ending.tail}`;
+    if (
+      ending.noSupport ||
+      declined ||
+      (!streaming &&
+        !CITED_TEXT.test(unstreamed) &&
+        (marker.partialSupport || DECLINE_PATTERN.test(unstreamed.trim())))
+    ) {
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -794,12 +833,13 @@ export class ChatService {
       });
       return;
     }
-    if (ending.tail && !cutByLength) {
-      if (!sourcesEmitted) {
-        sourcesEmitted = true;
+    const pending = streaming ? ending.tail : unstreamed;
+    if (pending && !cutByLength) {
+      if (!streaming) {
+        streaming = true;
         yield { data: { sources: citations.sources }, type: 'sources' };
       }
-      const piece = takePiece(ending.tail);
+      const piece = takePiece(pending);
       if (piece) yield { data: { text: piece }, type: 'token' };
     }
 
@@ -818,18 +858,15 @@ export class ChatService {
       yield { data: { text: truncationNote }, type: 'token' };
     }
 
+    // La calidad se evalúa sobre la respuesta, sin el aviso de corte (que no
+    // lleva citas y marcaría toda respuesta cortada para revisión).
     const citationQuality = evaluateAnswerCitationQualityDetails(
-      finalAnswer,
+      normalizedAnswer,
       retrieval.sources,
     );
     const qualitySignals = new Set<string>(citationQuality.signals);
     if (marker.partialSupport) qualitySignals.add('support_partial');
-    if (
-      retrieval.topRelevanceScore <
-      (this.configService.get<number>('RAG_MATCH_THRESHOLD') ??
-        RAG_DEFAULT_MATCH_THRESHOLD) +
-        0.05
-    ) {
+    if (retrieval.topRelevanceScore < this.matchThreshold() + 0.05) {
       qualitySignals.add('low_confidence');
     }
 
@@ -864,12 +901,13 @@ export class ChatService {
   private async *completeWithoutEvidence(input: {
     conversationId: string;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
+    message?: string;
     retrievalScope: RetrievalScope;
     topRelevanceScore: number | null;
     userId: string;
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
-    const message = noEvidenceMessage(input.retrievalScope);
+    const message = input.message ?? noEvidenceMessage(input.retrievalScope);
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: input.conversationId,
@@ -978,6 +1016,15 @@ export class ChatService {
     } catch {
       return undefined;
     }
+  }
+
+  /** Umbral configurado; un valor fuera de [0, 1] se ignora (la validación de
+   * entorno ya lo impide, pero el cálculo no debe depender de ello). */
+  private matchThreshold(): number {
+    const value = this.configService.get<number>('RAG_MATCH_THRESHOLD');
+    return typeof value === 'number' && value >= 0 && value <= 1
+      ? value
+      : RAG_DEFAULT_MATCH_THRESHOLD;
   }
 
   private historyLimit(): number {

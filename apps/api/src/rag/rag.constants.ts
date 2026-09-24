@@ -30,6 +30,13 @@ export const RAG_ROUTING_SCORE_MARGIN = 0.08;
  * (0.575–0.493 en «bonificaciones») y excluye la cola ajena (0.52 frente a 0.665).
  */
 export const RAG_SOURCE_SCORE_MARGIN = 0.12;
+/**
+ * Una aclaración solo cita fragmentos como «orientación inicial» si superan el
+ * umbral por este margen (0.57 con el umbral de 0.5: el piso de las consultas
+ * con sustento en el corpus real). Con coincidencias débiles se pide precisar
+ * sin citar documentos que no vienen al caso.
+ */
+export const RAG_ORIENTATION_SCORE_MARGIN = 0.07;
 /** Tope de texto que acepta la RPC de búsqueda (`p_query_text`, 1..8000). */
 export const RAG_QUERY_TEXT_MAX_CHARS = 8_000;
 /**

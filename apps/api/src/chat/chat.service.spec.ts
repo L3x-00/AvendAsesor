@@ -381,10 +381,11 @@ describe('ChatService', () => {
 
     const events = await collect(service);
 
+    // Los fragmentos previos a la primera cita se entregan juntos (ventana
+    // inicial que evita exhibir fuentes ante una negativa sin citas).
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
       'sources',
-      'token',
       'token',
       'done',
     ]);
