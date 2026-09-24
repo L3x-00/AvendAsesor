@@ -1,6 +1,10 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
   'No encontré sustento suficiente en los documentos disponibles para responderte con seguridad. Para no darte información sin respaldo, ¿podrías contarme un poco más o precisar tu consulta? Así puedo buscar mejor.';
 
+/** Primera consulta sin tema: se pide el trámite antes de buscar (puntos 5 y 12). */
+export const RAG_TOPIC_CLARIFICATION_MESSAGE =
+  'Para orientarte con precisión, cuéntame sobre qué trámite o situación es tu consulta: por ejemplo, una reasignación, una licencia, un destaque o una remuneración.';
+
 export const RAG_AMBIGUITY_MESSAGE =
   'Encontré información relacionada con más de un tema y quiero orientarte con precisión.';
 

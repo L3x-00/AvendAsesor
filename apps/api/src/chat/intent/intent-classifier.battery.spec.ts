@@ -2,6 +2,7 @@ import {
   announcesNewTopic,
   classifyTurnIntent,
   hasEducationalSignal,
+  isTopiclessQuestion,
 } from './intent-classifier';
 
 /**
@@ -242,5 +243,25 @@ describe('hasEducationalSignal', () => {
     expect(
       hasEducationalSignal('¿cuál es la mejor época para sembrar papa?'),
     ).toBe(false);
+  });
+});
+
+describe('isTopiclessQuestion', () => {
+  it.each([
+    '¿Cuáles son los requisitos?',
+    '¿Cuál es el plazo para presentar la solicitud?',
+    '¿Qué documentos necesito?',
+    '¿Dónde lo presento?',
+  ])('pide precisar el trámite: "%s"', (message) => {
+    expect(isTopiclessQuestion(message)).toBe(true);
+  });
+
+  it.each([
+    '¿Cuáles son los requisitos para una reasignación?',
+    '¿Qué dice la ley 29944 sobre el plazo?',
+    'Buenos días, quisiera saber cuánto tiempo tiene un director para responder esta solicitud.',
+    '¿Quién reemplaza al director cuando se encuentra de licencia?',
+  ])('una consulta con tema o extensa va al RAG: "%s"', (message) => {
+    expect(isTopiclessQuestion(message)).toBe(false);
   });
 });

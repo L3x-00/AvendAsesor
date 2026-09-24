@@ -661,6 +661,39 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
   });
 
+  it("shows Markdown headings as plain emphasized text and flags an unanswered saved question", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            {
+              ...eligibleConversation.messages[0],
+              id: "cc8b56af-6d0c-4fef-881e-7c00907540dd",
+            },
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: "### Misión del cargo\nGestionar los aprendizajes. [[1]]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.getByText("Misión del cargo")).toBeVisible();
+    // La cita [1] del texto guardado enlaza con su fuente.
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/###/u)).not.toBeInTheDocument();
+    // La primera pregunta quedó guardada sin respuesta: se avisa para reenviarla.
+    expect(
+      screen.getByText(/Esta consulta no se completó por un problema técnico/u),
+    ).toBeVisible();
+  });
+
   it("renders the clarification the API really sends ({id, name}) and re-sends the question for the chosen module", async () => {
     // Contrato real de la API: los módulos de la aclaración llegan como
     // { id, name }. El fixture anterior usaba el ChatModule completo y ocultaba

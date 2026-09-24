@@ -357,6 +357,49 @@ describe('ChatService — lineamientos del cliente', () => {
     });
   });
 
+  describe('puntos 5 y 12: consulta sin tema que requiere precisión', () => {
+    it('pide el trámite con los temas reales como opciones y guarda la aclaración', async () => {
+      const events = await collect({ question: '¿Cuáles son los requisitos?' });
+
+      expect(ragService.retrieve).not.toHaveBeenCalled();
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'clarification',
+        'done',
+      ]);
+      const clarification = events[1] as {
+        data: { message: string; modules: Array<{ id: string; name: string }> };
+      };
+      expect(clarification.data.message).toContain('sobre qué trámite');
+      expect(clarification.data.modules).toEqual([
+        { id: 'a', name: 'Situaciones administrativas' },
+        { id: 'b', name: 'Remuneraciones' },
+      ]);
+      expect(completion()).toMatchObject({
+        replyRole: 'clarification',
+        unansweredReason: 'ambiguous_request',
+      });
+    });
+
+    it('con un módulo elegido, la misma pregunta se busca en ese tema', async () => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      await collect({
+        question: '¿Cuáles son los requisitos?',
+        selectedModuleId: MODULE_ID,
+      });
+
+      expect(ragService.retrieve).toHaveBeenCalledWith(
+        '¿Cuáles son los requisitos?',
+        MODULE_ID,
+        [],
+      );
+    });
+  });
+
   describe('punto 2: charla y capacidades', () => {
     it('«¿qué puedes hacer?» lista los temas raíz reales, en su orden', async () => {
       const events = await collect({ question: '¿Qué puedes hacer?' });

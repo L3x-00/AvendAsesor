@@ -131,9 +131,6 @@ function resolveActiveParentId(
   return selected.parentModuleId ?? selected.id;
 }
 
-/** Resalta frases clave con **negrita** sin inyectar HTML (guía §6). El resto
- * del cuerpo se mantiene en texto normal (negro); el azul se reserva para
- * acentos, enlaces y estados. */
 interface CitationContext {
   messageId: string;
   sources: ChatSource[];
@@ -150,8 +147,9 @@ function linkCitations(
   keyPrefix: string,
 ): ReactNode[] {
   if (!citations?.sources.length) return [text];
-  return text.split(/(\[\d+\])/u).map((part, index) => {
-    const rank = Number(part.match(/^\[(\d+)\]$/u)?.[1]);
+  // Tolera la cita doble ([[4]]) que a veces escribe el modelo.
+  return text.split(/(\[\[?\d+\]\]?)/u).map((part, index) => {
+    const rank = Number(part.match(/^\[\[?(\d+)\]\]?$/u)?.[1]);
     const source = rank
       ? citations.sources.find((item) => item.rank === rank)
       : undefined;
@@ -169,6 +167,9 @@ function linkCitations(
   });
 }
 
+/** Resalta frases clave con **negrita** sin inyectar HTML (guía §6). El resto
+ * del cuerpo se mantiene en texto normal (negro); el azul se reserva para
+ * acentos, enlaces y estados. */
 function renderInline(text: string, citations?: CitationContext): ReactNode[] {
   return text.split("**").map((segment, index) => {
     const parts = linkCitations(segment, citations, `c${index}`);
@@ -181,6 +182,7 @@ function renderInline(text: string, citations?: CitationContext): ReactNode[] {
   });
 }
 
+const headingPattern = /^#{1,6}\s+(.+)$/;
 const unorderedListItemPattern = /^\s*[-*•]\s+(.+)$/;
 const orderedListItemPattern = /^\s*\d+[.)]\s+(.+)$/;
 const persistedMessageIdPattern =
@@ -224,6 +226,25 @@ function renderRichContent(
     if (!line) {
       flushParagraph();
       flushList();
+      continue;
+    }
+
+    // Un encabezado Markdown ("### Misión del cargo") se muestra como texto
+    // destacado, sin los símbolos #.
+    const heading = line.match(headingPattern)?.[1];
+    if (heading) {
+      flushParagraph();
+      flushList();
+      blocks.push(
+        <p
+          className="avend-chat-paragraph avend-chat-paragraph--heading"
+          key={`heading-${blocks.length}`}
+        >
+          <strong>
+            {renderInline(heading.replaceAll("**", ""), citations)}
+          </strong>
+        </p>,
+      );
       continue;
     }
 

@@ -16,6 +16,7 @@ import {
   RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
+  RAG_TOPIC_CLARIFICATION_MESSAGE,
 } from '../rag/rag.constants';
 import {
   detectRetrievalScope,
@@ -47,6 +48,7 @@ import {
   announcesNewTopic,
   classifyTurnIntent,
   hasEducationalSignal,
+  isTopiclessQuestion,
 } from './intent/intent-classifier';
 
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
@@ -554,11 +556,27 @@ export class ChatService {
       return;
     }
 
+    const faqMemory = this.faqMemoryService.prepare(input.question);
+
+    // Primera consulta sin tema ni módulo elegido: se pide precisar el trámite
+    // antes de buscar (tantas interpretaciones como procesos).
+    if (
+      !input.conversationId &&
+      !input.selectedModuleId &&
+      isTopiclessQuestion(input.question)
+    ) {
+      yield* this.askForTopic({
+        faqMemory,
+        question: input.question,
+        userId: input.authorization.userId,
+      });
+      return;
+    }
+
     // "Otra consulta: …" o "cambiando de tema…": la consulta se busca y se
     // responde en una conversación nueva, sin arrastrar el tema anterior.
     const explicitTopicChange =
       Boolean(input.conversationId) && announcesNewTopic(input.question);
-    const faqMemory = this.faqMemoryService.prepare(input.question);
     const storedContext =
       input.conversationId && !explicitTopicChange
         ? await this.historyGateway.getConversationContext({
@@ -885,7 +903,7 @@ export class ChatService {
   ): Promise<ChatStreamEvent> {
     const topics =
       kind === 'capabilities' || kind === 'ask_announcement'
-        ? await this.activeTopics()
+        ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {
       data: { message: buildConversationalReply(kind, { topics }) },
@@ -893,14 +911,70 @@ export class ChatService {
     };
   }
 
+  /**
+   * Primera consulta sin tema ("¿Cuáles son los requisitos?"): se pide precisar
+   * el trámite con los temas reales como opciones. Se guarda como aclaración
+   * para que la respuesta del usuario ("de reasignación") conserve la pregunta.
+   */
+  private async *askForTopic(input: {
+    faqMemory: ReturnType<FaqMemoryService['prepare']>;
+    question: string;
+    userId: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    const modules = ((await this.activeTopics()) ?? []).slice(0, 8);
+    const turn = await this.historyGateway.beginTurn({
+      conversationId: null,
+      question: input.question,
+      selectedModuleId: null,
+      userId: input.userId,
+    });
+    yield {
+      data: {
+        conversationId: turn.conversationId,
+        moduleId: null,
+        startedNewConversation: true,
+        userMessageId: turn.userMessageId,
+      },
+      type: 'conversation',
+    };
+    const message = modules.length
+      ? `${RAG_TOPIC_CLARIFICATION_MESSAGE} También puedes elegir uno de estos temas.`
+      : RAG_TOPIC_CLARIFICATION_MESSAGE;
+    const completed = await this.historyGateway.completeTurn({
+      answer: message,
+      conversationId: turn.conversationId,
+      faqMemory: input.faqMemory,
+      detectedModuleId: null,
+      detectedSubmoduleId: null,
+      qualitySignals: [],
+      replyRole: 'clarification',
+      retrievalScope: detectRetrievalScope(input.question),
+      sources: [],
+      topRelevanceScore: null,
+      unansweredReason: 'ambiguous_request',
+      userId: input.userId,
+      userMessageId: turn.userMessageId,
+    });
+    yield { data: { message, modules }, type: 'clarification' };
+    yield {
+      data: {
+        conversationId: turn.conversationId,
+        inReplyToMessageId: turn.userMessageId,
+        messageId: completed.answerMessageId,
+        provider: 'rule',
+      },
+      type: 'done',
+    };
+  }
+
   /** Módulos raíz activos, en su orden; si la lista falla, la respuesta sigue sin ellos. */
-  private async activeTopics(): Promise<string[] | undefined> {
+  private async activeTopics(): Promise<ResolvedModule[] | undefined> {
     try {
       const modules = await this.historyGateway.listActiveModules();
       return modules
         .filter((module) => module.parentModuleId === null)
         .sort((left, right) => left.sortOrder - right.sortOrder)
-        .map((module) => module.name);
+        .map(({ id, name }) => ({ id, name }));
     } catch {
       return undefined;
     }

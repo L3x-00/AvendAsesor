@@ -17,6 +17,7 @@
 import {
   hasDomainSignal,
   hasStrongDomainSignal,
+  hasTopicTerm,
 } from '../../rag/domain-lexicon';
 import { normalizeSpanishText } from '../../rag/text-normalization';
 
@@ -313,6 +314,30 @@ export function classifyTurnIntent(
  */
 export function hasEducationalSignal(message: string): boolean {
   return hasDomainSignal(normalizeSpanishText(message));
+}
+
+/** Aspecto de trámite sin tema: requisitos, plazo, documentos, dónde presentar… */
+const TOPICLESS_ASPECT =
+  /\b(requisitos?|plazos?|tramites?|procedimientos?|pasos|documentos?|formatos?|costos?|solicitud(?:es)?|como (?:lo |la )?(?:solicito|pido|tramito|presento|hago)|donde (?:lo |la )?(?:presento|solicito|pido|tramito)|a quien (?:le )?(?:presento|solicito|pido)|cuanto (?:tiempo )?(?:demora|tarda|dura))\b/u;
+const MAX_TOPICLESS_WORDS = 9;
+
+/**
+ * Primera consulta que pregunta por un aspecto de trámite sin decir de qué
+ * trámite se trata ("¿Cuáles son los requisitos?", "¿Cuál es el plazo para
+ * presentar la solicitud?"). Hay tantas interpretaciones como procesos, así que
+ * se pide precisar el tema antes de buscar (Hito 3, puntos 5 y 12). Una norma
+ * con número o una consulta larga siguen al RAG.
+ */
+export function isTopiclessQuestion(message: string): boolean {
+  const normalized = normalizeSpanishText(message);
+  if (/\d/u.test(normalized) || hasTopicTerm(normalized)) return false;
+  if (!TOPICLESS_ASPECT.test(normalized)) return false;
+  const words = normalized
+    .replace(/[^a-z0-9 ]+/gu, ' ')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+  return words.length <= MAX_TOPICLESS_WORDS;
 }
 
 const EXPLICIT_TOPIC_CHANGE =

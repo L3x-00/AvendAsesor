@@ -158,7 +158,7 @@ describe('ChatService', () => {
     });
 
     const events = await collect(service, {
-      question: '¿Cuál es el plazo para presentar la solicitud?',
+      question: '¿Cuál es el plazo para presentar la solicitud de licencia?',
     });
 
     const noEvidence = events.find((event) => event.type === 'no_evidence');
@@ -175,7 +175,7 @@ describe('ChatService', () => {
     });
 
     const events = await collect(service, {
-      question: '¿Qué decía la norma anterior sobre el plazo?',
+      question: '¿Qué decía la norma anterior sobre el plazo de la licencia?',
     });
 
     const noEvidence = events.find((event) => event.type === 'no_evidence');
