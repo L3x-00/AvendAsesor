@@ -353,5 +353,14 @@ describe('regresiones de la revisión de API (2026-09-24)', () => {
     expect(
       announcesNewTopicWithSubject('Ahora quiero saber cuál es el plazo'),
     ).toBe(false);
+    // Tema propio aunque no esté en el léxico (regresión de la validación real).
+    expect(
+      announcesNewTopicWithSubject(
+        'Otra consulta: ¿qué perfil se exige para el cargo de jefe de taller?',
+      ),
+    ).toBe(true);
+    expect(
+      announcesNewTopicWithSubject('Otra consulta: ¿y en ese caso qué pasa?'),
+    ).toBe(false);
   });
 });

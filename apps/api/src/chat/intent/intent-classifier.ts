@@ -420,9 +420,18 @@ export function announcesNewTopic(message: string): boolean {
 export function announcesNewTopicWithSubject(message: string): boolean {
   const normalized = normalizeSpanishText(message);
   if (!EXPLICIT_TOPIC_CHANGE.test(normalized)) return false;
-  const rest = normalized.replace(
+  const rest = stripped(
+    normalized,
     new RegExp(EXPLICIT_TOPIC_CHANGE.source, 'gu'),
-    ' ',
   );
-  return hasTopicTerm(rest);
+  if (!rest || /^(?:y|e|pero|entonces)\b/u.test(rest)) return false;
+  if (FOLLOW_UP_ANAPHORA.test(rest)) return false;
+  // Solo palabras genéricas ("ahora quiero saber cuál es el plazo"): depende
+  // de la conversación. Cualquier otra sustancia ("el perfil del cargo de jefe
+  // de taller") es un tema propio, esté o no en el léxico.
+  return !rest.split(' ').every((word) => TOPICLESS_FILLER.has(word));
 }
+
+/** Remite a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
+const FOLLOW_UP_ANAPHORA =
+  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|mismo|misma|ello|aquel|aquella)\b/u;
