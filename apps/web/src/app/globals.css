@@ -328,7 +328,6 @@ textarea[aria-invalid="true"]:focus,
   width: 1.25rem;
 }
 
-
 .avend-button {
   align-items: center;
   border: 1px solid transparent;
@@ -993,6 +992,43 @@ textarea[aria-invalid="true"]:focus,
 .avend-chat-message--no_evidence .avend-chat-message-content,
 .avend-chat-message--clarification .avend-chat-message-content {
   color: var(--avend-text-muted);
+}
+
+/* Cita [n] enlazada a su fila en Referencias (Hito 3, punto 8). */
+.avend-chat-citation {
+  border-radius: 0.25rem;
+  color: var(--avend-accent-strong);
+  font-weight: 700;
+  padding: 0 0.1rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.avend-chat-citation:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.avend-chat-sources tr:target,
+.avend-chat-sources tr:focus {
+  background: var(--avend-soft-blue);
+  outline: 3px solid var(--avend-focus);
+  outline-offset: -3px;
+}
+
+/* Aviso de conversación nueva por cambio de tema y de consulta sin respuesta. */
+.avend-chat-topic-divider,
+.avend-chat-unanswered-note {
+  border-left: 4px solid var(--avend-accent);
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0 0.25rem 0.75rem;
+}
+
+.avend-chat-unanswered-note {
+  margin: 0.75rem 0 0;
 }
 
 .avend-chat-clarification-options {

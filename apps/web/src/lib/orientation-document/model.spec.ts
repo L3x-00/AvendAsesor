@@ -241,7 +241,7 @@ describe("orientation document model", () => {
       teacherName: "María Pérez",
     });
     expect(describeOrientationSource(source)).toBe(
-      "[1] Ley de Reforma Magisterial, versión 2, páginas 33–34, sección Licencias por salud, Artículo 5, numeral 5.1.",
+      "[1] Ley de Reforma Magisterial (vigente), versión 2, páginas 33–34, sección Licencias por salud, Artículo 5, numeral 5.1.",
     );
   });
 

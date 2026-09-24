@@ -15,6 +15,23 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+const LEADING_COURTESY =
+  /^(?:(?:hola+|buen[oa]s(?: d[ií]as| tardes| noches)?|buen d[ií]a|saludos|estimad[oa]s?|disculpe(?: la molestia)?|por favor|qu[eé] tal)[\s,.;:!¡¿?-]*)+/iu;
+const MAX_TITLE_CHARS = 90;
+
+/**
+ * Título legible de una conversación: sin el saludo con que empezó la primera
+ * consulta (todas empezaban igual y el tema quedaba al final) y acotado.
+ */
+export function readableConversationTitle(title: string | null): string {
+  const topic = (title ?? "").replace(LEADING_COURTESY, "").trim();
+  if (!topic) return title?.trim() || "Consulta sin título";
+  const capitalized = topic.charAt(0).toLocaleUpperCase("es") + topic.slice(1);
+  return capitalized.length > MAX_TITLE_CHARS
+    ? `${capitalized.slice(0, MAX_TITLE_CHARS).trimEnd()}…`
+    : capitalized;
+}
+
 function ConversationDeleteForm({
   conversationId,
 }: {
@@ -66,7 +83,9 @@ export function ChatHistoryList({
         {conversations.map((conversation) => (
           <li className="avend-history-item" key={conversation.id}>
             <div>
-              <h2>{conversation.title ?? "Consulta sin título"}</h2>
+              <h2 title={conversation.title ?? undefined}>
+                {readableConversationTitle(conversation.title)}
+              </h2>
               <p>Última actualización: {formatDate(conversation.updatedAt)}</p>
             </div>
             <div className="avend-history-actions">

@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ChatHistoryList } from "./chat-history-list";
+import {
+  ChatHistoryList,
+  readableConversationTitle,
+} from "./chat-history-list";
 
 const { deleteConversationAction } = vi.hoisted(() => ({
   deleteConversationAction: vi.fn(async () => ({
@@ -55,5 +58,23 @@ describe("ChatHistoryList", () => {
     expect(
       await screen.findByText(/fue retirada de tu historial/i),
     ).toBeVisible();
+  });
+});
+
+describe("readableConversationTitle", () => {
+  it("removes the leading greeting so the topic comes first", () => {
+    expect(
+      readableConversationTitle(
+        "Hola, buenos días, quisiera saber cuánto tiempo tiene un director para responder.",
+      ),
+    ).toBe("Quisiera saber cuánto tiempo tiene un director para responder.");
+  });
+
+  it("keeps a title that is only a greeting and shortens long titles", () => {
+    expect(readableConversationTitle("Hola")).toBe("Hola");
+    expect(readableConversationTitle(null)).toBe("Consulta sin título");
+    const long = readableConversationTitle(`Requisitos ${"x".repeat(200)}`);
+    expect(long.length).toBeLessThanOrEqual(91);
+    expect(long.endsWith("…")).toBe(true);
   });
 });

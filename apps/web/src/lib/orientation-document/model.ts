@@ -15,15 +15,7 @@ const unsafeControlCharacters =
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g;
 
 const unsafeDocumentCodePoints = new Set([
-  0x202a,
-  0x202b,
-  0x202c,
-  0x202d,
-  0x202e,
-  0x2066,
-  0x2067,
-  0x2068,
-  0x2069,
+  0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069,
 ]);
 
 /** Keeps only XML 1.0-compatible Unicode scalar values. */
@@ -230,8 +222,17 @@ export function describeOrientationSource(source: ChatSource): string {
     source.numeralReference ? `numeral ${source.numeralReference}` : null,
   ].filter((value): value is string => Boolean(value));
 
+  // La situación documental va en la ficha: sin ella, una norma reemplazada
+  // impresa para la UGEL se leería como vigente (M13).
+  const situation =
+    source.documentSituation === "current"
+      ? "vigente"
+      : source.documentSituation === "replaced"
+        ? "reemplazada / sin vigencia (solo antecedente histórico)"
+        : "archivada (antecedente histórico)";
+
   return sanitizeDocumentText(
-    `[${source.rank}] ${source.documentTitle}, versión ${source.versionNumber}, ${pages}${details.length ? `, ${details.join(", ")}` : ""}.`,
+    `[${source.rank}] ${source.documentTitle} (${situation}), versión ${source.versionNumber}, ${pages}${details.length ? `, ${details.join(", ")}` : ""}.`,
   );
 }
 

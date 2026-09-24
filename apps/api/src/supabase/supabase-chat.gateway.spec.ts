@@ -254,7 +254,31 @@ describe('SupabaseChatGatewayAdapter', () => {
       p_user_id: userId,
     });
     expect(storageFrom).toHaveBeenCalledWith('normative-documents');
-    expect(createSignedUrl).toHaveBeenCalledWith('documents/version.pdf', 60, {
+    // Un PDF se abre en el visor del navegador, sin forzar la descarga.
+    expect(createSignedUrl).toHaveBeenCalledWith(
+      'documents/version.pdf',
+      60,
+      undefined,
+    );
+  });
+
+  it('keeps forcing the download for Word or Markdown sources', async () => {
+    const sourceId = '8c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const { client, createSignedUrl } = createClient({
+      rpcData: [
+        {
+          source_id: sourceId,
+          storage_bucket: 'normative-documents',
+          storage_path: 'documents/version.docx',
+        },
+      ],
+      signedUrl: 'https://storage.example/signed',
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await gateway.createSourceDownloadUrl({ sourceId, ttlSeconds: 60, userId });
+
+    expect(createSignedUrl).toHaveBeenCalledWith('documents/version.docx', 60, {
       download: true,
     });
   });

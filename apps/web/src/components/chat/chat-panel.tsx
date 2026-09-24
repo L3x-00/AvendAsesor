@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   FormEvent,
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -15,22 +16,32 @@ import type {
   ChatHistoryMessage,
   ChatModule,
   ChatSource,
+  ClarificationModule,
 } from "@/lib/chat-api/types";
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { ConsultationFeedback } from "./consultation-feedback";
-import { ChatSources } from "./chat-sources";
+import { ChatSources, citedSourceRanks, sourceAnchorId } from "./chat-sources";
 
 type MessageRole = ChatHistoryMessage["role"];
 
 interface RenderedMessage {
   content: string;
+  /** Conversación a la que pertenece (la API puede abrir otra por cambio de tema). */
+  conversationId?: string;
   id: string;
   inReplyToMessageId: string | null;
-  modules?: ChatModule[];
+  modules?: ClarificationModule[];
   role: MessageRole;
   sources: ChatSource[];
+  /** La consulta empezó una conversación nueva por cambio de tema. */
+  startsNewTopic?: boolean;
+  /** Consulta guardada que no recibió respuesta (fallo técnico o corte). */
+  unanswered?: boolean;
 }
+
+/** Tras este tiempo sin respuesta se avisa que el servicio puede estar activándose. */
+const COLD_START_NOTICE_MS = 12_000;
 
 interface ChatPanelProps {
   initialConversation?: ChatConversationDetail;
@@ -60,12 +71,18 @@ export function canPrepareOrientation(
 function initialMessages(
   conversation: ChatConversationDetail | undefined,
 ): RenderedMessage[] {
-  return (conversation?.messages ?? []).map((message) => ({
+  const messages = conversation?.messages ?? [];
+  const answeredIds = new Set(
+    messages.map((message) => message.inReplyToMessageId).filter(Boolean),
+  );
+  return messages.map((message) => ({
     content: message.content,
+    conversationId: conversation?.conversation.id,
     id: message.id,
     inReplyToMessageId: message.inReplyToMessageId,
     role: message.role,
     sources: message.sources,
+    unanswered: message.role === "user" && !answeredIds.has(message.id),
   }));
 }
 
@@ -117,12 +134,51 @@ function resolveActiveParentId(
 /** Resalta frases clave con **negrita** sin inyectar HTML (guía §6). El resto
  * del cuerpo se mantiene en texto normal (negro); el azul se reserva para
  * acentos, enlaces y estados. */
-function renderInline(text: string): ReactNode[] {
-  return text
-    .split("**")
-    .map((segment, index) =>
-      index % 2 === 1 ? <strong key={index}>{segment}</strong> : segment,
+interface CitationContext {
+  messageId: string;
+  sources: ChatSource[];
+}
+
+/**
+ * Convierte cada cita [n] en un enlace a la fila n de «Referencias» (Hito 3,
+ * punto 8): el usuario ve de dónde sale cada afirmación sin buscarla. Una cita
+ * sin fuente correspondiente queda como texto.
+ */
+function linkCitations(
+  text: string,
+  citations: CitationContext | undefined,
+  keyPrefix: string,
+): ReactNode[] {
+  if (!citations?.sources.length) return [text];
+  return text.split(/(\[\d+\])/u).map((part, index) => {
+    const rank = Number(part.match(/^\[(\d+)\]$/u)?.[1]);
+    const source = rank
+      ? citations.sources.find((item) => item.rank === rank)
+      : undefined;
+    if (!source) return part;
+    return (
+      <a
+        aria-label={`Ver fuente ${rank}: ${source.documentTitle}`}
+        className="avend-chat-citation"
+        href={`#${sourceAnchorId(citations.messageId, rank)}`}
+        key={`${keyPrefix}-${index}`}
+      >
+        [{rank}]
+      </a>
     );
+  });
+}
+
+function renderInline(text: string, citations?: CitationContext): ReactNode[] {
+  return text.split("**").map((segment, index) => {
+    const parts = linkCitations(segment, citations, `c${index}`);
+    if (index % 2 === 1) return <strong key={index}>{parts}</strong>;
+    return parts.length === 1 && typeof parts[0] === "string" ? (
+      parts[0]
+    ) : (
+      <Fragment key={index}>{parts}</Fragment>
+    );
+  });
 }
 
 const unorderedListItemPattern = /^\s*[-*•]\s+(.+)$/;
@@ -130,7 +186,10 @@ const orderedListItemPattern = /^\s*\d+[.)]\s+(.+)$/;
 const persistedMessageIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function renderRichContent(content: string): ReactNode[] {
+function renderRichContent(
+  content: string,
+  citations?: CitationContext,
+): ReactNode[] {
   const blocks: ReactNode[] = [];
   let paragraphLines: string[] = [];
   let listItems: string[] = [];
@@ -141,7 +200,7 @@ function renderRichContent(content: string): ReactNode[] {
     const paragraph = paragraphLines.join(" ");
     blocks.push(
       <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
-        {renderInline(paragraph)}
+        {renderInline(paragraph, citations)}
       </p>,
     );
     paragraphLines = [];
@@ -153,7 +212,7 @@ function renderRichContent(content: string): ReactNode[] {
     blocks.push(
       <List className="avend-chat-list" key={`list-${blocks.length}`}>
         {listItems.map((item, index) => (
-          <li key={`${index}-${item}`}>{renderInline(item)}</li>
+          <li key={`${index}-${item}`}>{renderInline(item, citations)}</li>
         ))}
       </List>,
     );
@@ -269,6 +328,13 @@ export function ChatPanel({
   // Contador monotónico para keys locales estables (evita colisiones de key de
   // React entre mensajes creados en el cliente, independiente de crypto.randomUUID).
   const localIdRef = useRef(0);
+  // Estado mutable del turno en streaming (conversación, fuentes y pregunta
+  // guardada); un solo turno a la vez por la guarda de isStreaming.
+  const turnRef = useRef<{
+    conversationId?: string;
+    sources: ChatSource[];
+    userMessageId: string | null;
+  }>({ sources: [], userMessageId: null });
 
   function nextLocalId(prefix: string): string {
     localIdRef.current += 1;
@@ -309,7 +375,8 @@ export function ChatPanel({
         .reverse()
         .find(
           (message) =>
-            message.role !== "user" && persistedMessageIdPattern.test(message.id),
+            message.role !== "user" &&
+            persistedMessageIdPattern.test(message.id),
         )?.id,
     [messages],
   );
@@ -457,19 +524,28 @@ export function ChatPanel({
     message: string,
     retryQuestion?: string,
     unpersistedQuestionId?: string,
+    persistedQuestionId?: string | null,
   ) {
     setMessages((current) =>
-      current.filter((item, index) => {
-        if (item.id === "streaming" || item.id === unpersistedQuestionId) {
-          return false;
-        }
-        const isLatest = index === current.length - 1;
-        return !(
-          isLatest &&
-          (item.id.startsWith("clarification-") ||
-            item.id.startsWith("no-evidence-"))
-        );
-      }),
+      current
+        .filter((item, index) => {
+          if (item.id === "streaming" || item.id === unpersistedQuestionId) {
+            return false;
+          }
+          const isLatest = index === current.length - 1;
+          return !(
+            isLatest &&
+            (item.id.startsWith("clarification-") ||
+              item.id.startsWith("no-evidence-"))
+          );
+        })
+        // La consulta ya quedó guardada sin respuesta: se avisa en pantalla (y
+        // en el historial) para que el usuario sepa que puede reenviarla.
+        .map((item) =>
+          persistedQuestionId && item.id === persistedQuestionId
+            ? { ...item, unanswered: true }
+            : item,
+        ),
     );
     if (retryQuestion) {
       setQuestion((current) => current || retryQuestion);
@@ -480,14 +556,67 @@ export function ChatPanel({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalizedQuestion = question.trim();
+    await sendQuestion(question.trim());
+  }
+
+  /**
+   * Responde una aclaración con un clic: reenvía la pregunta original en una
+   * conversación nueva del tema elegido, sin obligar a reescribirla (Hito 3,
+   * punto 5). Si la pregunta no está en pantalla, solo cambia el tema.
+   */
+  function answerClarification(
+    clarification: RenderedMessage,
+    module: ClarificationModule,
+  ) {
+    if (isStreaming) return;
+    const original = messages.find(
+      (message) =>
+        message.role === "user" &&
+        message.id === clarification.inReplyToMessageId,
+    )?.content;
+    if (!original) {
+      changeModuleContext(module.id);
+      return;
+    }
+    setSelectedModuleId(module.id);
+    void sendQuestion(original, { moduleId: module.id, newConversation: true });
+  }
+
+  async function sendQuestion(
+    normalizedQuestion: string,
+    options: { moduleId?: string; newConversation?: boolean } = {},
+  ) {
     if (!normalizedQuestion || isStreaming) return;
     if (isDictating) stopDictation();
 
+    // El módulo solo se envía al INICIAR una conversación: al continuarla, el
+    // servidor usa el módulo guardado. Reenviar el módulo de la pantalla tras
+    // un cambio de tema abría otra conversación sin contexto (punto 6).
+    const targetConversationId = options.newConversation
+      ? undefined
+      : conversationId;
+    const targetModuleId = options.moduleId ?? selectedModuleId;
+    const hadVisibleMessages = messages.length > 0;
     const abortController = new AbortController();
     const localQuestionId = nextLocalId("local-question");
+    // Estado del turno en curso: se completa a medida que llegan los eventos.
+    turnRef.current = { sources: [], userMessageId: null };
+    const turn = turnRef.current;
+    let receivedFrame = false;
+    const coldStartTimer = window.setTimeout(() => {
+      if (!receivedFrame) {
+        setStatus(
+          "Estamos activando el servicio; la primera consulta del día puede tardar hasta un minuto.",
+        );
+      }
+    }, COLD_START_NOTICE_MS);
     const discardCurrentRequest = (message: string) =>
-      discardStreamingMessage(message, normalizedQuestion, localQuestionId);
+      discardStreamingMessage(
+        message,
+        normalizedQuestion,
+        localQuestionId,
+        turn.userMessageId,
+      );
     setMessages((current) => [
       ...current,
       {
@@ -504,13 +633,15 @@ export function ChatPanel({
     setStatus("Buscando sustento en los documentos aplicables…");
 
     try {
-      let currentSources: ChatSource[] = [];
-      let currentUserMessageId: string | null = null;
       let completionStatus = "Respuesta lista.";
       const response = await fetch("/api/chat/stream", {
         body: JSON.stringify({
-          ...(conversationId ? { conversationId } : {}),
-          ...(selectedModuleId ? { moduleId: selectedModuleId } : {}),
+          ...(targetConversationId
+            ? { conversationId: targetConversationId }
+            : {}),
+          ...(!targetConversationId && targetModuleId
+            ? { moduleId: targetModuleId }
+            : {}),
           question: normalizedQuestion,
         }),
         headers: { "Content-Type": "application/json" },
@@ -535,6 +666,7 @@ export function ChatPanel({
         buffer = parsed.remainder;
 
         for (const frame of parsed.frames) {
+          receivedFrame = true;
           let payload: unknown;
           try {
             payload = JSON.parse(frame.data);
@@ -554,7 +686,16 @@ export function ChatPanel({
               );
               return;
             }
-            currentUserMessageId = result.data.userMessageId;
+            turnRef.current.userMessageId = result.data.userMessageId;
+            turnRef.current.conversationId = result.data.conversationId;
+            // La API abrió otra conversación (cambio de tema): se marca en
+            // pantalla para que el usuario sepa dónde quedó cada parte.
+            const startsNewTopic = Boolean(
+              result.data.startedNewConversation &&
+              hadVisibleMessages &&
+              conversationId &&
+              conversationId !== result.data.conversationId,
+            );
             setConversationId(result.data.conversationId);
             setMessages((current) => {
               const localQuestionIndex = current.findLastIndex(
@@ -566,7 +707,12 @@ export function ChatPanel({
 
               return current.map((message, index) =>
                 index === localQuestionIndex
-                  ? { ...message, id: result.data.userMessageId }
+                  ? {
+                      ...message,
+                      conversationId: result.data.conversationId,
+                      id: result.data.userMessageId,
+                      startsNewTopic,
+                    }
                   : message,
               );
             });
@@ -586,7 +732,7 @@ export function ChatPanel({
               );
               return;
             }
-            currentSources = result.data.sources;
+            turnRef.current.sources = result.data.sources;
             setStatus("Redactando una respuesta con el sustento encontrado…");
             continue;
           }
@@ -614,10 +760,11 @@ export function ChatPanel({
                 ...current,
                 {
                   content: result.data.text,
+                  conversationId: turn.conversationId,
                   id: "streaming",
-                  inReplyToMessageId: currentUserMessageId,
+                  inReplyToMessageId: turn.userMessageId,
                   role: "assistant",
-                  sources: currentSources,
+                  sources: turn.sources,
                 },
               ];
             });
@@ -638,11 +785,12 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
+                conversationId: turn.conversationId,
                 id: nextLocalId("clarification"),
-                inReplyToMessageId: currentUserMessageId,
+                inReplyToMessageId: turn.userMessageId,
                 modules: result.data.modules,
                 role: "clarification",
-                sources: currentSources,
+                sources: turn.sources,
               },
             ]);
             completionStatus = "Se necesita una aclaración para continuar.";
@@ -688,8 +836,9 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
+                conversationId: turn.conversationId,
                 id: nextLocalId("no-evidence"),
-                inReplyToMessageId: currentUserMessageId,
+                inReplyToMessageId: turn.userMessageId,
                 role: "no_evidence",
                 sources: [],
               },
@@ -740,6 +889,7 @@ export function ChatPanel({
         "Se interrumpió la conexión. No se guardó contenido parcial.",
       );
     } finally {
+      window.clearTimeout(coldStartTimer);
       setIsStreaming(false);
     }
   }
@@ -845,12 +995,29 @@ export function ChatPanel({
                 className={`avend-chat-message avend-chat-message--${message.role}`}
                 key={message.id}
               >
+                {message.startsNewTopic ? (
+                  <p className="avend-chat-topic-divider" role="note">
+                    Nuevo tema: esta consulta se guardó como una conversación
+                    nueva en tu Historial.
+                  </p>
+                ) : null}
                 <p className="avend-chat-message-label">
                   {message.role === "user" ? "Tu consulta" : "AVEND ASESOR"}
                 </p>
                 <div className="avend-chat-message-content">
-                  {renderRichContent(message.content)}
+                  {renderRichContent(
+                    message.content,
+                    message.role === "assistant" && message.id !== "streaming"
+                      ? { messageId: message.id, sources: message.sources }
+                      : undefined,
+                  )}
                 </div>
+                {message.unanswered ? (
+                  <p className="avend-chat-unanswered-note" role="note">
+                    Esta consulta no se completó por un problema técnico. Puedes
+                    volver a enviarla.
+                  </p>
+                ) : null}
                 {relatedRouteLabel(message) ? (
                   <p className="avend-chat-related-route">
                     <strong>Relacionado con:</strong>{" "}
@@ -863,7 +1030,7 @@ export function ChatPanel({
                       <button
                         disabled={isStreaming}
                         key={module.id}
-                        onClick={() => changeModuleContext(module.id)}
+                        onClick={() => answerClarification(message, module)}
                         type="button"
                       >
                         Consultar {module.name}
@@ -872,12 +1039,20 @@ export function ChatPanel({
                   </div>
                 ) : null}
                 {message.sources.length && message.id !== "streaming" ? (
-                  <ChatSources sources={message.sources} />
+                  <ChatSources
+                    citedRanks={
+                      message.role === "assistant"
+                        ? citedSourceRanks(message.content)
+                        : undefined
+                    }
+                    messageId={message.id}
+                    sources={message.sources}
+                  />
                 ) : null}
-                {conversationId &&
+                {(message.conversationId ?? conversationId) &&
                 canPrepareOrientation(
                   message,
-                  conversationId,
+                  message.conversationId ?? conversationId,
                   messages
                     .slice(0, messageIndex)
                     .some(
@@ -889,7 +1064,7 @@ export function ChatPanel({
                   <div className="mt-4 flex flex-col items-start gap-2">
                     <Link
                       className="avend-button avend-button--secondary"
-                      href={`/chat/${encodeURIComponent(conversationId)}/orientacion/${encodeURIComponent(message.id)}`}
+                      href={`/chat/${encodeURIComponent(message.conversationId ?? conversationId ?? "")}/orientacion/${encodeURIComponent(message.id)}`}
                       rel="noopener noreferrer"
                       target="_blank"
                     >
