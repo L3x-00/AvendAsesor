@@ -76,7 +76,7 @@ describe('RagService', () => {
     expect(gateway.search).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        matchCount: 5,
+        matchCount: 10,
         matchThreshold: 0.7,
         retrievalScope: 'current',
         selectedModuleId: 'module-a',
@@ -90,6 +90,7 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-b',
+        chunkContent: 'Contenido chunk-b.',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
@@ -117,6 +118,7 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-b',
+        chunkContent: 'Contenido chunk-b.',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
@@ -134,6 +136,7 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-without-module',
+        chunkContent: 'Contenido chunk-without-module.',
         moduleIds: [],
         moduleNames: [],
       },
@@ -146,7 +149,7 @@ describe('RagService', () => {
     });
   });
 
-  it('keeps the prior topic on a module-free follow-up (global uses context)', async () => {
+  it('keeps the prior topic on a module-free elliptical follow-up', async () => {
     gateway.search.mockResolvedValue([source]);
 
     await expect(
@@ -156,12 +159,10 @@ describe('RagService', () => {
     ).resolves.toMatchObject({ kind: 'evidence', sources: [source] });
 
     const embeddingCalls = embeddings.embed.mock.calls as Array<[string[]]>;
-    const embeddedQueries = embeddingCalls[0]?.[0];
-    expect(embeddedQueries?.[0]).toBe('¿Y cuál es el plazo?');
-    expect(embeddedQueries?.[1]).toContain(
+    expect(embeddingCalls[0]?.[0]).toHaveLength(1);
+    expect(embeddingCalls[0]?.[0]?.[0]).toContain(
       'Necesito una reasignación por unidad familiar.',
     );
-
     const searchCalls = gateway.search.mock.calls as Array<
       [Parameters<RetrievalGateway['search']>[0]]
     >;
@@ -170,14 +171,11 @@ describe('RagService', () => {
     expect(globalSearch?.query).toContain(
       'Pregunta actual: ¿Y cuál es el plazo?',
     );
-    expect(globalSearch?.query).toContain(
-      'Necesito una reasignación por unidad familiar.',
-    );
-    // La global usa el embedding contextual (segunda consulta), no el escueto.
-    expect(globalSearch?.embedding[0]).toBeCloseTo(0.11);
   });
 
-  it('uses the contextual query for selected-module follow-up retrieval', async () => {
+  it('searches an elliptical follow-up with context in BOTH searches when a module is selected', async () => {
+    // Con la pregunta escueta, la global coincidía con plazos de otros temas y
+    // declaraba un falso cambio de tema (auditoría de continuidad, 2026-09-23).
     gateway.search.mockImplementation(
       (input: { selectedModuleId: string | null }) =>
         Promise.resolve(input.selectedModuleId ? [source] : []),
@@ -188,31 +186,158 @@ describe('RagService', () => {
         'Necesito una licencia por salud.',
       ]),
     ).resolves.toMatchObject({ kind: 'evidence', sources: [source] });
-    const embeddingCalls = embeddings.embed.mock.calls as Array<[string[]]>;
-    const embeddedQueries = embeddingCalls[0]?.[0];
-    expect(embeddedQueries?.[0]).toBe('¿Y cuál es el plazo?');
-    expect(embeddedQueries?.[1]).toContain('Necesito una licencia por salud.');
-    expect(gateway.search).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        query: '¿Y cuál es el plazo?',
-        selectedModuleId: null,
-      }),
-    );
     const searchCalls = gateway.search.mock.calls as Array<
       [Parameters<RetrievalGateway['search']>[0]]
     >;
-    const selectedSearch = searchCalls[1]?.[0];
-    expect(selectedSearch?.query).toContain(
-      'Pregunta actual: ¿Y cuál es el plazo?',
+    for (const [call] of searchCalls) {
+      expect(call.query).toContain('Necesito una licencia por salud.');
+      expect(call.query).toContain('Pregunta actual: ¿Y cuál es el plazo?');
+    }
+    expect(searchCalls.map(([call]) => call.selectedModuleId)).toEqual([
+      null,
+      'module-a',
+    ]);
+  });
+
+  it('searches a follow-up that names its own topic without the previous questions', async () => {
+    gateway.search.mockResolvedValue([source]);
+
+    await service.retrieve('¿y para una permuta?', null, [
+      'requisitos para solicitar una reasignación',
+    ]);
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    expect(searchCalls[0]?.[0].query).toBe('¿y para una permuta?');
+  });
+
+  it('keeps the contextual query within the 8,000-character RPC limit, favoring recent questions', async () => {
+    gateway.search.mockResolvedValue([source]);
+
+    await service.retrieve('¿y el plazo?', null, [
+      'x'.repeat(7_000),
+      'consulta reciente',
+    ]);
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    const query = searchCalls[0]?.[0].query ?? '';
+    expect(query.length).toBeLessThanOrEqual(8_000);
+    expect(query).toContain('consulta reciente');
+  });
+
+  it('ignores a low-scoring tail source from another module when routing (no false clarification)', async () => {
+    // Datos reales: 3 fragmentos del documento de destitución (0.665–0.595) y
+    // uno de otro módulo a 0.52 pedían aclaración en «¿y cuál es el plazo?».
+    const main = [0.665, 0.665, 0.595].map((semanticScore, index) => ({
+      ...source,
+      chunkContent: `Destitución ${index}.`,
+      chunkId: `main-${index}`,
+      semanticScore,
+    }));
+    const tail = {
+      ...source,
+      chunkContent: 'Padrones.',
+      chunkId: 'tail',
+      documentVersionId: 'other-version',
+      moduleIds: ['module-b'],
+      moduleNames: ['Módulo B'],
+      semanticScore: 0.52,
+    };
+    gateway.search.mockResolvedValue([...main, tail]);
+
+    await expect(
+      service.retrieve('¿y cuál es el plazo?', null),
+    ).resolves.toEqual({
+      kind: 'evidence',
+      resolvedModule: { id: 'module-a', name: 'Módulo A' },
+      sources: main,
+      topRelevanceScore: 0.665,
+    });
+  });
+
+  it('resolves a document associated with several modules instead of asking to clarify', async () => {
+    const multiModule = [0.8, 0.78].map((semanticScore, index) => ({
+      ...source,
+      chunkContent: `Ley ${index}.`,
+      chunkId: `ley-${index}`,
+      moduleIds: ['module-a', 'module-b'],
+      moduleNames: ['Módulo A', 'Módulo B'],
+      semanticScore,
+    }));
+    gateway.search.mockResolvedValue(multiModule);
+
+    await expect(service.retrieve('Consulta', null)).resolves.toMatchObject({
+      kind: 'evidence',
+      resolvedModule: { id: 'module-a', name: 'Módulo A' },
+    });
+  });
+
+  it('drops duplicated chunks (same text of the same version) from the evidence', async () => {
+    gateway.search.mockResolvedValue([
+      source,
+      { ...source, chunkId: 'duplicate' },
+      { ...source, chunkContent: 'Otro contenido.', chunkId: 'other' },
+    ]);
+
+    const result = await service.retrieve('Consulta', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'chunk-id',
+      'other',
+    ]);
+  });
+
+  it('keeps only the sources within the relevance band of the best one, capped at the match count', async () => {
+    const scores = [0.8, 0.78, 0.76, 0.74, 0.72, 0.7, 0.6];
+    gateway.search.mockResolvedValue(
+      scores.map((semanticScore, index) => ({
+        ...source,
+        chunkContent: `Fragmento ${index}.`,
+        chunkId: `band-${index}`,
+        semanticScore,
+      })),
     );
-    expect(selectedSearch?.selectedModuleId).toBe('module-a');
+
+    const result = await service.retrieve('Consulta', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.semanticScore)).toEqual([
+      0.8, 0.78, 0.76, 0.74, 0.72,
+    ]);
+  });
+
+  it('adds global evidence of a sibling subtopic inside the selected module', async () => {
+    const reasignacion = {
+      ...source,
+      chunkContent: 'Reasignación.',
+      chunkId: 'r',
+      semanticScore: 0.7,
+    };
+    const permuta = {
+      ...source,
+      chunkContent: 'Permuta.',
+      chunkId: 'p',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(
+      (input: { selectedModuleId: string | null }) =>
+        Promise.resolve(input.selectedModuleId ? [reasignacion] : [permuta]),
+    );
+
+    const result = await service.retrieve('¿y para una permuta?', 'module-a', [
+      'requisitos para una reasignación',
+    ]);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.chunkId)).toEqual(['p', 'r']);
   });
 
   it('detects a clear topic switch without mixing the former module sources', async () => {
     const switchedSource = {
       ...source,
       chunkId: 'chunk-b',
+      chunkContent: 'Contenido chunk-b.',
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95,
@@ -244,6 +369,7 @@ describe('RagService', () => {
     const switchedSource = {
       ...source,
       chunkId: 'chunk-b',
+      chunkContent: 'Contenido chunk-b.',
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95,
@@ -272,6 +398,7 @@ describe('RagService', () => {
     const globalSources = Array.from({ length: 10 }, (_value, index) => ({
       ...source,
       chunkId: `global-${index}`,
+      chunkContent: `Contenido global-${index}.`,
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95 - index / 1_000,
@@ -279,6 +406,7 @@ describe('RagService', () => {
     const selectedSources = Array.from({ length: 10 }, (_value, index) => ({
       ...source,
       chunkId: `selected-${index}`,
+      chunkContent: `Contenido selected-${index}.`,
       semanticScore: 0.9 - index / 1_000,
     }));
     gateway.search.mockImplementation(
@@ -309,12 +437,14 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-b',
+        chunkContent: 'Contenido chunk-b.',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
       {
         ...source,
         chunkId: 'chunk-c',
+        chunkContent: 'Contenido chunk-c.',
         moduleIds: ['module-c'],
         moduleNames: ['Módulo C'],
       },
@@ -423,6 +553,7 @@ describe('resolveDetectedSubmodule', () => {
       {
         ...source,
         chunkId: 'chunk-b',
+        chunkContent: 'Contenido chunk-b.',
         moduleAssociations: [
           {
             rootModuleId: 'module-a',

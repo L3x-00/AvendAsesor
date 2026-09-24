@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import type { EmbeddingsGateway } from '../ingestion/embeddings.gateway';
 import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
+import { hasTopicTerm } from './domain-lexicon';
 import {
-  MAX_CHAT_CONTEXT_CHARS,
   RAG_DEFAULT_MATCH_THRESHOLD,
+  RAG_QUERY_TEXT_MAX_CHARS,
+  RAG_ROUTING_SCORE_MARGIN,
+  RAG_SOURCE_SCORE_MARGIN,
   RAG_TOPIC_SWITCH_SCORE_MARGIN,
 } from './rag.constants';
 import type {
@@ -144,6 +147,48 @@ function topScore(sources: RetrievedChunk[]): number {
   return clampScore(Math.max(...sources.map((source) => source.semanticScore)));
 }
 
+/**
+ * Quita fragmentos repetidos (mismo texto de la misma versión). El chunker
+ * anterior guardaba duplicados exactos; hasta reindexar, sin este filtro
+ * ocupaban dos de las cinco fuentes y repetían filas en las referencias.
+ */
+function uniqueSources(sources: RetrievedChunk[]): RetrievedChunk[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = `${source.documentVersionId}\u0000${source.chunkContent.replace(/\s+/gu, ' ').trim()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Fuentes a no más de `margin` del mejor puntaje, en su orden original. */
+function withinScoreMargin(
+  sources: RetrievedChunk[],
+  margin: number,
+): RetrievedChunk[] {
+  if (!sources.length) return sources;
+  const best = Math.max(...sources.map((source) => source.semanticScore));
+  return sources.filter((source) => source.semanticScore >= best - margin);
+}
+
+/** Evidencia que se entrega: sin duplicados, dentro de la banda y acotada. */
+function relevantSources(
+  sources: RetrievedChunk[],
+  limit: number,
+): RetrievedChunk[] {
+  return withinScoreMargin(
+    uniqueSources(sources),
+    RAG_SOURCE_SCORE_MARGIN,
+  ).slice(0, limit);
+}
+
+function byScoreDescending(sources: RetrievedChunk[]): RetrievedChunk[] {
+  return [...sources].sort(
+    (left, right) => right.semanticScore - left.semanticScore,
+  );
+}
+
 function balancedUniqueSources(
   limit: number,
   ...groups: RetrievedChunk[][]
@@ -169,7 +214,16 @@ function balancedUniqueSources(
   return result;
 }
 
-function routeSources(sources: RetrievedChunk[]): SourceRoute {
+/**
+ * Decide el módulo de la evidencia. Solo cuentan las fuentes dominantes (a
+ * `RAG_ROUTING_SCORE_MARGIN` del mejor puntaje): una fuente de cola de otro
+ * módulo no es una segunda interpretación real. Si todas comparten al menos un
+ * módulo, la ruta está resuelta —también cuando un mismo documento está
+ * asociado a varios módulos—; solo hay ambigüedad cuando las fuentes dominantes
+ * apuntan a módulos distintos sin ninguno en común.
+ */
+function routeSources(allSources: RetrievedChunk[]): SourceRoute {
+  const sources = withinScoreMargin(allSources, RAG_ROUTING_SCORE_MARGIN);
   const modules = new Map<string, string>();
   let commonModuleIds: Set<string> | null = null;
 
@@ -189,10 +243,13 @@ function routeSources(sources: RetrievedChunk[]): SourceRoute {
     .sort((left, right) =>
       left.name.localeCompare(right.name, 'es', { sensitivity: 'base' }),
     );
-  const common = [...(commonModuleIds ?? [])];
+  const common = new Set(commonModuleIds ?? []);
 
-  if (common.length === 1) {
-    const id = common[0];
+  if (common.size >= 1) {
+    // Módulo común preferido: el primero de la fuente mejor puntuada.
+    const id =
+      sources[0]?.moduleIds.find((moduleId) => common.has(moduleId)) ??
+      [...common][0];
     if (!id) throw new Error('RAG_INVALID_MODULE_ROUTE');
     return {
       kind: 'resolved',
@@ -237,16 +294,31 @@ function contextualQuery(
   priorUserQuestions: string[],
 ): string {
   if (!priorUserQuestions.length) return question;
+  // Presupuesto dentro del límite de texto de la RPC (8.000); si no alcanza se
+  // conservan las consultas más recientes (el final del contexto).
+  const budget = RAG_QUERY_TEXT_MAX_CHARS - question.length - 64;
+  if (budget <= 0) return question;
   const context = priorUserQuestions
     .slice(-4)
     .map(cleanContextValue)
     .filter(Boolean)
     .join(' | ')
-    .slice(0, Math.max(0, MAX_CHAT_CONTEXT_CHARS - question.length - 64));
+    .slice(-budget)
+    .trim();
 
   return context
     ? `Consultas anteriores: ${context}\nPregunta actual: ${question}`
     : question;
+}
+
+/**
+ * Un seguimiento elíptico ("¿y cuál es el plazo?", "¿y para auxiliares?") solo
+ * se entiende con las consultas previas; uno que nombra su propio tema ("¿y la
+ * permuta?", "otra consulta: vacaciones") se busca por sí mismo para no
+ * arrastrar el tema anterior.
+ */
+export function isEllipticalFollowUp(question: string): boolean {
+  return !hasTopicTerm(normalizeSpanishText(question));
 }
 
 const ARCHIVED_INTENT_PATTERNS = [
@@ -307,54 +379,47 @@ export class RagService {
     selectedModuleId: string | null,
     priorUserQuestions: string[] = [],
   ): Promise<RetrievalResult> {
-    const followUpQuery = contextualQuery(question, priorUserQuestions);
-    const isFollowUp = followUpQuery !== question;
     const retrievalScope = detectRetrievalScope(question);
-    const queries = isFollowUp ? [question, followUpQuery] : [question];
-    const embeddings = await this.embeddings.embed(queries);
-    const currentEmbedding = embeddings[0];
-    const contextualEmbedding = embeddings.at(-1);
+    // Los seguimientos elípticos se buscan con las consultas previas en TODAS
+    // las búsquedas (global y por módulo): con la pregunta escueta, "¿y el
+    // plazo?" coincidía con plazos de otros temas y se declaraba un falso cambio
+    // de tema. Una consulta con tema propio se busca tal cual.
+    const usesContext =
+      priorUserQuestions.length > 0 && isEllipticalFollowUp(question);
+    const query = usesContext
+      ? contextualQuery(question, priorUserQuestions)
+      : question;
+    const [embedding] = await this.embeddings.embed([query]);
 
-    if (
-      !currentEmbedding ||
-      currentEmbedding.length !== 1536 ||
-      !contextualEmbedding ||
-      contextualEmbedding.length !== 1536
-    ) {
+    if (!embedding || embedding.length !== 1536) {
       throw new Error('RAG_INVALID_QUERY_EMBEDDING');
     }
 
+    const matchCount = this.config.get<number>('RAG_MATCH_COUNT') ?? 5;
     const searchBase = {
-      matchCount: this.config.get<number>('RAG_MATCH_COUNT') ?? 5,
+      embedding,
+      // Holgura para descartar duplicados y fuentes fuera de banda sin quedarse
+      // corto; la RPC admite hasta 10.
+      matchCount: Math.min(10, matchCount * 2),
       matchThreshold:
         this.config.get<number>('RAG_MATCH_THRESHOLD') ??
         RAG_DEFAULT_MATCH_THRESHOLD,
+      query,
+      retrievalScope,
     };
-    // Sin módulo seleccionado, la búsqueda global es la recuperación principal:
-    // un seguimiento ("¿y el plazo?") debe conservar el tema, por lo que usa la
-    // consulta contextual. Con módulo seleccionado la global se reserva para
-    // detectar cambios de tema, así que mantiene la pregunta actual tal cual.
-    const globalUsesContext = !selectedModuleId && isFollowUp;
     const globalSearch = this.gateway.search({
       ...searchBase,
-      embedding: globalUsesContext ? contextualEmbedding : currentEmbedding,
-      query: globalUsesContext ? followUpQuery : question,
-      retrievalScope,
       selectedModuleId: null,
     });
     const selectedSearch = selectedModuleId
-      ? this.gateway.search({
-          ...searchBase,
-          embedding: contextualEmbedding,
-          query: followUpQuery,
-          retrievalScope,
-          selectedModuleId,
-        })
+      ? this.gateway.search({ ...searchBase, selectedModuleId })
       : Promise.resolve<RetrievedChunk[]>([]);
-    const [globalSources, selectedSources] = await Promise.all([
+    const [rawGlobalSources, rawSelectedSources] = await Promise.all([
       globalSearch,
       selectedSearch,
     ]);
+    const globalSources = uniqueSources(rawGlobalSources);
+    const selectedSources = uniqueSources(rawSelectedSources);
 
     if (!globalSources.length && !selectedSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };
@@ -362,22 +427,27 @@ export class RagService {
 
     if (!selectedModuleId) {
       const route = routeSources(globalSources);
+      const sources = relevantSources(globalSources, matchCount);
       if (route.kind === 'ambiguous') {
         return {
           kind: 'ambiguous',
           modules: route.modules,
-          sources: globalSources,
-          topRelevanceScore: topScore(globalSources),
+          sources,
+          topRelevanceScore: topScore(sources),
         };
       }
       return {
         kind: 'evidence',
         resolvedModule: route.resolvedModule,
-        sources: globalSources,
-        topRelevanceScore: topScore(globalSources),
+        sources,
+        topRelevanceScore: topScore(sources),
       };
     }
 
+    const dominantGlobal = withinScoreMargin(
+      globalSources,
+      RAG_ROUTING_SCORE_MARGIN,
+    );
     const currentRoute = globalSources.length
       ? routeSources(globalSources)
       : null;
@@ -386,7 +456,7 @@ export class RagService {
         currentRoute.kind === 'resolved' &&
         currentRoute.resolvedModule &&
         currentRoute.resolvedModule.id !== selectedModuleId &&
-        !globalSources.some((source) =>
+        !dominantGlobal.some((source) =>
           sourceIncludesContext(source, selectedModuleId),
         )
       ) {
@@ -398,18 +468,19 @@ export class RagService {
           selectedScore === null ||
           globalScore - selectedScore >= RAG_TOPIC_SWITCH_SCORE_MARGIN
         ) {
+          const sources = relevantSources(globalSources, matchCount);
           return {
             kind: 'topic_change',
             resolvedModule: currentRoute.resolvedModule,
-            sources: globalSources,
-            topRelevanceScore: globalScore,
+            sources,
+            topRelevanceScore: topScore(sources),
           };
         }
 
         const competingSources = balancedUniqueSources(
           10,
-          globalSources,
-          selectedSources,
+          withinScoreMargin(globalSources, RAG_SOURCE_SCORE_MARGIN),
+          withinScoreMargin(selectedSources, RAG_SOURCE_SCORE_MARGIN),
         );
         return {
           kind: 'ambiguous',
@@ -421,32 +492,42 @@ export class RagService {
 
       if (
         currentRoute.kind === 'ambiguous' &&
-        !globalSources.some((source) =>
+        !dominantGlobal.some((source) =>
           sourceIncludesContext(source, selectedModuleId),
         )
       ) {
+        const sources = relevantSources(globalSources, matchCount);
         return {
           kind: 'ambiguous',
           modules: currentRoute.modules,
-          sources: globalSources,
-          topRelevanceScore: topScore(globalSources),
+          sources,
+          topRelevanceScore: topScore(sources),
         };
       }
     }
 
     if (selectedSources.length) {
-      const selectedRoot = resolveSelectedRootModule(
-        selectedSources,
-        selectedModuleId,
+      // Subtema dentro del mismo módulo: la evidencia global que pertenece al
+      // módulo seleccionado también cuenta ("¿y para una permuta?" dentro de
+      // Desplazamientos), no solo la de la búsqueda acotada.
+      const sources = relevantSources(
+        byScoreDescending([
+          ...selectedSources,
+          ...globalSources.filter((source) =>
+            sourceIncludesContext(source, selectedModuleId),
+          ),
+        ]),
+        matchCount,
       );
+      const selectedRoot = resolveSelectedRootModule(sources, selectedModuleId);
       return {
         kind: 'evidence',
         resolvedModule: selectedRoot ?? {
           id: selectedModuleId,
           name: 'Módulo seleccionado',
         },
-        sources: selectedSources,
-        topRelevanceScore: topScore(selectedSources),
+        sources,
+        topRelevanceScore: topScore(sources),
       };
     }
 
@@ -454,20 +535,22 @@ export class RagService {
       currentRoute?.kind === 'resolved' &&
       currentRoute.resolvedModule?.id === selectedModuleId
     ) {
+      const sources = relevantSources(globalSources, matchCount);
       return {
         kind: 'evidence',
         resolvedModule: currentRoute.resolvedModule,
-        sources: globalSources,
-        topRelevanceScore: topScore(globalSources),
+        sources,
+        topRelevanceScore: topScore(sources),
       };
     }
 
     if (globalSources.length) {
+      const sources = relevantSources(globalSources, matchCount);
       return {
         kind: 'ambiguous',
         modules: currentRoute?.modules ?? [],
-        sources: globalSources,
-        topRelevanceScore: topScore(globalSources),
+        sources,
+        topRelevanceScore: topScore(sources),
       };
     }
 

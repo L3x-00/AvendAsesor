@@ -14,6 +14,21 @@ export const MAX_CHAT_CONTEXT_MESSAGES = 12;
 export const MAX_CONTEXT_MESSAGE_CHARS = 2_000;
 export const RAG_TOPIC_SWITCH_SCORE_MARGIN = 0.08;
 /**
+ * Solo las fuentes a esta distancia del mejor puntaje deciden el módulo. Con el
+ * corpus real, una fuente de cola de otro módulo (0.52 frente a 0.665) bastaba
+ * para pedir una aclaración innecesaria en un seguimiento («¿y el plazo?»).
+ */
+export const RAG_ROUTING_SCORE_MARGIN = 0.08;
+/**
+ * Banda de relevancia de las fuentes que se entregan al modelo y al usuario: las
+ * que quedan muy por debajo de la mejor no sustentan la respuesta y confunden la
+ * tabla de referencias. Con el corpus real, 0.12 conserva las fuentes pertinentes
+ * (0.575–0.493 en «bonificaciones») y excluye la cola ajena (0.52 frente a 0.665).
+ */
+export const RAG_SOURCE_SCORE_MARGIN = 0.12;
+/** Tope de texto que acepta la RPC de búsqueda (`p_query_text`, 1..8000). */
+export const RAG_QUERY_TEXT_MAX_CHARS = 8_000;
+/**
  * Umbral de similitud coseno por defecto, calibrado con el corpus real de
  * producción (2026-09-23, text-embedding-3-small): las consultas con sustento
  * puntuaron 0.57–0.76 y las que no tienen documento (destaque, reasignación,
