@@ -674,7 +674,8 @@ describe("ChatPanel", () => {
             eligibleConversation.messages[0],
             {
               ...eligibleConversation.messages[1],
-              content: "### Misión del cargo\nGestionar los aprendizajes. [[1]]",
+              content:
+                "### Misión del cargo\nGestionar los aprendizajes. [[1]]",
             },
           ],
         }}
@@ -741,6 +742,79 @@ describe("ChatPanel", () => {
     expect(
       await screen.findByText("No hay sustento suficiente."),
     ).toBeVisible();
+  });
+
+  it("replaces text already shown when the turn closes as no evidence", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: sources\ndata: {"sources":[]}\n\n',
+          'event: token\ndata: {"text":"Las fuentes no mencionan el plazo."}\n\n',
+          'event: no_evidence\ndata: {"message":"No encontré sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText("No encontré sustento suficiente."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Las fuentes no mencionan el plazo."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts a new conversation after «Otra consulta» announces a new topic", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          'event: conversational\ndata: {"message":"¡Claro! Cuéntame tu consulta.","startsNewTopic":true}\n\n',
+        ]),
+      )
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+      { target: { value: "Otra consulta" } },
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
+    await screen.findByText("¡Claro! Cuéntame tu consulta.");
+    await submitQuestion(user);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(
+      requestBody(
+        fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit],
+      ),
+    ).toMatchObject({ conversationId });
+    expect(
+      requestBody(
+        fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
+      ),
+    ).not.toHaveProperty("conversationId");
   });
 
   it("does not resend the screen module when continuing a conversation", async () => {

@@ -47,6 +47,7 @@ import {
 } from './intent/conversational-replies';
 import {
   announcesNewTopic,
+  announcesNewTopicWithSubject,
   classifyTurnIntent,
   hasEducationalSignal,
   isTopiclessQuestion,
@@ -101,7 +102,10 @@ export type ChatStreamEvent =
       type: 'clarification';
     }
   | { data: { message: string }; type: 'no_evidence' }
-  | { data: { message: string }; type: 'conversational' }
+  | {
+      data: { message: string; startsNewTopic?: boolean };
+      type: 'conversational';
+    }
   | {
       data: {
         conversationId: string;
@@ -559,9 +563,21 @@ export class ChatService {
       inConversation: Boolean(input.conversationId),
     });
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
-      yield await this.conversationalReply(
+      const reply = await this.conversationalReply(
         intent.lane === 'social' ? intent.subtype : 'out_of_domain',
       );
+      // «Otra consulta» a secas dentro de una conversación: la siguiente
+      // pregunta debe empezar una conversación nueva, sin el tema anterior.
+      if (
+        reply.type === 'conversational' &&
+        input.conversationId &&
+        intent.lane === 'social' &&
+        intent.subtype === 'ask_announcement' &&
+        announcesNewTopic(input.question)
+      ) {
+        reply.data.startsNewTopic = true;
+      }
+      yield reply;
       return;
     }
 
@@ -585,7 +601,8 @@ export class ChatService {
     // "Otra consulta: …" o "cambiando de tema…": la consulta se busca y se
     // responde en una conversación nueva, sin arrastrar el tema anterior.
     const explicitTopicChange =
-      Boolean(input.conversationId) && announcesNewTopic(input.question);
+      Boolean(input.conversationId) &&
+      announcesNewTopicWithSubject(input.question);
     const storedContext =
       input.conversationId && !explicitTopicChange
         ? await this.historyGateway.getConversationContext({
@@ -618,6 +635,9 @@ export class ChatService {
       input.question,
       selectedModuleId,
       priorUserQuestions,
+      {
+        forceContext: conversationContext.at(-1)?.role === 'clarification',
+      },
     );
 
     if (input.abortSignal?.aborted) return;
@@ -816,12 +836,15 @@ export class ChatService {
 
     const ending = marker.finish();
     const unstreamed = streaming ? '' : `${leadIn}${ending.tail}`;
+    // Toda la respuesta (mostrada o no): sin ninguna cita y con la marca o una
+    // negativa, no hubo sustento. Si ya se mostró texto, el evento
+    // «no_evidence» lo reemplaza en la pantalla.
+    const whole = `${answer}${streaming ? ending.tail : unstreamed}`;
     if (
       ending.noSupport ||
       declined ||
-      (!streaming &&
-        !CITED_TEXT.test(unstreamed) &&
-        (marker.partialSupport || DECLINE_PATTERN.test(unstreamed.trim())))
+      (!CITED_TEXT.test(whole) &&
+        (marker.partialSupport || DECLINE_PATTERN.test(whole.trim())))
     ) {
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
@@ -860,8 +883,17 @@ export class ChatService {
 
     // La calidad se evalúa sobre la respuesta, sin el aviso de corte (que no
     // lleva citas y marcaría toda respuesta cortada para revisión).
+    const truncated = cutByLength || finishReason === 'length';
+    const lastCompleteSentence = Math.max(
+      normalizedAnswer.lastIndexOf('.'),
+      normalizedAnswer.lastIndexOf('!'),
+      normalizedAnswer.lastIndexOf('?'),
+      normalizedAnswer.lastIndexOf(']'),
+    );
     const citationQuality = evaluateAnswerCitationQualityDetails(
-      normalizedAnswer,
+      truncated && lastCompleteSentence > 0
+        ? normalizedAnswer.slice(0, lastCompleteSentence + 1)
+        : normalizedAnswer,
       retrieval.sources,
     );
     const qualitySignals = new Set<string>(citationQuality.signals);

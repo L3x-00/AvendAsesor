@@ -256,6 +256,7 @@ describe('ChatService', () => {
       question,
       null,
       expect.any(Array),
+      { forceContext: false },
     );
     expect(events.some((event) => event.type === 'conversational')).toBe(false);
   });
@@ -438,6 +439,7 @@ describe('ChatService', () => {
       '¿Quién reemplaza al director cuando está de licencia?',
       null,
       expect.any(Array),
+      { forceContext: false },
     );
     const conversation = events[0];
     if (!conversation || conversation.type !== 'conversation') {
@@ -875,6 +877,7 @@ describe('ChatService', () => {
       '¿Y cuál es el plazo?',
       source.moduleIds[0],
       ['Necesito una licencia por salud.'],
+      { forceContext: false },
     );
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -915,6 +918,7 @@ describe('ChatService', () => {
       expect.any(String),
       source.moduleIds[0],
       ['Consulta anterior'],
+      { forceContext: false },
     );
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({

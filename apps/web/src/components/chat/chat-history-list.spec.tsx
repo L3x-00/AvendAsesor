@@ -78,3 +78,20 @@ describe("readableConversationTitle", () => {
     expect(long.endsWith("…")).toBe(true);
   });
 });
+
+describe("readableConversationTitle — revisión web", () => {
+  it("keeps the opening question mark and capitalizes the first letter", () => {
+    expect(readableConversationTitle("Hola, ¿cuánto dura la licencia?")).toBe(
+      "¿Cuánto dura la licencia?",
+    );
+  });
+
+  it("does not cut words that only start like a greeting", () => {
+    expect(
+      readableConversationTitle("Buenas prácticas docentes: ¿cómo postulo?"),
+    ).toBe("Buenas prácticas docentes: ¿cómo postulo?");
+    expect(readableConversationTitle("Holanda y el intercambio docente")).toBe(
+      "Holanda y el intercambio docente",
+    );
+  });
+});

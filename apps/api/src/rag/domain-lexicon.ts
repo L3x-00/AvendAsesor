@@ -17,7 +17,7 @@
 
 const TOPIC_PATTERNS: readonly RegExp[] = [
   // Desplazamientos y acceso a cargos
-  /\b(destaques?|destacar(?:me|se|lo|la)?|destacad[oa]|reasignacion(?:es)?|reasignar(?:me|se)?|encargatura|encargos?|encargar(?:me|se|le)?|encargan|permutas?|permutar|rotacion(?:es)?|nombramiento|nombrar(?:me)?|contratacion|contratos?|ascensos?|ascender|reincorporacion|reingreso|permanencia|escalafon|escala magisterial|designacion(?:es)?|adjudicacion(?:es)?|cuadro de meritos|comision de servicios?|concursos?|plazas?|vacantes?|cas)\b/u,
+  /\b(destaques?|destacar(?:me|se|lo|la)?|destacad[oa]|reasignacion(?:es)?|reasignar(?:me|se)?|encargatura|encargos?|encargar(?:me|se|le)?|encargan|permutas?|permutar|rotacion(?:es)?|nombramiento|nombrar(?:me)?|contratacion|contratos?|ascensos?|ascender|reincorporacion|reingreso|permanencia|escalafon|escala magisterial|designacion(?:es)?|adjudicacion(?:es)?|cuadro de meritos|comision de servicios?|concursos?|plazas?|vacantes?|cas|traslados?|trasladar(?:me|se)?|reubicacion(?:es)?|reubicar(?:me)?|excedencia|excedentes?|nivelacion(?:es)?)\b/u,
   // Licencias, permisos, asistencia y jornada
   /\b(licencias?|permisos?|inasistencias?|tardanzas?|faltas?|faltar|falte|faltado|ausencias?|justificar|justificacion|vacaciones|descansos?|subsidios?|luto|maternidad|paternidad|lactancia|fallecimiento|receta medica|certificado medico|papeletas?|horas? extras?|salir (?:temprano|antes)|carga horaria|jornadas?|horarios?|turnos?|huelgas?)\b/u,
   // Remuneraciones y beneficios
@@ -39,10 +39,10 @@ const WEAK_PATTERNS: readonly RegExp[] = [
   // Roles y condición laboral del sector
   /\b(docentes?|profesor(?:a|es|as)?|profes?|maestr[oa]s?|auxiliar(?:es)?|directiv[oa]s?|director(?:a|es|as)?|dire|subdirector(?:a|es|as)?|jerarquic[oa]s?|coordinador(?:a|es|as)?|especialistas?|nombrad[oa]s?|contratad[oa]s?|cesantes?|pensionistas?|interin[oa]s?|provisional(?:es)?)\b/u,
   // Instituciones y contexto escolar
-  /\b(ugel|minedu|dre|gerencia regional de educacion|institucion(?:es)? educativas?|ie|colegios?|cole|escuelas?|aulas?|clases?|alumn[oa]s?|estudiantes?|escolar(?:es)?|institucional|pedagogic[oa]s?|padres de familia|apoderad[oa]s?|matricula|siagie|siseve|cneb|curriculo|pei|mbdd|conei|magisterial|magisterio|carrera publica|sesion(?:es)? de aprendizaje|unidad(?:es)? didacticas?|programacion anual|prueba unica nacional|actuacion(?:es)?|actividad(?:es)? (?:escolar(?:es)?|del colegio|de la ie|institucional(?:es)?)|dia de la madre|dia del padre|dia del logro|dia del maestro|sutep|cafae|pronoei|cetpro|ceba|cebe|jec|tutoria|fut|pun|periodo de prueba|ingreso a la carrera)\b/u,
+  /\b(ugel|minedu|dre|gerencia regional de educacion|institucion(?:es)? educativas?|ie|colegios?|cole|escuelas?|aulas?|clases?|alumn[oa]s?|estudiantes?|escolar(?:es)?|institucional|pedagogic[oa]s?|padres de familia|apoderad[oa]s?|matricula|siagie|siseve|cneb|curriculo|pei|mbdd|conei|magisterial|magisterio|carrera publica|sesion(?:es)? de aprendizaje|unidad(?:es)? didacticas?|programacion anual|prueba unica nacional|actuacion(?:es)?|actividad(?:es)? (?:escolar(?:es)?|del colegio|de la ie|institucional(?:es)?)|dia de la madre|dia del padre|dia del logro|dia del maestro|sutep|cafae|pronoei|cetpro|ceba|cebe|jec|tutoria|fut|pun|periodo de prueba|ingreso a la carrera|inicial|primaria|secundaria)\b/u,
   // Condición laboral: una consulta sobre el propio trabajo es del ámbito
   // («Tengo covid, ¿debo ir a trabajar?», «¿me pueden obligar a…?»).
-  /\b(trabaj(?:ar|o|os|ando)|labor(?:ar|al|ales)|centro de trabajo|empleador|obliga(?:r|rme|rnos|n|do|da)?|me corresponden?)\b/u,
+  /\b(trabaj(?:ar|o|os|ando)|labor(?:ar|al|ales)|centro de trabajo|empleador|obliga(?:r|rme|rnos|n|do|da)?|exig(?:ir|irme|en|e|ido)|asist(?:ir|encia|o)|(?:tengo que|debo|puedo|hay que) ir|dia libre|miembro de mesa|me corresponden?)\b/u,
 ];
 
 function matchesAny(patterns: readonly RegExp[], normalized: string): boolean {

@@ -142,6 +142,21 @@ const ASK_ANNOUNCEMENT =
 const CAPABILITIES =
   /\b(que puedes hacer|que sabes hacer|que haces$|que sabes$|quien eres|que eres|eres (?:un|una) (?:robot|persona|humano|humana|bot|ia|inteligencia artificial|maquina|asistente)|eres (?:chatgpt|gpt|real)|con quien (?:hablo|estoy hablando)|para que sirves|para que sirve (?:esto|esta pagina|este chat|avend|la aplicacion|esta aplicacion|esta app|este sistema|la plataforma$|esta plataforma$)|en que (?:me )?(?:puedes ayudar(?:me)?|ayudas|me ayudas)|en que temas (?:me )?(?:ayudas|puedes ayudar)|con que (?:me )?puedes ayudar|como (?:me )?(?:puedes ayudar|ayudas)$|como funcionas|como te uso|como se usa$|que es avend|cual es tu funcion|de que puedes hablar|que temas (?:manejas|conoces|sabes|abarcas|tratas|atiendes|cubres)|de que temas sabes|que (?:tipo|clase) de (?:preguntas|consultas) (?:respondes|atiendes|puedo hacer(?:te)?)|sobre que (?:te )?puedo (?:preguntar(?:te)?|consultar(?:te)?)|que (?:modulos|temas) (?:hay|tienes)|^ayuda(?:me)?(?: por favor)?$|^(?:menu|opciones)$)\b/u;
 
+/** Lo único que puede acompañar a una pregunta de capacidad sin volverla consulta. */
+const CAPABILITY_RESIDUE_WORDS = new Set([
+  ...SOCIAL_RESIDUE_WORDS,
+  'me',
+  'hoy',
+  'aqui',
+  'y',
+  'tu',
+  'usted',
+  'puedes',
+  'ayudar',
+  'ayudarme',
+  'yo',
+]);
+
 /** Cláusula condicional/causal: convierte una pregunta en consulta ("…si no me pagan"). */
 const CONDITIONAL_CLAUSE = /\b(si|cuando|en caso|porque|aunque)\b/u;
 
@@ -167,13 +182,14 @@ const OUT_OF_SCOPE_PATTERNS: readonly RegExp[] = [
   // Tecnología y programación
   /\b(codigo en|en python|javascript|programa en|instalo whatsapp|instalar whatsapp|mi celular|mi laptop|mi computadora|mi pc|formatear)\b/u,
   // Política
-  /\b(por quien voto|por quien votar|elecciones|que opinas del presidente|el presidente de la republica|partido politico|congresistas?)\b/u,
+  /\b(por quien voto|por quien votar|que opinas del presidente|candidatos? presidencial(?:es)?|el presidente de la republica|partido politico|congresistas?)\b/u,
   // Salud personal y vida privada
   /\b(me duele|que pastilla|que medicamento|tengo (?:gripe|fiebre|tos|covid|dolor)|sintomas de|bajar de peso|bajo de peso|conseguir novia|consigo novia|mi esposo me engana|mi esposa me engana)\b/u,
   // Trámites civiles y finanzas personales ajenos al sector
   /\b((?:saco|sacar|tramito|tramitar|renuevo|renovar) (?:mi |el )?(?:dni|pasaporte|brevete)|bitcoin|criptomonedas?|precio del dolar|tipo de cambio|bolsa de valores|impuesto a la renta|prestamo en el banco)\b/u,
   // Cultura general
-  /\b(capital de (?:francia|espana|italia|alemania|japon|china|un pais)|quien es messi|quien es shakira|cuantos planetas|que hora es|sistema solar)\b/u,
+  /\b(capital de (?:francia|espana|italia|alemania|japon|china|un pais)|quien es messi|quien es shakira|cuantos planetas|sistema solar)\b/u,
+  /^[¿¡\s]*(?:disculpa,? |oye,? )?que hora es\s*[?!.]*$/u,
 ];
 
 const EMOJI = /\p{Extended_Pictographic}|[:;]-?[)(dDpP]/u;
@@ -294,7 +310,19 @@ export function classifyTurnIntent(
     CAPABILITIES.test(plain) &&
     !CONDITIONAL_CLAUSE.test(normalized) &&
     !/^(?:y|e|pero)\b/u.test(plain) &&
-    !hasWeakDomainSignal(stripped(normalized, GREETING, COURTESY, INTRODUCTION))
+    !hasWeakDomainSignal(
+      stripped(normalized, GREETING, COURTESY, INTRODUCTION),
+    ) &&
+    stripped(
+      plain,
+      new RegExp(CAPABILITIES.source, 'gu'),
+      GREETING,
+      COURTESY,
+      THANKS,
+      INTRODUCTION,
+    )
+      .split(' ')
+      .every((word) => !word || CAPABILITY_RESIDUE_WORDS.has(word))
   ) {
     return { lane: 'social', subtype: 'capabilities' };
   }
@@ -356,10 +384,16 @@ export function isTopiclessQuestion(message: string): boolean {
   const normalized = normalizeSpanishText(message);
   if (/\d/u.test(normalized) || hasTopicTerm(normalized)) return false;
   if (!TOPICLESS_ASPECT.test(normalized)) return false;
-  const words = normalized
-    .replace(/[^a-z0-9 ]+/gu, ' ')
-    .trim()
-    .split(/\s+/u)
+  // La cortesía y la presentación no aportan tema.
+  const words = stripped(
+    normalized,
+    GREETING,
+    COURTESY,
+    THANKS,
+    INTRODUCTION,
+    /\b(?:una|otra) (?:consulta|pregunta)\b/gu,
+  )
+    .split(' ')
     .filter(Boolean);
   return (
     words.length <= MAX_TOPICLESS_WORDS &&
@@ -376,4 +410,19 @@ const EXPLICIT_TOPIC_CHANGE =
  */
 export function announcesNewTopic(message: string): boolean {
   return EXPLICIT_TOPIC_CHANGE.test(normalizeSpanishText(message));
+}
+
+/**
+ * El anuncio de tema nuevo trae su propio tema ("otra consulta: ¿cuántos días
+ * de vacaciones tengo?"). Si lo que sigue es elíptico ("otra pregunta: ¿y si
+ * soy contratado?"), sigue dependiendo de la conversación y no se corta.
+ */
+export function announcesNewTopicWithSubject(message: string): boolean {
+  const normalized = normalizeSpanishText(message);
+  if (!EXPLICIT_TOPIC_CHANGE.test(normalized)) return false;
+  const rest = normalized.replace(
+    new RegExp(EXPLICIT_TOPIC_CHANGE.source, 'gu'),
+    ' ',
+  );
+  return hasTopicTerm(rest);
 }

@@ -51,7 +51,7 @@ function SourceTable({
 }) {
   return (
     <div
-      aria-label="Tabla de referencias documentales"
+      aria-label={caption}
       className={styles.tableViewport}
       role="region"
       tabIndex={0}

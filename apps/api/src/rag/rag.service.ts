@@ -311,14 +311,19 @@ function contextualQuery(
     : question;
 }
 
+/** Referencia a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
+const ANAPHORA =
+  /\b(ese|esa|eso|esos|esas|este|esta|esto|estos|estas|dicho|dicha|dichos|dichas|mismo|misma|ello|aquel|aquella)\b/u;
+
 /**
- * Un seguimiento elíptico ("¿y cuál es el plazo?", "¿y para auxiliares?") solo
- * se entiende con las consultas previas; uno que nombra su propio tema ("¿y la
- * permuta?", "otra consulta: vacaciones") se busca por sí mismo para no
- * arrastrar el tema anterior.
+ * Un seguimiento elíptico ("¿y cuál es el plazo?", "¿y para auxiliares?") o
+ * que remite a lo anterior ("¿y me pagan durante ese tiempo?") solo se entiende
+ * con las consultas previas. Uno que nombra su propio tema sin remitir a lo
+ * anterior ("¿y para una permuta?") se busca por sí mismo en la búsqueda global.
  */
 export function isEllipticalFollowUp(question: string): boolean {
-  return !hasTopicTerm(normalizeSpanishText(question));
+  const normalized = normalizeSpanishText(question);
+  return !hasTopicTerm(normalized) || ANAPHORA.test(normalized);
 }
 
 const ARCHIVED_INTENT_PATTERNS = [
@@ -378,41 +383,63 @@ export class RagService {
     question: string,
     selectedModuleId: string | null,
     priorUserQuestions: string[] = [],
+    options: { forceContext?: boolean } = {},
   ): Promise<RetrievalResult> {
     const retrievalScope = detectRetrievalScope(question);
-    // Los seguimientos elípticos se buscan con las consultas previas en TODAS
-    // las búsquedas (global y por módulo): con la pregunta escueta, "¿y el
-    // plazo?" coincidía con plazos de otros temas y se declaraba un falso cambio
-    // de tema. Una consulta con tema propio se busca tal cual.
-    const usesContext =
-      priorUserQuestions.length > 0 && isEllipticalFollowUp(question);
-    const query = usesContext
+    const hasPrior = priorUserQuestions.length > 0;
+    // Un seguimiento elíptico (o la respuesta a una aclaración, que completa la
+    // pregunta pendiente) se busca con las consultas previas en TODAS las
+    // búsquedas: con la pregunta escueta, "¿y el plazo?" coincidía con plazos de
+    // otros temas y se declaraba un falso cambio de tema. Una consulta con tema
+    // propio se busca tal cual en la global (que es la que detecta el cambio de
+    // tema), y con contexto dentro del módulo de la conversación.
+    const globalUsesContext =
+      hasPrior && (options.forceContext || isEllipticalFollowUp(question));
+    const contextual = hasPrior
       ? contextualQuery(question, priorUserQuestions)
       : question;
-    const [embedding] = await this.embeddings.embed([query]);
+    const globalQuery = globalUsesContext ? contextual : question;
+    const selectedQuery = hasPrior ? contextual : question;
+    const queries =
+      selectedModuleId && selectedQuery !== globalQuery
+        ? [globalQuery, selectedQuery]
+        : [globalQuery];
+    const embeddings = await this.embeddings.embed(queries);
+    const globalEmbedding = embeddings[0];
+    const selectedEmbedding = embeddings.at(-1);
 
-    if (!embedding || embedding.length !== 1536) {
+    if (
+      !globalEmbedding ||
+      globalEmbedding.length !== 1536 ||
+      !selectedEmbedding ||
+      selectedEmbedding.length !== 1536
+    ) {
       throw new Error('RAG_INVALID_QUERY_EMBEDDING');
     }
 
     const matchCount = this.config.get<number>('RAG_MATCH_COUNT') ?? 5;
     const searchBase = {
-      embedding,
       // Holgura para descartar duplicados y fuentes fuera de banda sin quedarse
       // corto; la RPC admite hasta 10.
       matchCount: Math.min(10, matchCount * 2),
       matchThreshold:
         this.config.get<number>('RAG_MATCH_THRESHOLD') ??
         RAG_DEFAULT_MATCH_THRESHOLD,
-      query,
       retrievalScope,
     };
     const globalSearch = this.gateway.search({
       ...searchBase,
+      embedding: globalEmbedding,
+      query: globalQuery,
       selectedModuleId: null,
     });
     const selectedSearch = selectedModuleId
-      ? this.gateway.search({ ...searchBase, selectedModuleId })
+      ? this.gateway.search({
+          ...searchBase,
+          embedding: selectedEmbedding,
+          query: selectedQuery,
+          selectedModuleId,
+        })
       : Promise.resolve<RetrievedChunk[]>([]);
     const [rawGlobalSources, rawSelectedSources] = await Promise.all([
       globalSearch,

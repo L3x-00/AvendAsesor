@@ -16,7 +16,7 @@ function formatDate(value: string): string {
 }
 
 const LEADING_COURTESY =
-  /^(?:(?:hola+|buen[oa]s(?: d[ií]as| tardes| noches)?|buen d[ií]a|saludos|estimad[oa]s?|disculpe(?: la molestia)?|por favor|qu[eé] tal)[\s,.;:!¡¿?-]*)+/iu;
+  /^¡?(?:(?:(?:hola+|buen[oa]s (?:d[ií]as|tardes|noches)|buen d[ií]a|saludos|estimad[oa]s?|disculpe(?: la molestia)?|por favor|qu[eé] tal)(?=[\s,.;:!?¡¿]|$)|buenas(?=[,.;:!?¡¿]|$))[\s,.;:!¡-]*)+/iu;
 const MAX_TITLE_CHARS = 90;
 
 /**
@@ -26,7 +26,12 @@ const MAX_TITLE_CHARS = 90;
 export function readableConversationTitle(title: string | null): string {
   const topic = (title ?? "").replace(LEADING_COURTESY, "").trim();
   if (!topic) return title?.trim() || "Consulta sin título";
-  const capitalized = topic.charAt(0).toLocaleUpperCase("es") + topic.slice(1);
+  // Mayúscula en la primera letra, aunque la pregunta empiece con «¿» o «¡».
+  const capitalized = topic.replace(
+    /^([¿¡]?)(\p{L})/u,
+    (_, mark: string, letter: string) =>
+      `${mark}${letter.toLocaleUpperCase("es")}`,
+  );
   return capitalized.length > MAX_TITLE_CHARS
     ? `${capitalized.slice(0, MAX_TITLE_CHARS).trimEnd()}…`
     : capitalized;

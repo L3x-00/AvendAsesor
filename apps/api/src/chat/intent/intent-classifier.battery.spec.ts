@@ -1,5 +1,6 @@
 import {
   announcesNewTopic,
+  announcesNewTopicWithSubject,
   classifyTurnIntent,
   hasEducationalSignal,
   isTopiclessQuestion,
@@ -304,5 +305,53 @@ describe('regresiones de la revisión independiente (2026-09-24)', () => {
   it('las abreviaturas y normas del sector cuentan como señal educativa', () => {
     expect(hasEducationalSignal('¿Qué dice el DS 004-2013-ED?')).toBe(true);
     expect(hasEducationalSignal('¿Qué beneficios da el CAFAE?')).toBe(true);
+  });
+});
+
+describe('regresiones de la revisión de API (2026-09-24)', () => {
+  it.each([
+    '¿En qué me puedes ayudar con mi traslado?',
+    '¿Con quién hablo sobre mi traslado?',
+    '¿Quién eres y cómo pido mi traslado?',
+    'Hola, ¿en qué me puedes ayudar con la nivelación?',
+    '¿Qué temas manejas sobre excedencia?',
+    'Salí sorteado miembro de mesa en las elecciones, ¿me dan el día libre?',
+    '¿A qué hora es la salida en primaria?',
+    'Tengo fiebre, ¿tengo que ir igual?',
+    '¿Nos dan el día libre por las elecciones?',
+    '¿Me pueden exigir usar mi celular para registrar la asistencia?',
+  ])('va al RAG: "%s"', (message) => {
+    expect(classifyTurnIntent(message).lane).toBe('domain');
+  });
+
+  it.each(['¿qué hora es?', 'me duele la cabeza, ¿qué pastilla tomo?'])(
+    'sigue siendo ajena: "%s"',
+    (message) => {
+      expect(classifyTurnIntent(message).lane).toBe('out_of_scope');
+    },
+  );
+
+  it.each([
+    'Hola, ¿cuáles son los requisitos?',
+    'Buenos días, ¿cuál es el plazo?',
+    'Por favor, ¿cuáles son los requisitos?',
+    'Una consulta, ¿cuál es el plazo?',
+    '¿Cuáles son los requisitos? Gracias',
+  ])('la cortesía no evita pedir el tema: "%s"', (message) => {
+    expect(isTopiclessQuestion(message)).toBe(true);
+  });
+
+  it('un anuncio de tema nuevo solo corta el contexto si trae tema propio', () => {
+    expect(
+      announcesNewTopicWithSubject(
+        'Otra consulta: ¿cuántos días de vacaciones tengo?',
+      ),
+    ).toBe(true);
+    expect(
+      announcesNewTopicWithSubject('Otra pregunta: ¿y si soy contratado?'),
+    ).toBe(false);
+    expect(
+      announcesNewTopicWithSubject('Ahora quiero saber cuál es el plazo'),
+    ).toBe(false);
   });
 });

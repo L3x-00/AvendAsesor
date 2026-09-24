@@ -416,6 +416,7 @@ describe('ChatService — lineamientos del cliente', () => {
         'Otra consulta: ¿cuántos días de vacaciones tengo?',
         null,
         [],
+        { forceContext: false },
       );
       expect(historyGateway.beginTurn).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: null }),
@@ -481,7 +482,108 @@ describe('ChatService — lineamientos del cliente', () => {
         '¿Cuáles son los requisitos?',
         MODULE_ID,
         [],
+        { forceContext: false },
       );
+    });
+  });
+
+  describe('revisión de API y web (2026-09-24)', () => {
+    const storedContext = {
+      messages: [
+        {
+          content: '¿Cuáles son los requisitos para la reasignación por salud?',
+          role: 'user',
+        },
+        { content: 'Los requisitos son… [1]', role: 'assistant' },
+      ],
+      selectedModuleId: MODULE_ID,
+    };
+
+    it('«otra pregunta: ¿y si soy contratado?» conserva la conversación y su contexto', async () => {
+      historyGateway.getConversationContext.mockResolvedValue(storedContext);
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      await collect({
+        conversationId: CONVERSATION_ID,
+        question: 'Otra pregunta: ¿y si soy contratado?',
+      });
+
+      expect(historyGateway.getConversationContext).toHaveBeenCalled();
+      expect(ragService.retrieve).toHaveBeenCalledWith(
+        'Otra pregunta: ¿y si soy contratado?',
+        MODULE_ID,
+        ['¿Cuáles son los requisitos para la reasignación por salud?'],
+        { forceContext: false },
+      );
+    });
+
+    it('la respuesta a una aclaración se busca junto con la pregunta pendiente', async () => {
+      historyGateway.getConversationContext.mockResolvedValue({
+        messages: [
+          { content: '¿Cuáles son los requisitos?', role: 'user' },
+          {
+            content: '¿Sobre qué trámite es tu consulta?',
+            role: 'clarification',
+          },
+        ],
+        selectedModuleId: null,
+      });
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      await collect({
+        conversationId: CONVERSATION_ID,
+        question: 'De reasignación',
+      });
+
+      expect(ragService.retrieve).toHaveBeenCalledWith(
+        'De reasignación',
+        null,
+        ['¿Cuáles son los requisitos?'],
+        { forceContext: true },
+      );
+    });
+
+    it('una negativa larga sin citas ya mostrada se reemplaza por «sin evidencia»', async () => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'evidence',
+        resolvedModule: { id: MODULE_ID, name: 'Licencias' },
+        sources: [source],
+        topRelevanceScore: 0.56,
+      });
+      answerGateway.generate.mockReturnValue(
+        tokens(
+          `Las fuentes proporcionadas tratan sobre otros temas ${'y no mencionan el plazo solicitado '.repeat(15)}`,
+          '[[SIN_SUSTENTO]]',
+        ),
+      );
+
+      const events = await collect();
+
+      expect(events.map((event) => event.type)).toContain('token');
+      expect(events.at(-2)?.type).toBe('no_evidence');
+      expect(completion()).toMatchObject({
+        replyRole: 'no_evidence',
+        sources: [],
+      });
+    });
+
+    it('«Otra consulta» a secas en una conversación avisa que empieza un tema nuevo', async () => {
+      const events = await collect({
+        conversationId: CONVERSATION_ID,
+        question: 'Otra consulta',
+      });
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        data: { startsNewTopic: true },
+        type: 'conversational',
+      });
     });
   });
 

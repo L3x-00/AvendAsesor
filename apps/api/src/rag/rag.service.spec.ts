@@ -199,6 +199,57 @@ describe('RagService', () => {
     ]);
   });
 
+  it('searches a follow-up that points back ("durante ese tiempo") with context even if it names a topic', async () => {
+    // Revisión de API: «¿Y me pagan durante ese tiempo?» se buscaba sin
+    // contexto, resolvía Remuneraciones y el modelo perdía la licencia.
+    gateway.search.mockResolvedValue([source]);
+
+    await service.retrieve('¿Y me pagan durante ese tiempo?', 'module-a', [
+      '¿Cuántos días de licencia por maternidad me corresponden?',
+    ]);
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    for (const [call] of searchCalls) {
+      expect(call.query).toContain('licencia por maternidad');
+    }
+  });
+
+  it('forces the pending question into the search when replying to a clarification', async () => {
+    gateway.search.mockResolvedValue([source]);
+
+    await service.retrieve(
+      'De reasignación',
+      null,
+      ['¿Cuáles son los requisitos?'],
+      {
+        forceContext: true,
+      },
+    );
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    expect(searchCalls[0]?.[0].query).toContain('¿Cuáles son los requisitos?');
+  });
+
+  it('keeps the context in the module search for a self-contained follow-up', async () => {
+    gateway.search.mockResolvedValue([source]);
+
+    await service.retrieve('¿y para una permuta?', 'module-a', [
+      'requisitos para una reasignación',
+    ]);
+
+    const searchCalls = gateway.search.mock.calls as Array<
+      [Parameters<RetrievalGateway['search']>[0]]
+    >;
+    expect(searchCalls[0]?.[0].query).toBe('¿y para una permuta?');
+    expect(searchCalls[1]?.[0].query).toContain(
+      'requisitos para una reasignación',
+    );
+  });
+
   it('searches a follow-up that names its own topic without the previous questions', async () => {
     gateway.search.mockResolvedValue([source]);
 

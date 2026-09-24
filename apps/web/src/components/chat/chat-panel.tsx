@@ -75,14 +75,20 @@ function initialMessages(
   const answeredIds = new Set(
     messages.map((message) => message.inReplyToMessageId).filter(Boolean),
   );
-  return messages.map((message) => ({
+  return messages.map((message, index) => ({
     content: message.content,
     conversationId: conversation?.conversation.id,
     id: message.id,
     inReplyToMessageId: message.inReplyToMessageId,
     role: message.role,
     sources: message.sources,
-    unanswered: message.role === "user" && !answeredIds.has(message.id),
+    // La última pregunta puede estar respondiéndose todavía (p. ej. al retomar
+    // desde el Historial mientras se genera): solo se marca si hubo mensajes
+    // después.
+    unanswered:
+      message.role === "user" &&
+      !answeredIds.has(message.id) &&
+      index < messages.length - 1,
   }));
 }
 
@@ -600,12 +606,23 @@ export function ChatPanel({
       return;
     }
     setSelectedModuleId(module.id);
-    void sendQuestion(original, { moduleId: module.id, newConversation: true });
+    // Sin la conversación anterior: si el reenvío falla, el reintento también
+    // empieza una conversación nueva en el tema elegido.
+    setConversationId(undefined);
+    void sendQuestion(original, {
+      fromClarification: true,
+      moduleId: module.id,
+      newConversation: true,
+    });
   }
 
   async function sendQuestion(
     normalizedQuestion: string,
-    options: { moduleId?: string; newConversation?: boolean } = {},
+    options: {
+      fromClarification?: boolean;
+      moduleId?: string;
+      newConversation?: boolean;
+    } = {},
   ) {
     if (!normalizedQuestion || isStreaming) return;
     if (isDictating) stopDictation();
@@ -712,12 +729,16 @@ export function ChatPanel({
             // La API abrió otra conversación (cambio de tema): se marca en
             // pantalla para que el usuario sepa dónde quedó cada parte.
             const startsNewTopic = Boolean(
+              !options.fromClarification &&
               result.data.startedNewConversation &&
               hadVisibleMessages &&
               conversationId &&
               conversationId !== result.data.conversationId,
             );
             setConversationId(result.data.conversationId);
+            if (startsNewTopic && result.data.moduleId !== undefined) {
+              setSelectedModuleId(result.data.moduleId ?? undefined);
+            }
             setMessages((current) => {
               const localQuestionIndex = current.findLastIndex(
                 (message) =>
@@ -828,6 +849,7 @@ export function ChatPanel({
               );
               return;
             }
+            if (result.data.startsNewTopic) setConversationId(undefined);
             setMessages((current) => [
               ...current,
               {
@@ -854,7 +876,7 @@ export function ChatPanel({
               return;
             }
             setMessages((current) => [
-              ...current,
+              ...current.filter((message) => message.id !== "streaming"),
               {
                 content: result.data.message,
                 conversationId: turn.conversationId,
@@ -1028,7 +1050,9 @@ export function ChatPanel({
                 <div className="avend-chat-message-content">
                   {renderRichContent(
                     message.content,
-                    message.role === "assistant" && message.id !== "streaming"
+                    (message.role === "assistant" ||
+                      message.role === "clarification") &&
+                      message.id !== "streaming"
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
                   )}
@@ -1062,7 +1086,8 @@ export function ChatPanel({
                 {message.sources.length && message.id !== "streaming" ? (
                   <ChatSources
                     citedRanks={
-                      message.role === "assistant"
+                      message.role === "assistant" ||
+                      message.role === "clarification"
                         ? citedSourceRanks(message.content)
                         : undefined
                     }
