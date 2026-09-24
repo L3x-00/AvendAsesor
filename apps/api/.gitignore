@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Reportes de la validación integral (pueden contener respuestas y fuentes)
+/test/acceptance/out/
