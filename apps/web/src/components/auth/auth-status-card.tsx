@@ -6,6 +6,8 @@ interface AuthStatusCardProps {
   actionLabel: string;
   description: string;
   eyebrow: string;
+  /** Segunda salida opcional (p. ej. «Ir a mi historial» en la página 404). */
+  secondaryAction?: { href: string; label: string };
   title: string;
 }
 
@@ -15,6 +17,7 @@ export function AuthStatusCard({
   actionLabel,
   description,
   eyebrow,
+  secondaryAction,
   title,
 }: AuthStatusCardProps) {
   return (
@@ -31,6 +34,14 @@ export function AuthStatusCard({
       >
         {actionLabel}
       </Link>
+      {secondaryAction ? (
+        <Link
+          className="avend-button avend-button--secondary avend-auth-status-action"
+          href={secondaryAction.href}
+        >
+          {secondaryAction.label}
+        </Link>
+      ) : null}
     </AuthLayout>
   );
 }
