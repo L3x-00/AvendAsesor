@@ -21,7 +21,13 @@ import type {
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { ConsultationFeedback } from "./consultation-feedback";
-import { ChatSources, citedSourceRanks, sourceAnchorId } from "./chat-sources";
+import {
+  CITATION_TOKEN,
+  ChatSources,
+  citationRanks,
+  citedSourceRanks,
+  sourceAnchorId,
+} from "./chat-sources";
 
 type MessageRole = ChatHistoryMessage["role"];
 
@@ -158,22 +164,40 @@ function linkCitations(
   keyPrefix: string,
 ): ReactNode[] {
   if (!citations?.sources.length) return [text];
-  // Tolera la cita doble ([[4]]) que a veces escribe el modelo.
-  return text.split(/(\[\[?\d+\]\]?)/u).map((part, index) => {
-    const rank = Number(part.match(/^\[\[?(\d+)\]\]?$/u)?.[1]);
-    const source = rank
-      ? citations.sources.find((item) => item.rank === rank)
-      : undefined;
-    if (!source) return part;
+  const link = (rank: number, key: string, label: ReactNode) => {
+    const source = citations.sources.find((item) => item.rank === rank);
+    if (!source) return label;
     return (
       <a
         aria-label={`Ver fuente ${rank}: ${source.documentTitle}`}
         className="avend-chat-citation"
         href={`#${sourceAnchorId(citations.messageId, rank)}`}
-        key={`${keyPrefix}-${index}`}
+        key={key}
       >
-        [{rank}]
+        {label}
       </a>
+    );
+  };
+  // Tolera la cita doble ([[4]]) y la agrupada ([1, 2], [1-3]) del modelo.
+  return text.split(CITATION_TOKEN).map((part, index) => {
+    const ranks = index % 2 === 1 ? citationRanks(part) : [];
+    const known = ranks.filter((rank) =>
+      citations.sources.some((item) => item.rank === rank),
+    );
+    if (!known.length) return part;
+    const key = `${keyPrefix}-${index}`;
+    if (ranks.length === 1) return link(ranks[0], key, `[${ranks[0]}]`);
+    return (
+      <Fragment key={key}>
+        [
+        {ranks.map((rank, position) => (
+          <Fragment key={`${key}-${rank}`}>
+            {position ? ", " : ""}
+            {link(rank, `${key}-${rank}-link`, rank)}
+          </Fragment>
+        ))}
+        ]
+      </Fragment>
     );
   });
 }

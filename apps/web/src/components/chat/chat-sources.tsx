@@ -14,11 +14,39 @@ export function sourceAnchorId(messageId: string, rank: number): string {
   return `fuente-${messageId}-${rank}`;
 }
 
-/** Números de fuente citados como [n] en el texto de una respuesta. */
+/**
+ * Cita del modelo: [n], [[n]] o agrupada ([1, 2], [1-3], [1 y 2]). Con el
+ * grupo de captura sirve para partir el texto conservando las citas.
+ */
+export const CITATION_TOKEN =
+  /(\[\[?\s*\d+(?:\s*(?:[,;–-]|y)\s*\d+)*\s*\]\]?)/u;
+const CITATION_ONLY = new RegExp(`^${CITATION_TOKEN.source}$`, "u");
+const MAX_CITATION_RANGE = 20;
+
+/** Números de fuente de una cita («[1, 2]» → 1, 2; «[1-3]» → 1, 2, 3). */
+export function citationRanks(citation: string): number[] {
+  if (!CITATION_ONLY.test(citation)) return [];
+  const ranks: number[] = [];
+  const inner = citation.replace(/[[\]\s]/gu, "");
+  for (const part of inner.split(/[,;]|y/u)) {
+    const [from, to] = part.split(/[–-]/u).map(Number);
+    if (to !== undefined && to >= from && to - from <= MAX_CITATION_RANGE) {
+      for (let rank = from; rank <= to; rank += 1) ranks.push(rank);
+    } else if (Number.isInteger(from)) {
+      ranks.push(from);
+    }
+  }
+  return ranks;
+}
+
+/** Números de fuente citados en el texto de una respuesta. */
 export function citedSourceRanks(content: string): number[] {
   return [
     ...new Set(
-      [...content.matchAll(/\[(\d+)\]/gu)].map((match) => Number(match[1])),
+      content
+        .split(CITATION_TOKEN)
+        .filter((_, index) => index % 2 === 1)
+        .flatMap(citationRanks),
     ),
   ];
 }

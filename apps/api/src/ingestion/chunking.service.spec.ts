@@ -268,4 +268,49 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       expect(chunk.tokenCount).toBeLessThanOrEqual(800);
     }
   });
+
+  it('does not take a brief complete article or list items as the heading of a long body (revisión 3)', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: [
+          'Artículo 3. Vigencia. La presente norma entra en vigencia al día siguiente de su publicación.',
+          'Artículo 4. Requisitos para la reasignación',
+          words('cuatro', 1_300),
+        ].join('\n\n'),
+      },
+    ]);
+    const listChunks = service.chunk([
+      {
+        pageNumber: 2,
+        text: [
+          'Son requisitos para el destaque:',
+          '1. Copia del DNI vigente.',
+          '2. Declaración jurada de no tener antecedentes.',
+          words('destaque', 1_300),
+        ].join('\n\n'),
+      },
+    ]);
+
+    const article3 = chunks.find((chunk) =>
+      chunk.chunkContent.includes('Vigencia. La presente'),
+    );
+    expect(article3?.articleReference).toBe('Artículo 3.');
+    for (const chunk of chunks.filter((item) =>
+      /cuatrow\d/u.test(item.chunkContent),
+    )) {
+      expect(chunk.chunkContent.startsWith('Artículo 4.')).toBe(true);
+      expect(chunk.chunkContent).not.toContain('Vigencia. La presente');
+      expect(chunk.articleReference).toBe('Artículo 4.');
+    }
+    // La lista queda con su introducción, no pegada a cada ventana siguiente.
+    const list = listChunks.find((chunk) =>
+      chunk.chunkContent.includes('Son requisitos para el destaque:'),
+    );
+    expect(list?.chunkContent).toContain('1. Copia del DNI vigente.');
+    expect(list?.chunkContent).toContain('2. Declaración jurada');
+    expect(
+      listChunks.filter((chunk) => chunk.chunkContent.includes('1. Copia')),
+    ).toHaveLength(1);
+  });
 });

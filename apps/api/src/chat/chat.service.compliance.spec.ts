@@ -228,6 +228,17 @@ describe('ChatService — lineamientos del cliente', () => {
         'respuesta sin ninguna cita',
         ['Según las fuentes proporcionadas, no se establece un plazo.'],
       ],
+      [
+        'un año entre corchetes no es una cita',
+        [
+          'Según la Ley de Reforma Magisterial [2012], la licencia es de 10 días.',
+        ],
+      ],
+      [
+        'una fuente inexistente no es una cita',
+        ['La licencia por paternidad es de 10 días [7].'],
+      ],
+      ['la fuente cero no existe', ['La licencia es de 10 días [0].']],
     ])('%s → «sin evidencia», sin mostrar fuentes', async (_case, parts) => {
       answerGateway.generate.mockReturnValue(tokens(...parts));
 
@@ -256,6 +267,30 @@ describe('ChatService — lineamientos del cliente', () => {
       expect(events.map((event) => event.type)).toContain('sources');
       expect(completion()?.replyRole).toBe('assistant');
     });
+
+    it.each([
+      ['[1, 2]'],
+      ['[1,2]'],
+      ['[1-3]'],
+      ['[1–2]'],
+      ['[1 y 2]'],
+      ['[ 1 ]'],
+      ['[1][2]'],
+    ])(
+      'una respuesta con citas agrupadas %s sigue siendo una respuesta sustentada',
+      async (citation) => {
+        answerGateway.generate.mockReturnValue(
+          tokens(
+            `Los documentos indican que la licencia se solicita dentro de 5 días ${citation}.`,
+          ),
+        );
+
+        const events = await collect();
+
+        expect(events.map((event) => event.type)).toContain('sources');
+        expect(completion()?.replyRole).toBe('assistant');
+      },
+    );
   });
 
   it('una aclaración con coincidencias débiles no cita documentos como orientación', async () => {

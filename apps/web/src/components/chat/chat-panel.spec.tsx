@@ -696,6 +696,35 @@ describe("ChatPanel", () => {
     ).toBeVisible();
   });
 
+  it("links grouped citations ([1, 2]) to their sources", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: "La licencia se solicita dentro de 5 días [1, 2].",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toBeVisible();
+    // La fuente 2 no existe en esta respuesta: queda como texto.
+    const paragraph = screen
+      .getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
+      .closest("p");
+    expect(paragraph?.textContent).toBe(
+      "La licencia se solicita dentro de 5 días [1, 2].",
+    );
+  });
+
   it("renders the clarification the API really sends ({id, name}) and re-sends the question for the chosen module", async () => {
     // Contrato real de la API: los módulos de la aclaración llegan como
     // { id, name }. El fixture anterior usaba el ChatModule completo y ocultaba

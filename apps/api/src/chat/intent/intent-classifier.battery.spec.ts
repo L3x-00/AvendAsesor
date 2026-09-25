@@ -413,18 +413,42 @@ describe('regresiones de la segunda revisión (2026-09-24)', () => {
     expect(classifyTurnIntent('Hola, asesor').lane).toBe('social');
   });
 
-  it('«este/esta/mismo» no hacen de una consulta nueva un seguimiento', () => {
-    expect(
-      isEllipticalFollowUp('¿La permuta está permitida entre regiones?'),
-    ).toBe(false);
-    expect(
-      isEllipticalFollowUp('¿Este año hay concurso de ascenso de escala?'),
-    ).toBe(false);
-    expect(isEllipticalFollowUp('¿Y para ese caso qué plazo hay?')).toBe(true);
-    expect(isEllipticalFollowUp('¿Pasa lo mismo con la permuta?')).toBe(true);
+  it('el verbo «está» y el tiempo presente no hacen de una consulta nueva un seguimiento', () => {
+    for (const question of [
+      '¿La permuta está permitida entre regiones?',
+      '¿La permuta esta permitida entre regiones?',
+      '¿Este año hay concurso de ascenso de escala?',
+      '¿El auxiliar esta obligado a pedir licencia?',
+      '¿La licencia esta sujeta a descuento?',
+      '¿Esta semana hay evaluación de desempeño docente?',
+    ]) {
+      expect(isEllipticalFollowUp(question)).toBe(false);
+    }
+  });
+
+  it('el demostrativo con sustantivo remite a lo anterior (revisión 3)', () => {
+    for (const question of [
+      '¿Y para ese caso qué plazo hay?',
+      '¿Pasa lo mismo con la permuta?',
+      '¿Y estos descuentos son legales?',
+      '¿Esta licencia es con goce de haber?',
+      '¿Por esto me pueden destituir?',
+      '¿Este proceso puede terminar en cese?',
+      '¿Durante este destaque me pagan la bonificación?',
+      '¿El mismo trámite sirve para la permuta?',
+      '¿Y esto afecta mi CTS?',
+    ]) {
+      expect(isEllipticalFollowUp(question)).toBe(true);
+    }
+    // «la misma licencia» remite a la ya tratada: no corta el contexto.
     expect(
       announcesNewTopicWithSubject(
         'Otra consulta: ¿la misma licencia aplica a contratados?',
+      ),
+    ).toBe(false);
+    expect(
+      announcesNewTopicWithSubject(
+        'Otra consulta: ¿la permuta está permitida entre regiones?',
       ),
     ).toBe(true);
   });

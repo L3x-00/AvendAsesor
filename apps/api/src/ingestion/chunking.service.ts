@@ -29,8 +29,26 @@ const SEPARATOR_TOKENS = 1;
 const MAX_UNBROKEN_CHARS = 200;
 /** Un título que precede a un párrafo largo viaja con él (no con el chunk anterior). */
 const MAX_HEADING_TOKENS = 60;
-const HEADING =
-  /^(?:cap[ií]tulo|art[ií]culo|t[ií]tulo|secci[oó]n|anexo|disposici[oó]n|\d+(?:\.\d+)*\.\s)/iu;
+/** Rótulo de un título normativo: «Artículo 14.», «Capítulo II», «Anexo 3». */
+const HEADING_LABEL =
+  /^(?:cap[ií]tulo|art[ií]culo|t[ií]tulo|secci[oó]n|anexo|disposici[oó]n)\b\s*[\w.°º-]*\.?\s*/iu;
+const MAX_HEADING_WORDS = 15;
+
+/**
+ * Título puro: rótulo más, a lo sumo, una frase breve («Artículo 14.
+ * Requisitos para la reasignación»). Un artículo breve completo («Artículo 3.
+ * Vigencia. La presente norma…») o el ítem de una lista («1. Copia del DNI»)
+ * no son títulos: pertenecen al texto que ya los precede.
+ */
+function isHeading(content: string): boolean {
+  const label = HEADING_LABEL.exec(content);
+  if (!label) return false;
+  const title = content.slice(label[0].length).trim();
+  return (
+    !/[.;:]\s+\S/u.test(title) &&
+    title.split(/\s+/u).filter(Boolean).length <= MAX_HEADING_WORDS
+  );
+}
 const ARTICLE = /art[ií]culo\s+([\w.-]+)/iu;
 const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
 
@@ -214,7 +232,7 @@ export class ChunkingService {
       const candidate = units[index];
       if (
         candidate.overlap ||
-        !HEADING.test(candidate.content) ||
+        !isHeading(candidate.content) ||
         headingTokens + candidate.tokenCount + SEPARATOR_TOKENS >
           MAX_HEADING_TOKENS
       ) {

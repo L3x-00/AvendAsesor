@@ -1,6 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ChatSources } from "./chat-sources";
+import { ChatSources, citationRanks, citedSourceRanks } from "./chat-sources";
+
+describe("citas del modelo", () => {
+  it("reads single, double and grouped citations", () => {
+    expect(
+      citedSourceRanks("Plazo [1]. Requisitos [[2]]. Sanción [1, 3]."),
+    ).toEqual([1, 2, 3]);
+    expect(citationRanks("[1-3]")).toEqual([1, 2, 3]);
+    expect(citationRanks("[1 y 2]")).toEqual([1, 2]);
+    expect(citationRanks("[2012]")).toEqual([2012]);
+    expect(citationRanks("texto")).toEqual([]);
+  });
+});
 
 describe("ChatSources", () => {
   it("renders only the evidence snapshot received from the chat API", () => {
