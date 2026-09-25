@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { EmbeddingsGateway } from '../ingestion/embeddings.gateway';
 import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
+import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
 import {
   RAG_DEFAULT_MATCH_THRESHOLD,
@@ -317,10 +318,6 @@ function contextualQuery(
     : question;
 }
 
-/** Referencia a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
-const ANAPHORA =
-  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|ello|aquel|aquella|lo mismo)\b/u;
-
 /**
  * Un seguimiento elíptico ("¿y cuál es el plazo?", "¿y para auxiliares?") o
  * que remite a lo anterior ("¿y me pagan durante ese tiempo?") solo se entiende
@@ -329,7 +326,7 @@ const ANAPHORA =
  */
 export function isEllipticalFollowUp(question: string): boolean {
   const normalized = normalizeSpanishText(question);
-  return !hasTopicTerm(normalized) || ANAPHORA.test(normalized);
+  return !hasTopicTerm(normalized) || refersBack(question);
 }
 
 const ARCHIVED_INTENT_PATTERNS = [

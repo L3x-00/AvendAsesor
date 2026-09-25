@@ -20,6 +20,7 @@ import {
   hasTopicTerm,
   hasWeakDomainSignal,
 } from '../../rag/domain-lexicon';
+import { refersBack } from '../../rag/anaphora';
 import { normalizeSpanishText } from '../../rag/text-normalization';
 
 export type TurnIntentLane = 'social' | 'domain' | 'out_of_scope';
@@ -458,13 +459,9 @@ export function announcesNewTopicWithSubject(message: string): boolean {
     new RegExp(EXPLICIT_TOPIC_CHANGE.source, 'gu'),
   );
   if (!rest || /^(?:y|e|pero|entonces)\b/u.test(rest)) return false;
-  if (FOLLOW_UP_ANAPHORA.test(rest)) return false;
+  if (refersBack(rest)) return false;
   // Solo palabras genéricas ("ahora quiero saber cuál es el plazo"): depende
   // de la conversación. Cualquier otra sustancia ("el perfil del cargo de jefe
   // de taller") es un tema propio, esté o no en el léxico.
   return !rest.split(' ').every((word) => TOPICLESS_FILLER.has(word));
 }
-
-/** Remite a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
-const FOLLOW_UP_ANAPHORA =
-  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|ello|aquel|aquella|lo mismo)\b/u;

@@ -27,6 +27,11 @@ import {
 } from '../rag/rag.service';
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
 import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
+import {
+  citedIndexes,
+  citesAnySource,
+  withoutCitations,
+} from '../rag/citations';
 import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
 import type {
   ActiveChatModule,
@@ -53,8 +58,6 @@ import {
   isTopiclessQuestion,
 } from './intent/intent-classifier';
 
-/** Texto con al menos una cita [n] (o [[n]]). */
-const CITED_TEXT = /\[\[?\d+\]\]?/u;
 /** Caracteres sin cita tras los cuales la respuesta empieza a mostrarse. */
 const LEAD_IN_WINDOW_CHARS = 400;
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
@@ -124,7 +127,6 @@ interface CitationBundle {
 
 const MAX_AMBIGUITY_EXCERPT_CHARS = 280;
 const MIN_SUBSTANTIVE_CLAIM_CHARS = 30;
-const CITATION_PATTERN = /\[(\d+)\]/gu;
 type CitationQualitySignal =
   'citation_insufficient' | 'support_insufficient' | 'support_partial';
 
@@ -175,7 +177,7 @@ function normalizedTerms(value: string): string[] {
 }
 
 function sourceSupportsClaim(claim: string, source: RetrievedChunk): boolean {
-  const claimTerms = normalizedTerms(claim.replace(CITATION_PATTERN, ''));
+  const claimTerms = normalizedTerms(withoutCitations(claim));
   if (!claimTerms.length) return true;
 
   const sourceTerms = normalizedTerms(source.chunkContent);
@@ -200,8 +202,7 @@ function claimNumbersAppearInSources(
   claim: string,
   citedSources: RetrievedChunk[],
 ): boolean {
-  const numbers =
-    claim.replace(CITATION_PATTERN, ' ').match(/\d+(?:[.,]\d+)*/gu) ?? [];
+  const numbers = withoutCitations(claim).match(/\d+(?:[.,]\d+)*/gu) ?? [];
   return numbers.every((number) =>
     citedSources.some((source) => source.chunkContent.includes(number)),
   );
@@ -234,14 +235,12 @@ export function evaluateAnswerCitationQualityDetails(
     .map((claim) => claim.trim())
     .filter(
       (claim) =>
-        claim.replace(CITATION_PATTERN, '').replace(/\s+/gu, '').length >=
+        withoutCitations(claim).replace(/\s+/gu, '').length >=
         MIN_SUBSTANTIVE_CLAIM_CHARS,
     );
 
   for (const claim of claims) {
-    const citationIndexes = [...claim.matchAll(CITATION_PATTERN)].map((match) =>
-      Number(match[1]),
-    );
+    const citationIndexes = citedIndexes(claim);
     if (!citationIndexes.length) {
       signals.add('support_partial');
       excerpts.support_partial ??= normalizedReviewExcerpt(claim);
@@ -793,6 +792,10 @@ export class ChatService {
       return piece;
     };
 
+    // Solo cuenta una cita a una fuente entregada: un año entre corchetes
+    // ([2012]) o una fuente inventada no sustentan la respuesta.
+    const cites = (text: string) =>
+      citesAnySource(text, retrieval.sources.length);
     for await (const token of this.answerGateway.generate({
       abortSignal: input.abortSignal,
       conversationContext,
@@ -807,11 +810,11 @@ export class ChatService {
       const visible = marker.push(token);
       if (!streaming) {
         leadIn += visible;
-        if (marker.partialSupport && !CITED_TEXT.test(leadIn)) {
+        if (marker.partialSupport && !cites(leadIn)) {
           declined = true;
           break;
         }
-        if (!CITED_TEXT.test(leadIn) && leadIn.length < LEAD_IN_WINDOW_CHARS) {
+        if (!cites(leadIn) && leadIn.length < LEAD_IN_WINDOW_CHARS) {
           continue;
         }
         streaming = true;
@@ -840,7 +843,7 @@ export class ChatService {
     if (
       ending.noSupport ||
       declined ||
-      (whole.trim() !== '' && !CITED_TEXT.test(whole))
+      (whole.trim() !== '' && !cites(whole))
     ) {
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,

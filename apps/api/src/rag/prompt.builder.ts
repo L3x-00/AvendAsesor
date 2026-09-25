@@ -90,7 +90,7 @@ export function buildEvidenceSystemPrompt(): string {
     'Distingue siempre la situación documental: Vigente, Reemplazado / sin vigencia o Archivado.',
     'Usa documentos Vigentes como sustento de la situación actual. Presenta documentos Reemplazados o Archivados únicamente como antecedentes históricos y nunca como regla actual.',
     'Escribe en español claro, en párrafos breves y con viñetas solo cuando ayuden a la lectura. No uses encabezados con # ni tablas.',
-    'Cita cada afirmación normativa relevante usando [n] (un solo par de corchetes), donde n es el número de fuente suministrada.',
+    'Cita cada afirmación normativa relevante usando [n] (un solo par de corchetes), donde n es el número de fuente suministrada. Si una afirmación se apoya en varias fuentes, escribe cada cita por separado: [1][2].',
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',
