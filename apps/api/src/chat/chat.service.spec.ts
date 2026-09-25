@@ -464,6 +464,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
+        yield 'La licencia se solicita mediante procedimiento institucional [1]. ';
         yield 'La licencia se concede automáticamente durante treinta días sin condición.';
       },
     });
@@ -666,7 +667,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
-        yield 'x'.repeat(MAX_RAG_ANSWER_CHARS + 1);
+        yield `[1] ${'x'.repeat(MAX_RAG_ANSWER_CHARS + 1)}`;
       },
     });
 
@@ -692,7 +693,7 @@ describe('ChatService', () => {
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
         pulled += 1;
-        yield 'a'.repeat(ANSWER_CAP - 10);
+        yield `[1] ${'a'.repeat(ANSWER_CAP - 14)}`;
         pulled += 1;
         yield 'b'.repeat(100); // cruza el tope: solo caben 10, luego se corta
         pulled += 1;

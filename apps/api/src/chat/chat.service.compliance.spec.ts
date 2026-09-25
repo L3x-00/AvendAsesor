@@ -214,6 +214,20 @@ describe('ChatService — lineamientos del cliente', () => {
       ],
       ['marca envuelta en formato', ['**[[SIN_SUSTENTO]]**']],
       ['variante de la marca', ['[[SIN SUSTENTO]]']],
+      ['marca con corchetes simples', ['[SIN_SUSTENTO]']],
+      ['marca sin corchetes', ['SIN_SUSTENTO']],
+      [
+        'negativa con cortesía',
+        ['Lo siento, pero las fuentes proporcionadas no mencionan el plazo.'],
+      ],
+      [
+        'negativa con «lamentablemente»',
+        ['Lamentablemente, las fuentes no especifican ese aspecto.'],
+      ],
+      [
+        'respuesta sin ninguna cita',
+        ['Según las fuentes proporcionadas, no se establece un plazo.'],
+      ],
     ])('%s → «sin evidencia», sin mostrar fuentes', async (_case, parts) => {
       answerGateway.generate.mockReturnValue(tokens(...parts));
 

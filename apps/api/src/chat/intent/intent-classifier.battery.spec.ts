@@ -5,6 +5,7 @@ import {
   hasEducationalSignal,
   isTopiclessQuestion,
 } from './intent-classifier';
+import { isEllipticalFollowUp } from '../../rag/rag.service';
 
 /**
  * Batería de aceptación del clasificador (Hito 3, puntos 1, 2, 3, 10 y 11),
@@ -362,5 +363,69 @@ describe('regresiones de la revisión de API (2026-09-24)', () => {
     expect(
       announcesNewTopicWithSubject('Otra consulta: ¿y en ese caso qué pasa?'),
     ).toBe(false);
+  });
+});
+
+describe('regresiones de la segunda revisión (2026-09-24)', () => {
+  it.each([
+    'Cambiando de tema',
+    'Nueva pregunta',
+    'Nueva consulta',
+    'Otro tema',
+    'Tengo una nueva consulta',
+    'Hola, tengo otra pregunta',
+  ])('anuncio a secas de una consulta, sin RAG: "%s"', (message) => {
+    expect(classifyTurnIntent(message, { inConversation: true })).toEqual({
+      lane: 'social',
+      subtype: 'ask_announcement',
+    });
+  });
+
+  it.each([
+    '¿En qué me puedes ayudar como auxiliar de educación?',
+    '¿Qué puedes hacer por los docentes?',
+    '¿Qué puedes hacer para un director?',
+    'Hola AVEND, ¿qué puedes hacer?',
+  ])('pregunta de capacidad con el rol como contexto: "%s"', (message) => {
+    expect(classifyTurnIntent(message)).toEqual({
+      lane: 'social',
+      subtype: 'capabilities',
+    });
+  });
+
+  it.each(['Hola, ¿qué hora es?', 'Buenos días, ¿qué hora es?'])(
+    'la cortesía no esconde un pedido ajeno: "%s"',
+    (message) => {
+      expect(classifyTurnIntent(message).lane).toBe('out_of_scope');
+    },
+  );
+
+  it('«asesor» dentro de la consulta es tema, no vocativo', () => {
+    expect(
+      isTopiclessQuestion('¿Cuáles son los requisitos para ser asesor?'),
+    ).toBe(false);
+    expect(isTopiclessQuestion('Asesor, ¿cuáles son los requisitos?')).toBe(
+      true,
+    );
+    expect(isTopiclessQuestion('Hola AVEND, ¿cuáles son los requisitos?')).toBe(
+      true,
+    );
+    expect(classifyTurnIntent('Hola, asesor').lane).toBe('social');
+  });
+
+  it('«este/esta/mismo» no hacen de una consulta nueva un seguimiento', () => {
+    expect(
+      isEllipticalFollowUp('¿La permuta está permitida entre regiones?'),
+    ).toBe(false);
+    expect(
+      isEllipticalFollowUp('¿Este año hay concurso de ascenso de escala?'),
+    ).toBe(false);
+    expect(isEllipticalFollowUp('¿Y para ese caso qué plazo hay?')).toBe(true);
+    expect(isEllipticalFollowUp('¿Pasa lo mismo con la permuta?')).toBe(true);
+    expect(
+      announcesNewTopicWithSubject(
+        'Otra consulta: ¿la misma licencia aplica a contratados?',
+      ),
+    ).toBe(true);
   });
 });

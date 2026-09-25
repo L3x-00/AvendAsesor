@@ -86,6 +86,20 @@ describe("readableConversationTitle — revisión web", () => {
     );
   });
 
+  it("drops «¿qué tal?» and a bare «Buenas» before the question", () => {
+    expect(
+      readableConversationTitle(
+        "Hola, ¿qué tal? Quería consultar sobre mi licencia",
+      ),
+    ).toBe("Quería consultar sobre mi licencia");
+    expect(
+      readableConversationTitle("Hola ¿qué tal? ¿cómo pido licencia?"),
+    ).toBe("¿Cómo pido licencia?");
+    expect(
+      readableConversationTitle("Buenas ¿cómo solicito mi destaque?"),
+    ).toBe("¿Cómo solicito mi destaque?");
+  });
+
   it("does not cut words that only start like a greeting", () => {
     expect(
       readableConversationTitle("Buenas prácticas docentes: ¿cómo postulo?"),

@@ -58,7 +58,10 @@ const FAREWELL =
 
 /** Cortesía sin contenido que acompaña al saludo o al agradecimiento. */
 const COURTESY =
-  /\b(por favor|porfa|porfavor|avend|asesor|estimad[oa]s?|disculpe(?:n)?(?: la molestia)?|disculpa(?: la molestia)?|oye|como (?:esta|estas|estan|le va|te va|les va|se encuentra|te encuentras|ha estado|has estado|va)|todo bien|estas ahi|esta ahi|hay alguien|un gusto|mucho gusto|amig[oa]s?|por todo|por la (?:informacion|info|respuesta|ayuda|orientacion|atencion)|por (?:tu|su) (?:ayuda|respuesta|orientacion|atencion|tiempo|paciencia)|por la ayuda|me (?:sirvio|ayudo)(?: mucho| bastante)?|fue (?:muy )?util|muy (?:clara|claro|util)(?: la respuesta)?|eso (?:es|era) todo|nada mas)\b/gu;
+  /\b(por favor|porfa|porfavor|estimad[oa]s?|disculpe(?:n)?(?: la molestia)?|disculpa(?: la molestia)?|oye|como (?:esta|estas|estan|le va|te va|les va|se encuentra|te encuentras|ha estado|has estado|va)|todo bien|estas ahi|esta ahi|hay alguien|un gusto|mucho gusto|amig[oa]s?|por todo|por la (?:informacion|info|respuesta|ayuda|orientacion|atencion)|por (?:tu|su) (?:ayuda|respuesta|orientacion|atencion|tiempo|paciencia)|por la ayuda|me (?:sirvio|ayudo)(?: mucho| bastante)?|fue (?:muy )?util|muy (?:clara|claro|util)(?: la respuesta)?|eso (?:es|era) todo|nada mas)\b/gu;
+
+/** Vocativo: el nombre del asistente en la charla ("hola, AVEND"). */
+const VOCATIVE = /\b(?:avend(?: asesor)?|asesor)\b/gu;
 
 /** Presentación del usuario ("soy docente", "soy director de una IE"). */
 const INTRODUCTION =
@@ -136,11 +139,18 @@ const ACKNOWLEDGMENT =
 
 /** "Tengo una consulta", "¿me puedes ayudar?": anuncia una consulta sin decirla. */
 const ASK_ANNOUNCEMENT =
-  /^(?:(?:tengo|tenia|quisiera|quiero|queria|deseo|necesito|me gustaria)(?: hacer(?:te|le)?| realizar)? (?:una |un |unas |algunas |otra )?(?:consulta|consultita|pregunta|duda)s?|(?:necesito|quisiera|busco) (?:ayuda|orientacion|asesoria)|(?:me |nos )?(?:puedes|podrias|puede|podria) (?:ayudar|orientar|asesorar)(?:me|nos)?|(?:una|otra) (?:consulta|pregunta))$/u;
+  /^(?:(?:tengo|tenia|quisiera|quiero|queria|deseo|necesito|me gustaria)(?: hacer(?:te|le)?| realizar)? (?:una |un |unas |algunas |otra )?(?:consulta|consultita|pregunta|duda)s?|(?:necesito|quisiera|busco) (?:ayuda|orientacion|asesoria)|(?:me |nos )?(?:puedes|podrias|puede|podria) (?:ayudar|orientar|asesorar)(?:me|nos)?|(?:una|otra) (?:consulta|pregunta)|(?:(?:tengo|quisiera hacer|quiero hacer) )?(?:una |otra )?(?:nueva|otra) (?:consulta|pregunta)|otro tema|(?:cambiando|cambio) de tema|(?:ahora )?(?:quiero|quisiera) (?:preguntar|consultar) otra cosa)$/u;
 
 /** Preguntas sobre la identidad o el alcance de AVEND. */
 const CAPABILITIES =
   /\b(que puedes hacer|que sabes hacer|que haces$|que sabes$|quien eres|que eres|eres (?:un|una) (?:robot|persona|humano|humana|bot|ia|inteligencia artificial|maquina|asistente)|eres (?:chatgpt|gpt|real)|con quien (?:hablo|estoy hablando)|para que sirves|para que sirve (?:esto|esta pagina|este chat|avend|la aplicacion|esta aplicacion|esta app|este sistema|la plataforma$|esta plataforma$)|en que (?:me )?(?:puedes ayudar(?:me)?|ayudas|me ayudas)|en que temas (?:me )?(?:ayudas|puedes ayudar)|con que (?:me )?puedes ayudar|como (?:me )?(?:puedes ayudar|ayudas)$|como funcionas|como te uso|como se usa$|que es avend|cual es tu funcion|de que puedes hablar|que temas (?:manejas|conoces|sabes|abarcas|tratas|atiendes|cubres)|de que temas sabes|que (?:tipo|clase) de (?:preguntas|consultas) (?:respondes|atiendes|puedo hacer(?:te)?)|sobre que (?:te )?puedo (?:preguntar(?:te)?|consultar(?:te)?)|que (?:modulos|temas) (?:hay|tienes)|^ayuda(?:me)?(?: por favor)?$|^(?:menu|opciones)$)\b/u;
+
+/**
+ * El rol dicho como contexto de una pregunta de capacidad («¿en qué me ayudas
+ * como auxiliar de educación?», «¿qué haces por los docentes?»).
+ */
+const ROLE_AS_CONTEXT =
+  /\b(?:como|a|por|para)(?: (?:los|las|un|una|el|la))? (?:docentes?|profesor(?:a|es|as)?|maestr[oa]s?|auxiliar(?:es)?(?: de educacion)?|directiv[oa]s?|director(?:a|es|as)?|subdirector(?:a|es|as)?)\b/gu;
 
 /** Lo único que puede acompañar a una pregunta de capacidad sin volverla consulta. */
 const CAPABILITY_RESIDUE_WORDS = new Set([
@@ -155,6 +165,12 @@ const CAPABILITY_RESIDUE_WORDS = new Set([
   'ayudar',
   'ayudarme',
   'yo',
+  'por',
+  'mi',
+  'para',
+  'exactamente',
+  'hacer',
+  'puede',
 ]);
 
 /** Cláusula condicional/causal: convierte una pregunta en consulta ("…si no me pagan"). */
@@ -196,7 +212,10 @@ const EMOJI = /\p{Extended_Pictographic}|[:;]-?[)(dDpP]/u;
 const WAVE = /👋|🙋/u;
 
 function isOutOfScope(normalized: string): boolean {
-  return OUT_OF_SCOPE_PATTERNS.some((pattern) => pattern.test(normalized));
+  const substance = withoutCourtesy(normalized);
+  return OUT_OF_SCOPE_PATTERNS.some(
+    (pattern) => pattern.test(normalized) || pattern.test(substance),
+  );
 }
 
 function stripped(value: string, ...patterns: RegExp[]): string {
@@ -220,7 +239,7 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
   if (!greeting && !thanks && !farewell) {
     // Cortesía sola ("¿cómo estás?", "¿todo bien?") equivale a un saludo.
     return new RegExp(COURTESY.source, 'u').test(normalized) &&
-      !stripped(normalized, COURTESY)
+      !stripped(normalized, COURTESY, VOCATIVE)
       ? 'greeting'
       : null;
   }
@@ -231,6 +250,7 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
     THANKS,
     GREETING,
     COURTESY,
+    VOCATIVE,
     INTRODUCTION,
   );
   const residueWords = residue ? residue.split(' ') : [];
@@ -245,7 +265,7 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
 
 /** Resto del mensaje sin saludo ni cortesía, para reglas de frase completa. */
 function withoutCourtesy(normalized: string): string {
-  return stripped(normalized, GREETING, COURTESY, THANKS);
+  return stripped(normalized, GREETING, COURTESY, VOCATIVE, THANKS);
 }
 
 function isFollowUpShaped(normalized: string): boolean {
@@ -311,15 +331,24 @@ export function classifyTurnIntent(
     !CONDITIONAL_CLAUSE.test(normalized) &&
     !/^(?:y|e|pero)\b/u.test(plain) &&
     !hasWeakDomainSignal(
-      stripped(normalized, GREETING, COURTESY, INTRODUCTION),
+      stripped(
+        normalized,
+        GREETING,
+        COURTESY,
+        VOCATIVE,
+        INTRODUCTION,
+        ROLE_AS_CONTEXT,
+      ),
     ) &&
     stripped(
       plain,
       new RegExp(CAPABILITIES.source, 'gu'),
       GREETING,
       COURTESY,
+      VOCATIVE,
       THANKS,
       INTRODUCTION,
+      ROLE_AS_CONTEXT,
     )
       .split(' ')
       .every((word) => !word || CAPABILITY_RESIDUE_WORDS.has(word))
@@ -386,12 +415,16 @@ export function isTopiclessQuestion(message: string): boolean {
   if (!TOPICLESS_ASPECT.test(normalized)) return false;
   // La cortesía y la presentación no aportan tema.
   const words = stripped(
-    normalized,
-    GREETING,
-    COURTESY,
-    THANKS,
-    INTRODUCTION,
-    /\b(?:una|otra) (?:consulta|pregunta)\b/gu,
+    stripped(
+      normalized,
+      GREETING,
+      COURTESY,
+      THANKS,
+      INTRODUCTION,
+      /\b(?:una|otra) (?:consulta|pregunta)\b/gu,
+      /\bavend(?: asesor)?\b/gu,
+    ),
+    /^asesor\b/u,
   )
     .split(' ')
     .filter(Boolean);
@@ -434,4 +467,4 @@ export function announcesNewTopicWithSubject(message: string): boolean {
 
 /** Remite a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
 const FOLLOW_UP_ANAPHORA =
-  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|mismo|misma|ello|aquel|aquella)\b/u;
+  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|ello|aquel|aquella|lo mismo)\b/u;

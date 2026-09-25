@@ -16,7 +16,7 @@ function formatDate(value: string): string {
 }
 
 const LEADING_COURTESY =
-  /^¡?(?:(?:(?:hola+|buen[oa]s (?:d[ií]as|tardes|noches)|buen d[ií]a|saludos|estimad[oa]s?|disculpe(?: la molestia)?|por favor|qu[eé] tal)(?=[\s,.;:!?¡¿]|$)|buenas(?=[,.;:!?¡¿]|$))[\s,.;:!¡-]*)+/iu;
+  /^¡?(?:(?:(?:hola+|buen[oa]s (?:d[ií]as|tardes|noches)|buen d[ií]a|saludos|estimad[oa]s?|disculpe(?: la molestia)?|por favor|qu[eé] tal)(?=[\s,.;:!?¡¿]|$)|¿qu[eé] tal\?|buenas(?=[,.;:!?¡¿]|\s+¿|$))[\s,.;:!¡-]*)+/iu;
 const MAX_TITLE_CHARS = 90;
 
 /**

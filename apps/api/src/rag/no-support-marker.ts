@@ -7,8 +7,11 @@
  */
 export const RAG_NO_SUPPORT_MARKER = '[[SIN_SUSTENTO]]';
 
-/** Variantes que el modelo produce: espacios, guiones, minúsculas. */
-const MARKER_PATTERN = /\[\[\s*sin[\s_-]*sustento\s*\]\]/iu;
+/** Variantes que el modelo produce: espacios, guiones, minúsculas, un solo par de corchetes. */
+const MARKER_PATTERN = /\[{1,2}\s*sin[\s_-]*sustento\s*\]{1,2}/iu;
+/** Comienzo de una marca de un solo corchete que puede completarse en el próximo token. */
+const MARKER_PREFIX =
+  /\[\s*(?:s(?:i(?:n(?:[\s_-]*(?:s(?:u(?:s(?:t(?:e(?:n(?:t(?:o\s*)?)?)?)?)?)?)?)?)?)?)?)?$/iu;
 /** Una marca abierta y sin cerrar puede seguir llegando en el próximo token. */
 const MAX_OPEN_MARKER_CHARS = 24;
 /** Formato sin contenido que el modelo pone alrededor de la marca («**…**»). */
@@ -82,7 +85,7 @@ export class NoSupportMarkerFilter {
     this.pending = '';
     if (!this.started) {
       // Una marca abierta y truncada (corte por longitud) tampoco es respuesta.
-      if (/^[\s*_`"'>:#-]*\[\[/u.test(rest)) {
+      if (/^[\s*_`"'>:#-]*\[(?:\[|\s*sin)/iu.test(rest)) {
         return { noSupport: true, tail: '' };
       }
       return {
@@ -103,6 +106,6 @@ export class NoSupportMarkerFilter {
     ) {
       return this.pending.length - open;
     }
-    return this.pending.endsWith('[') ? 1 : 0;
+    return MARKER_PREFIX.exec(this.pending)?.[0].length ?? 0;
   }
 }

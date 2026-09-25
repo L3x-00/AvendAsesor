@@ -313,7 +313,7 @@ function contextualQuery(
 
 /** Referencia a lo ya hablado: «durante ese tiempo», «en ese caso», «lo mismo». */
 const ANAPHORA =
-  /\b(ese|esa|eso|esos|esas|este|esta|esto|estos|estas|dicho|dicha|dichos|dichas|mismo|misma|ello|aquel|aquella)\b/u;
+  /\b(ese|esa|eso|esos|esas|dicho|dicha|dichos|dichas|ello|aquel|aquella|lo mismo)\b/u;
 
 /**
  * Un seguimiento elíptico ("¿y cuál es el plazo?", "¿y para auxiliares?") o

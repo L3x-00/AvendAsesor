@@ -57,10 +57,6 @@ import {
 const CITED_TEXT = /\[\[?\d+\]\]?/u;
 /** Caracteres sin cita tras los cuales la respuesta empieza a mostrarse. */
 const LEAD_IN_WINDOW_CHARS = 400;
-/** Negativa del modelo sin la marca («Las fuentes no contienen…»). */
-const DECLINE_PATTERN =
-  /^(?:lo siento[,.]?\s*)?(?:las fuentes|los documentos|la informaci[oó]n (?:proporcionada|disponible|entregada)|no (?:encuentro|encontr[eé]|hay|dispongo|cuento|se (?:menciona|especifica|indica|encuentra|detalla|precisa)))/iu;
-
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
 
@@ -836,15 +832,15 @@ export class ChatService {
 
     const ending = marker.finish();
     const unstreamed = streaming ? '' : `${leadIn}${ending.tail}`;
-    // Toda la respuesta (mostrada o no): sin ninguna cita y con la marca o una
-    // negativa, no hubo sustento. Si ya se mostró texto, el evento
-    // «no_evidence» lo reemplaza en la pantalla.
+    // Fail-closed (punto 4): una respuesta que no cita ninguna fuente no puede
+    // demostrar de dónde sale —suele ser una negativa («Lo siento, las fuentes
+    // no mencionan…») o la marca mal escrita— y se cierra como «sin
+    // evidencia». Si ya se mostró texto, el evento «no_evidence» lo reemplaza.
     const whole = `${answer}${streaming ? ending.tail : unstreamed}`;
     if (
       ending.noSupport ||
       declined ||
-      (!CITED_TEXT.test(whole) &&
-        (marker.partialSupport || DECLINE_PATTERN.test(whole.trim())))
+      (whole.trim() !== '' && !CITED_TEXT.test(whole))
     ) {
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,

@@ -43,6 +43,7 @@ const secondModule = {
 };
 
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
+const newConversationId = "6d8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
 const questionMessageId = "bc8b56af-6d0c-4fef-881e-7c00907540dd";
 const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
@@ -783,12 +784,13 @@ describe("ChatPanel", () => {
       )
       .mockImplementationOnce(async () =>
         streamResponse([
-          conversationEvent(),
+          `event: conversation\ndata: {"conversationId":"${newConversationId}","userMessageId":"${questionMessageId}","startedNewConversation":true}\n\n`,
           'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
           doneEvent("rule"),
         ]),
       );
     vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", `/chat/${conversationId}`);
     render(
       <ChatPanel
         initialConversation={eligibleConversation}
@@ -802,8 +804,14 @@ describe("ChatPanel", () => {
     );
     await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
     await screen.findByText("¡Claro! Cuéntame tu consulta.");
+    // Recargar ahora no reabre la conversación anterior.
+    expect(window.location.pathname).not.toContain(conversationId);
     await submitQuestion(user);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    // La pregunta siguiente se muestra como tema nuevo.
+    expect(
+      await screen.findByText(/Nuevo tema: esta consulta se guardó/u),
+    ).toBeVisible();
 
     expect(
       requestBody(
@@ -815,6 +823,37 @@ describe("ChatPanel", () => {
         fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
       ),
     ).not.toHaveProperty("conversationId");
+  });
+
+  it("flags the last saved question only when it is too old to be in progress", () => {
+    const question = eligibleConversation.messages[0];
+    const { unmount } = render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [question],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    // Guardada el 2026-08-24: la respuesta ya no puede estar en curso.
+    expect(
+      screen.getByText(/Esta consulta no se completó por un problema técnico/u),
+    ).toBeVisible();
+    unmount();
+
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [{ ...question, createdAt: new Date().toISOString() }],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    expect(
+      screen.queryByText(/Esta consulta no se completó/u),
+    ).not.toBeInTheDocument();
   });
 
   it("does not resend the screen module when continuing a conversation", async () => {

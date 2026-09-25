@@ -42,6 +42,9 @@ interface RenderedMessage {
 
 /** Tras este tiempo sin respuesta se avisa que el servicio puede estar activándose. */
 const COLD_START_NOTICE_MS = 12_000;
+// Una respuesta (con arranque en frío incluido) no tarda más que esto: pasado
+// ese tiempo, la última pregunta sin respuesta ya no está en curso.
+const STALE_QUESTION_MS = 3 * 60_000;
 
 interface ChatPanelProps {
   initialConversation?: ChatConversationDetail;
@@ -75,6 +78,7 @@ function initialMessages(
   const answeredIds = new Set(
     messages.map((message) => message.inReplyToMessageId).filter(Boolean),
   );
+  const now = Date.now();
   return messages.map((message, index) => ({
     content: message.content,
     conversationId: conversation?.conversation.id,
@@ -83,12 +87,13 @@ function initialMessages(
     role: message.role,
     sources: message.sources,
     // La última pregunta puede estar respondiéndose todavía (p. ej. al retomar
-    // desde el Historial mientras se genera): solo se marca si hubo mensajes
-    // después.
+    // desde el Historial mientras se genera): se marca si hubo mensajes
+    // después o si pasó más tiempo del que tarda una respuesta.
     unanswered:
       message.role === "user" &&
       !answeredIds.has(message.id) &&
-      index < messages.length - 1,
+      (index < messages.length - 1 ||
+        now - Date.parse(message.createdAt) > STALE_QUESTION_MS),
   }));
 }
 
@@ -362,6 +367,9 @@ export function ChatPanel({
     sources: ChatSource[];
     userMessageId: string | null;
   }>({ sources: [], userMessageId: null });
+  // «Otra consulta» a secas: la próxima pregunta abre una conversación nueva y
+  // se marca en pantalla como tema nuevo.
+  const pendingNewTopicRef = useRef(false);
 
   function nextLocalId(prefix: string): string {
     localIdRef.current += 1;
@@ -635,6 +643,8 @@ export function ChatPanel({
       : conversationId;
     const targetModuleId = options.moduleId ?? selectedModuleId;
     const hadVisibleMessages = messages.length > 0;
+    const announcedNewTopic = pendingNewTopicRef.current;
+    pendingNewTopicRef.current = false;
     const abortController = new AbortController();
     const localQuestionId = nextLocalId("local-question");
     // Estado del turno en curso: se completa a medida que llegan los eventos.
@@ -732,8 +742,9 @@ export function ChatPanel({
               !options.fromClarification &&
               result.data.startedNewConversation &&
               hadVisibleMessages &&
-              conversationId &&
-              conversationId !== result.data.conversationId,
+              (announcedNewTopic ||
+                (conversationId &&
+                  conversationId !== result.data.conversationId)),
             );
             setConversationId(result.data.conversationId);
             if (startsNewTopic && result.data.moduleId !== undefined) {
@@ -849,7 +860,17 @@ export function ChatPanel({
               );
               return;
             }
-            if (result.data.startsNewTopic) setConversationId(undefined);
+            if (result.data.startsNewTopic) {
+              setConversationId(undefined);
+              pendingNewTopicRef.current = true;
+              window.history.replaceState(
+                null,
+                "",
+                selectedModuleId
+                  ? `/chat?module=${encodeURIComponent(selectedModuleId)}`
+                  : "/chat",
+              );
+            }
             setMessages((current) => [
               ...current,
               {

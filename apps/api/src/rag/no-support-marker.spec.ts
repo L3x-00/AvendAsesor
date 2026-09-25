@@ -94,4 +94,18 @@ describe('NoSupportMarkerFilter — variantes del modelo', () => {
     expect(result.text).toBe('Según la norma [[4]] el plazo es breve.');
     expect(result.end.noSupport).toBe(false);
   });
+  it('reconoce la marca con un solo par de corchetes, aun partida', () => {
+    const alone = run(['[SIN_', 'SUSTENTO]']);
+    expect(alone.end.noSupport).toBe(true);
+    expect(alone.text).toBe('');
+    const after = run(['El plazo es de 30 días [1]. ', '[SIN_SUS', 'TENTO]']);
+    expect(after.text).toBe('El plazo es de 30 días [1]. ');
+    expect(after.partial).toBe(true);
+  });
+
+  it('no retiene una cita simple ni un corchete de texto', () => {
+    const result = run(['Ver [1', '] y [nota] final.']);
+    expect(result.text).toBe('Ver [1] y [nota] final.');
+    expect(result.partial).toBe(false);
+  });
 });

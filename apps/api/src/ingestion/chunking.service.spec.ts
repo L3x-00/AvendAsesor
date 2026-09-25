@@ -72,13 +72,10 @@ describe('ChunkingService', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
-        text: Array.from(
-          { length: 6 },
-          (_, block) =>
-            Array.from(
-              { length: 300 },
-              (_, index) => `b${block}w${index}`,
-            ).join(' '),
+        text: Array.from({ length: 6 }, (_, block) =>
+          Array.from({ length: 300 }, (_, index) => `b${block}w${index}`).join(
+            ' ',
+          ),
         ).join('\n\n'),
       },
     ]);
