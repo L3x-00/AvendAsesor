@@ -123,3 +123,149 @@ describe('ChunkingService', () => {
     expect(chunks[1].tokenCount).toBeLessThanOrEqual(800);
   });
 });
+
+describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
+  const service = new ChunkingService();
+  const words = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, index) => `${prefix}w${index}`).join(' ');
+
+  it('respects the token limit counting separators (tables with many short cells)', () => {
+    const cells = ['1', 'Requisito 1', '5 días', 'Sí'];
+    const table = Array.from(
+      { length: 600 },
+      (_, index) => cells[index % cells.length],
+    ).join('\n\n');
+    const chunks = service.chunk([
+      { pageNumber: 1, text: table },
+      {
+        pageNumber: 2,
+        text: `${words('a', 450)}\n\nArtículo 3. Título breve.\n\n${words('b', 560)}`,
+      },
+    ]);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks)
+      expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+  });
+
+  it('chunks a long table-like document in linear time', () => {
+    const page = Array.from(
+      { length: 120 },
+      (_, index) => `Celda ${index} del anexo`,
+    ).join('\n\n');
+    const pages = Array.from({ length: 40 }, (_, index) => ({
+      pageNumber: index + 1,
+      text: page,
+    }));
+
+    const started = performance.now();
+    const chunks = service.chunk(pages);
+    // Antes: recodificaba todo lo pendiente por cada celda (≈0,7 s por página).
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(chunks.length).toBeGreaterThan(5);
+  });
+
+  it('bounds long runs without spaces before encoding', () => {
+    const started = performance.now();
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: `Índice ${'.'.repeat(20_000)} 5\n\n${'a'.repeat(12_000)}`,
+      },
+    ]);
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(chunks[0].chunkContent).toContain('Índice ... 5');
+    for (const chunk of chunks)
+      expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+  });
+
+  const encoding = getEncoding('o200k_base');
+  /** Texto de `count` tokens como mínimo, con palabras únicas marcadas. */
+  const tokensOf = (prefix: string, count: number) => {
+    const parts: string[] = [];
+    while (encoding.encode(parts.join(' ')).length < count) {
+      parts.push(`${prefix}w${parts.length}`);
+    }
+    return parts.join(' ');
+  };
+
+  it('labels every chunk with the pages its text really comes from', () => {
+    const sizes = [700, 40, 500, 60, 90, 700, 30, 820, 40, 1_300, 15, 600];
+    const pages = sizes.map((size, index) => ({
+      pageNumber: index + 1,
+      text: tokensOf(`p${index + 1}x`, size),
+    }));
+    const chunks = service.chunk(pages);
+
+    expect(chunks.length).toBeGreaterThan(4);
+    for (const chunk of chunks) {
+      for (const match of chunk.chunkContent.matchAll(/\bp(\d+)x/gu)) {
+        const page = Number(match[1]);
+        expect(page).toBeGreaterThanOrEqual(chunk.pageStart);
+        expect(page).toBeLessThanOrEqual(chunk.pageEnd);
+      }
+    }
+  });
+
+  it('opens the overlap at the page where its text starts', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: `${tokensOf('uno', 690)} El plazo de reclamo es de quince días hábiles.`,
+      },
+      {
+        pageNumber: 2,
+        text: `Artículo 9. Requisitos del trámite.\n\n${tokensOf('dos', 500)}`,
+      },
+    ]);
+    const withSentence = chunks.filter((chunk) =>
+      chunk.chunkContent.includes('quince días hábiles'),
+    );
+    expect(withSentence.length).toBeGreaterThan(0);
+    for (const chunk of withSentence) expect(chunk.pageStart).toBe(1);
+  });
+
+  it('never leaves broken multi-token characters at window edges', () => {
+    const form = Array.from(
+      { length: 400 },
+      (_, index) => `☐ Sí ☐ No 📌 ítem ${index}`,
+    ).join(' ');
+    const chunks = service.chunk([{ pageNumber: 1, text: form }]);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.chunkContent).not.toContain('�');
+    }
+  });
+
+  it('keeps an article heading with its long body instead of the previous chunk', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: [
+          'Artículo 13. Plazos.',
+          words('trece', 300),
+          'Artículo 14. Requisitos para la reasignación.',
+          words('catorce', 1_500),
+        ].join('\n\n'),
+      },
+    ]);
+
+    const article13 = chunks.filter((chunk) =>
+      chunk.chunkContent.includes('trecew1 '),
+    );
+    expect(article13).toHaveLength(1);
+    expect(article13[0].chunkContent).not.toContain('Artículo 14');
+    expect(article13[0].articleReference).toBe('Artículo 13.');
+
+    const article14 = chunks.filter((chunk) =>
+      /catorcew\d/u.test(chunk.chunkContent),
+    );
+    expect(article14.length).toBeGreaterThan(1);
+    for (const chunk of article14) {
+      expect(chunk.chunkContent.startsWith('Artículo 14.')).toBe(true);
+      expect(chunk.articleReference).toBe('Artículo 14.');
+      expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+    }
+  });
+});

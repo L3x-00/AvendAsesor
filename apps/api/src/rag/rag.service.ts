@@ -148,18 +148,24 @@ function topScore(sources: RetrievedChunk[]): number {
 }
 
 /**
- * Quita fragmentos repetidos (mismo texto de la misma versión). El chunker
- * anterior guardaba duplicados exactos; hasta reindexar, sin este filtro
- * ocupaban dos de las cinco fuentes y repetían filas en las referencias.
+ * Quita fragmentos repetidos de la misma versión: el mismo texto, o uno
+ * contenido íntegro en otro ya elegido (mejor puntaje primero). El chunker
+ * anterior guardaba duplicados y tramos contenidos en el vecino; hasta
+ * reindexar, ocupaban varias de las cinco fuentes y repetían filas en las
+ * referencias.
  */
 function uniqueSources(sources: RetrievedChunk[]): RetrievedChunk[] {
-  const seen = new Set<string>();
-  return sources.filter((source) => {
-    const key = `${source.documentVersionId}\u0000${source.chunkContent.replace(/\s+/gu, ' ').trim()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const kept: Array<{ source: RetrievedChunk; text: string }> = [];
+  for (const source of sources) {
+    const text = source.chunkContent.replace(/\s+/gu, ' ').trim();
+    const repeated = kept.some(
+      (item) =>
+        item.source.documentVersionId === source.documentVersionId &&
+        item.text.includes(text),
+    );
+    if (!repeated) kept.push({ source, text });
+  }
+  return kept.map((item) => item.source);
 }
 
 /** Fuentes a no más de `margin` del mejor puntaje, en su orden original. */

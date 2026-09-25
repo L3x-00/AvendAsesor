@@ -341,6 +341,32 @@ describe('RagService', () => {
     ]);
   });
 
+  it('drops a legacy chunk contained in a better one of the same version, not of another', async () => {
+    const whole =
+      'Inicio del artículo. Tramo compartido del párrafo largo. Cierre.';
+    gateway.search.mockResolvedValue([
+      { ...source, chunkContent: whole, chunkId: 'whole' },
+      {
+        ...source,
+        chunkContent: 'Tramo compartido   del párrafo largo.',
+        chunkId: 'contained',
+      },
+      {
+        ...source,
+        chunkContent: 'Tramo compartido del párrafo largo.',
+        chunkId: 'other-version',
+        documentVersionId: 'another-version',
+      },
+    ]);
+
+    const result = await service.retrieve('Consulta', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'whole',
+      'other-version',
+    ]);
+  });
+
   it('keeps only the sources within the relevance band of the best one, capped at the match count', async () => {
     const scores = [0.8, 0.78, 0.76, 0.74, 0.72, 0.7, 0.6];
     gateway.search.mockResolvedValue(
