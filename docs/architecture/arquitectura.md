@@ -60,10 +60,11 @@ flowchart LR
   AI["OpenRouter / OpenAI<br/>embeddings y respuestas"]
 
   UI -- "páginas, Server Actions, SSE" --> BFF
-  UI -- "login y sesión (anon key)" --> AUTH
+  UI -. "token de sesión solo para cargas directas (anon key)" .-> AUTH
   UI -- "carga directa multipart + Bearer" --> API
+  BFF -- "login y sesión (anon key, Server Actions)" --> AUTH
   BFF -- "REST + Bearer del usuario" --> API
-  BFF -- "sesión y perfil propio (anon key, RLS)" --> DB
+  BFF -- "perfil propio y permiso de módulos (anon key, RLS)" --> DB
   API -- "valida el token" --> AUTH
   API -- "service_role: RPC y tablas" --> DB
   API -- "service_role" --> ST
@@ -119,21 +120,25 @@ en `src/app/(teacher)/layout.tsx` y `src/app/admin/layout.tsx`).
 ### 2.2 Frontera server-only
 
 - Los módulos que tocan tokens o el API importan `server-only`:
-  `src/lib/admin-api/*`, `src/lib/chat-api/*`,
-  `src/lib/consultation-reports-api/*`, `src/lib/supabase/server.ts` y
+  `client.ts`, `authorized-client.ts` y `config.ts` de `src/lib/admin-api/`;
+  `client.ts` y `authorized-client.ts` de `src/lib/chat-api/` y de
+  `src/lib/consultation-reports-api/`; `src/lib/supabase/server.ts` y
   `src/lib/orientation-document/builders.ts`. Un import accidental desde un
   componente de cliente rompe el build.
-- El navegador solo recibe `NEXT_PUBLIC_SUPABASE_URL` y
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `ADMIN_API_URL` no lleva el prefijo
-  `NEXT_PUBLIC_`. Se valida en `src/lib/admin-api/config.ts`: debe ser un origen
-  HTTPS (o `http` en loopback), sin credenciales, ruta, query ni hash.
+- Como variables de entorno, el navegador solo recibe
+  `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `ADMIN_API_URL`
+  no lleva el prefijo `NEXT_PUBLIC_`. Se valida en `src/lib/admin-api/config.ts`:
+  debe ser un origen HTTPS (o `http` en loopback), sin credenciales, ruta, query
+  ni hash. El servidor solo pasa ese origen ya validado, como prop, a los dos
+  formularios de carga directa (§2.4).
 - La clave `service_role` de Supabase **nunca** llega a la web.
 
 ### 2.3 Sesión y autorización en la web
 
 - `src/proxy.ts` es el *proxy* de Next.js 16 (antes *middleware*). Llama a
-  `updateSupabaseSession` en cada petición para refrescar las cookies de
-  sesión de `@supabase/ssr`.
+  `updateSupabaseSession` en cada petición (salvo recursos estáticos e
+  imágenes, según su `matcher`) para refrescar las cookies de sesión de
+  `@supabase/ssr`.
 - `src/lib/authorization/resolve-chat-access.ts` obtiene el usuario
   (`auth.getUser`) y lee su propia fila de `profiles`, que RLS permite. Exige:
   rol de chat, `account_status = 'active'`, `access_expires_at` vigente y nombre
@@ -181,8 +186,10 @@ permiso y contenido, y su CORS solo admite `WEB_ORIGIN`.
 - `src/app.module.ts` configura:
   - `ConfigModule` global, validado con zod en
     `src/config/environment.validation.ts`;
-  - `ThrottlerModule`, con 30 peticiones/60 s por defecto y límites propios por
-    controlador (por ejemplo, 10/min en `POST /chat/stream` y 5/min en cargas);
+  - `ThrottlerModule`, con 30 peticiones/60 s por defecto. Los controladores,
+    salvo `/health`, aplican `ThrottlerGuard` con su propio límite (por ejemplo, 10/min en
+    `POST /chat/stream`, 5/min en cargas de documentos y 3/min en la
+    importación de usuarios);
   - `ScheduleModule`, que usa el worker.
 - **No hay OpenAPI/Swagger.** La referencia de endpoints son los controladores
   (`src/**/*.controller.ts`) y sus DTO (`src/**/dto/`).
@@ -236,12 +243,14 @@ Lista tomada de `src/*/*.module.ts`:
   `vector`, `pg_trgm` y `unaccent` en el esquema `extensions`.
 - `public`: tablas de aplicación y RPC. La Data API expone solo `public` y
   `graphql_public` (`config.toml`).
-- `private`: funciones de triggers y helpers internos. Tiene `revoke all ... from
-  public` y los roles del API no tienen `USAGE` sobre él. Consecuencia: **una RPC
-  que invoca el API no debe llamar `private.*` en su camino normal**; los
-  triggers sí funcionan. La migración
-  `20260910130000_inline_document_mime_type.sql` documenta la regresión que causó
-  romper esta regla.
+- `private`: funciones de triggers y helpers internos (por ejemplo,
+  `private.require_administrator`). Tiene `revoke all ... from public`, y ni
+  `service_role` (con el que el API invoca las RPC) ni `authenticated` tienen
+  `USAGE` sobre él. Consecuencia: **una RPC `security invoker` que invoca
+  el API no debe llamar `private.*` en su camino normal**. Las RPC
+  `security definer` (se ejecutan como su propietario) y los triggers sí pueden
+  hacerlo. La migración `20260910130000_inline_document_mime_type.sql` documenta
+  la regresión que causó romper esta regla: todas las cargas respondían 503.
 
 ### 4.2 Tablas por dominio
 
@@ -256,7 +265,7 @@ Lista tomada de `src/*/*.module.ts`:
 | Memoria FAQ | `faq_memory_candidates`, `faq_memory_observations`, `faq_memory_reviews` |
 | Auditoría | `operational_audit_events`, además de `document_audit_events` y los eventos de permisos y de casos |
 
-Índices vectoriales: HNSW (`vector_cosine_ops`) sobre
+Índices de búsqueda: HNSW (`vector_cosine_ops`) sobre
 `document_chunks.embedding` y GIN sobre `content_tsv`
 (`20260821064610_create_hito3_rag_foundation.sql`). El detalle de columnas,
 índices y *hardening* está en
@@ -292,7 +301,7 @@ Lista tomada de `src/*/*.module.ts`:
 
 | Bucket | Privado | Límite | Tipos | Definido en |
 | --- | --- | --- | --- | --- |
-| `normative-documents` | Sí | 50 MiB | PDF, DOCX, DOC, Markdown | `20260809194717_...` y `20260910120000_document_upload_formats_and_size.sql` |
+| `normative-documents` | Sí | 50 MiB | PDF, DOCX, DOC, Markdown | `20260809194717_create_document_management_foundation.sql` y `20260910120000_document_upload_formats_and_size.sql` |
 | `consultation-case-attachments` | Sí | 10 MiB | JPEG, PNG, WebP, PDF, DOC, DOCX | `20260905100000_consultation_reports_and_quality.sql` |
 
 Políticas restrictivas niegan el acceso directo a `anon` y `authenticated`.
@@ -325,8 +334,11 @@ adjuntos de casos.
 2. El API valida:
    - rol y permiso de módulos;
    - bytes mágicos del archivo;
-   - tamaño de hasta 50 MiB y, en los PDF, hasta 300 páginas
-     (`src/documents/pdf-inspection.service.ts`).
+   - tamaño de hasta 50 MiB;
+   - en los PDF de hasta 20 MiB, que tengan entre 1 y 300 páginas. Un PDF de
+     más de 20 MiB no se analiza, para no agotar la memoria de la instancia, y
+     se guarda sin conteo de páginas ni tope de 300
+     (`src/documents/pdf-inspection.service.ts`, `MAX_PDF_PARSE_BYTES`).
 3. El API sube el archivo al bucket privado y llama a
    `create_governed_document_with_initial_version` o
    `add_governed_document_version`. Si la RPC falla, borra el objeto subido
@@ -348,8 +360,8 @@ adjuntos de casos.
      caracteres). Todo el texto queda como página 1.
    - **Markdown:** texto UTF-8 (página 1).
    - **DOC** (formato binario antiguo): se acepta en la carga, pero la ingesta
-     lo rechaza (`INGESTION_UNSUPPORTED_FORMAT`) y el trabajo termina en
-     `failed`.
+     no tiene extractor y lo rechaza (mensaje `INGESTION_UNSUPPORTED_FORMAT`).
+     Al agotar los reintentos, el trabajo termina en `failed`.
 7. Chunking (`chunking.service.ts`):
    - tokenizador `o200k_base` (`js-tiktoken`);
    - hasta 800 tokens por fragmento, con solapamiento de 100;
@@ -359,8 +371,10 @@ adjuntos de casos.
 9. El worker reemplaza los fragmentos de la versión en lotes de 25, renovando
    el lease, y cierra con `complete_document_ingestion_job`, que deja la versión
    en `indexed`. Ante un error llama a `fail_document_ingestion_job`, que la
-   reintenta o la marca `failed`. Para reencolar una versión se usa la RPC
-   `retry_document_ingestion`.
+   reintenta o la marca `failed`. Para reencolar una versión existe la RPC
+   `retry_document_ingestion`. El API no la expone: se ejecuta a mano con
+   `service_role` (ver
+   [`../hito3/RUNBOOK_ACTIVACION_EJE_B.md`](../hito3/RUNBOOK_ACTIVACION_EJE_B.md)).
 10. **Aprobación.** Un administrador marca el estado técnico «Listo»
     (`PATCH /admin/documents/:id/technical-status`). La RPC
     `set_document_technical_status` solo lo permite si la versión está
@@ -369,9 +383,9 @@ adjuntos de casos.
 
 ```mermaid
 flowchart TD
-  UP["Admin carga el archivo<br/>navegador → Render"] --> VAL["API valida rol, permiso,<br/>bytes mágicos, 50 MiB, PDF ≤ 300 págs."]
+  UP["Admin carga el archivo<br/>navegador → Render"] --> VAL["API valida rol, permiso,<br/>bytes mágicos, 50 MiB,<br/>PDF de hasta 20 MiB: ≤ 300 págs."]
   VAL --> STO["Storage privado normative-documents"]
-  STO --> RPC["RPC create_governed_document_with_initial_version"]
+  STO --> RPC["RPC create_governed_document_with_initial_version<br/>o add_governed_document_version"]
   RPC --> ENQ["Trigger: nuevo job en document_ingestion_jobs<br/>versión pending"]
   ENQ --> WON{"¿RAG_INGESTION_WORKER_ENABLED?"}
   WON -- "false" --> PEN["Queda en pending"]
@@ -407,9 +421,11 @@ Implementación en `src/chat/chat.service.ts` (`stream`) y
    `out_of_scope` o `domain`. Ante cualquier señal del dominio o duda elige
    `domain` (*fail-closed*). Los carriles social y fuera de ámbito responden con
    un evento `conversational` **efímero**: no activan el RAG ni guardan nada.
-2. **Consulta sin tema.** Si es la primera consulta y no nombra un trámite (por
-   ejemplo, «¿Cuáles son los requisitos?»), el API pide precisar y ofrece los
-   módulos raíz como opciones. No busca todavía.
+2. **Consulta sin tema.** Si es la primera consulta, no hay módulo elegido y
+   no nombra un trámite (por ejemplo, «¿Cuáles son los requisitos?»), el API
+   pide precisar y ofrece hasta 8 módulos raíz como opciones. No busca todavía.
+   El turno sí se guarda como aclaración, para que la respuesta del usuario
+   conserve la pregunta original.
 3. **Contexto.** Si el turno continúa una conversación, carga el historial con
    `get_chat_conversation_context`: hasta 12 mensajes y 10 000 caracteres.
    Una frase como «otra consulta: …» o un cambio manual de módulo empieza una
@@ -452,7 +468,7 @@ Implementación en `src/chat/chat.service.ts` (`stream`) y
    `[n]` válida o 400 caracteres. El turno se cierra como «sin evidencia» si
    ocurre cualquiera de estas situaciones:
    - el modelo empieza con la marca `[[SIN_SUSTENTO]]`;
-   - declina antes de citar;
+   - emite esa marca después de un texto que todavía no cita ninguna fuente;
    - la respuesta final no cita ninguna fuente entregada (`[2012]` no cuenta
      como cita).
 10. **Cierre atómico** con `complete_chat_turn_with_consultation_case`. En la
@@ -462,10 +478,11 @@ Implementación en `src/chat/chat.service.ts` (`stream`) y
 
     Las señales de calidad se calculan de forma determinista en
     `chat.service.ts`:
-    - `support_partial`: hay afirmaciones sin cita;
+    - `support_partial`: hay afirmaciones sin cita, o el modelo emitió la marca
+      de «sin sustento» después de una parte citada;
     - `citation_insufficient`: una cita no respalda la afirmación o una cifra
       no figura en la fuente;
-    - `low_confidence`: el mejor puntaje queda a menos de 0,05 del umbral.
+    - `low_confidence`: el mejor puntaje no supera el umbral en 0,05 o más.
 
     Una desconexión no guarda texto parcial.
 11. **Memoria FAQ** (`src/learning/`). Si existe
@@ -502,7 +519,8 @@ sequenceDiagram
       A-->>N: no_evidence o clarification, luego done
     else evidence
       A->>P: chat.completions en streaming
-      A-->>N: sources y luego token (tras la primera cita válida)
+      A-->>N: sources y luego token (tras la primera cita válida o 400 caracteres)
+      Note over A: sin cita válida, el turno se cierra como no_evidence (paso 9)
       A->>D: complete_chat_turn_with_consultation_case (atómico)
       A-->>N: done
     end
@@ -553,7 +571,7 @@ y [`../hito3/VALIDACION_INTEGRAL_HITO3.md`](../hito3/VALIDACION_INTEGRAL_HITO3.m
 | Vercel | Web Next.js | Proyecto `avend-asesor-web`, producción `https://avend-asesor-web.vercel.app`; los previews exigen login de Vercel | Plan, costo, titular y dominio propio: Por confirmar (PO) |
 | OpenRouter | Gateway de IA | `OPENROUTER_API_KEY`; `https://openrouter.ai/api/v1` por defecto; modelos `gpt-4o-mini` y `text-embedding-3-small` | Límite de gasto, retención de datos y titular: Por confirmar (PO) |
 | OpenAI | Respaldo de conexión si no existe `OPENROUTER_API_KEY` | `OPENAI_API_KEY` | Si está configurado en producción: Por confirmar (PO) |
-| SMTP de Supabase Auth | Correos de confirmación y recuperación | Diseño: Mailpit en local y Resend como SMTP de Supabase en ambientes remotos (`infrastructure/email/README.md`) | Configuración vigente en producción: Por confirmar (PO) |
+| SMTP de Supabase Auth | Correos de confirmación y recuperación | Diseño previsto: Mailpit en local y Resend como SMTP personalizado de Supabase en ambientes remotos (`infrastructure/email/README.md`) | Configuración vigente en producción: Por confirmar (PO) |
 | GitHub | Código, PR y CI (`.github/workflows/ci.yml`) | Integración continua en PR y en push a `main` | — |
 
 El cliente de IA se construye en `src/config/ai-gateway.ts`
@@ -608,7 +626,7 @@ respuestas, citas ni fuentes.
 | Listar | `/history` (paginado con cursor) | `GET /chat/conversations?limit&cursor` (`CHAT_HISTORY_LIMIT`, 20 por defecto) | `list_chat_conversations_page` |
 | Abrir / retomar | `/chat/[conversationId]` | `GET /chat/conversations/:id` (hasta 100 mensajes) | `get_chat_conversation` |
 | Eliminar | Acción del historial | `DELETE /chat/conversations/:id` (baja lógica) | `delete_chat_conversation` |
-| Ver fuente | «Ver documento» → `/api/chat/sources/[id]/download?pagina=N` | `GET /chat/sources/:sourceId/download-url` | `authorize_chat_source_download`: verifica cita → respuesta → conversación → propietario, registra el acceso y firma una URL de 60 s |
+| Ver fuente | «Ver documento» → `/api/chat/sources/[id]/download?pagina=N` | `GET /chat/sources/:sourceId/download-url`; el API firma una URL de 60 s | `authorize_chat_source_download`: verifica que la cita pertenezca a una respuesta de una conversación no eliminada del propio usuario y registra el acceso |
 
 Los saludos y agradecimientos aislados no crean conversación. Cada lectura se
 acota al usuario autenticado, así que otro usuario recibe «no encontrada».
@@ -620,14 +638,16 @@ acota al usuario autenticado, así que otro usuario recibe «no encontrada».
 - **Identidad:** Supabase Auth con correo confirmado. El rol se define en
   `profiles` y nunca en metadatos editables por el usuario.
 - **Autorización:**
-  - NestJS es la frontera: cada controlador aplica `AuthorizationGuard` y
-    `RolesGuard`, y los de módulos y documentos también `FeaturesGuard`;
-  - las RPC vuelven a validar al actor cuando corresponde (`require_administrator`,
-    `require_superadministrator`).
+  - NestJS es la frontera: todos los controladores, salvo `/health`, aplican
+    `AuthorizationGuard` y `RolesGuard`, y los de módulos y documentos también
+    `FeaturesGuard`;
+  - las RPC administrativas vuelven a validar al actor cuando corresponde
+    (`private.require_administrator`, `private.require_superadministrator`).
   - La web solo filtra la navegación.
 - **Datos:** RLS en todas las tablas; acceso deny-by-default para `anon` y
   `authenticated`; RPC con `search_path` vacío y ejecución solo para
-  `service_role`; auditoría append-only. Detalle en §4.3.
+  `service_role` (con la única excepción descrita en §4.3); auditoría
+  append-only. Detalle en §4.3.
 - **Archivos:** buckets privados con políticas restrictivas, validación por
   bytes mágicos y URLs firmadas de 60 s. El API nunca devuelve el bucket ni la
   ruta de Storage.
@@ -694,24 +714,28 @@ Consideraciones de Render Free:
 ### 9.3 Variables de entorno
 
 Solo nombres. Los valores están en cada proveedor. Las plantillas son
-`.env.example` (raíz), `apps/api/.env.example` y `apps/web/.env.example`.
+`.env.example` (raíz), `apps/api/.env.example` y `apps/web/.env.example`. La
+plantilla raíz es la más completa: `apps/api/.env.example` no incluye
+`OPENROUTER_API_KEY`, `AI_GATEWAY_BASE_URL` ni `RAG_ANSWER_FALLBACK_MODEL`.
 
-**API**. Se valida en `src/config/environment.validation.ts`; un valor
-inválido detiene el arranque.
+**API**. Casi todas se validan con zod en
+`src/config/environment.validation.ts`; un valor inválido detiene el arranque.
+`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` se validan aparte, en
+`createSupabaseServerClient` (`src/supabase/supabase.server-client.ts`).
 
 | Variable | Obligatoria | Valor por defecto | Propósito |
 | --- | --- | --- | --- |
 | `NODE_ENV` | No | `development` | `development`, `test`, `staging` o `production` |
 | `PORT` | No | `3000` | Puerto HTTP |
 | `WEB_ORIGIN` | Sí en remoto | `http://localhost:3000` | Único origen CORS; HTTPS en `staging` y `production` |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Sí | — | Cliente de servidor (`src/supabase/supabase.module.ts`). Si faltan las dos, los gateways responden 503; si falta una, el arranque falla |
-| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` | Una de las dos para el RAG | — | Proveedor de IA; OpenRouter tiene prioridad |
-| `AI_GATEWAY_BASE_URL` | No | OpenRouter | Endpoint alternativo compatible con OpenAI |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Sí | — | Cliente de servidor. Si faltan las dos, el API arranca pero sus dependencias de datos responden 503 (y `/health/ready` también); si falta solo una, el arranque falla |
+| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` | Una de las dos para el RAG; obligatoria si el worker está encendido | — | Proveedor de IA; OpenRouter tiene prioridad |
+| `AI_GATEWAY_BASE_URL` | No | `https://openrouter.ai/api/v1` con OpenRouter; el endpoint del SDK de OpenAI sin él | Endpoint alternativo compatible con la API de OpenAI (`src/config/ai-gateway.ts`) |
 | `RAG_EMBEDDING_MODEL` / `RAG_ANSWER_MODEL` | No | `text-embedding-3-small` / `gpt-4o-mini` | Modelos; con OpenRouter se usa su nomenclatura (ver `.env.example`) |
 | `RAG_ANSWER_FALLBACK_MODEL` | No | — | Respaldo ante error técnico |
 | `RAG_INGESTION_WORKER_ENABLED` | No | `false` | Enciende el worker; exige una clave de IA |
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | Lease del trabajo (30–900) |
-| `RAG_MATCH_THRESHOLD` / `RAG_MATCH_COUNT` | No | `0.5` / `5` | Umbral y número de fuentes |
+| `RAG_MATCH_THRESHOLD` / `RAG_MATCH_COUNT` | No | `0.5` / `5` | Umbral (0–1) y número de fuentes (1–10) |
 | `CHAT_HISTORY_LIMIT` | No | `20` | Tamaño de página del historial (1–50) |
 | `FAQ_MEMORY_FINGERPRINT_SECRET` | No | — | Secreto HMAC (mínimo 32 caracteres); sin él, no hay captura FAQ |
 
@@ -721,7 +745,7 @@ inválido detiene el arranque.
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sí | Cliente Supabase público (sesión) | `src/lib/supabase/config.ts` |
 | `ADMIN_API_URL` | Sí | Origen del API; solo servidor | `src/lib/admin-api/config.ts` |
-| `APP_URL` | Sí fuera de local | URL canónica para redirecciones de Auth (HTTPS) | `src/lib/auth/site-url.ts` |
+| `APP_URL` | Sí con `NODE_ENV=production`; en desarrollo cae a `http://localhost:3000` | URL canónica para redirecciones de Auth; HTTPS salvo en `localhost` | `src/lib/auth/site-url.ts` |
 
 ---
 
@@ -741,12 +765,12 @@ inválido detiene el arranque.
 | Memoria FAQ gobernada, nunca fuente | Mejora continua sin autoaprendizaje sobre conversaciones | [`MEJORA_CONTINUA_RAG.md`](MEJORA_CONTINUA_RAG.md) |
 | Umbral 0.5 calibrado con datos reales | Con 0.70 casi toda consulta real caía en «sin evidencia» | `src/rag/rag.constants.ts`, [`CALIBRACION_PRODUCCION_RAG.md`](CALIBRACION_PRODUCCION_RAG.md) |
 
-El equipo original registró estas decisiones como ADR numerados, a los que
-aluden los resúmenes de `docs/hito1` y `docs/hito2`. Esos registros no forman
-parte del repositorio publicado; este documento y los enlazados resumen las
-decisiones vigentes. Todo cambio estructural nuevo (arquitectura, dependencias,
-seguridad, infraestructura o datos persistentes) debe registrarse como ADR y
-reflejarse aquí.
+Los resúmenes de `docs/hito1` y `docs/hito2` mencionan ADR numerados (por
+ejemplo, ADR-0002). Esos registros no forman parte del repositorio; este
+documento y los enlazados resumen las decisiones vigentes. Todo cambio
+estructural nuevo (arquitectura, dependencias, seguridad, infraestructura o
+datos persistentes) debe documentarse, con su motivo, en esta tabla o en un
+documento enlazado desde ella.
 
 ---
 

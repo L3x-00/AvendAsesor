@@ -8,15 +8,15 @@
 
 | SERVICIO | PROPÓSITO | RESPONSABLE | PLAN | COSTO | LÍMITES | AMBIENTE |
 | --- | --- | --- | --- | --- | --- | --- |
-| **GitHub** (`L3x-00/AvendAsesor` + Actions) | Código fuente, PR, CI y origen de los despliegues automáticos | Product Owner / cuenta del proyecto | Por confirmar (PO). Repositorio **público** | Por confirmar (PO) | `main` sin protección de rama; la última corrida de CI tardó ~3 min | Todos |
-| **Vercel** (proyecto `avend-asesor-web`) | Aloja el web Next.js: UI y BFF | Product Owner / cuenta del proyecto | Por confirmar (PO) | Por confirmar (PO) | Cuerpo de función de 4.5 MB: las cargas grandes van directo del navegador a Render. Previews protegidas con login de Vercel | Producción `https://avend-asesor-web.vercel.app` y previews por rama/PR |
-| **Render** (web service `avend-asesor-api`) | API NestJS (lógica, datos, Storage, RAG) y worker de ingesta en el mismo proceso | Product Owner / cuenta del proyecto | Free, región oregon | Sin costo de plan (Free) | 512 MB de RAM; se suspende tras ~15 min sin tráfico; arranque en frío de ~50 s | Producción `https://avend-asesor-api.onrender.com` |
-| **Supabase producción** (`blxrdotroysitfyehmqw`, «AVENDSESOR») | Postgres 17 + pgvector, Auth y Storage | Product Owner / cuenta del proyecto | Free, **sin PITR** | Sin costo de plan (Free) | Sin PITR. Cuotas del plan: Por confirmar (PO). Buckets de 50 MiB y 10 MiB | Producción, `us-west-2` |
-| **Supabase staging** (`scepelftmjlabepygrri`, «avend-asesor-staging») | Validación aislada de migraciones; check «Supabase Preview» en los PR | Product Owner / cuenta del proyecto | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | Staging, `us-east-2` |
-| **OpenRouter** | Gateway de IA: embeddings `text-embedding-3-small` (1536 dim.) y respuestas `gpt-4o-mini` | Product Owner / cuenta del proyecto | Pago por uso | Por confirmar (PO) | Dimensión fija de 1536; máximo 1500 tokens de salida por respuesta; tope de gasto: Por confirmar (PO) | Producción (lo llama Render) |
-| **OpenAI API** | Proveedor directo alternativo, solo si falta `OPENROUTER_API_KEY` | Product Owner / cuenta del proyecto | Por confirmar (PO) | Por confirmar (PO) | No es un failover automático (ver §3.6) | Por confirmar (PO) si hay clave en Render |
-| **Resend** (SMTP) | SMTP personalizado de Supabase Auth: confirmación, recuperación e invitaciones | Product Owner / cuenta del proyecto | Por confirmar (PO) | Por confirmar (PO) | Requiere un dominio verificado con SPF, DKIM y DMARC | Previsto para staging y producción; configuración real: Por confirmar (PO) |
-| **Dominio propio** | — | Product Owner | No existe en el repositorio | Por confirmar (PO) | — | Hoy se usan `*.vercel.app` y `*.onrender.com` |
+| **GitHub** (`L3x-00/AvendAsesor` + Actions) | Código fuente, PR, CI y origen de los despliegues automáticos | Por confirmar (PO); el repositorio está bajo la cuenta `L3x-00` | Por confirmar (PO). Repositorio **público** | Por confirmar (PO) | `main` sin protección de rama; la última corrida de CI tardó ~3 min | Todos |
+| **Vercel** (proyecto `avend-asesor-web`) | Aloja el web Next.js: UI y BFF | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | Cuerpo de función de 4.5 MB: las cargas grandes van directo del navegador a Render. Previews protegidas con login de Vercel | Producción `https://avend-asesor-web.vercel.app` y previews por rama/PR |
+| **Render** (web service `avend-asesor-api`) | API NestJS (lógica, datos, Storage, RAG) y worker de ingesta en el mismo proceso | Por confirmar (PO) | Free, región oregon | Sin costo de plan (Free) | 512 MB de RAM; se suspende tras ~15 min sin tráfico; arranque en frío de ~50 s | Producción `https://avend-asesor-api.onrender.com` |
+| **Supabase producción** (`blxrdotroysitfyehmqw`, «AVENDSESOR») | Postgres 17 + pgvector, Auth y Storage | Por confirmar (PO) | Free, **sin PITR** | Sin costo de plan (Free) | Sin PITR. Cuotas del plan: Por confirmar (PO). Buckets de 50 MiB y 10 MiB | Producción, `us-west-2` |
+| **Supabase staging** (`scepelftmjlabepygrri`, «avend-asesor-staging») | Validación aislada de migraciones; check «Supabase Preview» en los PR | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | Staging, `us-east-2` |
+| **OpenRouter** | Gateway de IA: embeddings `text-embedding-3-small` (1536 dim.) y respuestas `gpt-4o-mini` | Por confirmar (PO) | Pago por uso | Por confirmar (PO) | Dimensión fija de 1536; máximo 1500 tokens de salida por respuesta; tope de gasto: Por confirmar (PO) | Producción (lo llama Render) |
+| **OpenAI API** | Proveedor directo alternativo, solo si falta `OPENROUTER_API_KEY` | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | No es un failover automático (ver §3.6) | Por confirmar (PO) si hay clave en Render |
+| **Resend** (SMTP) | SMTP personalizado de Supabase Auth: confirmación, recuperación e invitaciones | Por confirmar (PO) | Por confirmar (PO) | Por confirmar (PO) | Requiere un dominio verificado con SPF, DKIM y DMARC | Previsto para staging y producción; configuración real: Por confirmar (PO) |
+| **Dominio propio** | — | Por confirmar (PO) | No hay dominio propio configurado | Por confirmar (PO) | — | Hoy se usan `*.vercel.app` y `*.onrender.com` |
 
 Tesseract (OCR) **no es un servicio externo**: es una biblioteca que corre dentro del proceso del API (ver §4).
 
@@ -61,9 +61,10 @@ GitHub (merge a main) ──► despliegue automático en Vercel y en Render
 - Producción: `https://avend-asesor-web.vercel.app`. Cada rama o PR genera una preview protegida con el login de Vercel.
 - Vercel **solo sirve la UI y el BFF**. Toda la lógica de negocio vive en Render. Los *route handlers* de `apps/web/src/app/api/**` corren con `runtime = "nodejs"`:
   - proxy del chat en streaming (`apps/web/src/app/api/chat/stream/route.ts`);
-  - descargas: el BFF pide al API una URL firmada y responde con una redirección 307 (`apps/web/src/app/api/admin/documents/[id]/access/route.ts`);
-  - exportación de usuarios y reportes o sugerencias sobre las consultas (`apps/web/src/app/api/consultation-feedback/**`);
-  - generación del PDF/DOCX de la ficha de orientación CU-14 con `pdfkit`, `fontkit` y `docx`, en `apps/web/src/app/api/chat/conversations/[conversationId]/messages/[messageId]/orientacion/[format]/route.ts`.
+  - descargas: el BFF pide al API una URL firmada y responde con una redirección 307 (`apps/web/src/app/api/admin/documents/[id]/access/route.ts`, `apps/web/src/app/api/chat/sources/[sourceId]/download/route.ts` y `apps/web/src/app/api/admin/consultation-cases/[caseId]/attachments/[attachmentId]/download/route.ts`);
+  - exportación de usuarios en Excel (`apps/web/src/app/api/admin/users/export/route.ts`);
+  - reportes y sugerencias sobre las consultas (`apps/web/src/app/api/consultation-feedback/reports/route.ts` y `.../suggestions/route.ts`);
+  - generación del PDF/DOCX de la ficha de orientación CU-14 con `pdfkit`, `fontkit` y `docx` (`apps/web/src/app/api/chat/conversations/[conversationId]/messages/[messageId]/orientacion/[format]/route.ts`, que usa `apps/web/src/lib/orientation-document/builders.ts`).
 - La sesión se maneja con Supabase Auth (`@supabase/ssr`). El web lee el perfil propio y los permisos con la clave anon y la sesión del usuario, bajo RLS (`apps/web/src/lib/authorization/resolve-admin-access.ts`).
 
 **Configuración** (variables de Vercel)
@@ -73,14 +74,14 @@ GitHub (merge a main) ──► despliegue automático en Vercel y en Render
 | `NEXT_PUBLIC_SUPABASE_URL` | URL pública del proyecto Supabase | Sí | — | `apps/web/src/lib/supabase/config.ts` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave publicable (anon). Nunca la service role | Sí | — | `apps/web/src/lib/supabase/config.ts` |
 | `ADMIN_API_URL` | Origen del API en Render. Se entrega al navegador solo como origen para las cargas directas | Sí | — | `apps/web/src/lib/admin-api/config.ts` (HTTPS, o HTTP solo en loopback; sin ruta, query ni credenciales) |
-| `APP_URL` | URL canónica del web, usada para las redirecciones de Auth | Sí en producción | `http://localhost:3000` fuera de producción | `apps/web/src/lib/auth/site-url.ts` (exige HTTPS salvo en localhost) |
+| `APP_URL` | URL canónica del web, usada para las redirecciones de Auth y para validar el origen de las peticiones al BFF | Sí con `NODE_ENV=production` | `http://localhost:3000` si `NODE_ENV` no es `production` | `apps/web/src/lib/auth/site-url.ts` (exige HTTPS salvo en localhost) |
 
 **Límites**
 
 - Las funciones de Vercel admiten un cuerpo de hasta 4.5 MB (límite de la plataforma). Por eso la carga de documentos (hasta 50 MiB) y la importación de usuarios en Excel (hasta 2 MiB) van **directo del navegador a Render** con el bearer de Supabase y `credentials: "omit"` (`apps/web/src/components/admin/document-pdf-upload-form.tsx`, `apps/web/src/components/admin/users-import-form.tsx`). La razón también está en el comentario de `ADMIN_API_URL` en `.env.example`.
 - **Riesgo no verificado**: los adjuntos de los reportes de consulta admiten hasta 10 MiB en el código (`apps/web/src/lib/chat-api/consultation-feedback-upload.ts`), pero pasan por el BFF (`/api/consultation-feedback/reports`). Un adjunto de más de 4.5 MB podría ser rechazado por Vercel antes de llegar al código. No se ha probado en producción.
 - El API acepta un único origen CORS (`WEB_ORIGIN`, en `apps/api/src/application.factory.ts`). Las previews tienen otro origen, así que una carga directa desde una preview al API de producción es rechazada por CORS.
-- Duración máxima de las funciones (relevante para el streaming del chat) y región de las funciones: dependen del plan, Por confirmar (PO). Qué Supabase y qué API usan las previews: Por confirmar (PO).
+- El código no fija `maxDuration` ni región en ninguna ruta, así que rigen los valores por defecto del plan de Vercel. Duración máxima de las funciones (relevante para el streaming del chat) y región: Por confirmar (PO). Qué Supabase y qué API usan las previews: Por confirmar (PO).
 
 **Si falla**: sin Vercel no hay interfaz de usuario, aunque el API siga activo. Si falla un build, el despliegue anterior de producción sigue sirviendo.
 
@@ -124,8 +125,8 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 | `RAG_INGESTION_LEASE_SECONDS` | Duración del lease de un trabajo (30–900) | No | `300` |
 | `RAG_MATCH_THRESHOLD` | Similitud mínima para aceptar evidencia (0–1) | No | `0.5` (`RAG_DEFAULT_MATCH_THRESHOLD` en `apps/api/src/rag/rag.constants.ts`) |
 | `RAG_MATCH_COUNT` | Fragmentos recuperados (1–10) | No | `5` |
-| `FAQ_MEMORY_FINGERPRINT_SECRET` | Secreto de servidor para la memoria de preguntas frecuentes (mínimo 32 caracteres) | No | — |
-| `CHAT_HISTORY_LIMIT` | Tamaño de página del historial (1–50) | No | `20` |
+| `FAQ_MEMORY_FINGERPRINT_SECRET` | Secreto de servidor para la memoria de preguntas frecuentes (mínimo 32 caracteres). Sin él, esa memoria no registra nada (`apps/api/src/learning/faq-memory.service.ts`) | No | — |
+| `CHAT_HISTORY_LIMIT` | Tamaño de página por defecto del listado de conversaciones (1–50) | No | `20` |
 
 **Límites** (plan Free)
 
@@ -164,13 +165,13 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
   - `consultation-case-attachments`: 10 MiB; JPEG, PNG, WebP, PDF, DOC y DOCX (`supabase/migrations/20260905100000_consultation_reports_and_quality.sql`).
   - Las descargas usan URLs firmadas de 60 s (`DOWNLOAD_URL_TTL_SECONDS` en `apps/api/src/documents/documents.service.ts`).
 - **Quién se conecta**: el API, con la service role (Render). El web y el navegador, con la clave anon y la sesión del usuario (Vercel).
-- El enlace local de la CLI (`supabase/.temp/project-ref`, no versionado) apunta a **producción**. Los scripts `scripts/backup-production-demo-seed.mjs`, `scripts/seed-production-demo-data.mjs` e `infrastructure/qa/Invoke-QAPilot.ps1` verifican este ref antes de actuar.
+- El enlace local de la CLI (`supabase/.temp/project-ref`, no versionado) apunta a **producción**. Los scripts `scripts/backup-production-demo-seed.mjs` y `scripts/seed-production-demo-data.mjs` exigen este ref (en `--project-ref` y en el enlace local) antes de actuar. `infrastructure/qa/Invoke-QAPilot.ps1` usa este ref por defecto y pide confirmación explícita antes de escribir.
 
 **Configuración**: `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en Render; `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel. Auth (URLs y SMTP) y Storage se configuran en el panel de Supabase o mediante migraciones.
 
 **Límites**
 
-- **Sin PITR ni backup físico.** Antes de cada migración se hace un respaldo lógico privado y una validación en staging (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`, `docs/database/DEMO_SEED.md`).
+- **Sin PITR ni backup físico.** Por eso, antes de cada migración debe hacerse un respaldo lógico privado y una validación en staging, como en el release de los Hitos 3 y 4 (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). El seed de producción exige además un respaldo previo (`docs/database/DEMO_SEED.md`).
 - Las migraciones se aplican **antes** de desplegar el código que las necesita. Nunca se ejecuta `supabase db push` desde un árbol de trabajo.
 - Cuotas del plan Free (tamaño de la base, Storage, transferencia, usuarios activos, pausa por inactividad) y límites de envío de Auth en el proyecto remoto: Por confirmar (PO) en el panel. Los valores de `[auth.rate_limit]` de `supabase/config.toml` rigen **solo en local**.
 
@@ -206,7 +207,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 **Límites y costo**
 
 - La dimensión de 1536 es fija: `RAG_EMBEDDING_DIMENSIONS` en `apps/api/src/config/ai-gateway.ts`, y el gateway rechaza cualquier otra. Cambiar el modelo de embeddings obliga a reindexar todo y a migrar la columna.
-- Se cobra por uso; el monto mensual está Por confirmar (PO). Reindexar los 3 documentos actuales cuesta centavos (runbook). `npm run acceptance:hito3` (en `apps/api`) hace ~25 consultas reales al proveedor.
+- Se cobra por uso; el monto mensual está Por confirmar (PO). Según el runbook, reindexar los 3 documentos cargados al activar el RAG costó centavos en embeddings. `npm run acceptance:hito3` (en `apps/api`) hace ~25 consultas reales al proveedor.
 - `docs/architecture/INTEGRACION_OPENROUTER.md` recomienda configurar en OpenRouter un tope mensual de gasto, ZDR y una lista cerrada de modelos, y prohíbe los modelos gratuitos con datos reales. Si esa configuración está aplicada: Por confirmar (PO).
 
 **Si falla**
@@ -215,7 +216,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 - **Ingesta**: los trabajos se reintentan hasta `max_attempts` y luego quedan `failed`. El error se ve en `document_ingestion_jobs.last_error_code` y `last_error_message`. Para reencolar, usa la RPC `public.retry_document_ingestion` (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`).
 - **Diagnóstico**:
   - `401 User not found` es la respuesta de OpenRouter ante una clave inválida;
-  - `Incorrect API key provided` significa que la petición llegó a OpenAI con una clave de OpenRouter, es decir, que falta `OPENROUTER_API_KEY` en Render.
+  - `Incorrect API key provided` significa que la petición llegó a OpenAI directo y OpenAI rechazó la clave: normalmente falta `OPENROUTER_API_KEY` en Render y el gateway cayó a `OPENAI_API_KEY`.
 
 **Dónde revisar**: `GET /admin/rag/readiness`; panel de OpenRouter (*Activity*, *Credits*). Estado público: <https://status.openrouter.ai> (OpenAI: <https://status.openai.com>).
 
@@ -247,7 +248,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 
 | Biblioteca | Dónde corre | Uso |
 | --- | --- | --- |
-| `tesseract.js` 7 + `@tesseract.js-data/spa` | API (Render) | OCR en español de las páginas PDF con menos de 50 caracteres de texto. Los datos del idioma vienen en el paquete npm (`langPath` local en `apps/api/src/ingestion/ocr.service.ts`), así que no se descargan en ejecución |
+| `tesseract.js` 7 + `@tesseract.js-data/spa` | API (Render) | OCR en español de las páginas PDF con menos de 50 caracteres de texto, sin contar espacios. Los datos del idioma vienen en el paquete npm (`langPath` local en `apps/api/src/ingestion/ocr.service.ts`), así que no se descargan en ejecución |
 | `pdf-parse` | API | Texto por página, conteo de páginas y render de páginas para el OCR |
 | `mammoth` | API | Extracción de texto de DOCX. El `.doc` heredado se rechaza en la ingesta (`INGESTION_UNSUPPORTED_FORMAT`) |
 | `js-tiktoken` | API | Conteo de tokens para el troceo (máx. 800 tokens por fragmento) |
@@ -258,9 +259,9 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 
 | Dependencia | Cuándo se usa | Impacto si no está disponible |
 | --- | --- | --- |
-| Registro npm | `npm ci` en la CI, en el build de Render y en el de Vercel | No se puede construir ni desplegar |
+| Registro npm | Instalación de dependencias: `npm ci` en la CI y en el build de Render; en Vercel, su comando de instalación (el repositorio no tiene `vercel.json`) | No se puede construir ni desplegar |
 | Actions `actions/checkout@v4` y `actions/setup-node@v4` | CI | La CI no corre |
-| Google Fonts, vía `next/font/google` (`apps/web/src/app/layout.tsx`) | Build del web: Next descarga Geist y la sirve desde el propio despliegue | Puede fallar el build del web; en ejecución no se contacta a Google |
+| Google Fonts, vía `next/font/google` (`apps/web/src/app/layout.tsx`) | Build del web: Next descarga Geist y Geist Mono y las sirve desde el propio despliegue | Puede fallar el build del web; en ejecución no se contacta a Google |
 
 ### Herramientas de desarrollo local (no se usan en producción)
 
@@ -281,11 +282,11 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 | API key de Resend | Panel de Supabase → SMTP (contraseña) | Supabase Auth | Nunca en el repositorio ni en el web |
 | `SUPABASE_QA_PILOT_SECRET_KEY` | Temporal, en la sesión local del operador | `infrastructure/qa/Invoke-QAPilot.ps1` | Clave `sb_secret_` que no se guarda |
 
-Los archivos `.env*` están ignorados por Git, salvo los `.env.example` (`.gitignore`). La rotación y custodia de las credenciales está a cargo del Product Owner; el procedimiento formal de rotación: Por confirmar (PO).
+Los archivos `.env*` están ignorados por Git, salvo los `.env.example` (`.gitignore`). Responsable de la custodia y rotación de las credenciales, y procedimiento formal de rotación: Por confirmar (PO).
 
 ## 6. Pendientes por confirmar (PO)
 
-1. Plan y costo de GitHub, Vercel, OpenRouter, OpenAI y Resend, y el plan de Supabase staging.
+1. Plan y costo de GitHub, Vercel, OpenAI y Resend; costo mensual de OpenRouter; plan de Supabase staging.
 2. Si se protegerá `main` para exigir la CI verde antes del merge.
 3. Si Resend está configurado como SMTP en producción y en staging, con su dominio verificado.
 4. Tope de gasto, ZDR y lista cerrada de modelos en OpenRouter; si existe una clave de OpenAI en Render.

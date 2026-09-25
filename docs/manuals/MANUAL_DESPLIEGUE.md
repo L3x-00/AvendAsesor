@@ -9,10 +9,11 @@ verificar figura como **Por confirmar (PO)**.
 Fuera de alcance:
 
 - Respaldos y restauración: son un entregable separado del Hito 5 (ver §5.7).
-- Instalación y ejecución local: `docs/manuals/GUIA_INSTALACION_LOCAL.md`.
+- Instalación y ejecución local:
+  [`GUIA_INSTALACION_LOCAL.md`](GUIA_INSTALACION_LOCAL.md).
 - Referencia completa de variables de entorno:
-  `docs/manuals/VARIABLES_DE_ENTORNO.md`. Aquí solo figuran las que importan
-  para desplegar.
+  [`VARIABLES_DE_ENTORNO.md`](VARIABLES_DE_ENTORNO.md). Aquí solo figuran las
+  que importan para desplegar.
 
 > Regla de oro: **fusionar a `main` es desplegar a producción.** Render y
 > Vercel toman `main` automáticamente. Una migración que el código necesita se
@@ -103,7 +104,7 @@ Particularidades de `apps/web/next.config.ts`:
 | `NEXT_PUBLIC_SUPABASE_URL` | Sí | URL pública del proyecto Supabase | `apps/web/src/lib/supabase/config.ts`: error si falta |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sí | Clave publicable/anon de Supabase | Igual que la anterior |
 | `ADMIN_API_URL` | Sí | Origen de la API de Render (producción: `https://avend-asesor-api.onrender.com`) | `apps/web/src/lib/admin-api/config.ts`: exige HTTPS (HTTP solo en `localhost`/`127.0.0.1`), sin ruta, query, fragmento ni credenciales |
-| `APP_URL` | Sí fuera de desarrollo | URL canónica de la web; con ella se arman los enlaces de los correos de Auth | `apps/web/src/lib/auth/site-url.ts`: HTTPS obligatorio fuera de localhost. Solo en desarrollo cae a `http://localhost:3000` |
+| `APP_URL` | Sí fuera de desarrollo | URL canónica de la web. Con ella se arman los enlaces de los correos de Auth, y los route handlers `/api/consultation-feedback/*`, `/api/chat/conversations/*/messages/*/orientacion/*` y `/auth/sign-out` rechazan con `403` toda cabecera `Origin` distinta de su origen | `apps/web/src/lib/auth/site-url.ts`: HTTPS obligatorio fuera de localhost. Si falta y `NODE_ENV` no es `production`, cae a `http://localhost:3000` |
 
 Reglas:
 
@@ -122,7 +123,8 @@ Reglas:
 - Dominio propio: no hay evidencia de uno. Por confirmar (PO).
 - Si cambia el dominio canónico, actualice **los cuatro** puntos en la misma
   ventana:
-  1. `APP_URL` en Vercel, y redespliegue.
+  1. `APP_URL` en Vercel, y redespliegue. Si no coincide con el dominio real,
+     fallan los route handlers que validan `Origin` (§3.2).
   2. `WEB_ORIGIN` en Render. Es el único origen CORS permitido por la API.
   3. En Supabase Auth: Site URL y Redirect URLs (§5.5).
   4. El remitente o dominio de correo, si aplica (§5.6).
@@ -148,13 +150,16 @@ publicado (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). Si se repite:
 
 ### 3.5 Previews
 
-- Cada push a una rama con PR genera un *Preview Deployment*. Los previews están
-  protegidos por inicio de sesión en Vercel.
+- Los pushes a ramas distintas de `main` generan *Preview Deployments*
+  (comportamiento por defecto de la integración Git de Vercel). Los previews
+  están protegidos por inicio de sesión en Vercel.
 - Limitación real: la API solo acepta CORS desde `WEB_ORIGIN` (el origen de
   producción; `apps/api/src/application.factory.ts`). Desde la URL de un preview
   fallan las llamadas directas del navegador a la API: carga de documentos e
   importación de usuarios. Las llamadas del servidor de Next (Server Actions,
-  route handlers) no están sujetas a CORS.
+  route handlers) no están sujetas a CORS, pero los route handlers que validan
+  `Origin` contra `APP_URL` (§3.2) responden `403` si el `APP_URL` del scope
+  *Preview* no es la URL del preview.
 - A qué API y a qué Supabase apuntan los previews: Por confirmar (PO). Revise el
   scope *Preview* antes de probar con datos.
 
@@ -208,7 +213,7 @@ exige reiniciar o redesplegar.
 
 | Variable | Req. | Default | Propósito y reglas |
 | --- | --- | --- | --- |
-| `NODE_ENV` | No | `development` | `development`, `test`, `staging` o `production`. En producción debe ser `production` |
+| `NODE_ENV` | No | `development` | `development`, `test`, `staging` o `production`. En producción debe ser `production`: solo así se exige HTTPS en `WEB_ORIGIN`. Valor actual en Render: Por confirmar (PO) |
 | `PORT` | No | `3000` | Lo inyecta Render |
 | `WEB_ORIGIN` | Sí en producción | `http://localhost:3000` | Origen exacto permitido por CORS (hoy `https://avend-asesor-web.vercel.app`). Sin ruta, query, fragmento ni credenciales. En `staging`/`production` debe ser HTTPS |
 | `SUPABASE_URL` | Sí | — | URL del proyecto Supabase |
@@ -219,7 +224,7 @@ exige reiniciar o redesplegar.
 | `RAG_EMBEDDING_MODEL` | No | `text-embedding-3-small` | Debe producir vectores de **1536** dimensiones (§5.3). Con OpenRouter, use el identificador de OpenRouter, por ejemplo `openai/text-embedding-3-small` (`.env.example`) |
 | `RAG_ANSWER_MODEL` | No | `gpt-4o-mini` | Modelo de respuesta. En producción: gpt-4o-mini vía OpenRouter |
 | `RAG_ANSWER_FALLBACK_MODEL` | No | — | Modelo de respaldo, solo ante error técnico del primario. Si está cargado en producción: Por confirmar (PO) |
-| `RAG_INGESTION_WORKER_ENABLED` | No | `false` | `true` enciende el worker de ingesta (§8). Exige `OPENROUTER_API_KEY` u `OPENAI_API_KEY` |
+| `RAG_INGESTION_WORKER_ENABLED` | No | `false` | Solo acepta `true` o `false` (otro valor impide arrancar). `true` enciende el worker de ingesta (§8) y exige `OPENROUTER_API_KEY` u `OPENAI_API_KEY` |
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | Entre 30 y 900 s. Tiempo de *lease* de un trabajo de ingesta |
 | `RAG_MATCH_THRESHOLD` | No | `0.5` | Similitud mínima (0 a 1). Calibrada con el corpus real; **no** volver a 0.7 (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`) |
 | `RAG_MATCH_COUNT` | No | `5` | Entre 1 y 10 fragmentos |
@@ -294,7 +299,9 @@ use **Manual Deploy** en el panel del servicio.
   En la máquina del equipo original apuntaba a producción. Revíselo antes de
   cada comando remoto.
 - `supabase/config.toml` configura **solo el stack local** (`supabase start`).
-  No se aplica solo a los proyectos remotos.
+  No se aplica automáticamente a los proyectos remotos. No ejecute
+  `supabase config push`: copiaría al proyecto enlazado valores locales como
+  `site_url = "http://localhost:3000"`.
 
 ### 5.2 Migraciones
 
@@ -347,16 +354,19 @@ Trampas conocidas al escribir o aplicar migraciones:
 
 - **`search_path` de producción.** Producción no incluye `extensions` en el
   `search_path`. Califique los objetos de extensiones, por ejemplo
-  `extensions.vector_cosine_ops`. El 2026-08-24 un índice HNSW falló en
-  producción por esto (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`).
+  `extensions.vector_cosine_ops`. En la promoción de Hitos 3–4 (agosto de 2026)
+  la creación de un índice HNSW falló en producción por esto; la transacción se
+  revirtió sin cambios parciales (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`).
 - **SQLSTATE 55006** (`cannot ALTER TABLE ... because it has pending trigger
   events`). Aparece cuando un backfill (`update`) sobre una tabla con FK
   `deferrable initially deferred` precede a un `ALTER TABLE`. Escriba
-  `set constraints all immediate;` antes del `ALTER TABLE`. No se reproduce en
-  local ni en CI, donde las tablas están vacías.
+  `set constraints all immediate;` antes del `ALTER TABLE`, como hace
+  `20260903120000_module_document_governance.sql`. No se reproduce en local ni
+  en CI, donde las tablas están vacías.
 - **Migraciones aplicadas fuera de la CLI** (por ejemplo, desde el SQL Editor):
-  registre en `supabase_migrations.schema_migrations` la versión igual al
-  prefijo del archivo. Si no, un `db push` posterior intentará reaplicarla.
+  registre la versión (el prefijo del archivo) en el historial con
+  `supabase migration repair --status applied <versión> --linked`. Si no, un
+  `db push` posterior intentará reaplicarla.
 
 ### 5.3 pgvector y extensiones
 
@@ -410,13 +420,17 @@ En los proyectos remotos se configura en el panel de Supabase
   (`apps/web/src/app/auth/actions.ts`):
   - `<APP_URL>/auth/callback?next=/auth/confirmed`
   - `<APP_URL>/auth/callback?next=/auth/update-password`
+- Las invitaciones que envía la API al crear usuarios desde el panel
+  (`inviteUserByEmail` en
+  `apps/api/src/supabase/supabase-user-administration.gateway.ts`) no fijan
+  `redirectTo`, así que su enlace usa la **Site URL**.
 
 Si los ajustes remotos coinciden con los locales: Por confirmar (PO).
 
 ### 5.6 Correo
 
-- La web no envía correos. Registro, confirmación y recuperación los envía
-  Supabase Auth.
+- Ni la web ni la API envían correos por su cuenta. Registro, confirmación,
+  recuperación e invitaciones los envía Supabase Auth.
 - Configuración prevista para ambientes remotos (`infrastructure/email/README.md`):
   Resend como SMTP personalizado de Supabase Auth. Host `smtp.resend.com`,
   puerto `587` (STARTTLS), usuario `resend`, contraseña = API key de Resend
@@ -446,9 +460,9 @@ Job `validate` (ubuntu-latest, Node 24, caché de npm):
 | `npm ci` | Instalación limpia del monorepo |
 | `npm run lint` | ESLint en cada workspace que tiene script `lint` (api y web) |
 | `npm run typecheck` | api: `tsc --noEmit`; web: `next typegen && tsc --noEmit` |
-| `npm run test:coverage` | api: Jest con cobertura y umbrales (`apps/api/package.json`, `jest.coverageThreshold`); web: Vitest con cobertura (`apps/web/vitest.config.mts`). Incluye la prueba de contrato que verifica que la RPC de búsqueda exista en `supabase/migrations` con sus argumentos (`apps/api/src/rag/retrieval.contract.spec.ts`) |
+| `npm run test:coverage` | api: Jest con cobertura y umbrales (`apps/api/package.json`, `jest.coverageThreshold`); web: Vitest con cobertura y umbrales (`apps/web/vitest.config.mts`). Incluye la prueba de contrato que verifica que la RPC de búsqueda exista en `supabase/migrations` con sus argumentos (`apps/api/src/rag/retrieval.contract.spec.ts`) |
 | `npm run test:e2e` | E2E HTTP de la API con supertest y servicios simulados (`apps/api/test/app.e2e-spec.ts`); no usa base de datos |
-| `npm run build` | Build de todos los workspaces |
+| `npm run build` | Build de los workspaces que tienen script `build` (api y web) |
 | `npm run verify:build-artifacts` | Verifica el trazado de la función CU-14 de la web (§3.1) |
 
 El CI **no** hace esto:
@@ -535,7 +549,8 @@ Respuesta esperada en producción (forma definida en
 ```
 
 `ready` es `true` solo si el worker está encendido, hay proveedor configurado y
-Supabase respondió los conteos. `provider: "openai"` indica que falta
+Supabase está configurado (`counts` distinto de `null`). Si Supabase está
+configurado pero no responde, el endpoint devuelve `503`. `provider: "openai"` indica que falta
 `OPENROUTER_API_KEY` y se usa el respaldo; `"none"` indica que no hay proveedor.
 
 **Aceptación RAG (opcional, consume saldo del proveedor).** Desde `apps/api`:
@@ -613,16 +628,23 @@ select public.retry_document_ingestion('<document_version_id>', '<superadmin_use
   - `55000`: ya se está procesando con un lease vigente. Espere a que termine.
 - Reindexe **después** de desplegar el código que motiva la reindexación: el
   worker usa el código desplegado.
-- Tiempos y costo: la API debe estar despierta. Cada documento tarda alrededor
-  de un minuto y deja de aparecer en la búsqueda mientras se reindexa. El costo
-  de embeddings es de centavos por documento.
+- Tiempos y costo: la API debe estar despierta. Cada documento deja de aparecer
+  en la búsqueda mientras se reindexa. En la reindexación de los 3 documentos
+  de producción (2026-09) cada uno tardó alrededor de un minuto y el costo de
+  embeddings fue de centavos (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`); depende
+  del tamaño del documento.
 - Verificación: la versión vuelve a `indexed` y, en la consulta 1,
   `chunks = distintos`.
 
 ### 8.4 Diagnóstico de fallos
 
 Vea `last_error_code` y `last_error_message` en `public.document_ingestion_jobs`
-de la versión, corrija la causa y reencole con la RPC. Casos ya observados:
+de la versión, corrija la causa y reencole con la RPC. El worker registra
+siempre `last_error_code = 'INGESTION_FAILED'` y deja el detalle en
+`last_error_message` (`apps/api/src/ingestion/ingestion.service.ts`). La base
+usa además `LEASE_EXPIRED` (se agotaron los intentos con el lease vencido) y
+`UNREADABLE_PDF` (falló el procesamiento al cargar). Casos ya observados en
+`last_error_message`:
 
 | Mensaje | Causa |
 | --- | --- |
@@ -638,7 +660,7 @@ de la versión, corrija la causa y reencole con la RPC. Casos ya observados:
 | Situación | Acción |
 | --- | --- |
 | Defecto en la API o en la web | Revierta el merge en `main`: botón *Revert* del PR en GitHub, o `git revert -m 1 <sha-del-merge>` en una rama nueva. Luego PR, CI y fusión. Render y Vercel redespliegan la versión anterior |
-| Urgencia antes de que termine el revert | En Vercel, promueva el despliegue de producción anterior (*Instant Rollback*). En Render, vuelva a un deploy previo desde el historial del servicio. Es temporal: el siguiente commit en `main` redespliega lo que haya en la rama, así que complete igual el revert. Después, revise en Render el estado de *Auto-Deploy* |
+| Urgencia antes de que termine el revert | En Vercel, use *Instant Rollback* (en plan Hobby solo permite volver al despliegue de producción inmediatamente anterior). En Render, use *Rollback* a un deploy previo desde el panel del servicio. Ambos **congelan** producción: Vercel desactiva la asignación automática del dominio de producción y el rollback de Render desde el panel desactiva *Auto-Deploy*, así que los commits nuevos en `main` **no** se publican solos. Tras fusionar el revert, en Vercel use *Undo Rollback* (o promueva el despliegue nuevo) y en Render reactive *Auto-Deploy* en Settings y despliegue |
 | Problema en la ingesta o en el costo del proveedor | `RAG_INGESTION_WORKER_ENABLED=false` en Render (§8.2) |
 | Migración con defecto | No hay migraciones *down*. Corrija con una migración compensatoria; no edite ni borre la aplicada. Antes de revertir código, confirme que la versión anterior funciona con el esquema nuevo |
 | Pérdida o corrupción de datos | Procedimiento de respaldos y restauración (entregable separado del Hito 5). Plan Free sin PITR |
@@ -657,5 +679,7 @@ de la versión, corrija la causa y reencole con la RPC. Casos ya observados:
 - Configuración real de Auth (Site URL, Redirect URLs, SMTP Resend) en los
   proyectos remotos.
 - Si `RAG_ANSWER_FALLBACK_MODEL` y `FAQ_MEMORY_FINGERPRINT_SECRET` están
-  cargadas en producción.
+  cargadas en producción, y el valor de `NODE_ENV` en Render.
+- Plan del workspace de Vercel (limita qué despliegues admite *Instant
+  Rollback*).
 - Reglas de protección de la rama `main` en GitHub.

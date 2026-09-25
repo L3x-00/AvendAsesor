@@ -10,8 +10,9 @@ credenciales de staging ni de producción, y no deben usarse. El despliegue
 (Render, Vercel y Supabase remoto) queda fuera del alcance de esta guía.
 
 > Estado verificado el 2026-09-25, rama `docs/hito5-documentacion-tecnica`.
-> Los comandos citados existen en `package.json`, `apps/api/package.json`,
-> `apps/web/package.json` o en los scripts de `infrastructure/local/`.
+> Los scripts npm citados existen en `package.json`, `apps/api/package.json` o
+> `apps/web/package.json`; los scripts `.ps1` están en `infrastructure/local/`. Los
+> demás comandos son de Supabase CLI 2.x, Docker o Git.
 
 ---
 
@@ -24,7 +25,7 @@ git clone https://github.com/L3x-00/AvendAsesor.git
 cd AvendAsesor
 npm ci
 supabase start                      # levanta Postgres, Auth y Storage locales y aplica las migraciones
-supabase status                     # muestra las URL y las claves locales
+supabase status -o env              # muestra API_URL, ANON_KEY y SERVICE_ROLE_KEY locales
 # crear apps/api/.env y apps/web/.env.local (ver sección 5)
 npm run demo:seed                   # opcional: usuarios, módulos y documentos ficticios
 npm run dev:api                     # terminal 1 → http://localhost:3001
@@ -69,7 +70,7 @@ Estructura relevante:
 
 | Ruta | Contenido |
 | --- | --- |
-| `apps/api` | API NestJS 11: autenticación, autorización, módulos, documentos, ingesta RAG y chat |
+| `apps/api` | API NestJS 11: autenticación, autorización, usuarios, módulos, documentos, ingesta RAG, chat, operaciones y casos de consulta (módulos importados en `apps/api/src/app.module.ts`) |
 | `apps/web` | Web Next.js 16 (React 19): interfaz y BFF. No contiene lógica de negocio |
 | `packages/shared` | Paquete `@avend/shared` (sin scripts propios) |
 | `supabase/` | `config.toml`, migraciones (`supabase/migrations/`) y pruebas pgTAP (`supabase/tests/database/`) |
@@ -89,8 +90,9 @@ npm ci
 
 - `npm ci` instala exactamente lo que fija `package-lock.json`. Es el mismo comando de
   la integración continua.
-- Las dependencias de todos los workspaces se instalan en `node_modules/` de la raíz.
-  No ejecute `npm install` dentro de `apps/api` ni de `apps/web`.
+- Las dependencias de todos los workspaces se instalan en `node_modules/` de la raíz;
+  solo las versiones en conflicto quedan en el `node_modules/` de cada app. No
+  ejecute `npm install` dentro de `apps/api` ni de `apps/web`.
 - Use `npm install <paquete> --workspace=api` (o `--workspace=web`) solo cuando vaya a
   cambiar dependencias. Ese comando actualiza `package-lock.json`, y el cambio se
   confirma junto con el código.
@@ -124,14 +126,15 @@ El proyecto usa un rango de puertos propio, distinto del predeterminado de Supab
 | Base *shadow* | `55320` |
 | Analytics | `55327` |
 
-Para ver las URL y las claves locales:
+Para ver las URL y las claves locales con los nombres que usa esta guía:
 
 ```powershell
-supabase status
+supabase status -o env
 ```
 
 Los valores `API_URL`, `ANON_KEY` y `SERVICE_ROLE_KEY` alimentan las variables de
-entorno (sección 5). Son claves de desarrollo del stack local: no las copie a ningún
+entorno (sección 5). La salida por defecto de `supabase status` puede mostrarlos con
+otras etiquetas; los scripts del repositorio usan `supabase status --output json`. Son claves de desarrollo del stack local: no las copie a ningún
 ambiente remoto ni las confirme en Git.
 
 Para detener el stack sin perder los datos locales: `supabase stop`.
@@ -152,9 +155,9 @@ Para detener el stack sin perder los datos locales: `supabase stop`.
   pruebas pgTAP (sección 7.4).
 - **Nunca** ejecute `supabase db push` desde su copia de trabajo: aplicaría todas las
   migraciones locales, incluidas las que no se han fusionado, al proyecto enlazado. Las
-  migraciones remotas se aplican una por una y antes de fusionar a `main` el código que
-  las necesita, porque fusionar a `main` despliega la API y la web. Ese procedimiento
-  pertenece al manual de despliegue.
+  migraciones remotas se aplican antes de fusionar a `main` el código que las necesita,
+  porque fusionar a `main` despliega la API y la web. El procedimiento está en
+  [MANUAL_DESPLIEGUE.md](MANUAL_DESPLIEGUE.md) (sección 5.2).
 
 ### 4.3 Datos de demostración (opcional)
 
@@ -168,7 +171,8 @@ npm run demo:verify    # verifica sin modificar datos
   `127.0.0.1`**. No lee los archivos `.env`.
 - Crea usuarios ficticios del dominio `@demo.avend.local` (superadministradora,
   administradores y docentes), módulos, documentos, consultas y casos. Los usuarios
-  y su contraseña de prueba se describen en `docs/database/DEMO_SEED.md`.
+  y su contraseña de prueba se describen en
+  [`docs/database/DEMO_SEED.md`](../database/DEMO_SEED.md).
 - Los documentos demo llevan el marcador `metadata.demoSeed = "avend-demo-2026"` y
   **están excluidos del RAG** (migración
   `20260908151631_excluir_documentos_demo_del_rag.sql`). Sirven para los paneles de
@@ -181,13 +185,14 @@ npm run demo:verify    # verifica sin modificar datos
 Supabase Auth exige confirmar el correo (`[auth.email] enable_confirmations = true`).
 En local, los correos de registro y de recuperación no salen a Internet: se capturan
 en la bandeja `http://127.0.0.1:55324` (`[local_smtp]` en `supabase/config.toml`).
-Las redirecciones de Auth permitidas en local son
-`http://localhost:3000/auth/callback?next=/auth/confirmed` y
+Además de `site_url = "http://localhost:3000"`, las redirecciones de Auth permitidas en
+local son `http://localhost:3000/auth/callback?next=/auth/confirmed` y
 `http://localhost:3000/auth/callback?next=/auth/update-password`.
 
 Existe además `infrastructure/mailpit/compose.yaml`, un Mailpit independiente en los
 puertos 8025/1025. La configuración actual de `supabase/config.toml` no define
-`[auth.email.smtp]`, así que Auth no le envía correos. No hace falta levantarlo.
+`[auth.email.smtp]`, así que Auth no le envía correos, aunque
+`infrastructure/mailpit/README.md` describa esa conexión. No hace falta levantarlo.
 
 ---
 
@@ -200,7 +205,16 @@ puertos 8025/1025. La configuración actual de `supabase/config.toml` no define
 | API | `apps/api/.env` | `ConfigModule` de NestJS (`apps/api/src/app.module.ts`), que lee `.env` en el directorio de trabajo; `npm run dev:api` se ejecuta en `apps/api` | `apps/api/.env.example` |
 | Web | `apps/web/.env.local` (también sirve `apps/web/.env`) | Next.js, al arrancar en `apps/web` | `apps/web/.env.example` |
 
-- `.env.example` en la raíz reúne las variables de ambas apps en un solo archivo.
+- `.env.example` en la raíz agrupa variables de ambas apps, pero ninguna plantilla está
+  completa: la raíz no trae `RAG_INGESTION_LEASE_SECONDS`, `CHAT_HISTORY_LIMIT` ni
+  `FAQ_MEMORY_FINGERPRINT_SECRET`, y `apps/api/.env.example` no trae
+  `OPENROUTER_API_KEY`, `AI_GATEWAY_BASE_URL` ni `RAG_ANSWER_FALLBACK_MODEL`. La
+  referencia es la tabla 5.2.
+- **No deje líneas vacías del tipo `NOMBRE=` en `apps/api/.env`.** El esquema de la API
+  recibe el texto vacío como valor (no como ausencia) y lo rechaza, incluso en variables
+  opcionales o con valor por defecto (`NODE_ENV`, `PORT`, `WEB_ORIGIN`, claves de IA,
+  `AI_GATEWAY_BASE_URL`, `FAQ_MEMORY_FINGERPRINT_SECRET`, etc.). Las plantillas traen
+  varias líneas así: al copiarlas, complete cada una o bórrela.
 - `.gitignore` ignora todo `.env*` excepto `.env.example`. **Nunca confirme un archivo
   `.env` con valores reales.**
 - La API **solo** lee `apps/api/.env`, no `.env.local`. Las variables definidas en el
@@ -223,19 +237,24 @@ Supabase, que valida `apps/api/src/supabase/supabase.server-client.ts`.
 | `SUPABASE_SERVICE_ROLE_KEY` | Sí, para usar la base | — | `SERVICE_ROLE_KEY` de `supabase status` | Clave de servicio. Solo servidor; nunca se expone a la web |
 | `OPENROUTER_API_KEY` | No | — | la suya, si prueba el chat | Si existe, embeddings y respuestas pasan por OpenRouter (`apps/api/src/config/ai-gateway.ts`) |
 | `OPENAI_API_KEY` | No | — | alternativa a la anterior | Se usa solo si no hay `OPENROUTER_API_KEY` |
-| `AI_GATEWAY_BASE_URL` | No | con OpenRouter: `https://openrouter.ai/api/v1`; con OpenAI: el del SDK | vacío | Sustituye el endpoint compatible con la API de OpenAI. Debe ser una URL |
+| `AI_GATEWAY_BASE_URL` | No | con OpenRouter: `https://openrouter.ai/api/v1`; con OpenAI: el del SDK | no la defina | Sustituye el endpoint compatible con la API de OpenAI. Debe ser una URL |
 | `RAG_EMBEDDING_MODEL` | No | `text-embedding-3-small` | con OpenRouter: `openai/text-embedding-3-small` | Debe producir vectores de 1536 dimensiones (`RAG_EMBEDDING_DIMENSIONS`, columna `vector(1536)`) |
 | `RAG_ANSWER_MODEL` | No | `gpt-4o-mini` | con OpenRouter: `openai/gpt-4o-mini` | Modelo de respuesta. Con OpenRouter, use el nombre con prefijo del proveedor |
-| `RAG_ANSWER_FALLBACK_MODEL` | No | — | vacío | Modelo de respaldo, solo ante error técnico del primario |
-| `RAG_INGESTION_WORKER_ENABLED` | No | `false` | `false` | `true` enciende el worker de ingesta, que revisa la cola cada 5 s (`apps/api/src/ingestion/ingestion.worker.ts`). Con `true` exige `OPENROUTER_API_KEY` u `OPENAI_API_KEY` |
+| `RAG_ANSWER_FALLBACK_MODEL` | No | — | no la defina | Modelo de respaldo, solo ante error técnico del primario (`apps/api/src/rag/openai-answer.gateway.ts`) |
+| `RAG_INGESTION_WORKER_ENABLED` | No | `false` | `false` | Solo acepta `true` o `false` (en minúsculas). `true` enciende el worker de ingesta, que revisa la cola cada 5 s (`apps/api/src/ingestion/ingestion.worker.ts`). Con `true` exige `OPENROUTER_API_KEY` u `OPENAI_API_KEY` |
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | `300` | Duración del bloqueo de un trabajo de ingesta (30–900) |
 | `RAG_MATCH_THRESHOLD` | No | `0.5` | `0.5` | Similitud mínima (0–1) para aceptar un fragmento como evidencia (`RAG_DEFAULT_MATCH_THRESHOLD` en `apps/api/src/rag/rag.constants.ts`) |
 | `RAG_MATCH_COUNT` | No | `5` | `5` | Fragmentos recuperados por consulta (1–10) |
-| `CHAT_HISTORY_LIMIT` | No | `20` | `20` | Límite de historial del chat (1–50) |
-| `FAQ_MEMORY_FINGERPRINT_SECRET` | No | — | vacío | Si se define, mínimo 32 caracteres. Según `apps/api/.env.example`, es necesaria antes de habilitar la agregación compartida de memoria FAQ. Solo servidor |
+| `CHAT_HISTORY_LIMIT` | No | `20` | `20` | Tamaño de página por defecto al listar las conversaciones del historial (1–50) (`apps/api/src/chat/chat.service.ts`) |
+| `FAQ_MEMORY_FINGERPRINT_SECRET` | No | — | no la defina | Si se define, mínimo 32 caracteres. Sin ella, `apps/api/src/learning/faq-memory.service.ts` no prepara observaciones de memoria FAQ. Según `apps/api/.env.example`, es necesaria antes de habilitar la agregación compartida de memoria FAQ. Solo servidor |
 
-Sin clave de IA, la API arranca igual. Las operaciones que necesitan el proveedor
-(chat e ingesta) fallan con 503 (`The AI gateway is not configured.`) al invocarse.
+Sin clave de IA, la API arranca igual, siempre que `RAG_INGESTION_WORKER_ENABLED` no
+sea `true`. Las consultas del chat que necesitan el proveedor no se completan:
+`createAiGatewayClient` lanza `The AI gateway is not configured.`
+(`apps/api/src/config/ai-gateway.ts`) y, como `POST /chat/stream` ya respondió 200 y
+abrió el flujo SSE, la API envía el evento de error `CHAT_STREAM_FAILED`
+(`apps/api/src/chat/chat.controller.ts`). La web muestra «No se pudo completar la
+respuesta».
 
 ### 5.3 Web (`apps/web/.env.local`)
 
@@ -243,14 +262,15 @@ Sin clave de IA, la API arranca igual. Las operaciones que necesitan el proveedo
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Sí | `API_URL` de `supabase status` | `apps/web/src/lib/supabase/config.ts` (`Supabase public configuration is incomplete.` si falta) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sí | `ANON_KEY` de `supabase status` | Clave pública o *anon*. **Nunca** la clave de servicio |
-| `ADMIN_API_URL` | Sí, para los paneles y el chat | `http://localhost:3001` | `apps/web/src/lib/admin-api/config.ts`: solo el origen, sin ruta ni barra extra. Exige HTTPS, salvo `http` en `localhost` o `127.0.0.1`. No lleva prefijo `NEXT_PUBLIC` |
+| `ADMIN_API_URL` | Sí, para los paneles y el chat | `http://localhost:3001` | `apps/web/src/lib/admin-api/config.ts`: solo el origen (se admite una barra final), sin ruta, query ni credenciales. Exige HTTPS, salvo `http` en `localhost` o `127.0.0.1`. No lleva prefijo `NEXT_PUBLIC` |
 | `APP_URL` | No en desarrollo | `http://localhost:3000` | `apps/web/src/lib/auth/site-url.ts`: si falta y `NODE_ENV` no es `production`, usa `http://localhost:3000`. Fuera de localhost exige HTTPS |
 
 ### 5.4 Alternativa sin archivos `.env`: `Invoke-LocalEnvironment.ps1`
 
 `infrastructure/local/Invoke-LocalEnvironment.ps1` lee `supabase status` y rechaza
-cualquier URL que no sea local. Define las variables solo para el proceso y ejecuta el
-comando indicado desde la raíz:
+cualquier URL que no sea local. No escribe archivos: define las variables en el entorno
+del proceso de PowerShell y ejecuta el comando indicado desde la raíz. Las variables
+siguen definidas en esa terminal después de detener el comando.
 
 ```powershell
 .\infrastructure\local\Invoke-LocalEnvironment.ps1 -Target api npm run dev:api
@@ -286,8 +306,10 @@ npm run dev:web
 | `http://localhost:3000` | Página de inicio de la web |
 
 - Abra la web en **`http://localhost:3000`**, no en `127.0.0.1:3000`. Las
-  redirecciones de Auth y la verificación de origen de rutas como `/auth/sign-out`
-  comparan contra `APP_URL`, y con otro origen responden 403.
+  redirecciones de Auth se construyen con `APP_URL`, y las rutas que verifican el origen
+  (`/auth/sign-out`, los reportes y sugerencias de consultas y la descarga de la ficha de
+  orientación) responden 403 si el origen del navegador no coincide con `APP_URL`
+  (`hasTrustedRequestOrigin` en `apps/web/src/lib/auth/site-url.ts`).
 - Para entrar a los paneles de administración use las cuentas del seed demo
   (sección 4.3). Toda cuenta registrada desde la web nace con el rol `docente`.
 - Con `RAG_INGESTION_WORKER_ENABLED=false` (valor por defecto), los documentos que
@@ -316,7 +338,7 @@ integración continua ejecuta unitarias y e2e sin base de datos.
 | Comando | Qué hace |
 | --- | --- |
 | `npm run test --workspace=api` | Ejecuta `apps/api/src/**/*.spec.ts` |
-| `npm run test --workspace=api -- <patrón>` | Solo los specs cuyo nombre coincide |
+| `npm run test --workspace=api -- <patrón>` | Solo los specs cuya ruta coincide con el patrón |
 | `npm run test:cov --workspace=api` | Con cobertura y `--runInBand`. Umbral global: ramas 80 %, funciones, líneas y sentencias 90 % (`jest.coverageThreshold` en `apps/api/package.json`) |
 | `npm run test:watch --workspace=api` | Modo watch |
 
@@ -331,16 +353,24 @@ Equivale a `npm run test:e2e --workspace=api`, con la configuración
 dominio por *mocks* (`overrideProvider` en `apps/api/test/app.e2e-spec.ts`). Prueba
 rutas, autorización, validación y SSE sin tocar la base.
 
+Cuidado: `AppModule` carga `apps/api/.env` también durante las pruebas, porque npm las
+ejecuta en `apps/api`. El caso `/health/ready` espera 503 «sin configuración del
+almacén de datos». Si `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` están definidas (en
+`apps/api/.env` o en la terminal, por ejemplo después de usar
+`Invoke-LocalEnvironment.ps1 -Target api`) y Supabase local está levantado, ese caso
+recibe 200 y falla. Para reproducir la integración continua, ejecute las e2e sin esas
+variables.
+
 ### 7.3 Web — Vitest (jsdom + Testing Library)
 
 | Comando | Qué hace |
 | --- | --- |
 | `npm run test --workspace=web` | `vitest run` sobre `apps/web/src/**/*.spec.{ts,tsx}` |
 | `npm run test --workspace=web -- <filtro>` | Solo los archivos que coinciden |
-| `npm run test:cov --workspace=web` | Con cobertura v8. Umbral global 80/90/90/90, más umbrales por archivo para `chat-panel.tsx`, `chat-sources.tsx` y `teacher-shell.tsx` (`apps/web/vitest.config.mts`) |
+| `npm run test:cov --workspace=web` | Con cobertura v8. Umbral global: ramas 80 %, funciones, líneas y sentencias 90 %, más los mismos umbrales por archivo para `chat-panel.tsx`, `chat-sources.tsx` y `teacher-shell.tsx` (`apps/web/vitest.config.mts`) |
 
-Ejecute Vitest siempre mediante `npm run`. Invocar directamente el binario puede
-cargar otra instancia de Vitest y romper `src/test/setup.ts`.
+La configuración (`apps/web/vitest.config.mts`) usa `jsdom`, el archivo de preparación
+`src/test/setup.ts` y un alias que sustituye `server-only` en las pruebas.
 
 ### 7.4 Base de datos — pgTAP
 
@@ -375,13 +405,16 @@ MSYS_NO_PATHCONV=1 docker exec supabase_db_AvendAsesor \
 | `npm run test` | Unitarias de API y web |
 | `npm run test:coverage` | Unitarias con cobertura de ambos workspaces (igual que la integración continua) |
 | `.\infrastructure\local\Test-LocalHito4Closure.ps1` | pgTAP, `supabase db advisors --local --fail-on warn`, `supabase migration list --local`, cobertura API, e2e, typecheck, lint, pruebas, build, `npm audit --omit=dev --audit-level=high` y `git diff --check` |
-| `.\infrastructure\local\Test-LocalHito3Closure.ps1` | Igual, con foco en chat y RAG (incluye cobertura web) |
+| `.\infrastructure\local\Test-LocalHito3Closure.ps1` | Las mismas etapas con foco en chat y RAG: agrega la cobertura web (`npm run test:cov --workspace=web`) y no ejecuta `npm run test` |
 
 Los scripts de cierre exigen `supabase`, `node`, `npm` y `git` en el `PATH`, y se
-niegan a correr si Supabase no es local en el puerto 55321. Algunos scripts reinician
-la base local, siempre con una opción explícita: `Test-LocalHito2Closure.ps1` exige
+niegan a correr si Supabase no es local en el puerto 55321. Como ejecutan las e2e, se
+aplica la advertencia de la sección 7.2. Algunos scripts reinician la base local,
+siempre con una opción explícita: `Test-LocalHito2Closure.ps1` exige
 `-AllowLocalReset` y `Test-LocalDocumentsApi.ps1 -ResetAfter` ejecuta
-`supabase db reset --local` al terminar.
+`supabase db reset --local` al terminar. `Test-LocalHito2Closure.ps1` invoca además un
+script auxiliar que no está en el repositorio, por lo que en un clon limpio falla en
+la etapa `project-health`.
 
 ---
 
@@ -411,7 +444,8 @@ npm run verify:build-artifacts
 `verify:build-artifacts` necesita un `next build` previo. Comprueba que la traza de la
 ruta de descarga de la ficha de orientación
 (`/api/chat/conversations/[conversationId]/messages/[messageId]/orientacion/[format]`)
-incluya los módulos de `pdfkit` y `fontkit` que Vercel debe empaquetar.
+incluya `pdfkit`, `fontkit` y sus dependencias de ejecución, y las fuentes Noto
+(`.woff`), que Vercel debe empaquetar (`apps/web/scripts/verify-orientation-trace.mjs`).
 
 `npm run format --workspace=api` reescribe con Prettier **todos** los archivos de
 `apps/api/src` y `apps/api/test`. Prefiera `npm run lint:fix` o formatear solo los
@@ -483,14 +517,15 @@ cd apps/api && ACCEPTANCE_ENV_FILE=.env.acceptance.local npm run acceptance:hito
 | `supabase start` falla por un puerto ocupado | Otro stack de Supabase u otro proceso usa el rango 55320–55329 | Detenga el otro stack (`supabase stop` en su carpeta) o libere el puerto |
 | `supabase` no se reconoce en PowerShell | La CLI no está en el `PATH` | Instale la CLI y abra una terminal nueva; los scripts la invocan como `supabase` |
 | La API ocupa el puerto 3000 y la web arranca en otro puerto o no encuentra la API | `PORT` sin definir (valor por defecto 3000) | `PORT=3001` en `apps/api/.env` |
-| `Invalid environment configuration.` al iniciar la API | Una variable no cumple el esquema (por ejemplo, `WEB_ORIGIN` con ruta o `RAG_MATCH_COUNT` mayor que 10) | Revise la tabla 5.2 |
+| `Invalid environment configuration.` al iniciar la API | Una variable no cumple el esquema (por ejemplo, `WEB_ORIGIN` con ruta, `RAG_MATCH_COUNT` mayor que 10 o una línea vacía `NOMBRE=` copiada de una plantilla) | Revise la tabla 5.2 y borre las líneas vacías (sección 5.1) |
 | `Supabase server configuration is invalid.` | Solo está definida una de `SUPABASE_URL` o `SUPABASE_SERVICE_ROLE_KEY` | Defina ambas |
 | La API ignora `apps/api/.env.local` | La API solo lee `apps/api/.env` | Renombre el archivo a `.env` |
 | `/health/ready` responde 503 | Supabase local detenido o sin variables de Supabase | `supabase status` y la sección 5.2 |
-| La web falla con `Administrative API configuration is invalid.` | `ADMIN_API_URL` con ruta o barra extra, o `http` fuera de localhost | Use exactamente `http://localhost:3001` |
+| La web falla con `Administrative API configuration is incomplete.` o `... is invalid.` | `ADMIN_API_URL` ausente, con ruta, query o credenciales, o `http` fuera de localhost | Use exactamente `http://localhost:3001` |
 | Cerrar sesión o enviar reportes responde 403 | Abrió la web en `127.0.0.1` y `APP_URL` es `localhost` (o al revés) | Use `http://localhost:3000` |
 | No llega el correo de confirmación | En local los correos no salen a Internet | Ábralos en `http://127.0.0.1:55324` |
-| El chat responde 503 | No hay `OPENROUTER_API_KEY` ni `OPENAI_API_KEY` | Configure una clave en `apps/api/.env` |
+| El chat muestra «No se pudo completar la respuesta» | Entre otras causas, no hay `OPENROUTER_API_KEY` ni `OPENAI_API_KEY` (la API envía el evento SSE `CHAT_STREAM_FAILED`) | Configure una clave en `apps/api/.env` |
+| La prueba e2e `/health/ready` falla (recibe 200 en vez de 503) | `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` definidas en `apps/api/.env` o en la terminal, con Supabase local levantado | Ejecute las e2e sin esas variables (sección 7.2) |
 | Un documento subido queda «Pendiente» | Worker de ingesta apagado (valor por defecto) | `RAG_INGESTION_WORKER_ENABLED=true` más una clave de IA, solo si necesita indexar |
 | `VAR=valor npm run ...` no funciona en PowerShell | Esa sintaxis es de bash | `$env:VAR = 'valor'; npm run ...` |
 | PowerShell bloquea un `.ps1` de `infrastructure/local` | Política de ejecución | `powershell -NoProfile -ExecutionPolicy Bypass -File .\infrastructure\local\<script>.ps1` (afecta solo a ese proceso) |
@@ -498,7 +533,7 @@ cd apps/api && ACCEPTANCE_ENV_FILE=.env.acceptance.local npm run acceptance:hito
 | `npm run test:debug --workspace=api` falla | El script apunta a `node_modules/.bin/jest` dentro de `apps/api`, y npm workspaces instala en la raíz | Desde `apps/api`: `node --inspect-brk ../../node_modules/jest/bin/jest.js --runInBand` |
 | Avisos `EBADENGINE` durante `npm ci` | Versión de Node o npm fuera de `engines` | `nvm use 24.14.0` |
 | Errores al instalar o probar con pnpm | El repositorio es de npm workspaces | Use `npm ci` y `npm run ...` |
-| Muchos archivos cambian tras `npm run format --workspace=api` | Prettier escribe LF sobre archivos con CRLF (`core.autocrlf=true`) | Formatee solo los archivos que tocó (`npx prettier --write <archivo>`) o use `npm run lint:fix`; el lint de la API acepta ambos finales de línea (`endOfLine: "auto"`) |
+| Muchos archivos cambian tras `npm run format --workspace=api` | Con `core.autocrlf=true` (habitual en Git para Windows; el repositorio no tiene `.gitattributes`) los archivos se descargan con CRLF y Prettier los reescribe con LF | Formatee solo los archivos que tocó (`npx prettier --write <archivo>`) o use `npm run lint:fix`; el lint de la API acepta ambos finales de línea (`endOfLine: "auto"`) |
 
 ---
 
@@ -517,7 +552,10 @@ apunte un `.env` local a producción para desarrollar.
 
 ---
 
-## 12. Fuentes
+## 12. Fuentes y documentos relacionados
+
+Documentos relacionados: [VARIABLES_DE_ENTORNO.md](VARIABLES_DE_ENTORNO.md) y
+[MANUAL_DESPLIEGUE.md](MANUAL_DESPLIEGUE.md).
 
 - `package.json`, `apps/api/package.json`, `apps/web/package.json`, `.nvmrc`
 - `.env.example`, `apps/api/.env.example`, `apps/web/.env.example`, `.gitignore`
@@ -528,5 +566,8 @@ apunte un `.env` local a producción para desarrollar.
 - `supabase/config.toml`, `supabase/migrations/`, `supabase/tests/database/`
 - `infrastructure/local/*.ps1`, `infrastructure/mailpit/`, `scripts/seed-demo-data.mjs`,
   `docs/database/DEMO_SEED.md`
-- `apps/api/test/jest-e2e.json`, `apps/api/test/acceptance/hito3-client-cases.ts`
+- `apps/api/src/app.module.ts`, `apps/api/src/chat/chat.controller.ts`,
+  `apps/web/scripts/verify-orientation-trace.mjs`
+- `apps/api/test/jest-e2e.json`, `apps/api/test/app.e2e-spec.ts`,
+  `apps/api/test/acceptance/hito3-client-cases.ts`
 - `.github/workflows/ci.yml`

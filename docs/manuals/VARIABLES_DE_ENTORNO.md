@@ -46,11 +46,11 @@ y Vercel.
 - Si la validación falla, la API no arranca y solo registra
   `Invalid environment configuration.`, sin decir qué variable falló.
 - **Una línea vacía como `OPENAI_API_KEY=` cuenta como valor** (cadena vacía) y
-  hace fallar la validación. Solo se escapa `SUPABASE_URL=` +
-  `SUPABASE_SERVICE_ROLE_KEY=` (ambas vacías) y `RAG_MATCH_THRESHOLD=`, que se
-  convierte en `0` sin avisar (ver §9). Lo verificamos ejecutando
-  `validateEnvironment` con cada caso. Si una variable opcional no se usa,
-  bórrela o coméntela; no la deje vacía.
+  hace fallar la validación. Las únicas excepciones son `SUPABASE_URL=` y
+  `SUPABASE_SERVICE_ROLE_KEY=` cuando ambas están vacías (§3.2), y
+  `RAG_MATCH_THRESHOLD=`, que se convierte en `0` sin avisar (ver §9). Se
+  verificó ejecutando `validateEnvironment` con cada caso. Si una variable
+  opcional no se usa, bórrela o coméntela; no la deje vacía.
 - El esquema usa `.passthrough()`: acepta variables que no declara (por ejemplo
   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`, que se validan en otro lugar).
 
@@ -109,7 +109,7 @@ Selección del proveedor (`apps/api/src/config/ai-gateway.ts`):
 | --- | --- | --- |
 | presente | cualquiera | OpenRouter. `baseURL` = `AI_GATEWAY_BASE_URL` o `https://openrouter.ai/api/v1`. Cabeceras `HTTP-Referer` (= `WEB_ORIGIN`) y `X-Title: AVEND ASESOR`. |
 | ausente | presente | OpenAI directo. Usa `AI_GATEWAY_BASE_URL` si está definida. |
-| ausente | ausente | El chat RAG falla de forma cerrada con `503 The AI gateway is not configured.` No se puede encender el worker (§3.4). |
+| ausente | ausente | Falla de forma cerrada: cuando una consulta llega a la búsqueda o a la generación, `createAiGatewayClient` lanza `The AI gateway is not configured.` y, como `POST /chat/stream` ya respondió `200` con SSE, el cliente recibe el evento `error` con código `CHAT_STREAM_FAILED` (`apps/api/src/chat/chat.controller.ts`). No se inventa respuesta. No se puede encender el worker (§3.4). |
 
 `GET /admin/rag/readiness`, con token de `admin` o `superadmin`, muestra qué
 proveedor está activo (`openrouter`, `openai` o `none`) sin exponer las claves
@@ -119,8 +119,8 @@ proveedor está activo (`openrouter`, `openai` o `none`) sin exponer las claves
 
 | Variable | Obligatoria | Por defecto | Secreta | Propósito y reglas |
 | --- | --- | --- | --- | --- |
-| `RAG_EMBEDDING_MODEL` | Sí con OpenRouter | `text-embedding-3-small` | No | Modelo de embeddings. Debe devolver **1536 dimensiones** (`vector(1536)`, constante `RAG_EMBEDDING_DIMENSIONS` en `ai-gateway.ts`). Cambiarlo exige reindexar todo el corpus. |
-| `RAG_ANSWER_MODEL` | Sí con OpenRouter | `gpt-4o-mini` | No | Modelo que genera la respuesta (`apps/api/src/rag/openai-answer.gateway.ts`). |
+| `RAG_EMBEDDING_MODEL` | Recomendada con OpenRouter (ver nota) | `text-embedding-3-small` | No | Modelo de embeddings. Debe devolver **1536 dimensiones** (`vector(1536)`, constante `RAG_EMBEDDING_DIMENSIONS` en `ai-gateway.ts`). Cambiarlo exige reindexar todo el corpus. |
+| `RAG_ANSWER_MODEL` | Recomendada con OpenRouter (ver nota) | `gpt-4o-mini` | No | Modelo que genera la respuesta (`apps/api/src/rag/openai-answer.gateway.ts`). |
 | `RAG_ANSWER_FALLBACK_MODEL` | No | — (sin respaldo) | No | Modelo de respaldo. Se usa **solo** ante un error técnico del primario; nunca por falta de evidencia. Se ignora si es igual al primario o si la petición se abortó. |
 | `RAG_INGESTION_WORKER_ENABLED` | No | `false` | No | Solo acepta exactamente `true` o `false`. Con `true`, el worker consulta la cola cada 5 s (`ingestion.worker.ts`) y hace falta `OPENROUTER_API_KEY` u `OPENAI_API_KEY`: sin ninguna, la API no arranca. Con `false`, los documentos cargados quedan pendientes y el arranque registra una advertencia. |
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | No | Segundos de *lease* al reclamar un trabajo de ingesta (`ingestion.service.ts`). Entero de 30 a 900. |
@@ -130,8 +130,10 @@ proveedor está activo (`openrouter`, `openai` o `none`) sin exponer las claves
 Nombres de modelo: los valores por defecto del código (`gpt-4o-mini` y
 `text-embedding-3-small`) son nombres de OpenAI directo. Con OpenRouter activo,
 el `.env.example` de la raíz pide usar los nombres de OpenRouter, con prefijo
-de proveedor (por ejemplo `openai/text-embedding-3-small`). Por eso, en Render
-hay que definir ambos modelos de forma explícita.
+de proveedor (por ejemplo `openai/text-embedding-3-small`). Por eso conviene
+definir ambos modelos de forma explícita en Render. Si OpenRouter acepta o no
+los nombres sin prefijo no se puede comprobar desde el repositorio: **Por
+confirmar (PO)**.
 
 ### 3.5 Chat y memoria FAQ
 
@@ -189,13 +191,13 @@ Build: `npm ci --include=dev && npm run build --workspace=api`. Arranque:
 | `SUPABASE_URL` | Configurada (`/health/ready` responde `200`). Apunta al proyecto de producción, `https://blxrdotroysitfyehmqw.supabase.co` (misma URL que usan `scripts/seed-production-demo-data.mjs` y `scripts/backup-production-demo-seed.mjs`). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Configurada. Secreta: solo en Render. |
 | `WEB_ORIGIN` | Origen público exacto de Vercel (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`: CORS permite ese origen). |
-| `NODE_ENV` | Esperado `production`. Valor real: **Por confirmar (PO)**. Nota: `npm ci` omite las devDependencies cuando `NODE_ENV=production`; por eso el build usa `--include=dev`. |
+| `NODE_ENV` | Esperado `production`. Valor real: **Por confirmar (PO)**. Nota: `nest build` necesita `@nestjs/cli`, que es devDependency de `apps/api`, y `npm ci` omite las devDependencies cuando `NODE_ENV=production`; por eso el build usa `--include=dev`. |
 | `PORT` | Render la define para los Web Services. Si se fijó un valor explícito: **Por confirmar (PO)**. |
 | `OPENROUTER_API_KEY` | Configurada: el proveedor activo es OpenRouter (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`). |
 | `OPENAI_API_KEY` | **Por confirmar (PO)**. Mientras exista `OPENROUTER_API_KEY`, no se usa. |
 | `AI_GATEWAY_BASE_URL` | **Por confirmar (PO)**. Si no está definida, se usa el endpoint de OpenRouter. |
-| `RAG_EMBEDDING_MODEL` | Modelo en uso: text-embedding-3-small (1536 dimensiones). Cadena exacta: **Por confirmar (PO)**. |
-| `RAG_ANSWER_MODEL` | Modelo en uso: gpt-4o-mini. Cadena exacta: **Por confirmar (PO)**. |
+| `RAG_EMBEDDING_MODEL` | Modelo en uso: text-embedding-3-small (1536 dimensiones). Cadena exacta: **Por confirmar (PO)**; se puede leer en el campo `embeddingModel` de `GET /admin/rag/readiness`. |
+| `RAG_ANSWER_MODEL` | Modelo en uso: gpt-4o-mini. Cadena exacta: **Por confirmar (PO)**; se puede leer en el campo `answerModel` de `GET /admin/rag/readiness`. |
 | `RAG_ANSWER_FALLBACK_MODEL` | **Por confirmar (PO)**. |
 | `RAG_INGESTION_WORKER_ENABLED` | `true` (worker encendido según el runbook del 2026-09-24). |
 | `RAG_MATCH_THRESHOLD` | `0.5` o sin definir (el valor por defecto ya es `0.5`). |
@@ -218,8 +220,9 @@ variables en el alcance *Preview*, y a qué proyecto Supabase apuntan:
 
 ### 5.3 Supabase (panel del proyecto)
 
-La aplicación no tiene Edge Functions (`supabase/` solo contiene `config.toml`,
-`migrations/`, `snippets/` y `tests/`), así que no usa *secrets* de Supabase.
+La aplicación no tiene Edge Functions (no existe `supabase/functions/`; en Git
+`supabase/` solo versiona `config.toml`, `migrations/`, `tests/` y su
+`.gitignore`), así que no usa *secrets* de Supabase.
 Lo que se configura en el panel es:
 
 - **Auth → URL Configuration:** Site URL = `APP_URL`. Redirect URLs =
@@ -252,7 +255,7 @@ cuadrando:
 | `ADMIN_API_URL` (web) = URL pública de la API, sin ruta | Fallan las páginas admin, el chat y los reportes. |
 | `NEXT_PUBLIC_SUPABASE_URL` (web) y `SUPABASE_URL` (API) = mismo proyecto | La API rechaza tokens emitidos por otro proyecto y los datos no coinciden. |
 | Redirect URLs de Supabase Auth incluyen las dos rutas de callback de `APP_URL` | Fallan la confirmación de correo y la recuperación de contraseña. |
-| `RAG_EMBEDDING_MODEL` con 1536 dimensiones y el mismo modelo que indexó el corpus | Error `invalid embedding response`, o una búsqueda incoherente hasta reindexar. |
+| `RAG_EMBEDDING_MODEL` con 1536 dimensiones y el mismo modelo que indexó el corpus | Error `The RAG provider returned an invalid embedding response.` (`openai-embeddings.gateway.ts`), o una búsqueda incoherente hasta reindexar. |
 | `RAG_INGESTION_WORKER_ENABLED=true` solo con una clave de proveedor | La API no arranca. |
 
 `WEB_ORIGIN` admite **un solo** origen. Un preview de Vercel con otro dominio no
@@ -266,8 +269,9 @@ curl -s https://avend-asesor-api.onrender.com/health/ready
 ```
 
 Con sesión de administrador, `GET /admin/rag/readiness` devuelve
-`workerEnabled`, `provider`, `embeddingModel`, `answerModel`, `matchThreshold`
-y los conteos de ingesta.
+`workerEnabled`, `provider`, `providerConfigured`, `embeddingModel`,
+`answerModel`, `matchThreshold`, los conteos de ingesta (`counts`) y `ready`
+(`apps/api/src/rag-admin/rag-readiness.service.ts`).
 
 ---
 
@@ -319,8 +323,11 @@ valores reales: nunca las deje vacías.
 ### 7.2 CI
 
 `.github/workflows/ci.yml` no define variables ni secretos. Lint, typecheck,
-tests, e2e y build corren sin `.env`: las pruebas inyectan su configuración en
-el código.
+tests, e2e y build corren sin `.env`: las pruebas unitarias construyen su
+configuración en el código, y la e2e (`apps/api/test/app.e2e-spec.ts`) levanta
+`AppModule` con los valores por defecto del esquema y proveedores sustituidos.
+En local, esa e2e también lee `apps/api/.env` si existe, así que un archivo con
+valores vacíos la hace fallar.
 
 ### 7.3 Scripts y herramientas
 
@@ -329,13 +336,15 @@ el código.
 | `ACCEPTANCE_ENV_FILE` | `npm run acceptance:hito3` (`apps/api/test/acceptance/hito3-client-cases.ts`) | Sí | No (es una ruta) | Ruta a un archivo de entorno fuera de Git con `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y una clave de proveedor. El script fuerza `RAG_INGESTION_WORKER_ENABLED=false` y valida con `validateEnvironment`, así que aplican las mismas reglas de valores vacíos. Usa servicios reales y consume saldo del proveedor. Antes de ejecutarlo, confirme a qué proyecto apunta el archivo: el nombre no garantiza el ambiente. |
 | `ACCEPTANCE_OUT` | mismo script | No | No | Prefijo de los reportes `.json` y `.md`. Por defecto `test/acceptance/out/hito3-acceptance` (ignorado por Git). |
 | `SUPABASE_QA_PILOT_SECRET_KEY` | `infrastructure/qa/Invoke-QAPilot.ps1` | Solo en modo `Apply` o `Cleanup` | **Sí** | Clave temporal moderna con prefijo `sb_secret_`. El script rechaza claves legacy `service_role`. Vive solo en el proceso: nunca en `.env`, Render, Vercel ni Git (`infrastructure/qa/README.md`). |
-| `AVEND_LOCAL_STATUS_BASE64` | `infrastructure/local/Test-Local*.ps1` | — | Contiene credenciales locales | Variable interna: los scripts la definen para sus pruebas Node embebidas. No se define a mano. |
-| `ComSpec`, `LOCALAPPDATA` | `scripts/seed-production-demo-data.mjs`, `scripts/backup-production-demo-seed.mjs` | — (del sistema operativo) | No | Invocan `supabase.cmd` en Windows y ubican la carpeta local de respaldos. |
+| `AVEND_LOCAL_STATUS_BASE64` | `infrastructure/local/Test-LocalAdminWeb.ps1`, `Test-LocalAuthRls.ps1`, `Test-LocalDocumentSecurity.ps1`, `Test-LocalDocumentsApi.ps1` y `Test-LocalModulesApi.ps1` | — | Contiene credenciales locales | Variable interna: los scripts la definen para sus pruebas Node embebidas. No se define a mano. |
+| `ComSpec` | `scripts/seed-production-demo-data.mjs`, `scripts/backup-production-demo-seed.mjs` | — (del sistema operativo) | No | Ubica `cmd.exe` para invocar `supabase.cmd` en Windows. |
+| `LOCALAPPDATA` | `scripts/backup-production-demo-seed.mjs` | — (del sistema operativo) | No | Carpeta base de los respaldos locales; si falta, usa el directorio temporal del sistema. |
 
 Los seeds (`npm run demo:*`) no leen variables de la aplicación. El seed local
 toma sus credenciales de `supabase status`. El de producción las toma de
 `supabase projects api-keys --project-ref blxrdotroysitfyehmqw` y exige ese
-ref exacto (`docs/database/DEMO_SEED.md`).
+ref exacto (`scripts/seed-production-demo-data.mjs`,
+`docs/database/DEMO_SEED.md`).
 
 `supabase/config.toml` contiene referencias `env(...)` de la plantilla de la
 CLI: `SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN`,
@@ -375,17 +384,24 @@ corrigieron**: se dejan registradas para una tarea aparte.
    `RAG_INGESTION_LEASE_SECONDS`, `FAQ_MEMORY_FINGERPRINT_SECRET` y
    `CHAT_HISTORY_LIMIT`.
 3. **Si se copian los `.env.example` tal como están, la API no arranca.** Las
-   líneas vacías (`NODE_ENV=`, `PORT=`, `WEB_ORIGIN=`, `OPENAI_API_KEY=`,
-   `FAQ_MEMORY_FINGERPRINT_SECRET=` y, en la raíz, también
-   `OPENROUTER_API_KEY=`, `AI_GATEWAY_BASE_URL=`, `RAG_EMBEDDING_MODEL=`,
-   `RAG_ANSWER_MODEL=` y `RAG_ANSWER_FALLBACK_MODEL=`) llegan como cadena vacía
-   y el esquema Zod las rechaza (`Invalid environment configuration.`). Se
-   verificó ejecutando `validateEnvironment`. El comentario del `.env.example`
-   raíz ("Copia este archivo a .env en cada app") lleva a este error.
+   líneas vacías llegan como cadena vacía y el esquema Zod las rechaza
+   (`Invalid environment configuration.`). En `apps/api/.env.example` son
+   `NODE_ENV=`, `PORT=`, `WEB_ORIGIN=`, `FAQ_MEMORY_FINGERPRINT_SECRET=` y
+   `OPENAI_API_KEY=`. En el `.env.example` de la raíz son `NODE_ENV=`, `PORT=`,
+   `WEB_ORIGIN=`, `OPENROUTER_API_KEY=`, `OPENAI_API_KEY=`,
+   `AI_GATEWAY_BASE_URL=`, `RAG_EMBEDDING_MODEL=`, `RAG_ANSWER_MODEL=` y
+   `RAG_ANSWER_FALLBACK_MODEL=`. `SUPABASE_URL=` y
+   `SUPABASE_SERVICE_ROLE_KEY=`, ambas vacías, no bloquean el arranque (§3.2).
+   Se verificó ejecutando `validateEnvironment` con cada caso. El comentario del
+   `.env.example` raíz ("Copia este archivo a .env en cada app") lleva a este
+   error.
 4. **`RAG_MATCH_THRESHOLD=` vacío se convierte en `0` sin avisar**
-   (`z.coerce.number()` sobre `""`): cualquier fragmento pasaría como
-   evidencia. Con `RAG_MATCH_COUNT=`, `CHAT_HISTORY_LIMIT=` o
-   `RAG_INGESTION_LEASE_SECONDS=` vacíos, en cambio, la API no arranca.
+   (`z.coerce.number()` sobre `""`): desaparece el filtro de similitud mínima y
+   solo queda el margen relativo respecto del mejor fragmento
+   (`rag.service.ts`), así que fragmentos poco relacionados pueden pasar como
+   evidencia. Con `RAG_MATCH_COUNT=`, `CHAT_HISTORY_LIMIT=`,
+   `RAG_INGESTION_LEASE_SECONDS=` o `RAG_INGESTION_WORKER_ENABLED=` vacíos, en
+   cambio, la API no arranca.
 5. **`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` no están en el esquema
    central.** Sin ambas, la API arranca y solo `/health/ready` revela el
    problema (`503`).
@@ -397,7 +413,8 @@ corrigieron**: se dejan registradas para una tarea aparte.
    desactualizado.** Dice que el navegador no debe llamar a la API
    directamente, pero el código pasa ese origen a componentes de cliente para
    la carga de documentos y la importación de usuarios. El `.env.example` de la
-   raíz ya describe ese comportamiento.
+   raíz describe la carga directa de PDF, pero no menciona la importación de
+   usuarios.
 8. **Los modelos de ejemplo no coinciden con producción.** El `.env.example` de
    la raíz y `docs/architecture/INTEGRACION_OPENROUTER.md` dan
    `openai/gpt-5-mini` como modelo de respuesta de producción, pero producción
@@ -419,6 +436,8 @@ corrigieron**: se dejan registradas para una tarea aparte.
   `RAG_ANSWER_FALLBACK_MODEL`, `AI_GATEWAY_BASE_URL`, `OPENAI_API_KEY`,
   `FAQ_MEMORY_FINGERPRINT_SECRET`, `RAG_MATCH_COUNT`,
   `RAG_INGESTION_LEASE_SECONDS` y `CHAT_HISTORY_LIMIT` en Render.
+- Si OpenRouter acepta los nombres de modelo sin prefijo de proveedor (los
+  valores por defecto del código).
 - Valor exacto de `APP_URL` en Vercel y variables del alcance *Preview*.
 - Site URL, Redirect URLs y SMTP (Resend) configurados en Supabase Auth de
   producción.
