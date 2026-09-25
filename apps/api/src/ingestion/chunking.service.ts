@@ -31,22 +31,32 @@ const MAX_UNBROKEN_CHARS = 200;
 const MAX_HEADING_TOKENS = 60;
 /** Rótulo de un título normativo: «Artículo 14.», «Capítulo II», «Anexo 3». */
 const HEADING_LABEL =
-  /^(?:cap[ií]tulo|art[ií]culo|t[ií]tulo|secci[oó]n|anexo|disposici[oó]n)\b\s*[\w.°º-]*\.?\s*/iu;
+  /^(?:cap[ií]tulos?|art[ií]culos?|t[ií]tulos?|secci[oó]n(?:es)?|anexos?|disposici[oó]n(?:es)?)(?![\p{L}])\s*[\w.°º-]*\.?\s*/iu;
 const MAX_HEADING_WORDS = 15;
+/** Una frase terminada en punto con más palabras que esto ya es una disposición. */
+const MAX_TITLE_SENTENCE_WORDS = 8;
+/** Disposición breve: «Dejar sin efecto…», «La presente norma entra en vigencia…». */
+const PROVISION_START =
+  /^(?:\p{L}+(?:ar|er|ir)\s|(?:la|el|los|las)\s+presentes?\b)/iu;
 
 /**
  * Título puro: rótulo más, a lo sumo, una frase breve («Artículo 14.
  * Requisitos para la reasignación»). Un artículo breve completo («Artículo 3.
- * Vigencia. La presente norma…») o el ítem de una lista («1. Copia del DNI»)
- * no son títulos: pertenecen al texto que ya los precede.
+ * Vigencia. La presente norma…», «Artículo 3.- La presente norma entra en
+ * vigencia…») o el ítem de una lista («1. Copia del DNI») no son títulos:
+ * pertenecen al texto que ya los precede.
  */
 function isHeading(content: string): boolean {
   const label = HEADING_LABEL.exec(content);
   if (!label) return false;
   const title = content.slice(label[0].length).trim();
-  return (
-    !/[.;:]\s+\S/u.test(title) &&
-    title.split(/\s+/u).filter(Boolean).length <= MAX_HEADING_WORDS
+  const words = title.split(/\s+/u).filter(Boolean).length;
+  if (/[.;:]\s+\S/u.test(title) || words > MAX_HEADING_WORDS) return false;
+  // Una sola frase terminada en punto: título si es breve y no dispone nada.
+  return !(
+    title.endsWith('.') &&
+    (words > MAX_TITLE_SENTENCE_WORDS ||
+      (words > 3 && PROVISION_START.test(title)))
   );
 }
 const ARTICLE = /art[ií]culo\s+([\w.-]+)/iu;

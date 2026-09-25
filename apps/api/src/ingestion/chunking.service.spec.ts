@@ -313,4 +313,41 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       listChunks.filter((chunk) => chunk.chunkContent.includes('1. Copia')),
     ).toHaveLength(1);
   });
+
+  it.each([
+    [
+      'Artículo 3.- La presente norma entra en vigencia al día siguiente de su publicación.',
+      false,
+    ],
+    [
+      'Artículo 2.- Dejar sin efecto la Resolución Viceministerial N° 123-2020-MINEDU.',
+      false,
+    ],
+    ['DISPOSICIONES COMPLEMENTARIAS FINALES', true],
+    ['ANEXOS', true],
+    ['Artículo 5. Bienestar docente.', true],
+    ['Artículo 14°.- Requisitos para la reasignación por salud:', true],
+  ])(
+    'prefixes «%s» to the windows of the following long body: %s',
+    (heading, prefixed) => {
+      const chunks = service.chunk([
+        {
+          pageNumber: 1,
+          text: [
+            'Texto previo de la norma.',
+            heading,
+            words('cuerpo', 1_300),
+          ].join('\n\n'),
+        },
+      ]);
+      const windows = chunks.filter((chunk) =>
+        /cuerpow\d/u.test(chunk.chunkContent),
+      );
+      expect(windows.length).toBeGreaterThan(1);
+      for (const chunk of windows) {
+        expect(chunk.chunkContent.startsWith(heading)).toBe(prefixed);
+        expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+      }
+    },
+  );
 });

@@ -13,19 +13,18 @@ const MAX_RANGE = 20;
 function groupIndexes(group: string): number[] {
   const indexes: number[] = [];
   for (const part of group.split(/\s*(?:[,;]|\by\b)\s*/u)) {
-    const range = /^(\d+)\s*[–-]\s*(\d+)$/u.exec(part.trim());
-    if (range) {
-      const from = Number(range[1]);
-      const to = Number(range[2]);
-      if (to >= from && to - from <= MAX_RANGE) {
-        for (let index = from; index <= to; index += 1) indexes.push(index);
-      } else {
-        indexes.push(from, to);
-      }
+    const bounds = part
+      .trim()
+      .split(/\s*[–-]\s*/u)
+      .map(Number);
+    const [from, to] = bounds;
+    if (bounds.length === 1 && Number.isInteger(from)) {
+      indexes.push(from);
       continue;
     }
-    const value = Number(part.trim());
-    if (Number.isInteger(value)) indexes.push(value);
+    // Una fecha ([12-05-2024]) o un rango absurdo ([1-2012]) no es una cita.
+    if (bounds.length !== 2 || to < from || to - from > MAX_RANGE) return [];
+    for (let index = from; index <= to; index += 1) indexes.push(index);
   }
   return indexes;
 }

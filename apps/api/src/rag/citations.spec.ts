@@ -19,8 +19,10 @@ describe('citations', () => {
     expect(citesAnySource('Plazo de 10 días [7].', 3)).toBe(false);
     expect(citesAnySource('Plazo de 10 días [0].', 3)).toBe(false);
     expect(citesAnySource('Plazo de 10 días [1, 7].', 3)).toBe(true);
-    // Un rango absurdo no se expande a miles de números.
-    expect(citedIndexes('[1-2012]')).toEqual([1, 2012]);
+    // Una fecha o un rango absurdo no es una cita.
+    expect(citedIndexes('[1-2012]')).toEqual([]);
+    expect(citedIndexes('Fecha [12-05-2024].')).toEqual([]);
+    expect(citesAnySource('Plazo [1-2012].', 3)).toBe(false);
   });
 
   it('quita las citas para medir la sustancia de una afirmación', () => {

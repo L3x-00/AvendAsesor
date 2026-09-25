@@ -28,6 +28,7 @@ import {
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
 import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
 import {
+  CITATION_GROUP,
   citedIndexes,
   citesAnySource,
   withoutCitations,
@@ -134,7 +135,11 @@ export interface AnswerCitationQualityEvaluation {
   excerpts: Partial<Record<CitationQualitySignal, string>>;
   signals: CitationQualitySignal[];
 }
-const CLAIM_PATTERN = /[^.!?]+(?:[.!?]+(?:\s*\[\d+\])?|\s*$)/gu;
+/** Afirmación: una frase con las citas que la cierran (también agrupadas). */
+const CLAIM_PATTERN = new RegExp(
+  `[^.!?]+(?:[.!?]+(?:\\s*${CITATION_GROUP.source})*|\\s*$)`,
+  'gu',
+);
 const QUALITY_STOP_WORDS = new Set([
   'acerca',
   'ademas',

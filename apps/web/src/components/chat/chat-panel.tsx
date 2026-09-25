@@ -191,9 +191,9 @@ function linkCitations(
       <Fragment key={key}>
         [
         {ranks.map((rank, position) => (
-          <Fragment key={`${key}-${rank}`}>
+          <Fragment key={`${key}-${position}`}>
             {position ? ", " : ""}
-            {link(rank, `${key}-${rank}-link`, rank)}
+            {link(rank, `${key}-${position}-link`, rank)}
           </Fragment>
         ))}
         ]

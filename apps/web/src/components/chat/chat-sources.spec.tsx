@@ -11,6 +11,11 @@ describe("citas del modelo", () => {
     expect(citationRanks("[1 y 2]")).toEqual([1, 2]);
     expect(citationRanks("[2012]")).toEqual([2012]);
     expect(citationRanks("texto")).toEqual([]);
+    // Fechas y rangos absurdos quedan como texto literal.
+    expect(citationRanks("[12-05-2024]")).toEqual([]);
+    expect(citationRanks("[1-05-2024]")).toEqual([]);
+    expect(citationRanks("[1-2012]")).toEqual([]);
+    expect(citationRanks("[3-1]")).toEqual([]);
   });
 });
 

@@ -29,12 +29,17 @@ export function citationRanks(citation: string): number[] {
   const ranks: number[] = [];
   const inner = citation.replace(/[[\]\s]/gu, "");
   for (const part of inner.split(/[,;]|y/u)) {
-    const [from, to] = part.split(/[–-]/u).map(Number);
-    if (to !== undefined && to >= from && to - from <= MAX_CITATION_RANGE) {
-      for (let rank = from; rank <= to; rank += 1) ranks.push(rank);
-    } else if (Number.isInteger(from)) {
+    const bounds = part.split(/[–-]/u).map(Number);
+    const [from, to] = bounds;
+    if (bounds.length === 1 && Number.isInteger(from)) {
       ranks.push(from);
+      continue;
     }
+    // Una fecha ([12-05-2024]) o un rango absurdo queda como texto literal.
+    if (bounds.length !== 2 || to < from || to - from > MAX_CITATION_RANGE) {
+      return [];
+    }
+    for (let rank = from; rank <= to; rank += 1) ranks.push(rank);
   }
   return ranks;
 }

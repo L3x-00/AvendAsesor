@@ -1091,6 +1091,13 @@ describe('evaluateAnswerCitationQuality', () => {
     expect(
       evaluateAnswerCitationQuality('No existe sustento disponible.', []),
     ).toEqual(['support_insufficient']);
+    // Una cita agrupada tras el punto pertenece a esa frase (revisión 3).
+    expect(
+      evaluateAnswerCitationQuality(
+        'La licencia se solicita mediante procedimiento institucional vigente. [1, 1]',
+        [source],
+      ),
+    ).toEqual([]);
     expect(
       evaluateAnswerCitationQualityDetails(
         'La licencia se concede automáticamente durante treinta días sin condición.',

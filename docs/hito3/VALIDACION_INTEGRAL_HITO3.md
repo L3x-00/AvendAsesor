@@ -17,8 +17,8 @@ integral con documentos y servicios reales.
    del cliente y un red-team, con el retrieval y el modelo reales. Cuatro
    corridas, la última tras las correcciones de la revisión, con el mismo
    resultado.
-4. **Pruebas automatizadas**: API 757 pruebas y web 469, todas en verde.
-5. **Revisión independiente** por dimensiones (evidencia y seguridad, API, web, ingesta) con verificación adversarial de cada hallazgo; los hallazgos confirmados se corrigieron (ver «Revisión independiente»).
+4. **Pruebas automatizadas**: API 833 pruebas y web 477, todas en verde.
+5. **Revisión independiente** en tres rondas, por dimensiones (evidencia y seguridad, API, web, ingesta), con verificación adversarial de cada hallazgo. Los hallazgos confirmados que afectan los lineamientos se corrigieron (ver «Revisión independiente»).
 
 ## Matriz de cumplimiento
 
@@ -77,6 +77,27 @@ cada hallazgo (intenta refutarlo sobre el código real):
   una aclaración, aviso «no se completó» en falso, citas en las aclaraciones
   y título del historial.
 
+- **Segunda ronda:** 1 HIGH confirmado. Una negativa del modelo sin la marca
+  («Lo siento, pero las fuentes…») se mostraba con fuentes. Se corrigió con
+  una regla fail-closed: una respuesta que no cita ninguna fuente entregada se
+  cierra como «sin evidencia». También se corrigieron la marca con corchetes
+  simples, los anuncios «Cambiando de tema» o «Nueva pregunta», las preguntas
+  de capacidad dichas con el rol, «Hola, ¿qué hora es?», el título del
+  historial y el aviso «no se completó».
+- **Ingesta:** 1 HIGH. Un anexo grande en tablas bloqueaba la API durante
+  minutos al fragmentarse. Ahora el troceo es lineal. También se corrigieron
+  el límite real de 800 tokens, la página del solapamiento (para que «Ver
+  documento» abra la página correcta), los caracteres partidos y el título de
+  un artículo separado de su cuerpo.
+- **Tercera ronda:** 3 MEDIUM corregidos:
+  - Citas agrupadas «[1, 2]»: con la regla fail-closed se cerraban como «sin
+    evidencia».
+  - Seguimientos como «¿y estos descuentos…?»: perdían el hilo.
+  - Un artículo breve se tomaba como título del siguiente.
+
+  Además, una cita a una fuente inexistente («[2012]») ya no cuenta como
+  sustento.
+
 Cada ronda de correcciones se volvió a validar con los servicios reales. Una
 regresión detectada así (el anuncio de tema nuevo) se corrigió antes de cerrar.
 
@@ -84,8 +105,9 @@ regresión detectada así (el anuncio de tema nuevo) se corrigió antes de cerra
 
 1. **Fusionar y desplegar** la rama (sin migraciones). Ver
    `RUNBOOK_ACTIVACION_EJE_B.md` §1.
-2. **Reindexar** los 3 documentos para limpiar los fragmentos duplicados
-   (§3 del runbook, autorización del PO).
+2. **Reindexar** los 3 documentos (obligatorio). Así se limpian los fragmentos
+   duplicados y se corrigen las páginas y los artículos de cada fragmento.
+   Ver §3 del runbook; requiere autorización del PO.
 3. **Cargar el corpus completo**, que incluya directivos, auxiliares y los
    procesos de los ejemplos del cliente, y **repetir la validación integral**.
 4. **Pruebas manuales** de historial y aislamiento con dos cuentas (runbook §5).
@@ -100,3 +122,15 @@ regresión detectada así (el anuncio de tema nuevo) se corrigió antes de cerra
 - La búsqueda léxica es solo desempate (AND estricto); la recuperación es
   semántica.
 - El límite de consultas es por IP (H7); todo llega desde Vercel.
+- Hallazgos LOW de la tercera ronda, registrados como mejora (casos raros que
+  no afectan los 15 casos del cliente):
+  - El solapamiento que sigue a un cuerpo largo con título puede indicar una
+    página antes.
+  - Un chunk de 100 tokens o menos puede repetirse dentro del siguiente (el
+    retrieval ya descarta el contenido).
+  - Las URL de más de 200 caracteres se guardan partidas.
+  - Las series de símbolos se acortan.
+  - El texto multibyte sin espacios sigue siendo lento de fragmentar.
+  - El aviso «no se completó» usa el reloj del navegador.
+  - La marca «tema nuevo» se pierde si la pregunta siguiente falla y se
+    reintenta.

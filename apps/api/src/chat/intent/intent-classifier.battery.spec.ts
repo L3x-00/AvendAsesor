@@ -5,6 +5,7 @@ import {
   hasEducationalSignal,
   isTopiclessQuestion,
 } from './intent-classifier';
+import { refersBack } from '../../rag/anaphora';
 import { isEllipticalFollowUp } from '../../rag/rag.service';
 
 /**
@@ -424,6 +425,36 @@ describe('regresiones de la segunda revisión (2026-09-24)', () => {
     ]) {
       expect(isEllipticalFollowUp(question)).toBe(false);
     }
+  });
+
+  it('«esta» como verbo sin tilde y «la misma UGEL» no son seguimientos (verificación de la revisión 3)', () => {
+    for (const question of [
+      '¿La UGEL me esta descontando por la huelga de docentes?',
+      '¿Por qué la UGEL me esta cobrando la licencia?',
+      '¿Dónde esta el formato de solicitud de permuta?',
+      '¿En qué norma esta la licencia por paternidad?',
+      'Mi hijo esta enfermo, ¿me corresponde licencia?',
+      '¿La plaza esta vacante para el destaque?',
+      '¿Puedo pedir permuta dentro de la misma UGEL?',
+      '¿Pueden trabajar dos docentes de la misma familia en el mismo colegio?',
+      '¿Puedo postular a reasignación y destaque a la misma vez?',
+      'Esta mañana me notificaron el cese, ¿qué hago con mi licencia?',
+    ]) {
+      expect(refersBack(question)).toBe(false);
+    }
+    for (const question of [
+      '¿Esta medida es legal?',
+      '¿Estas medidas se aplican también a los auxiliares?',
+      '¿Esta jornada laboral incluye las horas no lectivas?',
+      '¿Aplica el mismo plazo para la permuta?',
+      '¿En este caso me descuentan?',
+      '¿Dicho trámite tiene costo?',
+    ]) {
+      expect(refersBack(question)).toBe(true);
+    }
+    expect(refersBack('¿Qué ha dicho el MINEDU sobre la licencia?')).toBe(
+      false,
+    );
   });
 
   it('el demostrativo con sustantivo remite a lo anterior (revisión 3)', () => {
