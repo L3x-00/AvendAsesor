@@ -37,13 +37,17 @@ export class OpenAiAnswerGateway implements AnswerGateway {
       },
     );
 
+    let finishReason: string | null = null;
     for await (const part of stream) {
-      const token = part.choices[0]?.delta.content;
+      const choice = part.choices[0];
+      const token = choice?.delta.content;
+      finishReason = choice?.finish_reason ?? finishReason;
 
       if (token) {
         yield token;
       }
     }
+    input.onFinish?.(finishReason);
   }
 
   private createStream(

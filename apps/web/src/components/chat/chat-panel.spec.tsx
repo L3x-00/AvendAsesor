@@ -43,6 +43,7 @@ const secondModule = {
 };
 
 const conversationId = "5c8b56af-6d0c-4fef-881e-7c00907540dd";
+const newConversationId = "6d8b56af-6d0c-4fef-881e-7c00907540dd";
 const messageId = "6c8b56af-6d0c-4fef-881e-7c00907540dd";
 const questionMessageId = "bc8b56af-6d0c-4fef-881e-7c00907540dd";
 const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
@@ -483,9 +484,19 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
 
     await waitFor(() => {
-      expect(screen.getByText("Respuesta sustentada. [1]")).toBeVisible();
+      expect(
+        screen.getByText(
+          (_, element) =>
+            element?.tagName === "P" &&
+            element.textContent === "Respuesta sustentada. [1]",
+        ),
+      ).toBeVisible();
     });
     expect(await screen.findByText("Respuesta lista.")).toBeVisible();
+    // La cita [1] enlaza con su fila en Referencias (punto 8).
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toHaveAttribute("href", `#fuente-${messageId}-1`);
     expect(screen.getByText("Norma de licencias")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
@@ -651,19 +662,92 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
   });
 
-  it("renders a persisted clarification and lets the user choose its module", async () => {
+  it("shows Markdown headings as plain emphasized text and flags an unanswered saved question", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            {
+              ...eligibleConversation.messages[0],
+              id: "cc8b56af-6d0c-4fef-881e-7c00907540dd",
+            },
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "### Misión del cargo\nGestionar los aprendizajes. [[1]]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.getByText("Misión del cargo")).toBeVisible();
+    // La cita [1] del texto guardado enlaza con su fuente.
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/###/u)).not.toBeInTheDocument();
+    // La primera pregunta quedó guardada sin respuesta: se avisa para reenviarla.
+    expect(
+      screen.getByText(/Esta consulta no se completó por un problema técnico/u),
+    ).toBeVisible();
+  });
+
+  it("links grouped citations ([1, 2]) to their sources", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: "La licencia se solicita dentro de 5 días [1, 2].",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toBeVisible();
+    // La fuente 2 no existe en esta respuesta: queda como texto.
+    const paragraph = screen
+      .getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
+      .closest("p");
+    expect(paragraph?.textContent).toBe(
+      "La licencia se solicita dentro de 5 días [1, 2].",
+    );
+  });
+
+  it("renders the clarification the API really sends ({id, name}) and re-sends the question for the chosen module", async () => {
+    // Contrato real de la API: los módulos de la aclaración llegan como
+    // { id, name }. El fixture anterior usaba el ChatModule completo y ocultaba
+    // que la web descartaba TODA aclaración como «formato no válido».
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
         streamResponse([
           conversationEvent(),
-          `event: clarification\ndata: {"message":"Precisa el tema.","modules":[${JSON.stringify(chatModule)}]}\n\n`,
+          `event: clarification\ndata: {"message":"Precisa el tema.","modules":[{"id":"${chatModule.id}","name":"${chatModule.name}"}]}\n\n`,
           doneEvent("rule"),
         ]),
-      ),
-    );
+      )
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
     render(<ChatPanel modules={[chatModule]} />);
 
     await submitQuestion(user);
@@ -675,7 +759,164 @@ describe("ChatPanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Consultar Licencias" }),
     );
-    expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
+
+    // La pregunta original se reenvía sola, en una conversación nueva del tema
+    // elegido: el docente no tiene que reescribirla.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      requestBody(fetchMock.mock.calls[1] as [RequestInfo, RequestInit]),
+    ).toEqual({
+      moduleId: chatModule.id,
+      question: "¿Cómo solicito una licencia?",
+    });
+    expect(
+      await screen.findByText("No hay sustento suficiente."),
+    ).toBeVisible();
+  });
+
+  it("replaces text already shown when the turn closes as no evidence", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: sources\ndata: {"sources":[]}\n\n',
+          'event: token\ndata: {"text":"Las fuentes no mencionan el plazo."}\n\n',
+          'event: no_evidence\ndata: {"message":"No encontré sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText("No encontré sustento suficiente."),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("Las fuentes no mencionan el plazo."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts a new conversation after «Otra consulta» announces a new topic", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          'event: conversational\ndata: {"message":"¡Claro! Cuéntame tu consulta.","startsNewTopic":true}\n\n',
+        ]),
+      )
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          `event: conversation\ndata: {"conversationId":"${newConversationId}","userMessageId":"${questionMessageId}","startedNewConversation":true}\n\n`,
+          'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(null, "", `/chat/${conversationId}`);
+    render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+      { target: { value: "Otra consulta" } },
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
+    await screen.findByText("¡Claro! Cuéntame tu consulta.");
+    // Recargar ahora no reabre la conversación anterior.
+    expect(window.location.pathname).not.toContain(conversationId);
+    await submitQuestion(user);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    // La pregunta siguiente se muestra como tema nuevo.
+    expect(
+      await screen.findByText(/Nuevo tema: esta consulta se guardó/u),
+    ).toBeVisible();
+
+    expect(
+      requestBody(
+        fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit],
+      ),
+    ).toMatchObject({ conversationId });
+    expect(
+      requestBody(
+        fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
+      ),
+    ).not.toHaveProperty("conversationId");
+  });
+
+  it("flags the last saved question only when it is too old to be in progress", () => {
+    const question = eligibleConversation.messages[0];
+    const { unmount } = render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [question],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    // Guardada el 2026-08-24: la respuesta ya no puede estar en curso.
+    expect(
+      screen.getByText(/Esta consulta no se completó por un problema técnico/u),
+    ).toBeVisible();
+    unmount();
+
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [{ ...question, createdAt: new Date().toISOString() }],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    expect(
+      screen.queryByText(/Esta consulta no se completó/u),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not resend the screen module when continuing a conversation", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        conversationEvent(),
+        'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+        doneEvent("rule"),
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+
+    await submitQuestion(user);
+    await screen.findByText("No hay sustento suficiente.");
+    await submitQuestion(user);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    // Primera consulta: inicia la conversación con el módulo elegido.
+    expect(
+      requestBody(
+        fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit],
+      ),
+    ).toMatchObject({ moduleId: chatModule.id });
+    // Seguimiento: solo la conversación; el servidor usa su módulo guardado.
+    const followUp = requestBody(
+      fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
+    );
+    expect(followUp).toMatchObject({ conversationId });
+    expect(followUp).not.toHaveProperty("moduleId");
   });
 
   it("renders the persisted no-evidence outcome without a fabricated source", async () => {

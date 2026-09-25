@@ -25,6 +25,13 @@ Rama de trabajo: `feat/hito3-fase1-clasificador-intencion` (sin fusionar a `main
 
 Diferidos con justificación (se retomarán en su fase): estado "RAG en preparación" (Eje B / Fase 9), wiring de `out_of_scope` (Fase 10), `aria-live` en streaming (accesibilidad).
 
+### Actualización 2026-09-24 — cumplimiento integral y Eje B
+
+- **Fase 4 (RAG activo):** en producción desde 2026-09-22 (OpenRouter, worker, 3 documentos reales). Umbral por defecto calibrado a 0.5, marca de «sin sustento» del modelo y fragmentador sin duplicados.
+- **Fase 8 (fuentes):** citas enlazadas, fuentes citadas primero, PDF en la página citada, situación documental en la ficha.
+- **Fase 12 (validación integral):** arnés `npm run acceptance:hito3` con servicios reales: 20/21 casos PASA; el caso de directivos requiere corpus.
+- Auditoría de cumplimiento contra los 12 lineamientos y correcciones de las fases 1, 2, 3, 5, 6, 7, 9, 10 y 11 (clasificador, ruteo, continuidad, aclaraciones, historial). Detalle en `VALIDACION_INTEGRAL_HITO3.md`; pasos restantes en `RUNBOOK_ACTIVACION_EJE_B.md`.
+
 ## Marco general (aplica a todas las fases)
 
 **Principios inviolables**

@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { RETRIEVAL_RPC_NAME } from '../rag/retrieval.constants';
 import type {
   RetrievalGateway,
   RetrievedChunk,
@@ -32,7 +33,7 @@ interface SituationAwareRetrievalRow {
 
 interface SituationAwareRetrievalClient {
   rpc(
-    name: 'search_document_chunks_with_consultation_context',
+    name: typeof RETRIEVAL_RPC_NAME,
     args: {
       p_match_count: number;
       p_match_threshold: number;
@@ -63,17 +64,14 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     // owner. This narrow local contract keeps this adapter type-safe meanwhile.
     const retrievalClient = this
       .client as unknown as SituationAwareRetrievalClient;
-    const { data, error } = await retrievalClient.rpc(
-      'search_document_chunks_with_consultation_context',
-      {
-        p_match_count: input.matchCount,
-        p_match_threshold: input.matchThreshold,
-        p_query_embedding: input.embedding,
-        p_query_text: input.query,
-        p_retrieval_scope: input.retrievalScope,
-        p_selected_module_id: input.selectedModuleId,
-      },
-    );
+    const { data, error } = await retrievalClient.rpc(RETRIEVAL_RPC_NAME, {
+      p_match_count: input.matchCount,
+      p_match_threshold: input.matchThreshold,
+      p_query_embedding: input.embedding,
+      p_query_text: input.query,
+      p_retrieval_scope: input.retrievalScope,
+      p_selected_module_id: input.selectedModuleId,
+    });
     if (error) {
       throw new ServiceUnavailableException(
         'Document retrieval is temporarily unavailable.',

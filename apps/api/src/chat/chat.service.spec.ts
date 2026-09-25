@@ -7,12 +7,16 @@ import {
 } from '../rag/rag.constants';
 import {
   ChatService,
+  RAG_TRUNCATION_NOTE,
   evaluateAnswerCitationQuality,
   evaluateAnswerCitationQualityDetails,
   noEvidenceMessage,
   type ChatStreamEvent,
 } from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
+
+/** Tope de la respuesta del modelo: se reserva espacio para el aviso de corte. */
+const ANSWER_CAP = MAX_RAG_ANSWER_CHARS - `\n\n${RAG_TRUNCATION_NOTE}`.length;
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -154,7 +158,7 @@ describe('ChatService', () => {
     });
 
     const events = await collect(service, {
-      question: '¿Cuál es el plazo para presentar la solicitud?',
+      question: '¿Cuál es el plazo para presentar la solicitud de licencia?',
     });
 
     const noEvidence = events.find((event) => event.type === 'no_evidence');
@@ -171,7 +175,7 @@ describe('ChatService', () => {
     });
 
     const events = await collect(service, {
-      question: '¿Qué decía la norma anterior sobre el plazo?',
+      question: '¿Qué decía la norma anterior sobre el plazo de la licencia?',
     });
 
     const noEvidence = events.find((event) => event.type === 'no_evidence');
@@ -252,6 +256,7 @@ describe('ChatService', () => {
       question,
       null,
       expect.any(Array),
+      { forceContext: false },
     );
     expect(events.some((event) => event.type === 'conversational')).toBe(false);
   });
@@ -377,10 +382,11 @@ describe('ChatService', () => {
 
     const events = await collect(service);
 
+    // Los fragmentos previos a la primera cita se entregan juntos (ventana
+    // inicial que evita exhibir fuentes ante una negativa sin citas).
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
       'sources',
-      'token',
       'token',
       'done',
     ]);
@@ -433,6 +439,7 @@ describe('ChatService', () => {
       '¿Quién reemplaza al director cuando está de licencia?',
       null,
       expect.any(Array),
+      { forceContext: false },
     );
     const conversation = events[0];
     if (!conversation || conversation.type !== 'conversation') {
@@ -457,6 +464,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
+        yield 'La licencia se solicita mediante procedimiento institucional [1]. ';
         yield 'La licencia se concede automáticamente durante treinta días sin condición.';
       },
     });
@@ -610,10 +618,9 @@ describe('ChatService', () => {
 
     const events = await collect(service, { abortSignal: controller.signal });
 
-    expect(events.map((event) => event.type)).toEqual([
-      'conversation',
-      'sources',
-    ]);
+    // Las fuentes se emiten con el primer fragmento visible; si el cliente se
+    // desconecta antes, no se transmiten ni se guarda nada.
+    expect(events.map((event) => event.type)).toEqual(['conversation']);
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });
 
@@ -660,7 +667,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue({
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
-        yield 'x'.repeat(MAX_RAG_ANSWER_CHARS + 1);
+        yield `[1] ${'x'.repeat(MAX_RAG_ANSWER_CHARS + 1)}`;
       },
     });
 
@@ -686,7 +693,7 @@ describe('ChatService', () => {
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
         pulled += 1;
-        yield 'a'.repeat(MAX_RAG_ANSWER_CHARS - 10);
+        yield `[1] ${'a'.repeat(ANSWER_CAP - 14)}`;
         pulled += 1;
         yield 'b'.repeat(100); // cruza el tope: solo caben 10, luego se corta
         pulled += 1;
@@ -711,8 +718,10 @@ describe('ChatService', () => {
     expect(streamed).toBe(completion?.answer);
     // Tras cruzar el tope se corta el bucle: el token posterior no se transmite
     // y el generador ni siquiera se consume más allá del token que cruzó.
-    expect(streamed).not.toContain('c');
+    expect(streamed).not.toContain('cc');
     expect(pulled).toBe(2);
+    // El corte se avisa en lenguaje llano (y se guarda igual que se mostró).
+    expect(streamed.endsWith(RAG_TRUNCATION_NOTE)).toBe(true);
   });
 
   it('retains only unambiguous source-module associations and bounds scores', async () => {
@@ -777,9 +786,10 @@ describe('ChatService', () => {
     ).resolves.toEqual({ items: [], nextCursor: null });
     await expect(service.listModules()).resolves.toEqual([]);
 
+    // Retomar una conversación carga hasta 100 mensajes (el listado sigue en 20).
     expect(historyGateway.getConversation).toHaveBeenCalledWith({
       conversationId,
-      limit: 20,
+      limit: 100,
       userId: authorization.userId,
     });
     expect(historyGateway.listConversations).toHaveBeenCalledWith({
@@ -868,6 +878,7 @@ describe('ChatService', () => {
       '¿Y cuál es el plazo?',
       source.moduleIds[0],
       ['Necesito una licencia por salud.'],
+      { forceContext: false },
     );
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -908,6 +919,7 @@ describe('ChatService', () => {
       expect.any(String),
       source.moduleIds[0],
       ['Consulta anterior'],
+      { forceContext: false },
     );
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1079,6 +1091,13 @@ describe('evaluateAnswerCitationQuality', () => {
     expect(
       evaluateAnswerCitationQuality('No existe sustento disponible.', []),
     ).toEqual(['support_insufficient']);
+    // Una cita agrupada tras el punto pertenece a esa frase (revisión 3).
+    expect(
+      evaluateAnswerCitationQuality(
+        'La licencia se solicita mediante procedimiento institucional vigente. [1, 1]',
+        [source],
+      ),
+    ).toEqual([]);
     expect(
       evaluateAnswerCitationQualityDetails(
         'La licencia se concede automáticamente durante treinta días sin condición.',

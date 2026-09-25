@@ -92,17 +92,31 @@ export const chatRequestSchema = z.object({
 });
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
 
+/**
+ * Módulo candidato de una aclaración. La API solo envía `{ id, name }`; exigir el
+ * `ChatModule` completo hacía que TODA aclaración se descartara como «formato no
+ * válido» (Hito 3, punto 5).
+ */
+export const clarificationModuleSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(255),
+});
+export type ClarificationModule = z.infer<typeof clarificationModuleSchema>;
+
 export const chatStreamPayloadSchemas = {
   clarification: z.object({
     message: z.string().min(1),
-    modules: z.array(chatModuleSchema),
+    modules: z.array(clarificationModuleSchema).max(10),
   }),
   conversation: z.object({
     conversationId: z.string().uuid(),
+    moduleId: z.string().uuid().nullable().optional(),
+    startedNewConversation: z.boolean().optional(),
     userMessageId: z.string().uuid(),
   }),
   conversational: z.object({
     message: z.string().min(1).max(20_000),
+    startsNewTopic: z.boolean().optional(),
   }),
   done: z.object({
     conversationId: z.string().uuid(),

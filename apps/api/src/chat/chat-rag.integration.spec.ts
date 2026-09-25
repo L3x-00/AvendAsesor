@@ -391,7 +391,7 @@ describe('ChatService + RagService integration', () => {
 
   it('returns evidence-backed ambiguity guidance without invoking the provider', async () => {
     const events = await collect(service, {
-      question: 'Tengo requisitos ambiguos.',
+      question: 'Tengo requisitos ambiguos de licencia y de permuta.',
     });
     const clarification = events.find(
       (event) => event.type === 'clarification',
@@ -411,7 +411,7 @@ describe('ChatService + RagService integration', () => {
 
   it('registers no evidence and does not invoke the provider', async () => {
     const events = await collect(service, {
-      question: 'Pregunta fuera del corpus.',
+      question: '¿Cuáles son los requisitos de un trámite fuera del corpus?',
     });
 
     expect(events).toContainEqual({

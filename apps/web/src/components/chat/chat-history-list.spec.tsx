@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ChatHistoryList } from "./chat-history-list";
+import {
+  ChatHistoryList,
+  readableConversationTitle,
+} from "./chat-history-list";
 
 const { deleteConversationAction } = vi.hoisted(() => ({
   deleteConversationAction: vi.fn(async () => ({
@@ -55,5 +58,54 @@ describe("ChatHistoryList", () => {
     expect(
       await screen.findByText(/fue retirada de tu historial/i),
     ).toBeVisible();
+  });
+});
+
+describe("readableConversationTitle", () => {
+  it("removes the leading greeting so the topic comes first", () => {
+    expect(
+      readableConversationTitle(
+        "Hola, buenos días, quisiera saber cuánto tiempo tiene un director para responder.",
+      ),
+    ).toBe("Quisiera saber cuánto tiempo tiene un director para responder.");
+  });
+
+  it("keeps a title that is only a greeting and shortens long titles", () => {
+    expect(readableConversationTitle("Hola")).toBe("Hola");
+    expect(readableConversationTitle(null)).toBe("Consulta sin título");
+    const long = readableConversationTitle(`Requisitos ${"x".repeat(200)}`);
+    expect(long.length).toBeLessThanOrEqual(91);
+    expect(long.endsWith("…")).toBe(true);
+  });
+});
+
+describe("readableConversationTitle — revisión web", () => {
+  it("keeps the opening question mark and capitalizes the first letter", () => {
+    expect(readableConversationTitle("Hola, ¿cuánto dura la licencia?")).toBe(
+      "¿Cuánto dura la licencia?",
+    );
+  });
+
+  it("drops «¿qué tal?» and a bare «Buenas» before the question", () => {
+    expect(
+      readableConversationTitle(
+        "Hola, ¿qué tal? Quería consultar sobre mi licencia",
+      ),
+    ).toBe("Quería consultar sobre mi licencia");
+    expect(
+      readableConversationTitle("Hola ¿qué tal? ¿cómo pido licencia?"),
+    ).toBe("¿Cómo pido licencia?");
+    expect(
+      readableConversationTitle("Buenas ¿cómo solicito mi destaque?"),
+    ).toBe("¿Cómo solicito mi destaque?");
+  });
+
+  it("does not cut words that only start like a greeting", () => {
+    expect(
+      readableConversationTitle("Buenas prácticas docentes: ¿cómo postulo?"),
+    ).toBe("Buenas prácticas docentes: ¿cómo postulo?");
+    expect(readableConversationTitle("Holanda y el intercambio docente")).toBe(
+      "Holanda y el intercambio docente",
+    );
   });
 });

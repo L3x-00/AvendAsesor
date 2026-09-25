@@ -134,3 +134,69 @@ describe("chat source download BFF", () => {
     expect(await response.text()).not.toContain("offline");
   });
 });
+
+describe("chat source download BFF — experiencia del usuario", () => {
+  beforeEach(() => {
+    mocks.accessTokens.length = 0;
+    mocks.getSourceDownloadUrl.mockReset();
+    mocks.resolveAuthorizedChatSession.mockReset();
+    mocks.resolveAuthorizedChatSession.mockResolvedValue({
+      access: { role: "docente", status: "authorized", userId: "user-1" },
+      accessToken: "verified-token",
+    });
+  });
+
+  it("opens the cited page of the document", async () => {
+    mocks.getSourceDownloadUrl.mockResolvedValue({
+      expiresAt: "2026-08-27T12:01:00.000Z",
+      sourceId,
+      url: signedUrl,
+    });
+
+    const response = await GET(
+      new Request(
+        `https://avend.example/api/chat/sources/${sourceId}/download?pagina=45`,
+      ),
+      { params: Promise.resolve({ sourceId }) },
+    );
+
+    expect(response.headers.get("location")).toBe(`${signedUrl}#page=45`);
+  });
+
+  it("ignores an invalid page instead of failing", async () => {
+    mocks.getSourceDownloadUrl.mockResolvedValue({
+      expiresAt: "2026-08-27T12:01:00.000Z",
+      sourceId,
+      url: signedUrl,
+    });
+
+    const response = await GET(
+      new Request(
+        `https://avend.example/api/chat/sources/${sourceId}/download?pagina=9999`,
+      ),
+      { params: Promise.resolve({ sourceId }) },
+    );
+
+    expect(response.headers.get("location")).toBe(signedUrl);
+  });
+
+  it("shows a plain-language page when a browser tab cannot open the document", async () => {
+    mocks.getSourceDownloadUrl.mockRejectedValue(new ChatApiError(404));
+
+    const response = await GET(
+      new Request(
+        `https://avend.example/api/chat/sources/${sourceId}/download`,
+        {
+          headers: { accept: "text/html,application/xhtml+xml" },
+        },
+      ),
+      { params: Promise.resolve({ sourceId }) },
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const body = await response.text();
+    expect(body).toContain("Este documento ya no está disponible");
+    expect(body).not.toContain("SOURCE_NOT_AVAILABLE");
+  });
+});

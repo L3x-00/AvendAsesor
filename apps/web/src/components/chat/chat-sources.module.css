@@ -231,3 +231,24 @@
     width: 100%;
   }
 }
+
+/* Fragmentos revisados que la respuesta no cita: plegados, sin presentarse
+   como sustento. */
+.others {
+  margin-top: 0.875rem;
+}
+
+.others summary {
+  color: var(--avend-accent-strong);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  min-height: 2.75rem;
+  padding: 0.5rem 0;
+}
+
+.others summary:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}

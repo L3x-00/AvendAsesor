@@ -13,6 +13,7 @@ import { ModulePermissionsModule } from './module-permissions/module-permissions
 import { UsersModule } from './users/users.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { RagModule } from './rag/rag.module';
+import { RagAdminModule } from './rag-admin/rag-admin.module';
 import { ChatModule } from './chat/chat.module';
 import { OperationsModule } from './operations/operations.module';
 import { UserAdministrationModule } from './user-administration/user-administration.module';
@@ -41,6 +42,7 @@ import { ConsultationCasesModule } from './consultation-cases/consultation-cases
     HealthModule,
     IngestionModule,
     RagModule,
+    RagAdminModule,
     ModulePermissionsModule,
     ModulesModule,
     OperationsModule,
