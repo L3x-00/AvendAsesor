@@ -9,6 +9,8 @@ import {
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { AdminPage } from "@/components/admin/admin-page";
+import { DeleteDisclosure } from "@/components/admin/delete-disclosure";
+import { DocumentAuditHistory } from "@/components/admin/document-audit-history";
 import { DocumentEditButton } from "@/components/admin/document-edit-button";
 import { DocumentEditCancelButton } from "@/components/admin/document-edit-cancel-button";
 import { DocumentEditSection } from "@/components/admin/document-edit-section";
@@ -101,27 +103,6 @@ function editableMetadata(metadata: Record<string, unknown>): string {
   delete editable.issuingEntityOther;
   delete editable.specificDependency;
   return Object.keys(editable).length ? JSON.stringify(editable, null, 2) : "";
-}
-
-function auditActionLabel(
-  action: string,
-  details: Record<string, unknown>,
-): string {
-  if (details.event === "technical_status_changed")
-    return "Estado técnico actualizado";
-  const labels: Record<string, string> = {
-    activated: "Documento marcado como vigente",
-    created: "Documento creado",
-    deactivated: "Documento archivado o reemplazado",
-    download_url_generated: "PDF descargado o visualizado",
-    logically_deleted: "Documento eliminado lógicamente",
-    metadata_updated: "Datos documentales actualizados",
-    module_linked: "Asociación agregada",
-    module_unlinked: "Asociación retirada",
-    restored: "Documento restaurado",
-    version_added: "Nueva versión cargada",
-  };
-  return labels[action] ?? action;
 }
 
 export default async function DocumentDetailPage({
@@ -643,41 +624,19 @@ export default async function DocumentDetailPage({
               )}
             </section>
 
-            <section
-              className="rounded-xl border border-avend-border bg-avend-surface p-5"
-              id="audit-history"
-            >
-              <h2 className="text-xl font-bold">Historial del documento</h2>
-              {document.auditEvents.length ? (
-                <ol className="mt-4 space-y-3">
-                  {document.auditEvents.map((event) => (
-                    <li
-                      className="rounded-lg border border-avend-border p-4"
-                      key={event.id}
-                    >
-                      <h3 className="text-base font-bold">
-                        {auditActionLabel(event.action, event.details)}
-                      </h3>
-                      <p className="mt-1 text-base text-avend-text-muted">
-                        <time dateTime={event.occurredAt}>
-                          {dateTimeFormatter.format(new Date(event.occurredAt))}
-                        </time>{" "}
-                        · {event.actorName ?? "Sistema"}
-                      </p>
-                      {Object.keys(event.details).length ? (
-                        <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md bg-avend-surface-muted p-3 text-base">
-                          {JSON.stringify(event.details, null, 2)}
-                        </pre>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="mt-4 text-base text-avend-text-muted">
-                  Aún no hay eventos registrados.
-                </p>
-              )}
-            </section>
+            <DocumentAuditHistory
+              context={{
+                documentTitleById: new Map(
+                  replacementDocument
+                    ? [[replacementDocument.id, replacementDocument.title]]
+                    : [],
+                ),
+                moduleNameById: new Map(
+                  modules.map((module) => [module.id, module.name]),
+                ),
+              }}
+              events={document.auditEvents}
+            />
           </div>
 
           <div className="space-y-6">
@@ -785,11 +744,23 @@ export default async function DocumentDetailPage({
                         {modulePath(module, modules)}
                       </Link>
                       {associatedModules.length > 1 ? (
+                        <div className="mt-2">
+                        <DeleteDisclosure
+                          description={
+                            <p>
+                              El documento dejará de estar en este módulo. El
+                              PDF y sus demás asociaciones se conservan.
+                            </p>
+                          }
+                          size="compact"
+                          title="¿Quitar esta asociación?"
+                          triggerLabel="Quitar asociación"
+                        >
                         <AdminActionForm
                           action={unlinkDocumentModuleAction}
-                          className="mt-2 space-y-2"
-                          confirmMessage="¿Confirmas quitar esta asociación? El PDF y las demás asociaciones se conservarán."
-                          submitLabel="Quitar asociación"
+                          className="space-y-2"
+                          submitLabel="Sí, quitar asociación"
+                          tone="danger"
                         >
                           <input
                             name="documentId"
@@ -802,6 +773,8 @@ export default async function DocumentDetailPage({
                             value={module.id}
                           />
                         </AdminActionForm>
+                        </DeleteDisclosure>
+                        </div>
                       ) : (
                         <p className="mt-1 text-base text-avend-text-muted">
                           Asociación principal; agrega otra antes de quitarla.
@@ -843,19 +816,26 @@ export default async function DocumentDetailPage({
             </section>
 
             <section
-              className="rounded-xl border border-red-300 bg-red-50 p-5"
+              aria-label="Eliminar documento"
+              className="rounded-xl border border-avend-border bg-avend-surface p-5"
               id="delete-document"
             >
-              <h2 className="text-xl font-bold text-red-900">Eliminar</h2>
-              <p className="mt-1 text-base text-red-800">
-                La eliminación es lógica: conserva el PDF, las versiones y la
-                trazabilidad.
-              </p>
+              <DeleteDisclosure
+                description={
+                  <p>
+                    La eliminación es lógica: el documento sale de la gestión
+                    habitual, pero se conservan el PDF, sus versiones y el
+                    historial.
+                  </p>
+                }
+                title="¿Eliminar este documento?"
+                triggerLabel="Eliminar documento"
+              >
               <AdminActionForm
                 action={deleteDocumentAction}
-                className="mt-4 space-y-3"
-                confirmMessage="¿Confirmas la eliminación lógica de este documento?"
-                submitLabel="Eliminar lógicamente"
+                className="space-y-3"
+                submitLabel="Sí, eliminar documento"
+                tone="danger"
                 rules={{ reason: [
                   { kind: "required", label: "El motivo" },
                   { kind: "minLength", label: "El motivo", min: 2 },
@@ -875,6 +855,7 @@ export default async function DocumentDetailPage({
                   />
                 </label>
               </AdminActionForm>
+              </DeleteDisclosure>
             </section>
           </div>
         </div>

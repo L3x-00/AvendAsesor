@@ -28,14 +28,22 @@ interface AdminActionFormProps {
   submitLabel: string;
   /** Texto del aviso de éxito. Si se omite se usa el mensaje de la acción. */
   successMessage?: string;
+  /** "danger": botón rojo para confirmar acciones destructivas. */
+  tone?: "danger" | "primary";
 }
 
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({
+  label,
+  tone = "primary",
+}: {
+  label: string;
+  tone?: "danger" | "primary";
+}) {
   const { pending } = useFormStatus();
 
   return (
     <button
-      className="avend-button avend-button--primary avend-admin-submit"
+      className={`avend-button ${tone === "danger" ? "avend-button--danger" : "avend-button--primary"} avend-admin-submit`}
       disabled={pending}
       type="submit"
     >
@@ -53,6 +61,7 @@ export function AdminActionForm({
   rules = {},
   submitLabel,
   successMessage,
+  tone = "primary",
 }: AdminActionFormProps) {
   const [state, formAction] = useActionState(action, initialAdminActionState);
   const { showToast } = useToast();
@@ -118,7 +127,7 @@ export function AdminActionForm({
           Abrir descarga temporal
         </a>
       ) : null}
-      <SubmitButton label={submitLabel} />
+      <SubmitButton label={submitLabel} tone={tone} />
     </ValidatedForm>
   );
 }

@@ -1,0 +1,109 @@
+.trigger {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-danger);
+  border-radius: 0.625rem;
+  color: var(--avend-danger);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.trigger svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.125rem;
+}
+
+.trigger:hover {
+  background: var(--avend-danger);
+  color: #ffffff;
+}
+
+.trigger:focus-visible,
+.cancel:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.compact {
+  font-size: 0.9375rem;
+  padding: 0 0.75rem;
+}
+
+.panel {
+  animation: delete-open 220ms ease-out both;
+  background: var(--avend-danger-soft-surface);
+  border: 1px solid var(--avend-danger-soft-border);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.title {
+  color: #7a271a;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.description {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.description p {
+  margin: 0;
+}
+
+.form {
+  margin-top: 0.25rem;
+}
+
+.cancel {
+  background: transparent;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+}
+
+.cancel:hover {
+  background: var(--avend-surface);
+}
+
+@keyframes delete-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+
+  .trigger {
+    transition: none;
+  }
+}

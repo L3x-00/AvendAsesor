@@ -10,6 +10,7 @@ import {
   updateModuleAction,
 } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { DeleteDisclosure } from "@/components/admin/delete-disclosure";
 import { FieldError } from "@/components/ui/form-field";
 import type { FieldRules } from "@/lib/ui/field-validation";
 import styles from "./modules-explorer.module.css";
@@ -248,11 +249,33 @@ export function ModuleManageDetails({
               submódulos para poder eliminar el módulo.
             </p>
           ) : (
+            <DeleteDisclosure
+              description={
+                <p>
+                  {module.parentModuleId ? "El submódulo" : "El módulo"} dejará
+                  de aparecer para los docentes y en la gestión. La eliminación
+                  es lógica: se conserva su historial.
+                </p>
+              }
+              title={
+                module.parentModuleId
+                  ? "¿Eliminar este submódulo?"
+                  : "¿Eliminar este módulo?"
+              }
+              triggerLabel={
+                module.parentModuleId ? "Eliminar submódulo" : "Eliminar módulo"
+              }
+            >
             <AdminActionForm
               action={deleteModuleAction}
               rules={MODULE_REASON_RULES}
-              submitLabel="Eliminar (lógico)"
+              submitLabel={
+                module.parentModuleId
+                  ? "Sí, eliminar submódulo"
+                  : "Sí, eliminar módulo"
+              }
               onSuccess={closeForm}
+              tone="danger"
             >
               <input name="moduleId" type="hidden" value={module.id} />
               {/* Tras el borrado, el servidor redirige aquí para no quedar en la
@@ -282,6 +305,7 @@ export function ModuleManageDetails({
                 <FieldError name="reason" />
               </label>
             </AdminActionForm>
+            </DeleteDisclosure>
           )}
         </div>
       </div>
