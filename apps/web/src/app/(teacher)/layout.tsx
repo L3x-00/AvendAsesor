@@ -19,11 +19,11 @@ export default async function TeacherLayout({
 }: {
   children: ReactNode;
 }) {
-  const { client, role } = await resolveAuthorizedChatContext();
+  const { client, fullName, role } = await resolveAuthorizedChatContext();
   const modules = await client.listModules();
 
   return (
-    <TeacherShell modules={modules} role={role}>
+    <TeacherShell fullName={fullName} modules={modules} role={role}>
       {children}
     </TeacherShell>
   );

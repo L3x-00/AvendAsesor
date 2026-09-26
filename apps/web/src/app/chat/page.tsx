@@ -6,7 +6,7 @@ export default async function ChatPage({
 }: {
   searchParams: Promise<{ module?: string | string[] }>;
 }) {
-  const { client, role } = await resolveAuthorizedChatContext();
+  const { client, fullName, role } = await resolveAuthorizedChatContext();
   const modules = await client.listModules();
   const { module } = await searchParams;
   const initialModuleId = typeof module === "string" ? module : undefined;
@@ -14,6 +14,7 @@ export default async function ChatPage({
   return (
     <ChatPanel
       initialModuleId={initialModuleId}
+      fullName={fullName}
       modules={modules}
       role={role}
     />

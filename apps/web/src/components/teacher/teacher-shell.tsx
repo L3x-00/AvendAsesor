@@ -11,6 +11,7 @@ import {
 } from "react";
 import { BrandLogo } from "@/components/ui/brand-logo";
 import type { ChatModule } from "@/lib/chat-api/types";
+import { AccountBadge } from "./account-badge";
 
 type TeacherSection = "chat" | "guide" | "history" | "profile";
 type TeacherRole = "docente" | "admin" | "superadmin";
@@ -71,6 +72,8 @@ interface TeacherShellProps {
    * se deduce de la ruta actual. */
   activeSection?: TeacherSection;
   children: ReactNode;
+  /** Nombre del perfil: se muestra junto a "Cerrar sesión". */
+  fullName?: string | null;
   moduleNavigationDisabled?: boolean;
   modules: ChatModule[];
   onModuleSelect?: (moduleId: string) => void;
@@ -151,6 +154,7 @@ function TeacherModuleIcon({ moduleName }: { moduleName: string }) {
 
 function TeacherNavigation({
   activeSection,
+  fullName,
   moduleNavigationDisabled,
   modules,
   onModuleSelect,
@@ -160,6 +164,7 @@ function TeacherNavigation({
 }: Pick<
   TeacherShellProps,
   | "activeSection"
+  | "fullName"
   | "moduleNavigationDisabled"
   | "modules"
   | "onModuleSelect"
@@ -269,6 +274,7 @@ function TeacherNavigation({
         Mi perfil
       </Link>
 
+      <AccountBadge fullName={fullName} role={role} />
       <form
         action="/auth/sign-out"
         className="avend-teacher-sign-out"
@@ -290,6 +296,7 @@ function TeacherNavigation({
 export function TeacherShell({
   activeSection,
   children,
+  fullName,
   moduleNavigationDisabled,
   modules,
   onModuleSelect,
@@ -355,6 +362,7 @@ export function TeacherShell({
         />
         <TeacherNavigation
           activeSection={currentSection}
+          fullName={fullName}
           moduleNavigationDisabled={moduleNavigationDisabled}
           modules={modules}
           onModuleSelect={onModuleSelect}
@@ -392,6 +400,7 @@ export function TeacherShell({
             </summary>
             <TeacherNavigation
               activeSection={currentSection}
+              fullName={fullName}
               moduleNavigationDisabled={moduleNavigationDisabled}
               modules={modules}
               onModuleSelect={

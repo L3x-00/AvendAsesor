@@ -1654,7 +1654,7 @@ textarea[aria-invalid="true"]:focus,
   padding: 1rem;
 }
 
-.avend-history-item h2 {
+.avend-history-item h3 {
   color: var(--avend-text);
   font-size: 1.125rem;
   line-height: 1.4;

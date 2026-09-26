@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ChatPanel } from "./chat-panel";
+import { ChatPanel, FRIENDLY_ERRORS } from "./chat-panel";
 
 const chatModule = {
   code: "LICENSES",
@@ -513,6 +513,27 @@ describe("ChatPanel", () => {
     );
   });
 
+  it("saluda por el nombre y un ejemplo solo rellena el cuadro, sin enviar", async () => {
+    const user = userEvent.setup();
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    render(<ChatPanel fullName="MARÍA pérez" modules={[chatModule]} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Hola, María. ¿En qué te ayudo hoy?" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: /¿Qué requisitos necesito para solicitar una reasignación?/,
+      }),
+    );
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    expect(box).toHaveValue("¿Qué requisitos necesito para solicitar una reasignación?");
+    expect(box).toHaveFocus();
+    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+  });
+
   it("keeps the empty module state explicit instead of inventing a category", () => {
     render(<ChatPanel modules={[]} />);
 
@@ -520,7 +541,7 @@ describe("ChatPanel", () => {
       screen.getByText(/Aún no hay módulos activos para filtrar/i),
     ).toBeVisible();
     expect(
-      screen.getByText(/Escribe una consulta para recibir/i),
+      screen.getByText(/Escribe una consulta sobre procesos/i),
     ).toBeVisible();
     expect(
       screen.queryByText(/Selecciona el tema relacionado/i),
@@ -590,11 +611,11 @@ describe("ChatPanel", () => {
   });
 
   it.each([
-    [401, "Tu sesión expiró. Inicia sesión nuevamente."],
-    [403, "No tienes permiso para realizar esta consulta."],
-    [429, "Alcanzaste el límite de consultas. Espera un minuto."],
-    [503, "El servicio de consulta no está disponible por el momento."],
-    [500, "No fue posible procesar la consulta. Inténtalo nuevamente."],
+    [401, FRIENDLY_ERRORS.sessionExpired],
+    [403, FRIENDLY_ERRORS.forbidden],
+    [429, FRIENDLY_ERRORS.rateLimited],
+    [503, FRIENDLY_ERRORS.unavailable],
+    [500, FRIENDLY_ERRORS.generic],
   ])("shows a safe request error for HTTP %i", async (status, message) => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
@@ -616,6 +637,38 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("ofrece volver a enviar la consulta con un toque tras un error", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const request = vi.fn(async () => new Response(null, { status: 503 }));
+    vi.stubGlobal("fetch", request);
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+    await user.click(
+      await screen.findByRole("button", { name: "Volver a enviar" }),
+    );
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  });
+
+  it("si la sesión caducó, lleva a iniciar sesión en vez de reintentar", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 401 })),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByRole("link", { name: "Iniciar sesión" }),
+    ).toHaveAttribute("href", "/auth/sign-in?sesion=caducada");
+    expect(screen.queryByRole("button", { name: "Volver a enviar" })).toBeNull();
+  });
+
   it("does not retain a partial reply if the stream emits a controlled error", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
@@ -635,7 +688,7 @@ describe("ChatPanel", () => {
 
     expect(
       await screen.findByText(
-        "No se pudo completar la respuesta. No se guardó contenido parcial.",
+        FRIENDLY_ERRORS.streamFailed,
       ),
     ).toBeVisible();
     expect(document.querySelectorAll(".avend-chat-message--user")).toHaveLength(
@@ -662,7 +715,7 @@ describe("ChatPanel", () => {
 
     expect(
       await screen.findByText(
-        "Se interrumpió la conexión. No se guardó contenido parcial.",
+        FRIENDLY_ERRORS.connection,
       ),
     ).toBeVisible();
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
@@ -982,31 +1035,31 @@ describe("ChatPanel", () => {
   it.each([
     [
       "event: conversation\ndata: {}\n\n",
-      "La conversación recibida no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       "event: conversational\ndata: {}\n\n",
-      "La respuesta recibida no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       `${conversationEvent()}event: sources\ndata: {"sources":[{}]}\n\n`,
-      "Las referencias recibidas no tienen un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       `${conversationEvent()}event: token\ndata: {"text":""}\n\n`,
-      "La respuesta recibida no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       `${conversationEvent()}event: done\ndata: {}\n\n`,
-      "El cierre de la respuesta no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       `${conversationEvent()}event: clarification\ndata: {"message":"Precisa el tema."}\n\n`,
-      "La aclaración recibida no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
     [
       `${conversationEvent()}event: no_evidence\ndata: {}\n\n`,
-      "El resultado recibido no tiene un formato válido.",
+      FRIENDLY_ERRORS.malformed,
     ],
   ])("rejects malformed %s SSE payloads", async (frame, message) => {
     const user = userEvent.setup();
@@ -1051,7 +1104,7 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
     expect(
       await screen.findByText(
-        "La respuesta recibida no tiene un formato válido.",
+        FRIENDLY_ERRORS.malformed,
       ),
     ).toBeVisible();
     unmount();
@@ -1064,7 +1117,7 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
     expect(
       await screen.findByText(
-        "Se interrumpió la conexión. No se guardó contenido parcial.",
+        FRIENDLY_ERRORS.connection,
       ),
     ).toBeVisible();
   });

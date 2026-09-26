@@ -1,6 +1,14 @@
 import { ChatHistoryList } from "@/components/chat/chat-history-list";
 import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 
+/**
+ * Instante de esta petición. Es a propósito un valor "impuro": el servidor lo
+ * fija UNA vez y viaja al cliente como prop, así la hidratación usa el mismo.
+ */
+function requestTime(): number {
+  return Date.now();
+}
+
 export default async function HistoryPage({
   searchParams,
 }: {
@@ -26,6 +34,7 @@ export default async function HistoryPage({
       <ChatHistoryList
         conversations={conversationPage.items}
         nextCursor={conversationPage.nextCursor}
+        now={requestTime()}
       />
     </section>
   );
