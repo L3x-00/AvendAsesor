@@ -1,0 +1,657 @@
+/*
+ * Experiencia del panel docente (TSK-0056): errores amables, bienvenida del
+ * chat, historial agrupado, perfil e identidad en la barra lateral.
+ * Movimiento breve y siempre anulado con prefers-reduced-motion.
+ */
+
+/* ---------- Errores de ruta ---------- */
+.avend-route-error {
+  display: grid;
+  padding: 1rem;
+  place-items: center;
+}
+
+.avend-route-error--section {
+  min-height: 60vh;
+}
+
+.avend-route-error--page {
+  background: var(--avend-surface-muted);
+  min-height: 100dvh;
+}
+
+.avend-route-error-card {
+  animation: avend-rise-in 360ms var(--avend-ease-interaction) both;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--avend-shadow-card);
+  max-width: 34rem;
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  text-align: center;
+  width: 100%;
+}
+
+.avend-route-error-icon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 50%;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  height: 4rem;
+  justify-content: center;
+  width: 4rem;
+}
+
+.avend-route-error-icon svg {
+  height: 2rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 2rem;
+}
+
+.avend-route-error-card h1 {
+  color: var(--avend-navy);
+  font-size: clamp(1.375rem, 3vw, 1.625rem);
+  line-height: 1.3;
+  margin: 1rem 0 0;
+  outline: none;
+}
+
+.avend-route-error-card > p {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.75rem 0 0;
+}
+
+.avend-route-error-card > p.avend-route-error-hint {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  margin-top: 1.25rem;
+}
+
+.avend-route-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-route-error-card {
+    animation: none;
+  }
+}
+
+/* ---------- Error dentro del chat ---------- */
+.avend-chat-error {
+  align-items: flex-start;
+  animation: avend-rise-in 280ms var(--avend-ease-interaction) both;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.avend-chat-error-icon {
+  color: var(--avend-danger);
+  flex: none;
+  height: 1.5rem;
+  margin-top: 0.0625rem;
+  width: 1.5rem;
+}
+
+.avend-chat-error-icon svg {
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.9;
+  width: 100%;
+}
+
+.avend-chat-error-body {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: start;
+  min-width: 0;
+}
+
+.avend-chat-error-body .avend-button {
+  margin-top: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-error {
+    animation: none;
+  }
+}
+
+/* ---------- Bienvenida del chat ---------- */
+.avend-chat-welcome {
+  animation: avend-rise-in 380ms var(--avend-ease-interaction) both;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(22 119 255 / 10%), transparent 45%),
+    var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1.125rem;
+  box-shadow: var(--avend-shadow-surface);
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.avend-chat-welcome-mark {
+  align-items: center;
+  background: var(--avend-navy);
+  border-radius: 0.875rem;
+  color: #ffffff;
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.avend-chat-welcome-mark svg {
+  height: 1.5rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 1.5rem;
+}
+
+.avend-chat-welcome h2 {
+  color: var(--avend-navy);
+  font-size: clamp(1.375rem, 3vw, 1.75rem);
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 1rem 0 0;
+}
+
+.avend-chat-welcome-text {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.5rem 0 0;
+  max-width: 46rem;
+}
+
+.avend-chat-welcome-label {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0;
+}
+
+.avend-chat-suggestions {
+  display: grid;
+  gap: 0.625rem;
+  list-style: none;
+  margin: 0.625rem 0 0;
+  padding: 0;
+}
+
+.avend-chat-suggestions li {
+  animation: avend-rise-in 360ms var(--avend-ease-interaction) both;
+}
+
+.avend-chat-suggestions button {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  color: var(--avend-text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 1rem;
+  gap: 0.75rem;
+  justify-content: space-between;
+  line-height: 1.45;
+  min-height: 3rem;
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+  transition:
+    background-color 160ms var(--avend-ease-interaction),
+    border-color 160ms var(--avend-ease-interaction),
+    transform 160ms var(--avend-ease-interaction);
+  width: 100%;
+}
+
+.avend-chat-suggestions button svg {
+  color: var(--avend-accent-strong);
+  flex: none;
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  transition: transform 160ms var(--avend-ease-interaction);
+  width: 1.125rem;
+}
+
+.avend-chat-suggestions button:not(:disabled):hover {
+  background: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 35%);
+}
+
+.avend-chat-suggestions button:not(:disabled):hover svg {
+  transform: translateX(3px);
+}
+
+.avend-chat-suggestions button:not(:disabled):active {
+  transform: scale(0.99);
+}
+
+.avend-chat-suggestions button:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.avend-chat-suggestions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (min-width: 48rem) {
+  .avend-chat-suggestions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* La consulta enviada entra con un leve ascenso. Las respuestas no: al
+   terminar de escribirse cambian de clave y se re-montarían con parpadeo. */
+.avend-chat-message--user {
+  animation: avend-rise-in 260ms var(--avend-ease-interaction) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-welcome,
+  .avend-chat-suggestions li,
+  .avend-chat-message--user {
+    animation: none;
+  }
+
+  .avend-chat-suggestions button,
+  .avend-chat-suggestions button svg {
+    transition: none;
+  }
+}
+
+/* ---------- Identidad de la cuenta ---------- */
+.avend-account-badge {
+  align-items: center;
+  border-radius: 0.75rem;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.avend-account-avatar {
+  align-items: center;
+  background: var(--avend-accent-strong);
+  border-radius: 50%;
+  color: #ffffff;
+  display: inline-flex;
+  flex: none;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  height: 2.5rem;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  width: 2.5rem;
+}
+
+.avend-account-text {
+  display: grid;
+  min-width: 0;
+}
+
+.avend-account-name {
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avend-account-role {
+  color: var(--avend-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+/* En la barra lateral (fondo azul marino) el texto va claro. */
+.avend-teacher-sidebar .avend-account-badge {
+  background: rgb(255 255 255 / 6%);
+  margin-top: 0.5rem;
+}
+
+.avend-teacher-sidebar .avend-account-name {
+  color: #ffffff;
+}
+
+.avend-teacher-sidebar .avend-account-role {
+  color: rgb(255 255 255 / 72%);
+}
+
+.avend-teacher-mobile-menu .avend-account-badge {
+  background: var(--avend-surface-muted);
+  margin-top: 0.25rem;
+}
+
+.avend-account-badge--large {
+  gap: 1rem;
+  padding: 0;
+}
+
+.avend-account-badge--large .avend-account-avatar {
+  font-size: 1.375rem;
+  height: 4rem;
+  width: 4rem;
+}
+
+.avend-account-badge--large .avend-account-name {
+  font-size: 1.25rem;
+  white-space: normal;
+}
+
+.avend-account-badge--large .avend-account-role {
+  font-size: 1rem;
+}
+
+/* ---------- Perfil ---------- */
+.avend-profile-card {
+  animation: avend-rise-in 320ms var(--avend-ease-interaction) both;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1.125rem;
+  box-shadow: var(--avend-shadow-surface);
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.avend-profile-facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.avend-profile-facts > div {
+  background: var(--avend-surface-muted);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+}
+
+.avend-profile-facts dt {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+}
+
+.avend-profile-facts dd {
+  align-items: center;
+  color: var(--avend-text);
+  display: flex;
+  font-size: 1.125rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+}
+
+.avend-status-dot {
+  background: var(--avend-success);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--avend-success-soft-surface);
+  height: 0.625rem;
+  width: 0.625rem;
+}
+
+.avend-profile-subtitle {
+  color: var(--avend-text);
+  font-size: 1.25rem;
+  margin: 2rem 0 0;
+}
+
+.avend-profile-shortcuts {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.avend-profile-shortcuts a {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  color: inherit;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 2.75rem;
+  padding: 1rem 1.125rem;
+  text-decoration: none;
+  transition:
+    border-color 160ms var(--avend-ease-interaction),
+    box-shadow 160ms var(--avend-ease-interaction),
+    transform 160ms var(--avend-ease-interaction);
+}
+
+.avend-profile-shortcuts strong {
+  color: var(--avend-navy);
+  font-size: 1.0625rem;
+}
+
+.avend-profile-shortcuts span {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+}
+
+.avend-profile-shortcuts a:hover {
+  border-color: rgb(22 119 255 / 35%);
+  box-shadow: var(--avend-shadow-card);
+}
+
+.avend-profile-shortcuts a:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+@media (min-width: 48rem) {
+  .avend-profile-card {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+
+  .avend-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .avend-profile-shortcuts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .avend-profile-shortcuts a:hover {
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-profile-card {
+    animation: none;
+  }
+
+  .avend-profile-shortcuts a {
+    transition: none;
+  }
+}
+
+/* ---------- Historial ---------- */
+.avend-history-results > section + section {
+  margin-top: 1.75rem;
+}
+
+.avend-history-group-title {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 1.5rem 0 0;
+  text-transform: uppercase;
+}
+
+.avend-history-group-title + .avend-history-list {
+  margin-top: 0.75rem;
+}
+
+.avend-history-item {
+  animation: avend-rise-in 300ms var(--avend-ease-interaction) both;
+}
+
+.avend-history-remove {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.625rem;
+  color: var(--avend-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  transition:
+    background-color 150ms var(--avend-ease-interaction),
+    color 150ms var(--avend-ease-interaction);
+}
+
+.avend-history-remove svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.125rem;
+}
+
+.avend-history-remove:hover {
+  background: var(--avend-danger-soft-surface);
+  color: var(--avend-danger);
+}
+
+.avend-history-remove:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.avend-history-confirm {
+  animation: avend-rise-in 220ms var(--avend-ease-interaction) both;
+  background: var(--avend-danger-soft-surface);
+  border: 1px solid var(--avend-danger-soft-border);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  width: 100%;
+}
+
+.avend-history-confirm p {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.avend-history-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
+.avend-button--danger {
+  background: var(--avend-danger);
+  border-color: var(--avend-danger);
+  color: #ffffff;
+}
+
+.avend-button--danger:not(:disabled):hover {
+  background: #912018;
+  border-color: #912018;
+}
+
+.avend-history-empty {
+  animation: avend-rise-in 320ms var(--avend-ease-interaction) both;
+  background: var(--avend-surface);
+  border: 1px dashed var(--avend-control-border);
+  border-radius: 1.125rem;
+  margin-top: 1.5rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  text-align: center;
+}
+
+.avend-history-empty-icon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 50%;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  height: 3.5rem;
+  justify-content: center;
+  width: 3.5rem;
+}
+
+.avend-history-empty-icon svg {
+  height: 1.75rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+  width: 1.75rem;
+}
+
+.avend-history-empty h2 {
+  color: var(--avend-text);
+  font-size: 1.25rem;
+  margin: 1rem 0 0;
+}
+
+.avend-history-empty p {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.5rem auto 1.25rem;
+  max-width: 32rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-history-item,
+  .avend-history-confirm,
+  .avend-history-empty {
+    animation: none;
+  }
+}
+
+.avend-history-confirm-actions .avend-button {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* En escritorio la confirmación no debe estrujar el título de la consulta. */
+@media (min-width: 48rem) {
+  .avend-history-confirm {
+    max-width: 19rem;
+  }
+}
+
+/* En el teléfono, dos ejemplos bastan: el cuadro de consulta queda a la vista. */
+@media (max-width: 47.999rem) {
+  .avend-chat-suggestions li:nth-child(n + 3) {
+    display: none;
+  }
+}

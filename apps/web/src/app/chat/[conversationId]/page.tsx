@@ -12,7 +12,7 @@ export default async function ConversationPage({
   params,
 }: ConversationPageProps) {
   const { conversationId } = await params;
-  const { client, role } = await resolveAuthorizedChatContext();
+  const { client, fullName, role } = await resolveAuthorizedChatContext();
   let conversation: ChatConversationDetail;
   let modules: ChatModule[];
 
@@ -29,6 +29,7 @@ export default async function ConversationPage({
   return (
     <ChatPanel
       initialConversation={conversation}
+      fullName={fullName}
       modules={modules}
       role={role}
     />

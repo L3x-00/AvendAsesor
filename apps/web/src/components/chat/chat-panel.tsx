@@ -22,6 +22,7 @@ import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { VoicePill } from "@/components/ui/voice-pill";
 import { ChatThinking, ChatWriting } from "./chat-thinking";
+import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import {
   CITATION_TOKEN,
@@ -57,6 +58,8 @@ const STALE_QUESTION_MS = 3 * 60_000;
 interface ChatPanelProps {
   initialConversation?: ChatConversationDetail;
   initialModuleId?: string;
+  /** Nombre del perfil, para saludar en la bienvenida y en la barra lateral. */
+  fullName?: string | null;
   modules: ChatModule[];
   role?: "docente" | "admin" | "superadmin";
 }
@@ -105,16 +108,35 @@ function initialMessages(
   }));
 }
 
+/**
+ * Mensajes de error en lenguaje llano: dicen qué pasó y qué hacer, sin
+ * términos técnicos. La consulta siempre vuelve al cuadro para reenviarla.
+ */
+export const FRIENDLY_ERRORS = {
+  connection:
+    "Se cortó la conexión mientras preparábamos la respuesta. Revisa tu internet y vuelve a enviarla; no guardamos una respuesta a medias.",
+  forbidden:
+    "Tu cuenta no tiene acceso a las consultas en este momento. Si crees que es un error, avisa a la persona responsable de la plataforma.",
+  generic:
+    "No pudimos procesar tu consulta esta vez. Espera unos segundos y vuelve a enviarla.",
+  malformed:
+    "Algo no salió bien al recibir la respuesta. Vuelve a enviar tu consulta; si se repite, inténtalo en unos minutos.",
+  rateLimited:
+    "Enviaste varias consultas seguidas. Espera un minuto y vuelve a enviarla.",
+  sessionExpired:
+    "Tu sesión se cerró por seguridad. Vuelve a iniciar sesión para continuar.",
+  streamFailed:
+    "La respuesta se interrumpió antes de terminar y no guardamos una versión a medias. Vuelve a enviar tu consulta.",
+  unavailable:
+    "El asistente no está disponible en este momento. Inténtalo de nuevo en unos minutos.",
+} as const;
+
 function requestError(response: Response): string {
-  if (response.status === 401)
-    return "Tu sesión expiró. Inicia sesión nuevamente.";
-  if (response.status === 403)
-    return "No tienes permiso para realizar esta consulta.";
-  if (response.status === 429)
-    return "Alcanzaste el límite de consultas. Espera un minuto.";
-  if (response.status === 503)
-    return "El servicio de consulta no está disponible por el momento.";
-  return "No fue posible procesar la consulta. Inténtalo nuevamente.";
+  if (response.status === 401) return FRIENDLY_ERRORS.sessionExpired;
+  if (response.status === 403) return FRIENDLY_ERRORS.forbidden;
+  if (response.status === 429) return FRIENDLY_ERRORS.rateLimited;
+  if (response.status === 503) return FRIENDLY_ERRORS.unavailable;
+  return FRIENDLY_ERRORS.generic;
 }
 
 function parseSseFrames(buffer: string): {
@@ -365,6 +387,7 @@ function getServerSpeechRecognitionSupportSnapshot(): boolean {
 }
 
 export function ChatPanel({
+  fullName,
   initialConversation,
   initialModuleId,
   modules,
@@ -382,6 +405,9 @@ export function ChatPanel({
   );
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const composerFormRef = useRef<HTMLFormElement>(null);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const hasScrolledRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
   const [isHearingSound, setIsHearingSound] = useState(false);
@@ -495,6 +521,24 @@ export function ChatPanel({
   function startNewChat() {
     changeModuleContext(undefined, true);
   }
+
+  // Al enviar, al empezar una respuesta o al retomar una conversación, se lleva
+  // la vista al último mensaje. No sigue el texto mientras se escribe: así la
+  // persona puede leer la respuesta desde el principio sin tirones.
+  const awaitingReply = isStreaming && messages.at(-1)?.role === "user";
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const end = conversationEndRef.current;
+    if (!end || typeof end.scrollIntoView !== "function") return;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    end.scrollIntoView({
+      behavior: hasScrolledRef.current && !reduceMotion ? "smooth" : "auto",
+      block: "nearest",
+    });
+    hasScrolledRef.current = true;
+  }, [messages.length, awaitingReply]);
 
   useEffect(() => {
     return () => {
@@ -762,7 +806,7 @@ export function ChatPanel({
             payload = JSON.parse(frame.data);
           } catch {
             discardCurrentRequest(
-              "La respuesta recibida no tiene un formato válido.",
+              FRIENDLY_ERRORS.malformed,
             );
             return;
           }
@@ -772,7 +816,7 @@ export function ChatPanel({
               chatStreamPayloadSchemas.conversation.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "La conversación recibida no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -823,7 +867,7 @@ export function ChatPanel({
             const result = chatStreamPayloadSchemas.sources.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "Las referencias recibidas no tienen un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -836,7 +880,7 @@ export function ChatPanel({
             const result = chatStreamPayloadSchemas.token.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "La respuesta recibida no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -872,7 +916,7 @@ export function ChatPanel({
               chatStreamPayloadSchemas.clarification.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "La aclaración recibida no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -898,7 +942,7 @@ export function ChatPanel({
               chatStreamPayloadSchemas.conversational.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "La respuesta recibida no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -934,7 +978,7 @@ export function ChatPanel({
               chatStreamPayloadSchemas.no_evidence.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "El resultado recibido no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -959,8 +1003,8 @@ export function ChatPanel({
             const result = chatStreamPayloadSchemas.error.safeParse(payload);
             discardCurrentRequest(
               result.success && result.data.code === "CHAT_STREAM_FAILED"
-                ? "No se pudo completar la respuesta. No se guardó contenido parcial."
-                : "La consulta no se pudo completar.",
+                ? FRIENDLY_ERRORS.streamFailed
+                : FRIENDLY_ERRORS.generic,
             );
             return;
           }
@@ -969,7 +1013,7 @@ export function ChatPanel({
             const result = chatStreamPayloadSchemas.done.safeParse(payload);
             if (!result.success) {
               discardCurrentRequest(
-                "El cierre de la respuesta no tiene un formato válido.",
+                FRIENDLY_ERRORS.malformed,
               );
               return;
             }
@@ -985,14 +1029,14 @@ export function ChatPanel({
 
         if (done && !completed) {
           discardCurrentRequest(
-            "Se interrumpió la conexión. No se guardó contenido parcial.",
+            FRIENDLY_ERRORS.connection,
           );
           return;
         }
       }
     } catch {
       discardCurrentRequest(
-        "Se interrumpió la conexión. No se guardó contenido parcial.",
+        FRIENDLY_ERRORS.connection,
       );
     } finally {
       window.clearTimeout(coldStartTimer);
@@ -1003,6 +1047,7 @@ export function ChatPanel({
   return (
     <TeacherShell
       activeSection="chat"
+      fullName={fullName}
       moduleNavigationDisabled={isStreaming}
       modules={modules}
       onModuleSelect={changeModuleContext}
@@ -1090,11 +1135,15 @@ export function ChatPanel({
 
         <section aria-busy={isStreaming} className="avend-chat-conversation">
           {messages.length === 0 ? (
-            <p className="avend-chat-empty-state">
-              Escribe una consulta para recibir una respuesta respaldada por
-              documentos vigentes o, cuando lo solicites expresamente, por sus
-              antecedentes históricos identificados con claridad.
-            </p>
+            <ChatWelcome
+              disabled={isStreaming}
+              fullName={fullName}
+              onSuggestion={(text) => {
+                setQuestion(text);
+                setStatus("Ejemplo listo en el cuadro: ajústalo a tu caso y envíalo.");
+                questionInputRef.current?.focus();
+              }}
+            />
           ) : (
             messages.map((message, messageIndex) => (
               <article
@@ -1198,13 +1247,50 @@ export function ChatPanel({
 
         {error ? (
           <div className="avend-chat-error" role="alert">
-            <strong>No pudimos completar la consulta.</strong>
-            <p>{error}</p>
-            <p>Tu texto se conserva para que puedas intentarlo nuevamente.</p>
+            <span aria-hidden="true" className="avend-chat-error-icon">
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M12 7.5v5M12 15.8v.01" />
+              </svg>
+            </span>
+            <div className="avend-chat-error-body">
+              <strong>No pudimos completar la consulta</strong>
+              <p>{error}</p>
+              {error === FRIENDLY_ERRORS.sessionExpired ? (
+                <a
+                  className="avend-button avend-button--primary"
+                  href="/auth/sign-in?sesion=caducada"
+                >
+                  Iniciar sesión
+                </a>
+              ) : (
+                <>
+                  <p>Tu consulta sigue escrita en el cuadro de abajo.</p>
+                  {/* Reenviar de inmediato no sirve si falta permiso o si se
+                      alcanzó el límite: ahí solo cabe esperar o avisar. */}
+                  {question.trim() &&
+                  !isStreaming &&
+                  error !== FRIENDLY_ERRORS.forbidden &&
+                  error !== FRIENDLY_ERRORS.rateLimited ? (
+                    <button
+                      className="avend-button avend-button--secondary"
+                      onClick={() => composerFormRef.current?.requestSubmit()}
+                      type="button"
+                    >
+                      Volver a enviar
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
           </div>
         ) : null}
 
-        <form className="avend-chat-composer" onSubmit={handleSubmit}>
+        <form
+          className="avend-chat-composer"
+          onSubmit={handleSubmit}
+          ref={composerFormRef}
+        >
           <label htmlFor="chat-question">Escribe tu consulta</label>
           <div className="avend-chat-input-shell">
             <span aria-hidden="true" className="avend-chat-input-icon">
@@ -1276,6 +1362,9 @@ export function ChatPanel({
               "La respuesta se sustentará en los documentos disponibles."}
           </p>
         </form>
+        {/* Destino del desplazamiento automático: DESPUÉS del error y del
+            cuadro de consulta, para que ambos queden a la vista. */}
+        <div aria-hidden="true" ref={conversationEndRef} />
         <ConsultationFeedback
           answerMessageId={latestReportableAnswerId}
           conversationId={conversationId}

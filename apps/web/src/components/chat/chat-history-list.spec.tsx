@@ -1,10 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   ChatHistoryList,
+  formatHistoryDate,
+  historyGroupOf,
   readableConversationTitle,
 } from "./chat-history-list";
+
+const showToast = vi.fn();
+vi.mock("@/components/ui/toast", () => ({
+  useToast: () => ({ showToast }),
+}));
 
 const { deleteConversationAction } = vi.hoisted(() => ({
   deleteConversationAction: vi.fn(async () => ({
@@ -33,6 +40,9 @@ describe("ChatHistoryList", () => {
     expect(
       screen.getByText(/Aún no tienes consultas guardadas/i),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Hacer una consulta" }),
+    ).toHaveAttribute("href", "/chat");
   });
 
   it("renders only the owned conversation actions and receives deletion feedback", async () => {
@@ -53,11 +63,69 @@ describe("ChatHistoryList", () => {
     await user.click(
       screen.getByRole("button", { name: "Quitar del historial" }),
     );
+    // Primero pregunta: nada se quita con un solo toque.
+    expect(deleteConversationAction).not.toHaveBeenCalled();
+    // El foco va a la salida segura, no a la acción destructiva.
+    expect(screen.getByRole("button", { name: "Cancelar" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
 
     expect(deleteConversationAction).toHaveBeenCalled();
-    expect(
-      await screen.findByText(/fue retirada de tu historial/i),
-    ).toBeVisible();
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        "La conversación fue retirada de tu historial.",
+      ),
+    );
+  });
+
+  it("cancelar la confirmación no quita nada y devuelve el foco", async () => {
+    const user = userEvent.setup();
+    deleteConversationAction.mockClear();
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+
+    await user.click(screen.getByRole("button", { name: "Quitar del historial" }));
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(deleteConversationAction).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Quitar del historial" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("agrupa por fecha en hora de Perú", () => {
+    vi.useFakeTimers({ now: new Date("2026-09-25T15:00:00.000Z") });
+    try {
+      render(
+        <ChatHistoryList
+          conversations={[
+            { ...conversation, id: "a", title: "Hoy", updatedAt: "2026-09-25T14:00:00.000Z" },
+            { ...conversation, id: "b", title: "Ayer", updatedAt: "2026-09-24T20:00:00.000Z" },
+            { ...conversation, id: "c", title: "Antes", updatedAt: "2026-08-01T12:00:00.000Z" },
+          ]}
+          nextCursor={null}
+        />,
+      );
+
+      const today = screen.getByRole("region", { name: "Hoy" });
+      expect(within(today).getByText("Hoy, 9:00 a. m.")).toBeVisible();
+      expect(screen.getByRole("region", { name: "Ayer" })).toBeVisible();
+      expect(screen.getByRole("region", { name: "Anteriores" })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("historyGroupOf / formatHistoryDate", () => {
+  const now = new Date("2026-09-25T04:30:00.000Z"); // 24/09 23:30 en Lima
+
+  it("usa el día calendario de Lima, no el de UTC", () => {
+    expect(historyGroupOf("2026-09-25T03:00:00.000Z", now)).toBe("today");
+    expect(historyGroupOf("2026-09-23T20:00:00.000Z", now)).toBe("yesterday");
+    expect(historyGroupOf("2026-09-20T12:00:00.000Z", now)).toBe("week");
+    expect(historyGroupOf("2026-09-01T12:00:00.000Z", now)).toBe("earlier");
+    expect(formatHistoryDate("2026-09-01T12:00:00.000Z", now)).toMatch(/2026/);
   });
 });
 
