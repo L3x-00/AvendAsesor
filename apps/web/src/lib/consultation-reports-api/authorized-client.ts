@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { resolveSignInPath } from "@/lib/auth/session-redirect";
 import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
@@ -26,10 +27,10 @@ export async function createAuthorizedConsultationReportsApiContext(): Promise<{
   const supabase =
     (await createServerSupabaseClient()) as unknown as SessionSupabaseClient;
   const access = await resolveAdminAccess(supabase);
-  if (access.status === "unauthenticated") redirect("/auth/sign-in");
+  if (access.status === "unauthenticated") redirect(await resolveSignInPath());
   if (access.status !== "authorized") redirect("/access-denied");
   const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session?.access_token) redirect("/auth/sign-in");
+  if (error || !data.session?.access_token) redirect(await resolveSignInPath());
   return {
     access,
     client: new ConsultationReportsApiClient(data.session.access_token),

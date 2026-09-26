@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => undefined }),
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: mocks.createServerSupabaseClient,
 }));

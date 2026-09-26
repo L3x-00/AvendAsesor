@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { resolveSignInPath } from "@/lib/auth/session-redirect";
 import { cache } from "react";
 import {
   resolveAdminAccess,
@@ -77,7 +78,7 @@ export async function createAuthorizedAdminApiContext(
   const session = await resolveAuthorizedAdminApiSession();
 
   if (session.status === "unauthenticated") {
-    redirect("/auth/sign-in");
+    redirect(await resolveSignInPath());
   }
 
   if (session.status !== "authorized") {

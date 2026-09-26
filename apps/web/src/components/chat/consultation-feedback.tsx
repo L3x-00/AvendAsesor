@@ -6,6 +6,7 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { FormField } from "@/components/ui/form-field";
@@ -69,6 +70,58 @@ interface ConsultationFeedbackProps {
   answerMessageId?: string;
   conversationId?: string;
   disabled?: boolean;
+  /**
+   * Consultas enviadas en la conversación visible. Cuando se indica, la
+   * tarjeta aparece recién tras `FEEDBACK_REVEAL_AFTER` consultas y respeta el
+   * cierre temporal; sin ella se muestra siempre (uso aislado).
+   */
+  userMessageCount?: number;
+}
+
+/** La invitación a reportar llega tras unas consultas, no desde la primera. */
+export const FEEDBACK_REVEAL_AFTER = 3;
+/** "Cerrar" la oculta este tiempo en el dispositivo, para no saturar la vista. */
+export const FEEDBACK_SNOOZE_MS = 30 * 60 * 1000;
+const FEEDBACK_SNOOZE_KEY = "avend-feedback-snoozed-until";
+
+function readSnoozedUntil(): number {
+  try {
+    return Number(window.localStorage.getItem(FEEDBACK_SNOOZE_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Respaldo en memoria si el almacenamiento está bloqueado (modo privado). */
+let memorySnoozedUntil = 0;
+const snoozeListeners = new Set<() => void>();
+
+function readSnoozeSnapshot(): number {
+  return Math.max(readSnoozedUntil(), memorySnoozedUntil);
+}
+
+/** En el servidor no hay almacenamiento: la tarjeta nace oculta. */
+function readServerSnoozeSnapshot(): number {
+  return -1;
+}
+
+function subscribeToSnooze(listener: () => void): () => void {
+  snoozeListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    snoozeListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+function writeSnoozedUntil(until: number) {
+  memorySnoozedUntil = until;
+  try {
+    window.localStorage.setItem(FEEDBACK_SNOOZE_KEY, String(until));
+  } catch {
+    // Sin almacenamiento, el cierre dura mientras la página siga abierta.
+  }
+  snoozeListeners.forEach((listener) => listener());
 }
 
 function submissionId(): string {
@@ -111,8 +164,19 @@ export function ConsultationFeedback({
   answerMessageId,
   conversationId,
   disabled = false,
+  userMessageCount,
 }: ConsultationFeedbackProps) {
   const [dialog, setDialog] = useState<FeedbackDialog>(null);
+  const gated = userMessageCount !== undefined;
+  // -1 en el servidor y en la hidratación: la tarjeta nace oculta y no
+  // parpadea. Luego refleja el cierre guardado en el dispositivo.
+  const snoozedUntil = useSyncExternalStore(
+    subscribeToSnooze,
+    readSnoozeSnapshot,
+    readServerSnoozeSnapshot,
+  );
+  // Plazo de cierre que ya venció (lo fija un temporizador, no el render).
+  const [elapsedSnooze, setElapsedSnooze] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -145,6 +209,26 @@ export function ConsultationFeedback({
       suggestionSubmissionIdRef.current = submissionId();
     }
     setDialog(nextDialog);
+  }
+
+  useEffect(() => {
+    if (!gated || snoozedUntil <= 0) return;
+    // Pasado el plazo vuelve sola, sin recargar la página.
+    const timer = window.setTimeout(
+      () => setElapsedSnooze(snoozedUntil),
+      Math.max(0, snoozedUntil - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [gated, snoozedUntil]);
+
+  const visible =
+    !gated ||
+    ((userMessageCount ?? 0) >= FEEDBACK_REVEAL_AFTER &&
+      (snoozedUntil === 0 || elapsedSnooze === snoozedUntil));
+
+  function snooze() {
+    writeSnoozedUntil(Date.now() + FEEDBACK_SNOOZE_MS);
+    setMessage(null);
   }
 
   useEffect(() => {
@@ -283,9 +367,15 @@ export function ConsultationFeedback({
     }
   }
 
+  // Oculta, la tarjeta no ocupa lugar; un diálogo ya abierto sigue vivo.
+  if (!visible && !dialog) return null;
+
   return (
-    <section aria-label="Reportes y sugerencias" className={styles.feedback}>
-      <div>
+    <section
+      aria-label="Reportes y sugerencias"
+      className={`${styles.feedback}${gated ? ` ${styles.feedbackGated}` : ""}`}
+    >
+      <div className={styles.copy}>
         <h2>¿La respuesta necesita revisión?</h2>
         <p>
           Reporta la última respuesta o comparte una sugerencia. Tu sugerencia
@@ -310,6 +400,21 @@ export function ConsultationFeedback({
           Sugerencia
         </button>
       </div>
+      {gated ? (
+        <button
+          aria-label="Cerrar este aviso por 30 minutos"
+          className={styles.dismiss}
+          disabled={isSubmitting}
+          onClick={snooze}
+          title="Se ocultará por 30 minutos"
+          type="button"
+        >
+          <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+            <path d="m7 7 10 10M17 7 7 17" />
+          </svg>
+          <span>Cerrar</span>
+        </button>
+      ) : null}
       {!answerMessageId ? (
         <p className={styles.hint}>
           Podrás reportar cuando recibas una respuesta del asistente.

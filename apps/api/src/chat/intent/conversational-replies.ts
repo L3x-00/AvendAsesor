@@ -45,7 +45,7 @@ export function buildConversationalReply(
 ): string {
   switch (kind) {
     case 'greeting':
-      return `¡Hola! Soy AVEND ASESOR. ${SCOPE_SENTENCE} ¿En qué puedo ayudarte hoy?`;
+      return `¡Hola! Qué gusto saludarte. Soy AVEND ASESOR, tu asistente de consulta. ${SCOPE_SENTENCE} ¿En qué te ayudo hoy?`;
     case 'thanks':
       return 'Con mucho gusto. Si necesitas otra orientación del ámbito educativo, aquí estoy para ayudarte.';
     case 'acknowledgment':
@@ -57,8 +57,8 @@ export function buildConversationalReply(
     case 'capabilities':
       return `Soy AVEND ASESOR. ${SCOPE_SENTENCE}${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} ¿Qué necesitas consultar?`;
     case 'out_of_domain':
-      return `Gracias por escribir. Estoy especializado en el ámbito educativo, así que no puedo ayudarte con temas fuera de él. ${SCOPE_SENTENCE} ¿Hay algo de eso en lo que pueda orientarte?`;
+      return `Gracias por escribirme. Me especializo en el ámbito educativo, así que con ese tema no puedo ayudarte, pero sí en esto: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} ¿Hay algo de eso en lo que pueda orientarte?`;
     case 'unrelated_no_evidence':
-      return `No encontré información sobre esto en los documentos disponibles. Te cuento que estoy especializado en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta tiene que ver con eso, cuéntame un poco más (por ejemplo, el trámite o la situación laboral) y la busco.`;
+      return `No encontré información sobre esto en los documentos disponibles, y prefiero decírtelo antes que adivinar. Me especializo en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más —por ejemplo, el trámite o tu situación laboral— y la busco con gusto.`;
   }
 }

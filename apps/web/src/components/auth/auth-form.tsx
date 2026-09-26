@@ -35,8 +35,56 @@ interface AuthFormProps {
   description: string;
   fields: AuthField[];
   links?: AuthLink[];
+  /** Aviso sereno sobre el formulario (p. ej. una sesión caducada). */
+  notice?: { text: string; title: string };
+  /** Ofrece mantener la sesión y recordar el correo en este dispositivo. */
+  rememberOption?: boolean;
   submitLabel: string;
   title: string;
+}
+
+/**
+ * Solo se recuerda el CORREO, nunca la contraseña: guardarla es tarea del
+ * gestor de contraseñas del navegador, que los campos ya habilitan con
+ * `autocomplete="email"` y `autocomplete="current-password"`.
+ */
+const REMEMBERED_EMAIL_KEY = 'avend-remembered-email';
+
+function readRememberedEmail(): string | null {
+  try {
+    return window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeRememberedEmail(email: string | null) {
+  try {
+    if (email) window.localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    else window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+  } catch {
+    // Almacenamiento bloqueado (modo privado): recordar es solo una comodidad.
+  }
+}
+
+function RememberMe() {
+  return (
+    <label className="avend-remember">
+      <input defaultChecked name="remember" type="checkbox" />
+      <span className="avend-remember-box" aria-hidden="true">
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="m5 12.5 4.5 4.5L19 7.5" />
+        </svg>
+      </span>
+      <span className="avend-remember-text">
+        <strong>Mantener mi sesión iniciada</strong>
+        <span>
+          En este dispositivo no tendrás que volver a ingresar tus datos. No lo
+          marques en una computadora compartida.
+        </span>
+      </span>
+    </label>
+  );
 }
 
 const FIELD_LABELS: Record<AuthFieldName, string> = {
@@ -117,6 +165,8 @@ export function AuthForm({
   description,
   fields,
   links = [],
+  notice,
+  rememberOption = false,
   submitLabel,
   title,
 }: AuthFormProps) {
@@ -124,6 +174,29 @@ export function AuthForm({
   const { showToast } = useToast();
   const announced = useRef<AuthActionState | null>(null);
   const rules = rulesForFields(fields);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  // El correo recordado se completa tras montar (localStorage no existe en el
+  // servidor) y el foco pasa directo a la contraseña: un paso menos.
+  useEffect(() => {
+    if (!rememberOption) return;
+    const remembered = readRememberedEmail();
+    const input = emailInputRef.current;
+    if (!remembered || !input || input.value) return;
+    input.value = remembered;
+    passwordInputRef.current?.focus();
+  }, [rememberOption]);
+
+  function rememberEmail(formData: FormData) {
+    if (!rememberOption) return;
+    const email = formData.get('email');
+    writeRememberedEmail(
+      formData.get('remember') === 'on' && typeof email === 'string'
+        ? email.trim()
+        : null,
+    );
+  }
 
   useEffect(() => {
     if (state.status !== 'success' || announced.current === state) return;
@@ -142,9 +215,25 @@ export function AuthForm({
           <p>{description}</p>
         </header>
 
+        {notice ? (
+          <div className="avend-auth-notice" role="status">
+            <span aria-hidden="true" className="avend-auth-notice-icon">
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M12 7.5V12l3 2" />
+              </svg>
+            </span>
+            <div>
+              <strong>{notice.title}</strong>
+              <p>{notice.text}</p>
+            </div>
+          </div>
+        ) : null}
+
         <ValidatedForm
           action={formAction}
           className="avend-auth-form"
+          onValidSubmit={rememberEmail}
           rules={rules}
           serverErrors={state.fieldErrors}
           submissionState={state}
@@ -155,10 +244,19 @@ export function AuthForm({
                 autoComplete={field.autoComplete}
                 className="avend-field"
                 name={field.name}
+                ref={
+                  field.name === 'email'
+                    ? emailInputRef
+                    : field.name === 'password'
+                      ? passwordInputRef
+                      : undefined
+                }
                 type={field.type}
               />
             </FormField>
           ))}
+
+          {rememberOption ? <RememberMe /> : null}
 
           {/* El aviso general queda para lo que no pertenece a un campo: una
               credencial rechazada, una sesión caducada o un fallo del servidor. */}

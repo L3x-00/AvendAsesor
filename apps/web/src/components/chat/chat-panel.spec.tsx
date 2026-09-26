@@ -257,7 +257,10 @@ describe("ChatPanel", () => {
       lang: "es-PE",
     });
     expect(
-      screen.getByRole("button", { name: "Detener el dictado por voz" }),
+      screen.getByRole("button", {
+        name: "Dictar la consulta por voz",
+        pressed: true,
+      }),
     ).toBeVisible();
 
     act(() => {
@@ -280,7 +283,10 @@ describe("ChatPanel", () => {
       screen.getByRole("button", { name: "Dictar la consulta por voz" }),
     );
     await user.click(
-      screen.getByRole("button", { name: "Detener el dictado por voz" }),
+      screen.getByRole("button", {
+        name: "Dictar la consulta por voz",
+        pressed: true,
+      }),
     );
     expect(instances[1].stop).toHaveBeenCalledOnce();
     expect(

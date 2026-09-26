@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { type AuthActionState } from "@/lib/auth/action-state";
 import { AuthService } from "@/lib/auth/auth-service";
@@ -7,6 +8,10 @@ import {
   resolveAdminAccess,
   type AuthorizationSupabaseClient,
 } from "@/lib/authorization/resolve-admin-access";
+import {
+  REMEMBER_COOKIE,
+  sessionPreferenceCookies,
+} from "@/lib/auth/session-preferences";
 import { getAuthRedirectUrl } from "@/lib/auth/site-url";
 import {
   parseAuthForm,
@@ -57,8 +62,27 @@ export async function signInAction(
     return parsed.state;
   }
 
+  // La preferencia se fija ANTES de iniciar sesión: el cliente de Supabase la
+  // lee al emitir sus cookies para decidir si sobreviven al cierre del navegador.
+  // La marca de sesión, en cambio, solo tras un inicio correcto.
+  const cookieStore = await cookies();
+  const previousRemember = cookieStore.get(REMEMBER_COOKIE)?.value;
+  const [rememberCookie, markerCookie] = sessionPreferenceCookies(
+    formData.get("remember") === "on",
+    process.env.NODE_ENV === "production",
+  );
+  cookieStore.set(rememberCookie.name, rememberCookie.value, rememberCookie.options);
+
   const authService = await createAuthService();
   const signedIn = await authService.signIn(parsed.data);
+
+  if (signedIn) {
+    cookieStore.set(markerCookie.name, markerCookie.value, markerCookie.options);
+  } else {
+    // Un intento fallido no debe cambiar cómo persiste una sesión existente.
+    if (previousRemember === undefined) cookieStore.delete(REMEMBER_COOKIE);
+    else cookieStore.set(REMEMBER_COOKIE, previousRemember, rememberCookie.options);
+  }
 
   if (!signedIn) {
     return {

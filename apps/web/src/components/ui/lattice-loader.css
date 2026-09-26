@@ -1,0 +1,233 @@
+/* LatticeLoader — adaptado de React Bits (https://reactbits.dev, MIT). */
+.lattice-loader {
+  --ll-n: 3;
+  --ll-cell: 6px;
+  --ll-gap: 2px;
+  --ll-font: 16px;
+  --ll-color: currentColor;
+  --ll-mark: #05713d;
+  --ll-idle: 0.15;
+  --ll-peak: 1;
+  --ll-cycle: 864ms;
+  --ll-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ll-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  align-items: center;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: var(--ll-font);
+  gap: calc(var(--ll-font) * 0.625);
+  line-height: 1;
+  position: relative;
+}
+
+.lattice-loader__grid {
+  display: grid;
+  flex: none;
+}
+
+.lattice-loader__layer {
+  display: grid;
+  gap: var(--ll-gap);
+  grid-area: 1 / 1;
+  grid-template-columns: repeat(var(--ll-n), var(--ll-cell));
+}
+
+.lattice-loader__cell {
+  background: var(--ll-color);
+  border-radius: max(1px, calc(var(--ll-cell) * 0.25));
+  height: var(--ll-cell);
+  opacity: var(--ll-idle);
+  width: var(--ll-cell);
+}
+
+.lattice-loader[data-shape="round"] .lattice-loader__cell {
+  border-radius: 50%;
+}
+
+.lattice-loader__run {
+  transition: opacity 200ms ease;
+}
+
+.lattice-loader__run .lattice-loader__cell {
+  animation: lattice-on var(--ll-cycle) var(--ll-ease-in-out) infinite;
+}
+
+.lattice-loader__run .lattice-loader__cell[data-lit="45"] {
+  animation-name: lattice-on-45;
+}
+
+.lattice-loader__run .lattice-loader__cell[data-lit="35"] {
+  animation-name: lattice-on-35;
+}
+
+.lattice-loader__run .lattice-loader__cell[data-lit="25"] {
+  animation-name: lattice-on-25;
+}
+
+.lattice-loader__run .lattice-loader__cell[data-hole] {
+  animation: none;
+  opacity: calc(var(--ll-idle) * 0.47);
+}
+
+.lattice-loader__mark {
+  opacity: 0;
+  transform: scale(0.9);
+  transform-origin: center;
+  transition:
+    opacity 160ms var(--ll-ease-out),
+    transform 160ms var(--ll-ease-out);
+}
+
+.lattice-loader__mark .lattice-loader__cell {
+  transition:
+    opacity 200ms ease,
+    background-color 200ms ease;
+}
+
+.lattice-loader__mark .lattice-loader__cell[data-on] {
+  background: var(--ll-mark);
+  opacity: var(--ll-peak);
+}
+
+.lattice-loader:not([data-status="working"]) .lattice-loader__run {
+  opacity: 0;
+}
+
+.lattice-loader:not([data-status="working"]) .lattice-loader__run .lattice-loader__cell {
+  animation-play-state: paused;
+}
+
+.lattice-loader:not([data-status="working"]) .lattice-loader__mark {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 200ms ease,
+    transform 200ms var(--ll-ease-out);
+}
+
+.lattice-loader__label {
+  display: inline-block;
+  font-weight: 600;
+  position: relative;
+}
+
+.lattice-loader__text {
+  filter: blur(2px);
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease;
+  white-space: nowrap;
+}
+
+.lattice-loader__text[data-active] {
+  filter: blur(0);
+  opacity: 1;
+  position: static;
+}
+
+.lattice-loader__timer {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: calc(var(--ll-font) * 0.875);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+.lattice-loader__sr {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes lattice-on {
+  0%,
+  100% {
+    opacity: var(--ll-idle);
+  }
+
+  18%,
+  42% {
+    opacity: var(--ll-peak);
+  }
+
+  62% {
+    opacity: var(--ll-idle);
+  }
+}
+
+@keyframes lattice-on-45 {
+  0%,
+  100% {
+    opacity: var(--ll-idle);
+  }
+
+  13%,
+  31% {
+    opacity: var(--ll-peak);
+  }
+
+  45% {
+    opacity: var(--ll-idle);
+  }
+}
+
+@keyframes lattice-on-35 {
+  0%,
+  100% {
+    opacity: var(--ll-idle);
+  }
+
+  10%,
+  24% {
+    opacity: var(--ll-peak);
+  }
+
+  35% {
+    opacity: var(--ll-idle);
+  }
+}
+
+@keyframes lattice-on-25 {
+  0%,
+  100% {
+    opacity: var(--ll-idle);
+  }
+
+  7%,
+  17% {
+    opacity: var(--ll-peak);
+  }
+
+  25% {
+    opacity: var(--ll-idle);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lattice-loader__run {
+    --ll-peak: 0.7;
+  }
+
+  .lattice-loader__run .lattice-loader__cell {
+    animation-delay: 0ms !important;
+    animation-duration: 1400ms !important;
+  }
+
+  .lattice-loader .lattice-loader__mark {
+    transform: none;
+  }
+
+  .lattice-loader .lattice-loader__text {
+    filter: none;
+  }
+}

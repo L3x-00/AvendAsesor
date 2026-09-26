@@ -160,3 +160,66 @@
     width: 100%;
   }
 }
+
+.copy {
+  flex: 1 1 18rem;
+}
+
+/* En el chat la tarjeta llega tras unas consultas y NO se queda pegada al pie:
+   acompaña la conversación sin competir con la respuesta. */
+.feedbackGated {
+  animation: feedback-enter 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  background: var(--avend-surface);
+  position: relative;
+  bottom: auto;
+}
+
+.dismiss {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.625rem;
+  color: var(--avend-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.dismiss:hover {
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+}
+
+.dismiss:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.dismiss svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2;
+  width: 1.125rem;
+}
+
+@keyframes feedback-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedbackGated {
+    animation: none;
+  }
+}

@@ -1,0 +1,184 @@
+/* VoicePill — adaptado de React Bits (https://reactbits.dev, MIT). */
+.voice-pill {
+  --vp-accent: #0d1b3d;
+  --vp-icon: #0d1b3d;
+  --vp-bg: #e8f1ff;
+  --vp-size: 44px;
+  --vp-radius: 22px;
+  --vp-reach: 8px;
+  --vp-extra: 0px;
+  --vp-clock-w: 0px;
+  --vp-wave-w: 0px;
+  --vp-stop: 13px;
+  --vp-icon-size: 20px;
+  --vp-time-size: 15px;
+  --vp-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  -webkit-tap-highlight-color: transparent;
+  background: transparent;
+  border: 0;
+  border-radius: var(--vp-radius);
+  color: var(--vp-icon);
+  cursor: pointer;
+  display: inline-grid;
+  flex: none;
+  font-family: inherit;
+  height: var(--vp-size);
+  isolation: isolate;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  position: relative;
+  transition:
+    transform 160ms var(--vp-ease-out),
+    color 150ms ease;
+  user-select: none;
+  width: var(--vp-size);
+}
+
+.voice-pill[data-state="listening"] {
+  color: var(--vp-accent);
+  z-index: 1;
+}
+
+.voice-pill:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.voice-pill:focus-visible {
+  outline: 3px solid var(--avend-focus, #1677ff);
+  outline-offset: 3px;
+}
+
+.voice-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* La cápsula vive a la izquierda del botón y se "abre" recortando menos. */
+.voice-pill__capsule {
+  background: var(--vp-bg);
+  border: 1px solid rgb(22 119 255 / 22%);
+  border-radius: var(--vp-radius);
+  clip-path: inset(0 0 0 calc(var(--vp-reach) + var(--vp-extra)) round var(--vp-radius));
+  inset: 0 0 0 calc(-1 * (var(--vp-reach) + var(--vp-extra)));
+  pointer-events: none;
+  position: absolute;
+  transition:
+    clip-path 220ms var(--vp-ease-out),
+    background-color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .voice-pill[data-state="idle"]:not(:disabled):hover .voice-pill__capsule {
+    background: color-mix(in srgb, var(--vp-icon) 8%, var(--vp-bg));
+  }
+}
+
+.voice-pill[data-state="listening"] .voice-pill__capsule {
+  clip-path: inset(0 0 round var(--vp-radius));
+}
+
+.voice-pill__time {
+  bottom: 0;
+  box-sizing: border-box;
+  color: var(--vp-accent);
+  display: grid;
+  filter: blur(2px);
+  font-size: var(--vp-time-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  place-items: center;
+  pointer-events: none;
+  position: absolute;
+  right: 100%;
+  top: 0;
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease;
+  width: var(--vp-clock-w);
+}
+
+.voice-pill__wave {
+  filter: blur(2px);
+  height: 60%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: calc(100% + var(--vp-clock-w));
+  top: 20%;
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease;
+  width: var(--vp-wave-w);
+}
+
+.voice-pill[data-state="listening"] .voice-pill__time,
+.voice-pill[data-state="listening"] .voice-pill__wave {
+  filter: blur(0);
+  opacity: 1;
+}
+
+.voice-pill__glyph {
+  display: grid;
+  height: var(--vp-size);
+  place-items: center;
+  position: relative;
+  width: var(--vp-size);
+}
+
+.voice-pill__glyph > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease,
+    transform 200ms var(--vp-ease-out);
+}
+
+.voice-pill__mic {
+  height: var(--vp-icon-size);
+  width: var(--vp-icon-size);
+}
+
+.voice-pill__stop {
+  background: #b42318;
+  border-radius: 22%;
+  filter: blur(2px);
+  height: var(--vp-stop);
+  opacity: 0;
+  transform: scale(0.6);
+  width: var(--vp-stop);
+}
+
+.voice-pill[data-state="listening"] .voice-pill__mic {
+  filter: blur(2px);
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.voice-pill[data-state="listening"] .voice-pill__stop {
+  filter: blur(0);
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-pill {
+    transform: none !important;
+    transition: color 150ms ease;
+  }
+
+  .voice-pill__capsule {
+    transition: background-color 150ms ease;
+  }
+
+  .voice-pill__glyph > *,
+  .voice-pill__time,
+  .voice-pill__wave {
+    filter: none !important;
+    transform: none !important;
+    transition: opacity 200ms ease;
+  }
+}

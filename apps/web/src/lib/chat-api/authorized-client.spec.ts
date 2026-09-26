@@ -12,8 +12,18 @@ const mocks = vi.hoisted(() => {
       throw new Error(`REDIRECT:${destination}`);
     }),
     resolveChatAccess: vi.fn(),
+    sessionMarker: vi.fn((): string | undefined => undefined),
   };
 });
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "avend-session" && mocks.sessionMarker()
+        ? { name, value: mocks.sessionMarker() }
+        : undefined,
+  }),
+}));
 
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -69,6 +79,16 @@ describe("authorized chat API context", () => {
     await expect(resolveAuthorizedChatContext()).rejects.toThrow(
       "REDIRECT:/access-denied",
     );
+  });
+
+  it("tells the person their session expired when this device had one", async () => {
+    mocks.sessionMarker.mockReturnValue("1");
+    mocks.resolveChatAccess.mockResolvedValue({ status: "unauthenticated" });
+
+    await expect(resolveAuthorizedChatContext()).rejects.toThrow(
+      "REDIRECT:/auth/sign-in?sesion=caducada",
+    );
+    mocks.sessionMarker.mockReturnValue(undefined);
   });
 
   it("redirects when an authorized profile has no usable session token", async () => {

@@ -8,6 +8,11 @@ interface AuthStatusCardProps {
   eyebrow: string;
   /** Segunda salida opcional (p. ej. «Ir a mi historial» en la página 404). */
   secondaryAction?: { href: string; label: string };
+  /**
+   * Ofrece cerrar la sesión actual (POST a /auth/sign-out). Imprescindible
+   * donde la persona no llega a ver ningún panel, como el acceso denegado.
+   */
+  signOutLabel?: string;
   title: string;
 }
 
@@ -18,6 +23,7 @@ export function AuthStatusCard({
   description,
   eyebrow,
   secondaryAction,
+  signOutLabel,
   title,
 }: AuthStatusCardProps) {
   return (
@@ -41,6 +47,16 @@ export function AuthStatusCard({
         >
           {secondaryAction.label}
         </Link>
+      ) : null}
+      {signOutLabel ? (
+        <form action="/auth/sign-out" method="post">
+          <button
+            className="avend-button avend-button--secondary avend-auth-status-action"
+            type="submit"
+          >
+            {signOutLabel}
+          </button>
+        </form>
       ) : null}
     </AuthLayout>
   );
