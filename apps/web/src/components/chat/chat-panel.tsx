@@ -10,7 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type {
   ChatConversationDetail,
   ChatHistoryMessage,
@@ -21,6 +21,7 @@ import type {
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { VoicePill } from "@/components/ui/voice-pill";
+import { AssistantAvatar, CopyAnswerButton } from "./chat-message-parts";
 import { ChatThinking, ChatWriting } from "./chat-thinking";
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
@@ -178,6 +179,19 @@ interface CitationContext {
 }
 
 /**
+ * Las referencias viven plegadas: antes de saltar a la fila de una cita se
+ * abren los <details> que la contienen (el ancla sola no los abre en todos
+ * los navegadores).
+ */
+function openEnclosingDetails(targetId: string) {
+  let details = document.getElementById(targetId)?.closest("details");
+  while (details) {
+    details.open = true;
+    details = details.parentElement?.closest("details") ?? null;
+  }
+}
+
+/**
  * Convierte cada cita [n] en un enlace a la fila n de «Referencias» (Hito 3,
  * punto 8): el usuario ve de dónde sale cada afirmación sin buscarla. Una cita
  * sin fuente correspondiente queda como texto.
@@ -197,6 +211,9 @@ function linkCitations(
         className="avend-chat-citation"
         href={`#${sourceAnchorId(citations.messageId, rank)}`}
         key={key}
+        onClick={() =>
+          openEnclosingDetails(sourceAnchorId(citations.messageId, rank))
+        }
       >
         {label}
       </a>
@@ -518,9 +535,59 @@ export function ChatPanel({
     changeModuleContext(activeParentId);
   }
 
+  /**
+   * Como en los asistentes de IA: en computadora, Enter envía y Shift+Enter
+   * hace un salto de línea. En pantallas táctiles Enter sigue siendo salto de
+   * línea (se envía con el botón), y nunca se envía mientras se compone un
+   * carácter con acento en teclados que lo requieren.
+   */
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // keyCode 229: en Safari el Enter que confirma una tilde o un carácter
+    // compuesto llega con isComposing ya en false; no debe enviar.
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      event.keyCode === 229
+    ) {
+      return;
+    }
+    const finePointer =
+      typeof window.matchMedia !== "function" ||
+      window.matchMedia("(pointer: fine)").matches;
+    if (!finePointer) return;
+    event.preventDefault();
+    if (!isStreaming && question.trim()) composerFormRef.current?.requestSubmit();
+  }
+
   function startNewChat() {
     changeModuleContext(undefined, true);
   }
+
+  // El cuadro se desactiva mientras se responde y el foco cae al <body>. Al
+  // terminar vuelve al cuadro, para seguir preguntando sin recorrer la página
+  // con el tabulador (solo si nadie movió el foco a otro lugar).
+  const wasStreamingRef = useRef(false);
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreaming) {
+      const active = document.activeElement;
+      if (!active || active === document.body) {
+        questionInputRef.current?.focus({ preventScroll: true });
+      }
+    }
+    wasStreamingRef.current = isStreaming;
+  }, [isStreaming]);
+
+  // Donde el navegador no admite `field-sizing: content` (p. ej. Firefox), el
+  // cuadro crece con el texto por JS hasta el máximo del CSS.
+  useEffect(() => {
+    const box = questionInputRef.current;
+    if (!box || typeof CSS === "undefined" || CSS.supports?.("field-sizing", "content")) {
+      return;
+    }
+    box.style.height = "auto";
+    box.style.height = `${box.scrollHeight}px`;
+  }, [question]);
 
   // Al enviar, al empezar una respuesta o al retomar una conversación, se lleva
   // la vista al último mensaje. No sigue el texto mientras se escribe: así la
@@ -1156,9 +1223,16 @@ export function ChatPanel({
                     nueva en tu Historial.
                   </p>
                 ) : null}
-                <p className="avend-chat-message-label">
-                  {message.role === "user" ? "Tu consulta" : "AVEND ASESOR"}
-                </p>
+                {message.role === "user" ? (
+                  <p className="avend-chat-message-label avend-visually-hidden">
+                    Tu consulta
+                  </p>
+                ) : (
+                  <p className="avend-chat-message-label">
+                    <AssistantAvatar />
+                    AVEND ASESOR
+                  </p>
+                )}
                 <div className="avend-chat-message-content">
                   {renderRichContent(
                     message.content,
@@ -1196,6 +1270,13 @@ export function ChatPanel({
                         Consultar {module.name}
                       </button>
                     ))}
+                  </div>
+                ) : null}
+                {message.role === "assistant" &&
+                message.id !== "streaming" &&
+                message.content.trim() ? (
+                  <div className="avend-chat-message-actions">
+                    <CopyAnswerButton content={message.content} />
                   </div>
                 ) : null}
                 {message.sources.length && message.id !== "streaming" ? (
@@ -1245,6 +1326,13 @@ export function ChatPanel({
           ) : null}
         </section>
 
+        <ConsultationFeedback
+          answerMessageId={latestReportableAnswerId}
+          conversationId={conversationId}
+          disabled={isStreaming}
+          userMessageCount={userMessageCount}
+        />
+
         {error ? (
           <div className="avend-chat-error" role="alert">
             <span aria-hidden="true" className="avend-chat-error-icon">
@@ -1291,23 +1379,20 @@ export function ChatPanel({
           onSubmit={handleSubmit}
           ref={composerFormRef}
         >
-          <label htmlFor="chat-question">Escribe tu consulta</label>
+          <label className="avend-visually-hidden" htmlFor="chat-question">
+            Escribe tu consulta
+          </label>
           <div className="avend-chat-input-shell">
-            <span aria-hidden="true" className="avend-chat-input-icon">
-              <svg fill="none" viewBox="0 0 24 24">
-                <circle cx="10.75" cy="10.75" r="6.75" />
-                <path d="m16 16 4 4" />
-              </svg>
-            </span>
             <textarea
               disabled={isStreaming}
               id="chat-question"
               maxLength={8_000}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Escribe tu consulta aquí…"
+              onKeyDown={handleComposerKeyDown}
+              placeholder="Escribe tu consulta a AVEND ASESOR…"
               ref={questionInputRef}
               required
-              rows={2}
+              rows={1}
               value={question}
             />
             <div className="avend-chat-composer-buttons">
@@ -1335,21 +1420,28 @@ export function ChatPanel({
                   </span>
                 </div>
               ) : null}
+              {/* Botón circular solo con ícono, como en los asistentes de IA;
+                  el nombre accesible dice qué hace (y "Consultando…" mientras
+                  responde). */}
               <button
-                className="avend-button avend-button--primary"
+                aria-label={isStreaming ? "Consultando…" : "Enviar consulta"}
+                className="avend-chat-send"
                 disabled={isStreaming || !question.trim()}
+                title={isStreaming ? "Consultando…" : "Enviar consulta"}
                 type="submit"
               >
-                <svg
-                  aria-hidden="true"
-                  className="avend-chat-send-icon"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="m4 4 17 8-17 8 3-8-3-8Z" />
-                  <path d="M7 12h14" />
-                </svg>
-                {isStreaming ? "Consultando…" : "Enviar consulta"}
+                {isStreaming ? (
+                  <span aria-hidden="true" className="avend-button-spinner" />
+                ) : (
+                  <svg
+                    aria-hidden="true"
+                    className="avend-chat-send-icon"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
@@ -1359,18 +1451,16 @@ export function ChatPanel({
             className="avend-chat-status"
           >
             {status ??
-              "La respuesta se sustentará en los documentos disponibles."}
+              "Las respuestas se sustentan en los documentos disponibles."}
+          </p>
+          <p aria-hidden="true" className="avend-chat-keyboard-hint">
+            <kbd>Enter</kbd> para enviar · <kbd>Shift</kbd> + <kbd>Enter</kbd>{" "}
+            para una línea nueva
           </p>
         </form>
         {/* Destino del desplazamiento automático: DESPUÉS del error y del
             cuadro de consulta, para que ambos queden a la vista. */}
         <div aria-hidden="true" ref={conversationEndRef} />
-        <ConsultationFeedback
-          answerMessageId={latestReportableAnswerId}
-          conversationId={conversationId}
-          disabled={isStreaming}
-          userMessageCount={userMessageCount}
-        />
       </section>
     </TeacherShell>
   );

@@ -6,6 +6,8 @@ interface ChatSourcesProps {
   citedRanks?: number[];
   /** Mensaje al que pertenecen: permite enlazar cada cita [n] con su fila. */
   messageId?: string;
+  /** Abiertas desde el inicio (p. ej. en la ficha de orientación imprimible). */
+  defaultOpen?: boolean;
   sources: ChatSource[];
 }
 
@@ -197,6 +199,7 @@ function SourceTable({
  */
 export function ChatSources({
   citedRanks,
+  defaultOpen = false,
   messageId,
   sources,
 }: ChatSourcesProps) {
@@ -209,11 +212,28 @@ export function ChatSources({
     ? sources.filter((source) => !citedRanks?.includes(source.rank))
     : [];
 
+  // Plegadas por defecto: la respuesta se lee primero y el sustento se abre
+  // a pedido ("Ver referencias"), como en los asistentes de IA. Una cita [n]
+  // del texto las abre sola y lleva a su fila.
   return (
-    <section
+    <details
       aria-label="Referencias verificables"
-      className="avend-chat-sources"
+      className={`avend-chat-sources ${styles.disclosure}`}
+      open={defaultOpen || undefined}
     >
+      <summary className={styles.toggle}>
+        <svg aria-hidden="true" className={styles.toggleIcon} fill="none" viewBox="0 0 24 24">
+          <path d="M7 3.75h7L18 7.7v12.55H7z" />
+          <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
+        </svg>
+        <span>Ver referencias</span>
+        <span className={styles.count}>
+          {primary.length} {primary.length === 1 ? "fuente" : "fuentes"}
+        </span>
+        <svg aria-hidden="true" className={styles.chevron} fill="none" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </summary>
       <header className={styles.heading}>
         <div>
           <h2>Referencias</h2>
@@ -223,9 +243,6 @@ export function ChatSources({
               : "Documentos consultados para esta respuesta."}
           </p>
         </div>
-        <span className={styles.count}>
-          {primary.length} {primary.length === 1 ? "fuente" : "fuentes"}
-        </span>
       </header>
 
       <SourceTable
@@ -247,6 +264,6 @@ export function ChatSources({
           />
         </details>
       ) : null}
-    </section>
+    </details>
   );
 }

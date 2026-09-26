@@ -500,9 +500,13 @@ describe("ChatPanel", () => {
     });
     expect(await screen.findByText("Respuesta lista.")).toBeVisible();
     // La cita [1] enlaza con su fila en Referencias (punto 8).
-    expect(
-      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
-    ).toHaveAttribute("href", `#fuente-${messageId}-1`);
+    const citation = screen.getByRole("link", {
+      name: "Ver fuente 1: Norma de licencias",
+    });
+    expect(citation).toHaveAttribute("href", `#fuente-${messageId}-1`);
+    // Las referencias nacen plegadas; tocar la cita [1] las abre.
+    expect(screen.getByText("Norma de licencias")).not.toBeVisible();
+    fireEvent.click(citation);
     expect(screen.getByText("Norma de licencias")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
@@ -600,6 +604,7 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
 
     act(() => finishStream());
+    await user.click(await screen.findByText("Ver referencias"));
     expect(
       await screen.findByRole("heading", { name: "Referencias" }),
     ).toBeVisible();
@@ -635,6 +640,49 @@ describe("ChatPanel", () => {
     expect(
       document.querySelector(".avend-chat-message--user"),
     ).not.toBeInTheDocument();
+  });
+
+  it("Enter envía y Shift+Enter hace un salto de línea, como en los chats de IA", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const request = vi.fn(async () => new Response(null, { status: 503 }));
+    vi.stubGlobal("fetch", request);
+    render(<ChatPanel modules={[chatModule]} />);
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    await user.type(box, "Primera línea{Shift>}{Enter}{/Shift}segunda");
+    expect(box).toHaveValue("Primera línea\nsegunda");
+    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith("/api/chat/stream", expect.anything()),
+    );
+  });
+
+  it("Enter que confirma un carácter compuesto (Safari, keyCode 229) no envía", () => {
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    render(<ChatPanel modules={[chatModule]} />);
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    fireEvent.change(box, { target: { value: "¿Qué plazo" } });
+    fireEvent.keyDown(box, { key: "Enter", keyCode: 229 });
+
+    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+  });
+
+  it("devuelve el foco al cuadro de consulta cuando termina la respuesta", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    render(<ChatPanel modules={[chatModule]} />);
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    await user.type(box, "Consulta{Enter}");
+
+    await screen.findByText(FRIENDLY_ERRORS.unavailable);
+    await waitFor(() => expect(box).toHaveFocus());
   });
 
   it("ofrece volver a enviar la consulta con un toque tras un error", async () => {

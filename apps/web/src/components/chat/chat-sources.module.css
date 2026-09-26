@@ -252,3 +252,93 @@
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
+
+/* ---------- "Ver referencias" plegable ---------- */
+.disclosure {
+  border-top: 0 !important;
+  margin-top: 0.75rem !important;
+  padding-top: 0 !important;
+}
+
+.toggle {
+  align-items: center;
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  list-style: none;
+  min-height: 2.75rem;
+  padding: 0 0.5rem 0 0.875rem;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+  user-select: none;
+}
+
+.toggle::-webkit-details-marker {
+  display: none;
+}
+
+.toggle:hover {
+  background: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 35%);
+}
+
+.toggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.toggle .count {
+  font-size: 0.875rem;
+  padding: 0.15rem 0.6rem;
+}
+
+.toggleIcon,
+.chevron {
+  flex: none;
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.125rem;
+}
+
+.chevron {
+  transition: transform 200ms ease-out;
+}
+
+.disclosure[open] .chevron {
+  transform: rotate(180deg);
+}
+
+.disclosure[open] > .toggle {
+  background: var(--avend-soft-blue);
+}
+
+.disclosure[open] > .heading {
+  animation: sources-open 220ms ease-out both;
+  margin-top: 1rem;
+}
+
+@keyframes sources-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+
+  .disclosure[open] > .heading {
+    animation: none;
+  }
+}

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ChatSources, citationRanks, citedSourceRanks } from "./chat-sources";
 
@@ -42,6 +42,9 @@ describe("ChatSources", () => {
       />,
     );
 
+    // Plegadas por defecto: primero se lee la respuesta.
+    expect(screen.getByRole("heading", { name: "Referencias" })).not.toBeVisible();
+    fireEvent.click(screen.getByText("Ver referencias"));
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
       screen.getByRole("table", {
@@ -216,6 +219,7 @@ describe("ChatSources — fuentes citadas", () => {
     );
 
     expect(screen.getByText("1 fuente")).toBeVisible();
+    fireEvent.click(screen.getByText("Ver referencias"));
     expect(
       screen.getByText(/Documentos citados en la respuesta/u),
     ).toBeVisible();
