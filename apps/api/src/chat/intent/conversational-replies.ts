@@ -54,6 +54,9 @@ export function buildConversationalReply(
       return 'Hasta pronto. Cuando necesites orientación sobre un trámite o una norma del ámbito educativo, vuelve a escribirme.';
     case 'ask_announcement':
       return `¡Claro, con gusto! Cuéntame tu consulta con el mayor detalle posible: por ejemplo, si eres docente, auxiliar o directivo, y de qué trámite o situación se trata.${topicsSentence(options.topics)}`;
+    case 'catalog':
+      // Respaldo si no se pudo leer la lista de documentos.
+      return `Respondo con base en los documentos oficiales cargados en la plataforma.${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} Cuéntame tu consulta con el mayor detalle posible y la busco.`;
     case 'capabilities':
       return `Soy AVEND ASESOR. ${SCOPE_SENTENCE}${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} ¿Qué necesitas consultar?`;
     case 'out_of_domain':

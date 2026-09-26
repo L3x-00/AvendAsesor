@@ -21,7 +21,11 @@ import type {
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
 import { VoicePill } from "@/components/ui/voice-pill";
-import { AssistantAvatar, CopyAnswerButton } from "./chat-message-parts";
+import {
+  AssistantAvatar,
+  CopyAnswerButton,
+  SuggestedQuestions,
+} from "./chat-message-parts";
 import { ChatThinking, ChatWriting } from "./chat-thinking";
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
@@ -46,6 +50,8 @@ interface RenderedMessage {
   sources: ChatSource[];
   /** La consulta empezó una conversación nueva por cambio de tema. */
   startsNewTopic?: boolean;
+  /** Preguntas recomendadas (respuesta de catálogo): se ofrecen como botones. */
+  suggestions?: string[];
   /** Consulta guardada que no recibió respuesta (fallo técnico o corte). */
   unanswered?: boolean;
 }
@@ -1032,6 +1038,7 @@ export function ChatPanel({
                 inReplyToMessageId: null,
                 role: "assistant",
                 sources: [],
+                suggestions: result.data.suggestions,
               },
             ]);
             completionStatus = "Listo.";
@@ -1271,6 +1278,24 @@ export function ChatPanel({
                       </button>
                     ))}
                   </div>
+                ) : null}
+                {message.suggestions?.length ? (
+                  <SuggestedQuestions
+                    disabled={isStreaming}
+                    onPick={(text) => {
+                      setQuestion(text);
+                      setStatus(
+                        "Pregunta lista en el cuadro: ajústala si quieres y envíala.",
+                      );
+                      window.requestAnimationFrame(() => {
+                        const box = questionInputRef.current;
+                        if (!box) return;
+                        box.focus();
+                        box.setSelectionRange(box.value.length, box.value.length);
+                      });
+                    }}
+                    questions={message.suggestions}
+                  />
                 ) : null}
                 {message.role === "assistant" &&
                 message.id !== "streaming" &&

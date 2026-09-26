@@ -212,6 +212,62 @@ describe('ChatService', () => {
     expect(ragService.retrieve).not.toHaveBeenCalled();
   });
 
+  it('answers «¿de qué tienes información?» with the document catalog and suggestions', async () => {
+    const catalogService = {
+      reply: jest.fn().mockResolvedValue({
+        message: '¡Claro! Hoy puedo responderte con este documento…',
+        suggestions: ['¿Qué funciones tiene el Coordinador Pedagógico?'],
+      }),
+    };
+    const withCatalog = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      catalogService as never,
+    );
+
+    const events = await collect(withCatalog, {
+      question: '¿De qué tienes información?',
+    });
+
+    expect(events).toEqual([
+      {
+        data: {
+          message: '¡Claro! Hoy puedo responderte con este documento…',
+          suggestions: ['¿Qué funciones tiene el Coordinador Pedagógico?'],
+        },
+        type: 'conversational',
+      },
+    ]);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the topics reply if the catalog cannot be read', async () => {
+    historyGateway.listActiveModules.mockResolvedValue([]);
+    const withCatalog = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      { reply: jest.fn().mockRejectedValue(new Error('db down')) } as never,
+    );
+
+    const [event] = await collect(withCatalog, {
+      question: '¿Qué documentos tienes?',
+    });
+
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain('documentos oficiales');
+    expect(event.data.suggestions).toBeUndefined();
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
   it('declines an out-of-scope question and reorients without RAG (point 10)', async () => {
     const events = await collect(service, {
       question: '¿Qué tiempo hace hoy?',

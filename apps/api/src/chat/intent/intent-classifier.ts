@@ -31,7 +31,8 @@ export type SocialSubtype =
   | 'acknowledgment'
   | 'farewell'
   | 'ask_announcement'
-  | 'capabilities';
+  | 'capabilities'
+  | 'catalog';
 
 /**
  * Unión discriminada por `lane`: si `lane` es `social`, `subtype` es un
@@ -174,6 +175,60 @@ const CAPABILITY_RESIDUE_WORDS = new Set([
   'puede',
 ]);
 
+/**
+ * Pregunta por el catálogo: qué documentos o información hay y qué conviene
+ * preguntar («¿de qué tienes información?», «¿qué documentos hay?»,
+ * «preguntas frecuentes»). No es una consulta normativa: se responde con la
+ * lista real de documentos disponibles, sin pasar por el RAG.
+ */
+const CATALOG =
+  /\b((?:de|sobre) (?:que|cuales) (?:temas |documentos |normas )?(?:tienes|tiene|hay|manejas|cuentas con|dispones de) (?:informacion|documentos|datos|fuentes|normas)|(?:de|sobre) que (?:tienes|tiene|hay) informacion|que (?:informacion|documentos|normas|normativas?|fuentes|leyes|resoluciones|archivos|materiales) (?:tienes|tiene|hay|manejas|conoces|cargaron|estan (?:disponibles|cargad[oa]s)|puedo consultar)|con que (?:documentos|informacion|fuentes|normas) (?:cuentas|trabajas|respondes)|(?:lista|listado|catalogo|relacion) de (?:los |las )?(?:documentos|normas|fuentes)|(?:muestrame|dame|dime|ensename|indicame|mostrar) (?:la lista de |el listado de |los |las )?(?:documentos|normas|fuentes)|que (?:puedo|se puede) (?:consultar(?:te)?|preguntar(?:te)?)|(?:preguntas|consultas) (?:frecuentes|recomendadas|sugeridas|de ejemplo)|que (?:preguntas|consultas) (?:puedo hacer(?:te)?|me recomiendas|me sugieres)|que me (?:recomiendas|sugieres) (?:preguntar|consultar)|(?:dame|dime) (?:algunos |unos )?ejemplos de (?:preguntas|consultas))\b/u;
+
+/**
+ * Lo único que puede acompañar a una pregunta de catálogo sin volverla
+ * consulta. Lista propia y corta (sin roles, "hacer", "para" ni conectores):
+ * «¿qué documentos tiene que hacer el profesor?» o «¿qué resoluciones hay para
+ * los docentes?» son consultas y siguen al RAG.
+ */
+const CATALOG_RESIDUE_WORDS = new Set([
+  'a',
+  'de',
+  'el',
+  'los',
+  'las',
+  'que',
+  'me',
+  'mi',
+  'tu',
+  'usted',
+  'puedes',
+  'puede',
+  'por',
+  'hoy',
+  'aqui',
+  'actualmente',
+  'ahora',
+  'cargados',
+  'cargadas',
+  'disponibles',
+  'disponible',
+  'en',
+  'esta',
+  'este',
+  'hay',
+  'la',
+  'plataforma',
+  'sistema',
+  'todos',
+  'todas',
+  'tienes',
+  'tus',
+  'base',
+  'datos',
+  'podrias',
+  'favor',
+]);
+
 /** Cláusula condicional/causal: convierte una pregunta en consulta ("…si no me pagan"). */
 const CONDITIONAL_CLAUSE = /\b(si|cuando|en caso|porque|aunque)\b/u;
 
@@ -264,6 +319,46 @@ function detectPureSocial(normalized: string): SocialSubtype | null {
   return 'greeting';
 }
 
+/** «hay que…», «tiene que…»: una obligación, no una pregunta por el catálogo. */
+const OBLIGATION = /\b(?:hay|tiene|tienen|tienes|tengo) que\b/u;
+
+/** Verbos que preguntan por el propio asistente, no por un tema en curso. */
+const SELF_REFERENCE =
+  /\b(?:tienes|manejas|conoces|cuentas|dispones|trabajas|respondes|cargaron|disponibles?|cargad[oa]s|lista|listado|catalogo|frecuentes|recomendadas|sugeridas|recomiendas|sugieres|ejemplos?|consultarte|preguntarte|hacerte)\b/u;
+
+function isCatalogRequest(
+  normalized: string,
+  context: TurnIntentContext,
+): boolean {
+  const plain = normalized
+    .replace(/[^a-z0-9 ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (
+    !CATALOG.test(plain) ||
+    CONDITIONAL_CLAUSE.test(normalized) ||
+    OBLIGATION.test(plain) ||
+    // «¿Y qué normas hay?» continúa el tema anterior.
+    /^(?:y|e|pero|entonces|o sea)\b/u.test(plain) ||
+    // Dentro de una conversación, «¿qué normas hay?» se lee con el tema en
+    // curso: solo cuenta como catálogo si pregunta por el propio asistente.
+    (context.inConversation && !SELF_REFERENCE.test(plain))
+  ) {
+    return false;
+  }
+  return stripped(
+    plain,
+    new RegExp(CATALOG.source, 'gu'),
+    GREETING,
+    COURTESY,
+    VOCATIVE,
+    THANKS,
+    INTRODUCTION,
+  )
+    .split(' ')
+    .every((word) => !word || CATALOG_RESIDUE_WORDS.has(word));
+}
+
 /** Resto del mensaje sin saludo ni cortesía, para reglas de frase completa. */
 function withoutCourtesy(normalized: string): string {
   return stripped(normalized, GREETING, COURTESY, VOCATIVE, THANKS);
@@ -301,6 +396,14 @@ export function classifyTurnIntent(
       return { lane: 'social', subtype: 'acknowledgment' };
     }
     return DOMAIN;
+  }
+
+  // Antes de la señal fuerte de dominio: «¿qué normas tienes?» nombra "normas"
+  // pero no es una consulta normativa. Con cualquier tema añadido («¿qué
+  // normas tienes sobre licencias?») el resto no pasa la lista blanca y sigue
+  // al RAG (fail-closed).
+  if (isCatalogRequest(normalized, context)) {
+    return { lane: 'social', subtype: 'catalog' };
   }
 
   if (hasStrongDomainSignal(normalized)) return DOMAIN;
