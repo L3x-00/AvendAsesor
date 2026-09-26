@@ -223,7 +223,7 @@ describe("ChatPanel", () => {
       interimResults = false;
       lang = "";
       onend: (() => void) | null = null;
-      onerror: (() => void) | null = null;
+      onerror: ((event?: { error?: string }) => void) | null = null;
       onresult:
         | ((event: {
             resultIndex: number;
@@ -301,6 +301,135 @@ describe("ChatPanel", () => {
       screen.getByText(
         "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
       ),
+    ).toBeVisible();
+  });
+
+  it("explica la causa real del fallo de voz y reintenta en español general", async () => {
+    const user = userEvent.setup();
+    const instances: {
+      lang: string;
+      onend: (() => void) | null;
+      onerror: ((event?: { error?: string }) => void) | null;
+      start: ReturnType<typeof vi.fn>;
+    }[] = [];
+
+    class SpeechRecognitionMock {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onend: (() => void) | null = null;
+      onerror: ((event?: { error?: string }) => void) | null = null;
+      onresult = null;
+      start = vi.fn();
+      stop = vi.fn();
+
+      constructor() {
+        instances.push(this);
+      }
+    }
+
+    vi.stubGlobal("SpeechRecognition", SpeechRecognitionMock);
+    render(<ChatPanel modules={[chatModule]} />);
+    const mic = await screen.findByRole("button", {
+      name: "Dictar la consulta por voz",
+    });
+
+    await user.click(mic);
+    act(() => {
+      instances[0].onerror?.({ error: "language-not-supported" });
+      instances[0].onend?.();
+    });
+    expect(instances[1]).toMatchObject({ lang: "es-ES" });
+    expect(instances[1].start).toHaveBeenCalledOnce();
+
+    act(() => {
+      instances[1].onerror?.({ error: "no-speech" });
+      instances[1].onend?.();
+    });
+    expect(
+      screen.getByText(
+        "No escuché nada. Toca el micrófono y habla cerca de él.",
+      ),
+    ).toBeVisible();
+
+    for (const [code, text] of [
+      ["not-allowed", /bloqueó el micrófono/],
+      ["service-not-allowed", /no ofrece dictado por voz/],
+      ["audio-capture", /No se detectó un micrófono/],
+      ["network", /servicio de voz del navegador no respondió/],
+    ] as const) {
+      await user.click(mic);
+      act(() => instances.at(-1)?.onerror?.({ error: code }));
+      expect(screen.getByText(text)).toBeVisible();
+    }
+
+    await user.click(mic);
+    act(() => {
+      instances.at(-1)?.onerror?.({ error: "language-not-supported" });
+      instances.at(-1)?.onend?.();
+    });
+    act(() => instances.at(-1)?.onerror?.({ error: "language-not-supported" }));
+    expect(screen.getByText(/no reconoce el dictado en español/)).toBeVisible();
+
+    await user.click(mic);
+    act(() => {
+      instances.at(-1)?.onerror?.({ error: "aborted" });
+      instances.at(-1)?.onend?.();
+    });
+    expect(
+      screen.getByText(
+        "Dictado finalizado. Revisa el texto antes de enviarlo.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("los eventos tardíos de un dictado detenido no lo reinician ni cancelan el nuevo", async () => {
+    const user = userEvent.setup();
+    const instances: {
+      onend: (() => void) | null;
+      onerror: ((event?: { error?: string }) => void) | null;
+      start: ReturnType<typeof vi.fn>;
+    }[] = [];
+
+    class SpeechRecognitionMock {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onend: (() => void) | null = null;
+      onerror: ((event?: { error?: string }) => void) | null = null;
+      onresult = null;
+      start = vi.fn();
+      stop = vi.fn();
+
+      constructor() {
+        instances.push(this);
+      }
+    }
+
+    vi.stubGlobal("SpeechRecognition", SpeechRecognitionMock);
+    render(<ChatPanel modules={[chatModule]} />);
+    const mic = await screen.findByRole("button", {
+      name: "Dictar la consulta por voz",
+    });
+
+    // Se detiene justo cuando el navegador iba a reintentar en otro idioma.
+    await user.click(mic);
+    act(() => instances[0].onerror?.({ error: "language-not-supported" }));
+    await user.click(mic);
+    act(() => instances[0].onend?.());
+    expect(instances).toHaveLength(1);
+    expect(
+      screen.getByText("Dictado detenido. Revisa el texto antes de enviarlo."),
+    ).toBeVisible();
+
+    // El fin tardío de la sesión anterior no apaga la nueva.
+    await user.click(mic);
+    act(() => instances[0].onend?.());
+    expect(
+      screen.getByRole("button", {
+        name: "Dictar la consulta por voz",
+        pressed: true,
+      }),
     ).toBeVisible();
   });
 
@@ -524,7 +653,9 @@ describe("ChatPanel", () => {
     render(<ChatPanel fullName="MARÍA pérez" modules={[chatModule]} />);
 
     expect(
-      screen.getByRole("heading", { name: "Hola, María. ¿En qué te ayudo hoy?" }),
+      screen.getByRole("heading", {
+        name: "Hola, María. ¿En qué te ayudo hoy?",
+      }),
     ).toBeVisible();
     await user.click(
       screen.getByRole("button", {
@@ -535,7 +666,10 @@ describe("ChatPanel", () => {
     const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
     expect(box).toHaveValue("¿Qué requisitos necesito para ");
     expect(box).toHaveFocus();
-    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+    expect(request).not.toHaveBeenCalledWith(
+      "/api/chat/stream",
+      expect.anything(),
+    );
   });
 
   it("keeps the empty module state explicit instead of inventing a category", () => {
@@ -652,11 +786,17 @@ describe("ChatPanel", () => {
     const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
     await user.type(box, "Primera línea{Shift>}{Enter}{/Shift}segunda");
     expect(box).toHaveValue("Primera línea\nsegunda");
-    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+    expect(request).not.toHaveBeenCalledWith(
+      "/api/chat/stream",
+      expect.anything(),
+    );
 
     await user.keyboard("{Enter}");
     await waitFor(() =>
-      expect(request).toHaveBeenCalledWith("/api/chat/stream", expect.anything()),
+      expect(request).toHaveBeenCalledWith(
+        "/api/chat/stream",
+        expect.anything(),
+      ),
     );
   });
 
@@ -669,13 +809,19 @@ describe("ChatPanel", () => {
     fireEvent.change(box, { target: { value: "¿Qué plazo" } });
     fireEvent.keyDown(box, { key: "Enter", keyCode: 229 });
 
-    expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
+    expect(request).not.toHaveBeenCalledWith(
+      "/api/chat/stream",
+      expect.anything(),
+    );
   });
 
   it("devuelve el foco al cuadro de consulta cuando termina la respuesta", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 })),
+    );
     render(<ChatPanel modules={[chatModule]} />);
 
     const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
@@ -714,7 +860,9 @@ describe("ChatPanel", () => {
     expect(
       await screen.findByRole("link", { name: "Iniciar sesión" }),
     ).toHaveAttribute("href", "/auth/sign-in?sesion=caducada");
-    expect(screen.queryByRole("button", { name: "Volver a enviar" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Volver a enviar" }),
+    ).toBeNull();
   });
 
   it("does not retain a partial reply if the stream emits a controlled error", async () => {
@@ -734,11 +882,7 @@ describe("ChatPanel", () => {
 
     await submitQuestion(user);
 
-    expect(
-      await screen.findByText(
-        FRIENDLY_ERRORS.streamFailed,
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText(FRIENDLY_ERRORS.streamFailed)).toBeVisible();
     expect(document.querySelectorAll(".avend-chat-message--user")).toHaveLength(
       1,
     );
@@ -761,11 +905,7 @@ describe("ChatPanel", () => {
 
     await submitQuestion(user);
 
-    expect(
-      await screen.findByText(
-        FRIENDLY_ERRORS.connection,
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText(FRIENDLY_ERRORS.connection)).toBeVisible();
     expect(screen.queryByText("Texto parcial")).not.toBeInTheDocument();
   });
 
@@ -1109,14 +1249,8 @@ describe("ChatPanel", () => {
   });
 
   it.each([
-    [
-      "event: conversation\ndata: {}\n\n",
-      FRIENDLY_ERRORS.malformed,
-    ],
-    [
-      "event: conversational\ndata: {}\n\n",
-      FRIENDLY_ERRORS.malformed,
-    ],
+    ["event: conversation\ndata: {}\n\n", FRIENDLY_ERRORS.malformed],
+    ["event: conversational\ndata: {}\n\n", FRIENDLY_ERRORS.malformed],
     [
       `${conversationEvent()}event: sources\ndata: {"sources":[{}]}\n\n`,
       FRIENDLY_ERRORS.malformed,
@@ -1178,11 +1312,7 @@ describe("ChatPanel", () => {
     const { unmount } = render(<ChatPanel modules={[chatModule]} />);
 
     await submitQuestion(user);
-    expect(
-      await screen.findByText(
-        FRIENDLY_ERRORS.malformed,
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText(FRIENDLY_ERRORS.malformed)).toBeVisible();
     unmount();
 
     vi.stubGlobal(
@@ -1191,10 +1321,6 @@ describe("ChatPanel", () => {
     );
     render(<ChatPanel modules={[chatModule]} />);
     await submitQuestion(user);
-    expect(
-      await screen.findByText(
-        FRIENDLY_ERRORS.connection,
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText(FRIENDLY_ERRORS.connection)).toBeVisible();
   });
 });

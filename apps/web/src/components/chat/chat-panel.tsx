@@ -375,7 +375,7 @@ interface SpeechRecognitionLike {
   interimResults: boolean;
   lang: string;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event?: { error?: string }) => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   /** Opcionales: animan la onda del botón cuando el navegador oye sonido. */
   onsoundend?: (() => void) | null;
@@ -384,6 +384,33 @@ interface SpeechRecognitionLike {
   stop(): void;
 }
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+/** Idiomas de dictado en orden de preferencia. */
+const DICTATION_LANGUAGES = ["es-PE", "es-ES"];
+
+/**
+ * Mensaje según la causa real (código de error del navegador). Antes todo
+ * fallo decía «revisa el permiso», aunque el permiso estuviera concedido y la
+ * causa fuera silencio, falta de red o un navegador sin servicio de voz.
+ */
+function dictationErrorMessage(code: string): string {
+  switch (code) {
+    case "not-allowed":
+      return "El navegador bloqueó el micrófono para esta página. Permítelo desde el candado junto a la dirección web y vuelve a intentarlo.";
+    case "service-not-allowed":
+      return "Este navegador no ofrece dictado por voz en esta página. Prueba con Google Chrome o Microsoft Edge, o escribe tu consulta.";
+    case "audio-capture":
+      return "No se detectó un micrófono. Revisa que esté conectado y seleccionado en tu equipo.";
+    case "network":
+      return "El servicio de voz del navegador no respondió. Revisa tu conexión y vuelve a intentarlo, o escribe tu consulta.";
+    case "no-speech":
+      return "No escuché nada. Toca el micrófono y habla cerca de él.";
+    case "language-not-supported":
+      return "Este navegador no reconoce el dictado en español. Prueba con Google Chrome o Microsoft Edge, o escribe tu consulta.";
+    default:
+      return "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.";
+  }
+}
 
 /** Detección segura del dictado por voz (no está en todos los navegadores). */
 function getSpeechRecognition(): SpeechRecognitionConstructor | null {
@@ -563,7 +590,8 @@ export function ChatPanel({
       window.matchMedia("(pointer: fine)").matches;
     if (!finePointer) return;
     event.preventDefault();
-    if (!isStreaming && question.trim()) composerFormRef.current?.requestSubmit();
+    if (!isStreaming && question.trim())
+      composerFormRef.current?.requestSubmit();
   }
 
   function startNewChat() {
@@ -588,7 +616,11 @@ export function ChatPanel({
   // cuadro crece con el texto por JS hasta el máximo del CSS.
   useEffect(() => {
     const box = questionInputRef.current;
-    if (!box || typeof CSS === "undefined" || CSS.supports?.("field-sizing", "content")) {
+    if (
+      !box ||
+      typeof CSS === "undefined" ||
+      CSS.supports?.("field-sizing", "content")
+    ) {
       return;
     }
     box.style.height = "auto";
@@ -642,12 +674,15 @@ export function ChatPanel({
       stopDictation();
       return;
     }
+    startDictation(DICTATION_LANGUAGES[0]);
+  }
 
+  function startDictation(lang: string) {
     const Recognition = getSpeechRecognition();
     if (!Recognition) return;
 
     const recognition = new Recognition();
-    recognition.lang = "es-PE";
+    recognition.lang = lang;
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.onsoundstart = () => setIsHearingSound(true);
@@ -665,16 +700,34 @@ export function ChatPanel({
       }
     };
     let recognitionFailed = false;
-    recognition.onerror = () => {
+    let retryLanguage: string | null = null;
+    // Cada sesión solo responde mientras sea la activa: al detenerla o al
+    // empezar otra, sus eventos tardíos no reinician ni cancelan nada.
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      const code = event?.error ?? "";
+      // "aborted" llega al detenerlo la propia persona: termina como siempre.
+      if (code === "aborted") return;
       recognitionFailed = true;
+      // Algunos navegadores no traen español de Perú: se reintenta con el
+      // español general antes de avisar.
+      const nextLanguage =
+        DICTATION_LANGUAGES[DICTATION_LANGUAGES.indexOf(lang) + 1];
+      if (code === "language-not-supported" && nextLanguage) {
+        retryLanguage = nextLanguage;
+        return;
+      }
       recognitionRef.current = null;
       setIsDictating(false);
       setIsHearingSound(false);
-      setStatus(
-        "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
-      );
+      setStatus(dictationErrorMessage(code));
     };
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      if (retryLanguage) {
+        startDictation(retryLanguage);
+        return;
+      }
       recognitionRef.current = null;
       setIsDictating(false);
       setIsHearingSound(false);
@@ -685,7 +738,7 @@ export function ChatPanel({
 
     recognitionRef.current = recognition;
     setIsDictating(true);
-    setStatus("Escuchando el dictado…");
+    setStatus("Escuchando el dictado… habla cerca del micrófono.");
     try {
       recognition.start();
     } catch {
@@ -878,9 +931,7 @@ export function ChatPanel({
           try {
             payload = JSON.parse(frame.data);
           } catch {
-            discardCurrentRequest(
-              FRIENDLY_ERRORS.malformed,
-            );
+            discardCurrentRequest(FRIENDLY_ERRORS.malformed);
             return;
           }
 
@@ -888,9 +939,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.conversation.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             turnRef.current.userMessageId = result.data.userMessageId;
@@ -939,9 +988,7 @@ export function ChatPanel({
           if (frame.event === "sources") {
             const result = chatStreamPayloadSchemas.sources.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             turnRef.current.sources = result.data.sources;
@@ -952,9 +999,7 @@ export function ChatPanel({
           if (frame.event === "token") {
             const result = chatStreamPayloadSchemas.token.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             setMessages((current) => {
@@ -988,9 +1033,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.clarification.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             setMessages((current) => [
@@ -1014,9 +1057,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.conversational.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             if (result.data.startsNewTopic) {
@@ -1051,9 +1092,7 @@ export function ChatPanel({
             const result =
               chatStreamPayloadSchemas.no_evidence.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             setMessages((current) => [
@@ -1086,9 +1125,7 @@ export function ChatPanel({
           if (frame.event === "done") {
             const result = chatStreamPayloadSchemas.done.safeParse(payload);
             if (!result.success) {
-              discardCurrentRequest(
-                FRIENDLY_ERRORS.malformed,
-              );
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
             replacePendingResponseMessage((message) => ({
@@ -1102,16 +1139,12 @@ export function ChatPanel({
         }
 
         if (done && !completed) {
-          discardCurrentRequest(
-            FRIENDLY_ERRORS.connection,
-          );
+          discardCurrentRequest(FRIENDLY_ERRORS.connection);
           return;
         }
       }
     } catch {
-      discardCurrentRequest(
-        FRIENDLY_ERRORS.connection,
-      );
+      discardCurrentRequest(FRIENDLY_ERRORS.connection);
     } finally {
       window.clearTimeout(coldStartTimer);
       setIsStreaming(false);
@@ -1145,12 +1178,6 @@ export function ChatPanel({
                   {activeParent.description}
                 </p>
               ) : null}
-              {activeParent && submodules.length > 0 ? (
-                <p>
-                  Selecciona el tema relacionado si lo deseas. También puedes
-                  escribir directamente tu consulta.
-                </p>
-              ) : null}
             </div>
           </header>
 
@@ -1164,6 +1191,10 @@ export function ChatPanel({
               aria-label={`Subtemas de ${activeParent.name}`}
               className="avend-chat-modules avend-chat-submodules"
             >
+              <p className="avend-chat-submodules-label">
+                Selecciona el tema relacionado si lo deseas (opcional). También
+                puedes escribir directamente tu consulta.
+              </p>
               {submodules.map((submodule) => (
                 <button
                   aria-pressed={submodule.id === selectedModuleId}
@@ -1214,7 +1245,9 @@ export function ChatPanel({
               fullName={fullName}
               onSuggestion={(text) => {
                 setQuestion(text);
-                setStatus("Ejemplo listo en el cuadro: ajústalo a tu caso y envíalo.");
+                setStatus(
+                  "Ejemplo listo en el cuadro: ajústalo a tu caso y envíalo.",
+                );
                 questionInputRef.current?.focus();
               }}
             />
@@ -1291,7 +1324,10 @@ export function ChatPanel({
                         const box = questionInputRef.current;
                         if (!box) return;
                         box.focus();
-                        box.setSelectionRange(box.value.length, box.value.length);
+                        box.setSelectionRange(
+                          box.value.length,
+                          box.value.length,
+                        );
                       });
                     }}
                     questions={message.suggestions}

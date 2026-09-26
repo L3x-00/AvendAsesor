@@ -794,7 +794,11 @@
 
 .avend-chat-avatar {
   align-items: center;
-  background: linear-gradient(145deg, var(--avend-navy), var(--avend-accent-strong));
+  background: linear-gradient(
+    145deg,
+    var(--avend-navy),
+    var(--avend-accent-strong)
+  );
   border-radius: 50%;
   color: #ffffff;
   display: inline-flex;
@@ -819,7 +823,10 @@
   padding-left: 2.375rem; /* alineado con el nombre, bajo el avatar */
 }
 
-.avend-chat-message:not(.avend-chat-message--user) > :not(.avend-chat-message-label):not(.avend-chat-message-content):not(.avend-chat-topic-divider) {
+.avend-chat-message:not(.avend-chat-message--user)
+  > :not(.avend-chat-message-label):not(.avend-chat-message-content):not(
+    .avend-chat-topic-divider
+  ) {
   margin-left: 2.375rem;
 }
 
@@ -886,7 +893,11 @@
 
 /* ---------- Cuadro de escritura fijo al pie ---------- */
 .avend-chat-composer {
-  background: linear-gradient(to bottom, rgb(243 245 249 / 0%), var(--avend-surface-muted) 1.25rem);
+  background: linear-gradient(
+    to bottom,
+    rgb(243 245 249 / 0%),
+    var(--avend-surface-muted) 1.25rem
+  );
   border: 0;
   border-radius: 0;
   bottom: 0;
@@ -1124,4 +1135,138 @@ ul.avend-chat-list {
   .avend-chat-suggested li {
     animation: none;
   }
+}
+
+/* =========================================================================
+   Identidad del chat docente (TSK-0061)
+   - Una sola columna de lectura: cabecera del módulo, temas, conversación y
+     cuadro de consulta comparten el mismo ancho y el mismo eje.
+   - Temas del módulo como fichas compactas en una fila (antes, tarjetas
+     altas de anchos dispares que alargaban la página).
+   - El cuadro de consulta no proyecta sombra de tarjeta al enfocarse: su
+     franja fija es transparente y la sombra se veía como un recuadro opaco.
+   ========================================================================= */
+.avend-chat-composer:focus-within {
+  box-shadow: none;
+}
+
+.avend-chat-workspace-transition {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 50rem;
+  width: 100%;
+}
+
+.avend-chat-header {
+  padding: 0 0 1rem;
+}
+
+.avend-chat-header .avend-chat-module-description {
+  margin-top: 0.5rem;
+}
+
+.avend-chat-submodules {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow: visible;
+  padding: 0 0 1.25rem;
+}
+
+.avend-chat-submodules-label {
+  color: var(--avend-text-muted);
+  flex: 1 0 100%;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 0.25rem;
+}
+
+.avend-chat-submodules .avend-chat-module {
+  align-items: center;
+  border-radius: 999px;
+  box-shadow: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.3125rem 1rem 0.3125rem 0.3125rem;
+  transform: none;
+}
+
+.avend-chat-submodules
+  .avend-chat-module:not(:disabled):not([aria-pressed="true"]):hover {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+  box-shadow: none;
+  transform: none;
+}
+
+.avend-chat-submodules .avend-chat-module[aria-pressed="true"] {
+  background: var(--avend-navy);
+  border-color: var(--avend-navy);
+  box-shadow: 0 6px 14px rgb(13 27 61 / 18%);
+  color: #ffffff;
+  transform: none;
+}
+
+/* Selector doble: la regla global `.avend-chat-module span { display: block }`
+   ganaba al icono y dejaba el dibujo pegado a la esquina superior. */
+.avend-chat-module .avend-chat-module-icon {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.avend-chat-submodules .avend-chat-module-icon {
+  border: 0;
+  border-radius: 999px;
+  height: 2rem;
+  width: 2rem;
+}
+
+.avend-chat-submodules .avend-chat-module-icon svg {
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.avend-chat-submodules
+  .avend-chat-module[aria-pressed="true"]
+  .avend-chat-module-icon {
+  background: rgb(255 255 255 / 16%);
+  color: #ffffff;
+}
+
+.avend-chat-submodules .avend-chat-module-name {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* El tema elegido ya se ve en su ficha: aquí queda solo una línea discreta
+   con la opción de quitarlo. */
+.avend-chat-context {
+  background: transparent;
+  border: 0;
+  color: var(--avend-text-muted);
+  margin: -0.75rem 0 0.75rem;
+  padding: 0;
+}
+
+.avend-chat-context strong {
+  color: var(--avend-text);
+}
+
+.avend-chat-context button {
+  color: var(--avend-accent-strong, var(--avend-accent));
+}
+
+/* Bienvenida más compacta: la consulta debe verse sin desplazarse. */
+.avend-chat-welcome {
+  padding: clamp(1.125rem, 2.5vw, 1.5rem);
+}
+
+.avend-chat-welcome h2 {
+  margin-top: 0.75rem;
 }

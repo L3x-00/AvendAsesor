@@ -151,6 +151,48 @@ describe('ChatService', () => {
     );
   });
 
+  it('tells what the loaded documents cover when there is no evidence', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    const coverageSummary = jest
+      .fn()
+      .mockResolvedValueOnce('Por ahora mis documentos cubren: Remuneraciones.')
+      .mockRejectedValueOnce(new Error('db down'));
+    const withCatalog = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      { coverageSummary } as never,
+    );
+    const messageOf = async () => {
+      const event = (
+        await collect(withCatalog, {
+          question:
+            '¿Cuál es el plazo para presentar la solicitud de licencia?',
+        })
+      ).find((item) => item.type === 'no_evidence');
+      if (!event || event.type !== 'no_evidence') {
+        throw new Error('Expected a no_evidence event.');
+      }
+      return event.data.message;
+    };
+
+    const withCoverage = await messageOf();
+    expect(withCoverage).toContain('antecedente');
+    expect(withCoverage).toContain(
+      '\n\nPor ahora mis documentos cubren: Remuneraciones.',
+    );
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ answer: withCoverage }),
+    );
+    // Si el catálogo falla, el «sin sustento» sale igual, sin la línea extra.
+    expect(await messageOf()).toBe(noEvidenceMessage('current'));
+  });
+
   it('offers to check historical antecedents on a current-scope no-evidence', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',

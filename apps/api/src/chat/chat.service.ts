@@ -945,6 +945,19 @@ export class ChatService {
     };
   }
 
+  /** Temas que cubren hoy los documentos; nunca impide responder. */
+  private async catalogCoverage(): Promise<string | null> {
+    if (!this.catalogService) return null;
+    try {
+      return await this.catalogService.coverageSummary();
+    } catch (error) {
+      this.logger.warn(
+        `Cobertura del catálogo no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
+      );
+      return null;
+    }
+  }
+
   /** Cierra el turno como «sin evidencia»: mensaje claro, sin fuentes. */
   private async *completeWithoutEvidence(input: {
     conversationId: string;
@@ -955,7 +968,9 @@ export class ChatService {
     userId: string;
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
-    const message = input.message ?? noEvidenceMessage(input.retrievalScope);
+    const base = input.message ?? noEvidenceMessage(input.retrievalScope);
+    const coverage = await this.catalogCoverage();
+    const message = coverage ? `${base}\n\n${coverage}` : base;
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: input.conversationId,

@@ -12,6 +12,15 @@ import {
 export const SUGGESTIONS_CACHE_MS = 30 * 60 * 1000;
 /** Tras un fallo de la IA, cuánto se usan las preguntas de respaldo. */
 export const FAILED_SUGGESTIONS_CACHE_MS = 2 * 60 * 1000;
+/** Resumen de cobertura para «sin sustento»: se consulta la base como mucho cada 5 min. */
+export const COVERAGE_CACHE_MS = 5 * 60 * 1000;
+export const FAILED_COVERAGE_CACHE_MS = 60 * 1000;
+const OTHER_TOPICS = 'otros temas';
+
+function joinSpanish(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} y ${items.at(-1)}`;
+}
 const MAX_LISTED_DOCUMENTS = 25;
 const MAX_FALLBACK_SUGGESTIONS = 4;
 const SHORT_TITLE_CHARS = 70;
@@ -79,6 +88,7 @@ export class ChatCatalogService {
     signature: string;
     suggestions: string[];
   } | null = null;
+  private coverage: { expiresAt: number; summary: string | null } | null = null;
   private inFlight: {
     promise: Promise<string[]>;
     signature: string;
@@ -90,6 +100,52 @@ export class ChatCatalogService {
     @Inject(SUGGESTED_QUESTIONS_GATEWAY)
     private readonly suggestionsGateway: SuggestedQuestionsGateway,
   ) {}
+
+  /**
+   * Una línea de asesor para cuando el RAG no encuentra sustento: qué temas
+   * cubren hoy los documentos cargados y cómo ver la lista completa. Así el
+   * docente sabe qué puede consultar en vez de quedarse sin orientación.
+   */
+  async coverageSummary(): Promise<string | null> {
+    if (this.coverage && this.coverage.expiresAt > Date.now()) {
+      return this.coverage.summary;
+    }
+    let documents: AvailableDocument[];
+    try {
+      documents = await this.catalogGateway.listAvailableDocuments();
+    } catch (error) {
+      // Un fallo se recuerda un minuto: cada «sin sustento» no debe esperar
+      // a que la base vuelva a fallar.
+      this.coverage = {
+        expiresAt: Date.now() + FAILED_COVERAGE_CACHE_MS,
+        summary: null,
+      };
+      throw error;
+    }
+    const counts = new Map<string, number>();
+    for (const document of documents) {
+      const topic = document.moduleNames[0] ?? OTHER_TOPICS;
+      counts.set(topic, (counts.get(topic) ?? 0) + 1);
+    }
+    const topics = [...counts.entries()]
+      // «otros temas» siempre al final.
+      .sort(([left], [right]) =>
+        left === OTHER_TOPICS
+          ? 1
+          : right === OTHER_TOPICS
+            ? -1
+            : left.localeCompare(right, 'es'),
+      )
+      .map(
+        ([topic, count]) =>
+          `${topic} (${count} ${count === 1 ? 'documento' : 'documentos'})`,
+      );
+    const summary = topics.length
+      ? `Por ahora mis documentos cubren: ${joinSpanish(topics)}. Si quieres, pregúntame «¿De qué tienes información?» y te muestro la lista con preguntas recomendadas.`
+      : null;
+    this.coverage = { expiresAt: Date.now() + COVERAGE_CACHE_MS, summary };
+    return summary;
+  }
 
   async reply(abortSignal?: AbortSignal): Promise<ChatCatalogReply> {
     const documents = await this.catalogGateway.listAvailableDocuments();
