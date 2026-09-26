@@ -226,7 +226,9 @@ describe("ModulesExplorer", () => {
     await user.clear(screen.getByLabelText("Nombre"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     await user.click(screen.getByRole("button", { name: "Desactivar" }));
-    await user.click(screen.getByRole("button", { name: "Eliminar (lógico)" }));
+    // Eliminar va en dos pasos: el botón rojo despliega la confirmación.
+    await user.click(screen.getByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }));
+    await user.click(screen.getByRole("button", { name: /^Sí, eliminar/ }));
     expect(screen.getByLabelText("Nombre")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(/Motivo de desactivación/)).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute("aria-invalid", "true");
@@ -256,7 +258,7 @@ describe("ModulesExplorer", () => {
     await user.click(screen.getByText("Editar, ordenar o cambiar estado"));
 
     expect(
-      screen.queryByRole("button", { name: "Eliminar (lógico)" }),
+      screen.queryByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(/Elimina primero sus submódulos/i),
