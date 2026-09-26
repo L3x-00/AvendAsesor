@@ -376,7 +376,9 @@ describe('ChatService — lineamientos del cliente', () => {
       const noEvidence = events.find(
         (event) => event.type === 'no_evidence',
       ) as { data: { message: string } } | undefined;
-      expect(noEvidence?.data.message).toContain('Me especializo en el ámbito educativo');
+      expect(noEvidence?.data.message).toContain(
+        'Me especializo en el ámbito educativo',
+      );
       expect(completion()).toMatchObject({
         replyRole: 'no_evidence',
         unansweredReason: 'insufficient_evidence',
