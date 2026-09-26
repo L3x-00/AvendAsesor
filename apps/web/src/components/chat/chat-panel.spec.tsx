@@ -1054,6 +1054,34 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
   });
 
+  it("muestra el catálogo con preguntas recomendadas que rellenan el cuadro", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          'event: conversational\ndata: {"message":"¡Claro! Hoy puedo responderte con este documento.","suggestions":["¿Qué funciones tiene el Coordinador Pedagógico?"]}\n\n',
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    const group = await screen.findByRole("region", {
+      name: "Preguntas recomendadas",
+    });
+    await user.click(
+      within(group).getByRole("button", {
+        name: "¿Qué funciones tiene el Coordinador Pedagógico?",
+      }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toHaveValue("¿Qué funciones tiene el Coordinador Pedagógico?");
+  });
+
   it("answers a greeting conversationally without RAG sources", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });

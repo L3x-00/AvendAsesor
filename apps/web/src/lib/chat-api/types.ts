@@ -117,6 +117,8 @@ export const chatStreamPayloadSchemas = {
   conversational: z.object({
     message: z.string().min(1).max(20_000),
     startsNewTopic: z.boolean().optional(),
+    /** Preguntas recomendadas de la respuesta de catálogo. */
+    suggestions: z.array(z.string().min(1).max(200)).max(8).optional(),
   }),
   done: z.object({
     conversationId: z.string().uuid(),

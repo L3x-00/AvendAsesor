@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   SUPABASE_ADMIN_DASHBOARD_GATEWAY,
   SUPABASE_AUTH_GATEWAY,
+  SUPABASE_CHAT_CATALOG_GATEWAY,
   SUPABASE_CHAT_GATEWAY,
   SUPABASE_CONSULTATION_CASES_GATEWAY,
   SUPABASE_DOCUMENTS_GATEWAY,
@@ -21,6 +22,7 @@ import {
 } from './supabase.constants';
 import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
 import { SupabaseAuthGatewayAdapter } from './supabase-auth.gateway';
+import { SupabaseChatCatalogGatewayAdapter } from './supabase-chat-catalog.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
 import { SupabaseConsultationCasesGatewayAdapter } from './supabase-consultation-cases.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
@@ -132,6 +134,12 @@ import {
         new SupabaseChatGatewayAdapter(client),
     },
     {
+      provide: SUPABASE_CHAT_CATALOG_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseChatCatalogGatewayAdapter(client),
+    },
+    {
       provide: SUPABASE_CONSULTATION_CASES_GATEWAY,
       inject: [SUPABASE_SERVER_CLIENT],
       useFactory: (client: SupabaseServerClient | null) =>
@@ -171,6 +179,7 @@ import {
   exports: [
     SUPABASE_ADMIN_DASHBOARD_GATEWAY,
     SUPABASE_AUTH_GATEWAY,
+    SUPABASE_CHAT_CATALOG_GATEWAY,
     SUPABASE_CHAT_GATEWAY,
     SUPABASE_CONSULTATION_CASES_GATEWAY,
     SUPABASE_DOCUMENTS_GATEWAY,

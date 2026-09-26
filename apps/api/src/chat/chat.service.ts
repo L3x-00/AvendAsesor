@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ChatCatalogService } from './catalog/chat-catalog.service';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
@@ -103,7 +105,12 @@ export type ChatStreamEvent =
     }
   | { data: { message: string }; type: 'no_evidence' }
   | {
-      data: { message: string; startsNewTopic?: boolean };
+      data: {
+        message: string;
+        startsNewTopic?: boolean;
+        /** Preguntas recomendadas (catálogo): la interfaz las ofrece como botones. */
+        suggestions?: string[];
+      };
       type: 'conversational';
     }
   | {
@@ -463,6 +470,7 @@ export class ChatService {
     private readonly ragService: RagService,
     private readonly configService: ConfigService,
     private readonly faqMemoryService: FaqMemoryService,
+    @Optional() private readonly catalogService?: ChatCatalogService,
   ) {}
 
   getConversation(
@@ -975,8 +983,28 @@ export class ChatService {
   private async conversationalReply(
     kind: ConversationalReplyKind,
   ): Promise<ChatStreamEvent> {
+    // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
+    // Si el catálogo falla, se responde con los temas (texto determinista).
+    if (kind === 'catalog' && this.catalogService) {
+      try {
+        const catalog = await this.catalogService.reply();
+        return {
+          data: {
+            message: catalog.message,
+            ...(catalog.suggestions.length
+              ? { suggestions: catalog.suggestions }
+              : {}),
+          },
+          type: 'conversational',
+        };
+      } catch {
+        // Continúa con la respuesta de temas.
+      }
+    }
     const topics =
-      kind === 'capabilities' || kind === 'ask_announcement'
+      kind === 'capabilities' ||
+      kind === 'ask_announcement' ||
+      kind === 'catalog'
         ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {

@@ -32,6 +32,39 @@ export function plainAnswerText(content: string): string {
     .trim();
 }
 
+/**
+ * Preguntas recomendadas bajo la respuesta de catálogo («¿de qué tienes
+ * información?»). Tocar una la deja lista en el cuadro para ajustarla y
+ * enviarla: nunca se envía sola.
+ */
+export function SuggestedQuestions({
+  disabled,
+  onPick,
+  questions,
+}: {
+  disabled?: boolean;
+  onPick: (question: string) => void;
+  questions: string[];
+}) {
+  return (
+    <section aria-label="Preguntas recomendadas" className="avend-chat-suggested">
+      <p className="avend-chat-suggested-title">Preguntas recomendadas</p>
+      <ul>
+        {questions.map((question, index) => (
+          <li key={question} style={{ animationDelay: `${index * 60}ms` }}>
+            <button disabled={disabled} onClick={() => onPick(question)} type="button">
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path d="M5 18.5 3.5 21l3.1-1.1A8.5 8.5 0 1 0 5 18.5Z" />
+              </svg>
+              <span>{question}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 type CopyState = "copied" | "failed" | "idle";
 
 /** "Copiar respuesta": confirma en el mismo botón y vuelve a su estado. */
