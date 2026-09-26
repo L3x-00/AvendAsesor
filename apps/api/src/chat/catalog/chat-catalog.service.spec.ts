@@ -1,5 +1,6 @@
 import {
   ChatCatalogService,
+  COVERAGE_CACHE_MS,
   FAILED_SUGGESTIONS_CACHE_MS,
   fallbackSuggestions,
 } from './chat-catalog.service';
@@ -172,6 +173,60 @@ describe('ChatCatalogService', () => {
     expect(reply.suggestions).toEqual([
       '¿Qué funciones tiene el Coordinador Pedagógico?',
     ]);
+  });
+
+  it('resume qué temas cubren los documentos y lo reutiliza unos minutos', async () => {
+    const { catalogGateway, service: catalog } = service([
+      document(),
+      document({ id: 'd2' }),
+      document({ id: 'd3', moduleNames: ['Ley y reglamento'] }),
+      document({ id: 'd4', moduleNames: [] }),
+    ]);
+
+    const summary = await catalog.coverageSummary();
+    await catalog.coverageSummary();
+
+    expect(summary).toBe(
+      'Por ahora mis documentos cubren: Cargos y plazas (2 documentos), Ley y reglamento (1 documento) y otros temas (1 documento). Si quieres, pregúntame «¿De qué tienes información?» y te muestro la lista con preguntas recomendadas.',
+    );
+    expect(catalogGateway.listAvailableDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it('deja «otros temas» al final y recuerda un fallo un minuto', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+    try {
+      const { catalogGateway, service: catalog } = service([
+        document({ moduleNames: [] }),
+        document({ id: 'd2', moduleNames: ['Remuneraciones'] }),
+      ]);
+      await expect(catalog.coverageSummary()).resolves.toContain(
+        'Remuneraciones (1 documento) y otros temas (1 documento).',
+      );
+
+      now.mockReturnValue(5_000_000 + COVERAGE_CACHE_MS + 1);
+      catalogGateway.listAvailableDocuments.mockRejectedValueOnce(
+        new Error('db down'),
+      );
+      await expect(catalog.coverageSummary()).rejects.toThrow('db down');
+      await expect(catalog.coverageSummary()).resolves.toBeNull();
+      expect(catalogGateway.listAvailableDocuments).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('sin documentos no añade resumen de cobertura', async () => {
+    const { service: catalog } = service([]);
+
+    await expect(catalog.coverageSummary()).resolves.toBeNull();
+  });
+
+  it('con un solo tema lo nombra sin conjunciones', async () => {
+    const { service: catalog } = service([document()]);
+
+    await expect(catalog.coverageSummary()).resolves.toContain(
+      'cubren: Cargos y plazas (1 documento).',
+    );
   });
 
   it('sin documentos lo dice con claridad y sin sugerencias', async () => {
