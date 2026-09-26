@@ -110,7 +110,7 @@ export function GuideContent() {
             vez al abrir la guía y queda quieta. */}
         <div aria-hidden="true" className={styles.preview}>
           <div className={`${styles.bubble} ${styles.bubbleUser}`}>
-            ¿Qué requisitos necesito para solicitar una reasignación?
+            ¿Qué requisitos necesito para mi trámite?
           </div>
           <div className={styles.thinking}>
             <span />

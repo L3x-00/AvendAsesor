@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ConnectionStatus } from "@/components/ui/connection-status";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 import "./ui-polish.css";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <ToastProvider>{children}</ToastProvider>
+        <ConnectionStatus />
       </body>
     </html>
   );

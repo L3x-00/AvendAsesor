@@ -22,6 +22,7 @@ import {
   documentYears,
   issuingEntityLabel,
 } from "@/lib/admin-api/document-taxonomy";
+import styles from "./document-library-view.module.css";
 
 interface DocumentLibraryViewProps {
   activeFilterCount: number;
@@ -51,15 +52,8 @@ const technicalClasses = {
   ready: "border-emerald-300 bg-emerald-50 text-emerald-800",
 } as const;
 
-function accessHref(
-  documentId: string,
-  disposition: "attachment" | "inline",
-  versionId?: string | null,
-): string {
-  const params = new URLSearchParams({ disposition });
-  if (versionId) params.set("versionId", versionId);
-  return `/api/admin/documents/${documentId}/access?${params.toString()}`;
-}
+const fieldClass =
+  "mt-1 min-h-11 w-full rounded-md border border-avend-border bg-white px-3 text-base";
 
 function AssociationList({
   associations,
@@ -180,45 +174,85 @@ function displayedIssuingEntity(document: DocumentLibraryItem): string {
     : issuingEntityLabel(document.issuingEntity);
 }
 
-function DocumentActions({
-  compact = false,
-  document,
-}: {
-  compact?: boolean;
-  document: DocumentLibraryItem;
-}) {
-  const actionClass = `inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border bg-white px-3 py-2 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-avend-accent ${compact ? "w-full" : ""}`;
+function MissingPdfNote({ document }: { document: DocumentLibraryItem }) {
+  if (document.currentVersionId) return null;
+  return <span className="block text-avend-text-muted">Sin PDF disponible</span>;
+}
 
+function EyeIcon() {
   return (
-    <div className={compact ? "grid gap-2" : "flex flex-wrap gap-2"}>
-      <Link className={actionClass} href={`/admin/documents/${document.id}`}>
-        Ver detalle
-      </Link>
-      {document.currentVersionId ? (
-        <>
-          <Link
-            className={actionClass}
-            href={`/admin/documents/${document.id}#pdf-viewer`}
-          >
-            Ver PDF
-          </Link>
-          <a
-            className={actionClass}
-            href={accessHref(
-              document.id,
-              "attachment",
-              document.currentVersionId,
-            )}
-          >
-            Descargar PDF
-          </a>
-        </>
-      ) : (
-        <span className="inline-flex min-h-11 items-center px-2 text-base font-medium text-avend-text-muted">
-          Sin PDF disponible
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </svg>
+  );
+}
+
+/**
+ * Acciones compactas: ojo = ver detalle, lápiz = editar.
+ * - En la tabla solo se ve el ícono; el nombre completo aparece como etiqueta
+ *   flotante al pasar el mouse o al llegar con el teclado, sin mover nada.
+ * - En las tarjetas (pantallas pequeñas y táctiles) el nombre se ve siempre.
+ * Cada enlace conserva su nombre accesible para lectores de pantalla.
+ */
+function DocumentActions({
+  document,
+  variant = "table",
+}: {
+  document: DocumentLibraryItem;
+  variant?: "card" | "table";
+}) {
+  return (
+    <div className={`${styles.actions} ${variant === "card" ? styles.actionsCard : styles.actionsTable}`}>
+      <Link
+        aria-label={`Ver detalle: ${document.title}`}
+        className={styles.action}
+        href={`/admin/documents/${document.id}`}
+        title="Ver detalle"
+      >
+        <EyeIcon />
+        <span aria-hidden="true" className={styles.actionLabel}>
+          Ver detalle
         </span>
-      )}
+      </Link>
+      <Link
+        aria-label={`Editar: ${document.title}`}
+        className={styles.action}
+        href={`/admin/documents/${document.id}#edit-document`}
+        title="Editar"
+      >
+        <PencilIcon />
+        <span aria-hidden="true" className={styles.actionLabel}>
+          Editar
+        </span>
+      </Link>
     </div>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M4 6h16M7 12h10M10 18h4" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <circle cx="10.75" cy="10.75" r="6.75" />
+      <path d="m16 16 4 4" />
+    </svg>
   );
 }
 
@@ -252,79 +286,79 @@ export function DocumentLibraryView({
     }))
     .filter((group) => group.children.length > 0);
   const totalPages = Math.max(1, Math.ceil(library.total / library.limit));
+  // La búsqueda por nombre ya está a la vista: no cuenta como "filtro
+  // avanzado". (La ubicación fija de un módulo ya la descuenta su página.)
+  const advancedFilterCount = Math.max(
+    0,
+    activeFilterCount - (query.q !== undefined ? 1 : 0),
+  );
 
   return (
     <div className="space-y-6">
-      <form
-        action={basePath}
-        className="avend-elevated rounded-xl border border-avend-border bg-avend-surface p-5"
-        method="get"
-      >
+      {/*
+        Vista minimalista: a la vista solo queda la búsqueda. El resto de los
+        filtros vive en un panel plegable, así la pantalla no se satura ni se
+        alarga. Al estar dentro del mismo formulario, los filtros elegidos se
+        conservan aunque el panel esté cerrado.
+      */}
+      <form action={basePath} className={styles.searchCard} method="get">
         {lockLocation && query.moduleId ? (
           <input name="moduleId" type="hidden" value={query.moduleId} />
         ) : null}
         {lockLocation && query.submoduleId ? (
           <input name="submoduleId" type="hidden" value={query.submoduleId} />
         ) : null}
-        <div className="grid gap-4 lg:grid-cols-12">
-          <label className="block lg:col-span-8" htmlFor="library-search">
-            <span className="text-base font-semibold">Buscar documento</span>
+
+        <div className={styles.searchRow}>
+          <label className={styles.searchField} htmlFor="library-search">
+            <span className="sr-only">Buscar documentos por nombre</span>
+            <span aria-hidden="true" className={styles.searchIcon}>
+              <SearchIcon />
+            </span>
             <input
-              className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
               defaultValue={query.q}
               id="library-search"
               maxLength={200}
               name="q"
-              placeholder="Buscar documento..."
+              placeholder="Buscar documentos por nombre"
               type="search"
             />
-            <span className="mt-1 block text-base text-avend-text-muted">
-              Busca por título, número, entidad o palabras clave.
-            </span>
           </label>
-          <label className="block lg:col-span-4" htmlFor="library-sort">
-            <span className="text-base font-semibold">Ordenar por</span>
-            <select
-              className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-              defaultValue={query.sort}
-              id="library-sort"
-              name="sort"
-            >
-              <option value="newest">Más recientes (última versión)</option>
-              <option value="oldest">Más antiguos (última versión)</option>
-              <option value="year">Año (más reciente primero)</option>
-              <option value="title">Título (A–Z)</option>
-              <option value="upload_date">
-                Fecha de carga (más reciente primero)
-              </option>
-              <option value="document_type">Tipo documental (A–Z)</option>
-              <option value="issuing_entity">Entidad emisora (A–Z)</option>
-              <option value="situation">
-                Situación (Vigente → Archivado)
-              </option>
-              <option value="technical_status">
-                Estado técnico (Error primero)
-              </option>
-              <option value="module">Módulo / submódulo</option>
-            </select>
-            <span className="mt-1 block text-base text-avend-text-muted">
-              «Más recientes» usa la fecha de la última versión subida; «Fecha
-              de carga» usa la fecha en que se registró el documento.
-            </span>
-          </label>
+          <button className="avend-button avend-button--primary" type="submit">
+            Buscar
+          </button>
+        </div>
 
-          <fieldset className="contents">
+        <details className={styles.advanced}>
+          <summary className={styles.advancedToggle}>
+            <FilterIcon />
+            <span>Filtros avanzados</span>
+            {advancedFilterCount > 0 ? (
+              <span className={styles.badge}>
+                {advancedFilterCount}
+                <span className="sr-only">
+                  {advancedFilterCount === 1 ? " filtro activo" : " filtros activos"}
+                </span>
+              </span>
+            ) : null}
+            <svg aria-hidden="true" className={styles.chevron} fill="none" viewBox="0 0 24 24">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </summary>
+
+          <fieldset className={styles.filtersGrid}>
             <legend className="sr-only">Filtros de documentos</legend>
-            <label className="block lg:col-span-2" htmlFor="library-year">
+            <label htmlFor="library-year">
               <span className="text-base font-semibold">Año</span>
               <input
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.issuanceYear ?? ""}
                 id="library-year"
                 inputMode="numeric"
                 list="library-year-options"
-                max={new Date().getFullYear()}
-                min={1800}
+                // Sin min/max del navegador: con el panel plegado, un año fuera
+                // de rango bloqueaba "Buscar" sin mostrar por qué. El servidor
+                // ya descarta los años inválidos.
                 name="issuanceYear"
                 placeholder="Todos (ej. 2026 o 2009)"
                 type="number"
@@ -337,10 +371,10 @@ export function DocumentLibraryView({
                 </option>
               ))}
             </datalist>
-            <label className="block lg:col-span-3" htmlFor="library-type">
+            <label htmlFor="library-type">
               <span className="text-base font-semibold">Tipo documental</span>
               <select
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.documentType}
                 id="library-type"
                 name="documentType"
@@ -353,10 +387,10 @@ export function DocumentLibraryView({
                 ))}
               </select>
             </label>
-            <label className="block lg:col-span-3" htmlFor="library-entity">
+            <label htmlFor="library-entity">
               <span className="text-base font-semibold">Entidad</span>
               <select
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.issuingEntity}
                 id="library-entity"
                 name="issuingEntity"
@@ -370,10 +404,10 @@ export function DocumentLibraryView({
               </select>
             </label>
             {!lockLocation ? (
-              <label className="block lg:col-span-4" htmlFor="library-module">
+              <label htmlFor="library-module">
                 <span className="text-base font-semibold">Módulo</span>
                 <select
-                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  className={fieldClass}
                   defaultValue={query.moduleId ?? ""}
                   id="library-module"
                   name="moduleId"
@@ -388,13 +422,10 @@ export function DocumentLibraryView({
               </label>
             ) : null}
             {!lockLocation ? (
-              <label
-                className="block lg:col-span-4"
-                htmlFor="library-submodule"
-              >
+              <label htmlFor="library-submodule">
                 <span className="text-base font-semibold">Submódulo</span>
                 <select
-                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  className={fieldClass}
                   defaultValue={query.submoduleId ?? ""}
                   id="library-submodule"
                   name="submoduleId"
@@ -412,10 +443,10 @@ export function DocumentLibraryView({
                 </select>
               </label>
             ) : null}
-            <label className="block lg:col-span-4" htmlFor="library-situation">
+            <label htmlFor="library-situation">
               <span className="text-base font-semibold">Situación</span>
               <select
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.situation ?? ""}
                 id="library-situation"
                 name="situation"
@@ -426,38 +457,34 @@ export function DocumentLibraryView({
                 <option value="archived">Archivado</option>
               </select>
             </label>
-            <label className="block lg:col-span-4" htmlFor="library-technical">
+            <label htmlFor="library-technical">
               <span className="text-base font-semibold">Estado técnico</span>
               <select
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.technicalStatus ?? ""}
                 id="library-technical"
                 name="technicalStatus"
               >
                 <option value="">Todos</option>
                 <option value="ready">Listo</option>
-                <option value="pending_approval">
-                  Pendiente de aprobación
-                </option>
+                <option value="pending_approval">Pendiente de aprobación</option>
                 <option value="error">Error</option>
               </select>
             </label>
-            <label className="block lg:col-span-3" htmlFor="library-created-from">
-              <span className="text-base font-semibold">
-                Cargado desde
-              </span>
+            <label htmlFor="library-created-from">
+              <span className="text-base font-semibold">Cargado desde</span>
               <input
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.createdFrom ?? ""}
                 id="library-created-from"
                 name="createdFrom"
                 type="date"
               />
             </label>
-            <label className="block lg:col-span-3" htmlFor="library-created-to">
+            <label htmlFor="library-created-to">
               <span className="text-base font-semibold">Cargado hasta</span>
               <input
-                className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                className={fieldClass}
                 defaultValue={query.createdTo ?? ""}
                 id="library-created-to"
                 name="createdTo"
@@ -465,15 +492,12 @@ export function DocumentLibraryView({
               />
             </label>
             {uploaders.length > 0 ? (
-              <label
-                className="block lg:col-span-6"
-                htmlFor="library-created-by"
-              >
+              <label htmlFor="library-created-by">
                 <span className="text-base font-semibold">
                   Administrador que lo cargó
                 </span>
                 <select
-                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                  className={fieldClass}
                   defaultValue={query.createdBy ?? ""}
                   id="library-created-by"
                   name="createdBy"
@@ -487,27 +511,49 @@ export function DocumentLibraryView({
                 </select>
               </label>
             ) : null}
+            <label htmlFor="library-sort">
+              <span className="text-base font-semibold">Ordenar por</span>
+              <select
+                className={fieldClass}
+                defaultValue={query.sort}
+                id="library-sort"
+                name="sort"
+              >
+                <option value="newest">Más recientes (última versión)</option>
+                <option value="oldest">Más antiguos (última versión)</option>
+                <option value="year">Año (más reciente primero)</option>
+                <option value="title">Título (A–Z)</option>
+                <option value="upload_date">
+                  Fecha de carga (más reciente primero)
+                </option>
+                <option value="document_type">Tipo documental (A–Z)</option>
+                <option value="issuing_entity">Entidad emisora (A–Z)</option>
+                <option value="situation">Situación (Vigente → Archivado)</option>
+                <option value="technical_status">
+                  Estado técnico (Error primero)
+                </option>
+                <option value="module">Módulo / submódulo</option>
+              </select>
+            </label>
           </fieldset>
-        </div>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            className="avend-button avend-button--primary inline-flex min-h-11 items-center justify-center rounded-md px-5 text-base font-semibold text-white"
-            type="submit"
-          >
-            Aplicar búsqueda y filtros
-          </button>
-          <Link
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-avend-border px-4 text-base font-semibold text-avend-navy hover:bg-avend-soft-blue"
-            href={clearedLibraryFiltersHref(query, basePath)}
-          >
-            Limpiar filtros
-          </Link>
-          <span className="text-base text-avend-text-muted">
-            {activeFilterCount === 0
-              ? "Sin filtros activos"
-              : `${activeFilterCount} ${activeFilterCount === 1 ? "filtro activo" : "filtros activos"}`}
-          </span>
-        </div>
+
+          <div className={styles.advancedActions}>
+            <button className="avend-button avend-button--primary" type="submit">
+              Aplicar filtros
+            </button>
+          </div>
+        </details>
+
+        {activeFilterCount > 0 ? (
+          <p className={styles.activeSummary}>
+            <span>
+              {`${activeFilterCount} ${activeFilterCount === 1 ? "filtro activo" : "filtros activos"}`}
+            </span>
+            <Link href={clearedLibraryFiltersHref(query, basePath)}>
+              Limpiar filtros
+            </Link>
+          </p>
+        ) : null}
       </form>
 
       <section aria-labelledby="document-library-results" className="space-y-4">
@@ -543,84 +589,86 @@ export function DocumentLibraryView({
           </div>
         ) : (
           <>
-            {/* La tabla desborda a propósito (min-w 64rem): el contenedor debe
-                ser enfocable para poder desplazarlo solo con teclado. */}
+            {/*
+              Cada documento ocupa dos filas: el título a lo ancho de toda la
+              tabla (una sola línea; el texto completo va en el tooltip y en el
+              detalle) y debajo sus datos. Antes el título vivía en una columna
+              angosta y un nombre largo estiraba cada fila hacia abajo.
+            */}
             <div
               aria-label="Tabla de documentos, desplazable horizontalmente"
               className="hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block"
               role="region"
               tabIndex={0}
             >
-              <table className="w-full min-w-[64rem] table-fixed border-collapse text-left text-base">
+              <table className={`${styles.table} w-full min-w-[60rem] border-collapse text-left text-base`}>
                 <thead className="bg-avend-surface-muted text-avend-navy">
                   <tr>
-                    <th className="w-40 px-4 py-3 font-bold" scope="col">
-                      Documento
+                    <th className="px-4 py-3 font-bold" scope="col">
+                      Tipo / número
                     </th>
-                    <th className="w-16 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Año
                     </th>
-                    <th className="w-24 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Entidad
                     </th>
-                    <th className="w-32 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Módulo / Submódulo
                     </th>
-                    <th className="w-32 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Situación
                     </th>
-                    <th className="w-32 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Estado
                     </th>
-                    <th className="w-32 px-3 py-3 font-bold" scope="col">
+                    <th className="px-3 py-3 font-bold" scope="col">
                       Fecha de carga
                     </th>
-                    <th
-                      className="sticky right-0 z-10 w-40 border-l border-avend-border bg-avend-surface-muted px-3 py-3 font-bold"
-                      scope="col"
-                    >
+                    <th className={`${styles.actionsCell} px-3 py-3 text-right font-bold`} scope="col">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {library.items.map((document) => (
-                    <tr
-                      className="border-t border-avend-border align-top"
-                      key={document.id}
-                    >
-                      <th className="px-4 py-4 font-normal" scope="row">
+                {library.items.map((document) => (
+                  <tbody className={styles.documentGroup} key={document.id}>
+                    <tr>
+                      <th className={styles.titleCell} colSpan={8} scope="rowgroup">
                         <Link
-                          className="font-bold text-avend-navy hover:underline"
+                          className={styles.titleLink}
                           href={`/admin/documents/${document.id}`}
+                          title={document.title}
                         >
                           {document.title}
                         </Link>
-                        <span className="mt-1 block break-words text-avend-text-muted">
-                          {displayedDocumentType(document)}
-                          {document.resolutionNumber
-                            ? ` · ${document.resolutionNumber}`
-                            : ""}
-                        </span>
                       </th>
-                      <td className="px-3 py-4">
+                    </tr>
+                    <tr className="align-top">
+                      <td className="px-4 pb-4 pt-1 text-avend-text-muted">
+                        {displayedDocumentType(document)}
+                        {document.resolutionNumber
+                          ? ` · ${document.resolutionNumber}`
+                          : ""}
+                        <MissingPdfNote document={document} />
+                      </td>
+                      <td className="px-3 pb-4 pt-1">
                         {document.issuanceYear ?? "—"}
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 pb-4 pt-1">
                         {displayedIssuingEntity(document)}
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 pb-4 pt-1">
                         <AssociationList
                           associations={document.moduleAssociations}
                         />
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 pb-4 pt-1">
                         <SituationBadge document={document} />
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 pb-4 pt-1">
                         <TechnicalBadge document={document} />
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 pb-4 pt-1">
                         <time dateTime={document.createdAt}>
                           {dateFormatter.format(new Date(document.createdAt))}
                         </time>
@@ -629,12 +677,12 @@ export function DocumentLibraryView({
                         </span>
                         <LastVersionDate document={document} />
                       </td>
-                      <td className="sticky right-0 w-40 border-l border-avend-border bg-avend-surface px-3 py-4">
-                        <DocumentActions compact document={document} />
+                      <td className={`${styles.actionsCell} px-3 pb-4 pt-1`}>
+                        <DocumentActions document={document} />
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  </tbody>
+                ))}
               </table>
             </div>
 
@@ -645,8 +693,9 @@ export function DocumentLibraryView({
                   key={document.id}
                 >
                   <Link
-                    className="text-lg font-bold text-avend-navy hover:underline"
+                    className={`${styles.cardTitle} text-lg`}
                     href={`/admin/documents/${document.id}`}
+                    title={document.title}
                   >
                     {document.title}
                   </Link>
@@ -656,6 +705,7 @@ export function DocumentLibraryView({
                       ? ` · ${document.resolutionNumber}`
                       : ""}
                   </p>
+                  <MissingPdfNote document={document} />
                   <div className="mt-3 flex flex-wrap gap-2">
                     <SituationBadge document={document} />
                     <TechnicalBadge document={document} />
@@ -690,7 +740,7 @@ export function DocumentLibraryView({
                     </div>
                   </dl>
                   <div className="mt-5">
-                    <DocumentActions document={document} />
+                    <DocumentActions document={document} variant="card" />
                   </div>
                 </li>
               ))}

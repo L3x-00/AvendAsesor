@@ -655,3 +655,83 @@
     display: none;
   }
 }
+
+/* ---------- Aviso de conexión (global: docente y administración) ---------- */
+.avend-connection-region {
+  left: 50%;
+  pointer-events: none;
+  position: fixed;
+  top: 1rem;
+  transform: translateX(-50%);
+  width: min(34rem, calc(100vw - 2rem));
+  z-index: 90;
+}
+
+.avend-connection {
+  align-items: flex-start;
+  animation: avend-connection-in 320ms var(--avend-ease-interaction) both;
+  border-radius: 0.875rem;
+  box-shadow: 0 14px 36px rgb(13 27 61 / 22%);
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  pointer-events: auto;
+}
+
+.avend-connection strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.avend-connection p {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0.125rem 0 0;
+}
+
+.avend-connection--offline {
+  background: var(--avend-navy);
+  color: #ffffff;
+}
+
+.avend-connection--offline p {
+  color: rgb(255 255 255 / 82%);
+}
+
+.avend-connection--restored {
+  background: var(--avend-success-soft-surface);
+  border: 1px solid var(--avend-success-soft-border);
+  color: var(--avend-success);
+}
+
+.avend-connection-icon {
+  flex: none;
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.avend-connection-icon svg {
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  width: 100%;
+}
+
+.avend-connection--offline .avend-connection-icon {
+  color: #ffb4a8;
+}
+
+@keyframes avend-connection-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-connection {
+    animation: none;
+  }
+}
