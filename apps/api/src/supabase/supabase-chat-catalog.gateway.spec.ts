@@ -13,7 +13,15 @@ function fakeClient(tables: Record<string, Rows>, failing?: string) {
           ? { data: null, error: { message: 'down' } }
           : { data: tables[table] ?? [], error: null };
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'not', 'order', 'limit', 'in']) {
+      for (const method of [
+        'select',
+        'eq',
+        'is',
+        'not',
+        'order',
+        'limit',
+        'in',
+      ]) {
         chain[method] = () => chain;
       }
       chain.then = (resolve: (value: unknown) => unknown) => resolve(result);
@@ -128,10 +136,23 @@ describe('SupabaseChatCatalogGatewayAdapter', () => {
     await expect(adapter.listAvailableDocuments()).resolves.toEqual([]);
   });
 
+  it('sin documentos citables no busca secciones', async () => {
+    const adapter = new SupabaseChatCatalogGatewayAdapter(
+      fakeClient({ ...baseTables, document_versions: [] }, 'document_chunks'),
+    );
+
+    await expect(adapter.listAvailableDocuments()).resolves.toEqual([]);
+  });
+
   it('informa de forma controlada si la base no responde o no está configurada', async () => {
     await expect(
       new SupabaseChatCatalogGatewayAdapter(
         fakeClient(baseTables, 'document_versions'),
+      ).listAvailableDocuments(),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      new SupabaseChatCatalogGatewayAdapter(
+        fakeClient(baseTables, 'document_chunks'),
       ).listAvailableDocuments(),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     await expect(

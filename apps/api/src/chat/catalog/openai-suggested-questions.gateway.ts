@@ -8,7 +8,8 @@ import type {
 
 const MAX_SUGGESTIONS = 6;
 const MAX_QUESTION_CHARS = 140;
-const TIMEOUT_MS = 12_000;
+/** Corto: el docente espera la respuesta de catálogo en vivo. */
+const TIMEOUT_MS = 8_000;
 
 const SYSTEM_PROMPT = [
   'Eres AVEND ASESOR, asistente del ámbito educativo peruano.',

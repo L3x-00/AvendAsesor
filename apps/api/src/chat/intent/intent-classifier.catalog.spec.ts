@@ -27,8 +27,33 @@ describe('classifyTurnIntent — catálogo («¿de qué tienes información?»)'
     '¿Qué documentos necesito para una licencia?',
     '¿Qué información tienes sobre el Coordinador Pedagógico?',
     '¿Qué puedo consultar si me descuentan?',
+    '¿Qué documentos tiene que hacer el profesor?',
+    '¿Qué documentos hay que hacer?',
+    '¿Qué resoluciones hay para los docentes?',
+    '¿Y qué normas hay?',
   ])('«%s» nombra un tema: es una consulta y va al RAG', (message) => {
     expect(classifyTurnIntent(message).lane).toBe('domain');
+  });
+
+  it('dentro de una conversación, «¿qué normas hay?» sigue el tema en curso', () => {
+    expect(
+      classifyTurnIntent('¿Qué normas hay?', { inConversation: true }).lane,
+    ).toBe('domain');
+    expect(
+      classifyTurnIntent('¿Y qué normas hay?', { inConversation: true }).lane,
+    ).toBe('domain');
+    expect(
+      classifyTurnIntent('¿Qué documentos tiene?', { inConversation: true })
+        .lane,
+    ).toBe('domain');
+  });
+
+  it('dentro de una conversación, preguntar por el propio asistente sigue siendo catálogo', () => {
+    expect(
+      classifyTurnIntent('¿De qué tienes información?', {
+        inConversation: true,
+      }),
+    ).toEqual({ lane: 'social', subtype: 'catalog' });
   });
 
   it('no altera la pregunta de capacidad existente', () => {

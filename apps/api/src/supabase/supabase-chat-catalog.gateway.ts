@@ -6,7 +6,10 @@ import type {
 } from '../chat/catalog/chat-catalog.types';
 import type { SupabaseServerClient } from './supabase.server-client';
 
-const MAX_DOCUMENTS = 60;
+/** Documentos candidatos por consulta; el conteo mostrado sale de aquí. */
+const MAX_CANDIDATES = 200;
+/** Documentos listados y descritos a la IA (ver ChatCatalogService). */
+const MAX_DESCRIBED_DOCUMENTS = 25;
 const MAX_SECTIONS_PER_DOCUMENT = 6;
 
 function databaseError(error: PostgrestError): never {
@@ -39,6 +42,8 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
   async listAvailableDocuments(): Promise<AvailableDocument[]> {
     const client = this.requireClient();
 
+    // Tope amplio: el conteo que ve el docente debe ser el real, así que los
+    // demos se excluyen en la consulta y no después de limitar filas.
     const documents = await client
       .from('documents')
       .select(
@@ -48,8 +53,9 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       .eq('situation', 'current')
       .eq('publication_status', 'active')
       .not('approved_version_id', 'is', null)
+      .is('metadata->demoSeed', null)
       .order('title', { ascending: true })
-      .limit(MAX_DOCUMENTS);
+      .limit(MAX_CANDIDATES);
     if (documents.error) databaseError(documents.error);
 
     const candidates = (documents.data ?? []).filter((document) => {
@@ -68,7 +74,7 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       .filter((id): id is string => Boolean(id));
     const documentIds = candidates.map((document) => document.id);
 
-    const [versions, links, modules, sections] = await Promise.all([
+    const [versions, links, modules] = await Promise.all([
       client
         .from('document_versions')
         .select('id')
@@ -83,15 +89,8 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
         .select(
           'id, name, parent_module_id, is_active, is_deleted, sort_order',
         ),
-      client
-        .from('document_chunks')
-        .select('document_id, section_title')
-        .in('document_version_id', approvedVersionIds)
-        .not('section_title', 'is', null)
-        .order('chunk_index', { ascending: true })
-        .limit(MAX_DOCUMENTS * MAX_SECTIONS_PER_DOCUMENT * 4),
     ]);
-    for (const result of [versions, links, modules, sections]) {
+    for (const result of [versions, links, modules]) {
       if (result.error) databaseError(result.error);
     }
 
@@ -119,6 +118,28 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       rootNamesByDocument.set(link.document_id, names);
     }
 
+    const eligible = candidates.filter(
+      (document) =>
+        document.approved_version_id !== null &&
+        indexed.has(document.approved_version_id) &&
+        rootNamesByDocument.has(document.id),
+    );
+    if (!eligible.length) return [];
+
+    // Secciones solo de los documentos que se muestran y se dan a la IA.
+    const described = eligible.slice(0, MAX_DESCRIBED_DOCUMENTS);
+    const sections = await client
+      .from('document_chunks')
+      .select('document_id, section_title')
+      .in(
+        'document_version_id',
+        described.map((document) => document.approved_version_id),
+      )
+      .not('section_title', 'is', null)
+      .order('chunk_index', { ascending: true })
+      .limit(MAX_DESCRIBED_DOCUMENTS * MAX_SECTIONS_PER_DOCUMENT * 4);
+    if (sections.error) databaseError(sections.error);
+
     const sectionsByDocument = new Map<string, string[]>();
     for (const row of sections.data ?? []) {
       const title = row.section_title?.trim();
@@ -130,21 +151,14 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       sectionsByDocument.set(row.document_id, list);
     }
 
-    return candidates
-      .filter(
-        (document) =>
-          document.approved_version_id !== null &&
-          indexed.has(document.approved_version_id) &&
-          rootNamesByDocument.has(document.id),
-      )
-      .map((document) => ({
-        documentType: document.document_type,
-        id: document.id,
-        issuanceYear: document.issuance_year,
-        moduleNames: [...(rootNamesByDocument.get(document.id) ?? [])].sort(),
-        resolutionNumber: document.resolution_number,
-        sectionTitles: sectionsByDocument.get(document.id) ?? [],
-        title: document.title,
-      }));
+    return eligible.map((document) => ({
+      documentType: document.document_type,
+      id: document.id,
+      issuanceYear: document.issuance_year,
+      moduleNames: [...(rootNamesByDocument.get(document.id) ?? [])].sort(),
+      resolutionNumber: document.resolution_number,
+      sectionTitles: sectionsByDocument.get(document.id) ?? [],
+      title: document.title,
+    }));
   }
 }

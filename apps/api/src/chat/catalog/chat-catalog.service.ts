@@ -10,6 +10,8 @@ import {
 
 /** Las sugerencias se regeneran solo si cambia el catálogo o pasa este tiempo. */
 export const SUGGESTIONS_CACHE_MS = 30 * 60 * 1000;
+/** Tras un fallo de la IA, cuánto se usan las preguntas de respaldo. */
+export const FAILED_SUGGESTIONS_CACHE_MS = 2 * 60 * 1000;
 const MAX_LISTED_DOCUMENTS = 25;
 const MAX_FALLBACK_SUGGESTIONS = 4;
 const SHORT_TITLE_CHARS = 70;
@@ -77,6 +79,10 @@ export class ChatCatalogService {
     signature: string;
     suggestions: string[];
   } | null = null;
+  private inFlight: {
+    promise: Promise<string[]>;
+    signature: string;
+  } | null = null;
 
   constructor(
     @Inject(SUPABASE_CHAT_CATALOG_GATEWAY)
@@ -85,7 +91,7 @@ export class ChatCatalogService {
     private readonly suggestionsGateway: SuggestedQuestionsGateway,
   ) {}
 
-  async reply(): Promise<ChatCatalogReply> {
+  async reply(abortSignal?: AbortSignal): Promise<ChatCatalogReply> {
     const documents = await this.catalogGateway.listAvailableDocuments();
 
     if (!documents.length) {
@@ -96,7 +102,7 @@ export class ChatCatalogService {
       };
     }
 
-    const suggestions = await this.suggestionsFor(documents);
+    const suggestions = await this.suggestionsFor(documents, abortSignal);
     return { message: this.buildMessage(documents, suggestions), suggestions };
   }
 
@@ -132,20 +138,37 @@ export class ChatCatalogService {
 
   private async suggestionsFor(
     documents: AvailableDocument[],
+    abortSignal?: AbortSignal,
   ): Promise<string[]> {
     const signature = documents
       .map((document) => document.id)
       .sort()
       .join(',');
-    const now = Date.now();
     if (
       this.cache &&
       this.cache.signature === signature &&
-      this.cache.expiresAt > now
+      this.cache.expiresAt > Date.now()
     ) {
       return this.cache.suggestions;
     }
 
+    // Consultas simultáneas comparten una sola llamada a la IA.
+    if (this.inFlight?.signature !== signature) {
+      const promise = this.generate(documents, signature).finally(() => {
+        if (this.inFlight?.promise === promise) this.inFlight = null;
+      });
+      this.inFlight = { promise, signature };
+    }
+    return raceAbort(this.inFlight.promise, abortSignal, () =>
+      fallbackSuggestions(documents),
+    );
+  }
+
+  /** Llama a la IA y guarda el resultado; un fallo se recuerda poco tiempo. */
+  private async generate(
+    documents: AvailableDocument[],
+    signature: string,
+  ): Promise<string[]> {
     let suggestions: string[] = [];
     try {
       suggestions = await this.suggestionsGateway.suggest(documents);
@@ -154,16 +177,39 @@ export class ChatCatalogService {
         `No se pudieron generar preguntas sugeridas: ${error instanceof Error ? error.message : 'error desconocido'}`,
       );
     }
-    if (!suggestions.length) {
-      // Sin caché: si la IA falló, se reintenta en la próxima consulta.
-      return fallbackSuggestions(documents);
-    }
-
+    const failed = !suggestions.length;
+    const result = failed ? fallbackSuggestions(documents) : suggestions;
+    // Una llamada vieja (el catálogo cambió mientras respondía) no pisa la nueva.
+    const latest = this.inFlight?.signature ?? this.cache?.signature;
+    if (latest && latest !== signature) return result;
+    // Tras un fallo se usan las preguntas de respaldo un rato, para no hacer
+    // esperar a cada docente mientras la IA no responde.
     this.cache = {
-      expiresAt: now + SUGGESTIONS_CACHE_MS,
+      expiresAt:
+        Date.now() +
+        (failed ? FAILED_SUGGESTIONS_CACHE_MS : SUGGESTIONS_CACHE_MS),
       signature,
-      suggestions,
+      suggestions: result,
     };
-    return suggestions;
+    return result;
   }
+}
+
+/** Si el docente se va (señal abortada), no se espera a la IA. */
+function raceAbort<T>(
+  promise: Promise<T>,
+  abortSignal: AbortSignal | undefined,
+  onAbort: () => T,
+): Promise<T> {
+  if (!abortSignal) return promise;
+  if (abortSignal.aborted) return Promise.resolve(onAbort());
+  return new Promise<T>((resolve) => {
+    const abort = () => resolve(onAbort());
+    abortSignal.addEventListener('abort', abort, { once: true });
+    // generate() nunca rechaza: los errores de la IA ya se convierten en respaldo.
+    void promise.then((value) => {
+      abortSignal.removeEventListener('abort', abort);
+      resolve(value);
+    });
+  });
 }

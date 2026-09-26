@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
+  Logger,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -463,6 +464,8 @@ export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @Inject(RAG_ANSWER_GATEWAY) private readonly answerGateway: AnswerGateway,
     @Inject(SUPABASE_CHAT_GATEWAY)
@@ -573,6 +576,7 @@ export class ChatService {
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
       const reply = await this.conversationalReply(
         intent.lane === 'social' ? intent.subtype : 'out_of_domain',
+        input.abortSignal,
       );
       // «Otra consulta» a secas dentro de una conversación: la siguiente
       // pregunta debe empezar una conversación nueva, sin el tema anterior.
@@ -982,12 +986,13 @@ export class ChatService {
   /** Respuesta amable efímera; la capacidad y el anuncio listan los temas reales. */
   private async conversationalReply(
     kind: ConversationalReplyKind,
+    abortSignal?: AbortSignal,
   ): Promise<ChatStreamEvent> {
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
     // Si el catálogo falla, se responde con los temas (texto determinista).
     if (kind === 'catalog' && this.catalogService) {
       try {
-        const catalog = await this.catalogService.reply();
+        const catalog = await this.catalogService.reply(abortSignal);
         return {
           data: {
             message: catalog.message,
@@ -997,8 +1002,10 @@ export class ChatService {
           },
           type: 'conversational',
         };
-      } catch {
-        // Continúa con la respuesta de temas.
+      } catch (error) {
+        this.logger.warn(
+          `Catálogo no disponible; se responde con los temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
+        );
       }
     }
     const topics =
