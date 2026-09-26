@@ -305,7 +305,7 @@ export function OrientationPreview({
             </section>
           ) : null}
 
-          <ChatSources sources={context.sources} />
+          <ChatSources defaultOpen sources={context.sources} />
         </article>
       </div>
     </section>

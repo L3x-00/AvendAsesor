@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LatticeLoader } from "@/components/ui/lattice-loader";
+import { AssistantAvatar } from "./chat-message-parts";
 
 /**
  * Lo que el asistente está haciendo mientras aún no llega texto. Las fases son
@@ -33,7 +34,10 @@ export function ChatThinking() {
       aria-hidden="true"
       className="avend-chat-message avend-chat-message--assistant avend-chat-thinking"
     >
-      <p className="avend-chat-message-label">AVEND ASESOR</p>
+      <p className="avend-chat-message-label">
+        <AssistantAvatar />
+        AVEND ASESOR
+      </p>
       <LatticeLoader
         cellSize={7}
         className="avend-chat-thinking-loader"
