@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { resolveSignInPath } from "@/lib/auth/session-redirect";
 import {
   resolveChatAccess,
   type ChatAccessResult,
@@ -41,7 +42,7 @@ export async function createAuthorizedChatApiClient(): Promise<ChatApiClient> {
   const session = await resolveAuthorizedChatSession();
 
   if ("status" in session) {
-    if (session.status === "unauthenticated") redirect("/auth/sign-in");
+    if (session.status === "unauthenticated") redirect(await resolveSignInPath());
     redirect("/access-denied");
   }
 
@@ -63,7 +64,7 @@ export async function resolveAuthorizedChatContext(): Promise<{
   const session = await resolveAuthorizedChatSession();
 
   if ("status" in session) {
-    if (session.status === "unauthenticated") redirect("/auth/sign-in");
+    if (session.status === "unauthenticated") redirect(await resolveSignInPath());
     redirect("/access-denied");
   }
 

@@ -409,6 +409,146 @@ textarea[aria-invalid="true"]:focus,
   color: var(--avend-danger);
 }
 
+/* Aviso sereno sobre el formulario de acceso (sesión caducada, contraseña
+   actualizada). Informa sin alarmar: azul suave, no rojo de error. */
+.avend-auth-notice {
+  animation: avend-rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  background: var(--avend-soft-blue);
+  border: 1px solid rgb(22 119 255 / 22%);
+  border-radius: 0.875rem;
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1rem;
+}
+
+.avend-auth-notice strong {
+  color: var(--avend-navy);
+  display: block;
+  font-size: 1rem;
+}
+
+.avend-auth-notice p {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.125rem 0 0;
+}
+
+.avend-auth-notice-icon {
+  color: var(--avend-accent-strong);
+  flex: none;
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.avend-auth-notice-icon svg {
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  width: 100%;
+}
+
+/* "Mantener mi sesión iniciada": casilla propia de 24px dentro de una fila
+   táctil de 44px; el texto explica la consecuencia en lenguaje llano. */
+.avend-remember {
+  align-items: flex-start;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.25rem;
+  position: relative;
+}
+
+.avend-remember input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.avend-remember-box {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1.5px solid var(--avend-control-border);
+  border-radius: 0.4rem;
+  display: inline-flex;
+  flex: none;
+  height: 1.5rem;
+  justify-content: center;
+  margin-top: 0.0625rem;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+  width: 1.5rem;
+}
+
+.avend-remember-box svg {
+  height: 1rem;
+  opacity: 0;
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+  transform: scale(0.6);
+  transition:
+    opacity 150ms ease-out,
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  width: 1rem;
+}
+
+.avend-remember input:checked + .avend-remember-box {
+  background: var(--avend-accent-strong);
+  border-color: var(--avend-accent-strong);
+}
+
+.avend-remember input:checked + .avend-remember-box svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.avend-remember input:focus-visible + .avend-remember-box {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.avend-remember-text {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.avend-remember-text strong {
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.avend-remember-text span {
+  color: var(--avend-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+@keyframes avend-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-auth-notice {
+    animation: none;
+  }
+
+  .avend-remember-box svg {
+    transition: opacity 150ms ease-out;
+  }
+}
+
 /* Una sola fila. Antes era una rejilla de una columna, así que "Olvidé mi
    contraseña" y "Crear una cuenta" caían siempre en renglones distintos. El
    `wrap` deja que se partan solo si de verdad no caben. */
@@ -444,10 +584,6 @@ textarea[aria-invalid="true"]:focus,
   display: grid;
   gap: 0.75rem;
   margin-top: 2rem;
-}
-
-.avend-home-sign-out {
-  margin-top: 1.5rem;
 }
 
 .avend-admin-entry-page {
@@ -937,6 +1073,34 @@ textarea[aria-invalid="true"]:focus,
   border-left: 4px solid var(--avend-accent);
 }
 
+/* "Pensando": la tarjeta del asistente aparece de inmediato, antes del primer
+   texto, para que enviar nunca parezca no haber hecho nada. */
+.avend-chat-thinking {
+  animation: avend-rise-in 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  max-width: min(30rem, 100%);
+}
+
+.avend-chat-thinking-loader {
+  color: var(--avend-accent-strong);
+  margin-top: 0.75rem;
+}
+
+.avend-chat-thinking-loader .lattice-loader__label {
+  color: var(--avend-text);
+}
+
+.avend-chat-writing {
+  color: var(--avend-text-muted);
+  display: flex;
+  margin-top: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-thinking {
+    animation: none;
+  }
+}
+
 .avend-chat-message-label {
   color: var(--avend-navy);
   font-size: 1rem;
@@ -1154,6 +1318,38 @@ textarea[aria-invalid="true"]:focus,
   gap: 0.5rem;
   grid-column: 1 / -1;
   justify-content: flex-end;
+}
+
+/* Dictado: al escuchar, el contenedor cede espacio a la izquierda para que la
+   cápsula (onda + cronómetro) no tape el texto de la consulta. */
+.avend-chat-voice {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.375rem;
+  transition: padding-left 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.avend-chat-voice[data-listening] {
+  padding-left: 7.75rem;
+}
+
+.avend-chat-voice-label {
+  color: var(--avend-text);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  min-width: 3.75rem;
+  user-select: none;
+}
+
+.avend-chat-voice[data-listening] .avend-chat-voice-label {
+  color: var(--avend-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-voice {
+    transition: none;
+  }
 }
 
 .avend-chat-mic {
@@ -1429,8 +1625,7 @@ textarea[aria-invalid="true"]:focus,
 
 .avend-content-empty,
 .avend-history-item,
-.avend-profile-summary > div,
-.avend-guide-page ol {
+.avend-profile-summary > div {
   background: var(--avend-surface);
   border: 1px solid var(--avend-border);
   border-radius: 0.875rem;
@@ -1487,16 +1682,6 @@ textarea[aria-invalid="true"]:focus,
 .avend-history-delete-form .avend-feedback {
   margin: 0;
   width: 100%;
-}
-
-.avend-guide-page ol {
-  color: var(--avend-text);
-  display: grid;
-  font-size: 1rem;
-  gap: 1rem;
-  line-height: 1.65;
-  margin: 1.5rem 0 0;
-  padding: 1.25rem 1.25rem 1.25rem 2.5rem;
 }
 
 .avend-profile-summary {

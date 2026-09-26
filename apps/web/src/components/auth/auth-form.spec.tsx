@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthActionState } from '@/lib/auth/action-state';
 import { AuthForm, type AuthAction } from './auth-form';
 
@@ -13,7 +13,109 @@ const fields = [
   },
 ];
 
+const signInFields = [
+  ...fields,
+  {
+    autoComplete: 'current-password',
+    label: 'Contraseña',
+    name: 'password' as const,
+    type: 'password' as const,
+  },
+];
+
 describe('AuthForm', () => {
+  afterEach(() => window.localStorage.clear());
+
+  it('offers to keep the session, remembers only the email and prefills it next time', async () => {
+    const user = userEvent.setup();
+    const received: FormData[] = [];
+    const action: AuthAction = vi.fn(
+      async (_state: AuthActionState, formData: FormData): Promise<AuthActionState> => {
+        received.push(formData);
+        return { message: 'No se pudo iniciar sesión.', status: 'error' };
+      },
+    );
+
+    const { unmount } = render(
+      <AuthForm
+        action={action}
+        description="Descripción"
+        fields={signInFields}
+        rememberOption
+        submitLabel="Iniciar sesión"
+        title="Bienvenido"
+      />,
+    );
+
+    const keep = screen.getByRole('checkbox', { name: /Mantener mi sesión iniciada/ });
+    expect(keep).toBeChecked();
+    await user.type(screen.getByLabelText('Correo electrónico'), 'docente@avend.pe');
+    await user.type(screen.getByLabelText('Contraseña'), 'Secreta123');
+    await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+    await waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0].get('remember')).toBe('on');
+    expect(window.localStorage.getItem('avend-remembered-email')).toBe('docente@avend.pe');
+    // La contraseña nunca se guarda: eso es tarea del gestor del navegador.
+    expect(JSON.stringify({ ...window.localStorage })).not.toContain('Secreta123');
+    unmount();
+
+    render(
+      <AuthForm
+        action={action}
+        description="Descripción"
+        fields={signInFields}
+        rememberOption
+        submitLabel="Iniciar sesión"
+        title="Bienvenido"
+      />,
+    );
+    expect(screen.getByLabelText('Correo electrónico')).toHaveValue('docente@avend.pe');
+    expect(screen.getByLabelText('Contraseña')).toHaveFocus();
+  });
+
+  it('forgets the email when the person chooses not to keep the session', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('avend-remembered-email', 'anterior@avend.pe');
+    const action: AuthAction = vi.fn(async (): Promise<AuthActionState> => ({
+      status: 'error',
+    }));
+
+    render(
+      <AuthForm
+        action={action}
+        description="Descripción"
+        fields={signInFields}
+        rememberOption
+        submitLabel="Iniciar sesión"
+        title="Bienvenido"
+      />,
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: /Mantener mi sesión iniciada/ }));
+    await user.type(screen.getByLabelText('Contraseña'), 'Secreta123');
+    await user.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    expect(window.localStorage.getItem('avend-remembered-email')).toBeNull();
+  });
+
+  it('shows a calm notice above the form when one is provided', () => {
+    render(
+      <AuthForm
+        action={vi.fn()}
+        description="Descripción"
+        fields={fields}
+        notice={{ text: 'Ingresa nuevamente para continuar.', title: 'Tu sesión finalizó' }}
+        submitLabel="Iniciar sesión"
+        title="Bienvenido"
+      />,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Tu sesión finalizó');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
   it('renders accessible fields, links and returned field errors', async () => {
     const user = userEvent.setup();
     const action: AuthAction = vi.fn(async (): Promise<AuthActionState> => ({

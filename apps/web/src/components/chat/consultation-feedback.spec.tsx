@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsultationFeedback } from "./consultation-feedback";
@@ -118,6 +118,52 @@ describe("ConsultationFeedback", () => {
       ),
     ).toBeVisible();
     expect(showToast).toHaveBeenCalledWith("Gracias por tu sugerencia. Ya la registramos.");
+  });
+
+  it("en el chat espera unas consultas antes de invitar a reportar", () => {
+    const { rerender } = render(
+      <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={1} />,
+    );
+    expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+
+    rerender(
+      <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={3} />,
+    );
+    expect(
+      screen.getByRole("region", { name: "Reportes y sugerencias" }),
+    ).toBeVisible();
+  });
+
+  it("al cerrarla se oculta 30 minutos en el dispositivo y luego vuelve", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-25T10:00:00Z") });
+    try {
+      window.localStorage.clear();
+      const { unmount } = render(
+        <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={4} />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Cerrar este aviso por 30 minutos" }),
+      );
+      expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+      unmount();
+
+      // Sigue oculta al volver a la página dentro del plazo.
+      render(
+        <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={5} />,
+      );
+      expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(30 * 60 * 1000 + 1);
+      });
+      expect(
+        screen.getByRole("region", { name: "Reportes y sugerencias" }),
+      ).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.clear();
+    }
   });
 
   it("keeps reporting unavailable until a canonical response exists", () => {

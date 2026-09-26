@@ -1,7 +1,31 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { AuthLayout } from '@/components/auth/auth-layout';
+import { resolveSignInPath } from '@/lib/auth/session-redirect';
+import { SIGN_IN_PATH } from '@/lib/auth/session-preferences';
+import {
+  resolveAdminAccess,
+  type AuthorizationSupabaseClient,
+} from '@/lib/authorization/resolve-admin-access';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
-export default function Home() {
+export default async function Home() {
+  // Con una sesión vigente, la portada no vuelve a pedir credenciales: lleva
+  // al mismo destino que el inicio de sesión (panel o chat). Cada ruta
+  // revalida el acceso; esto solo decide a dónde entrar.
+  const supabase = await createServerSupabaseClient();
+  const access = await resolveAdminAccess(
+    supabase as unknown as AuthorizationSupabaseClient,
+  );
+
+  if (access.status === 'authorized') redirect('/admin');
+  if (access.status === 'unauthorized') redirect('/chat');
+
+  // Sin sesión: si en este dispositivo había una, caducó; se explica en el
+  // login en vez de mostrar la portada como si nada hubiera pasado.
+  const signInPath = await resolveSignInPath();
+  if (signInPath !== SIGN_IN_PATH) redirect(signInPath);
+
   return (
     <AuthLayout>
       <section aria-labelledby="home-title">
@@ -27,14 +51,6 @@ export default function Home() {
             Iniciar sesión
           </Link>
         </div>
-        <form action="/auth/sign-out" className="avend-home-sign-out" method="post">
-          <button
-            className="avend-text-link"
-            type="submit"
-          >
-            Cerrar sesión en este dispositivo
-          </button>
-        </form>
       </section>
     </AuthLayout>
   );

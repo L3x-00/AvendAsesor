@@ -20,6 +20,8 @@ import type {
 } from "@/lib/chat-api/types";
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
+import { VoicePill } from "@/components/ui/voice-pill";
+import { ChatThinking, ChatWriting } from "./chat-thinking";
 import { ConsultationFeedback } from "./consultation-feedback";
 import {
   CITATION_TOKEN,
@@ -330,6 +332,9 @@ interface SpeechRecognitionLike {
   onend: (() => void) | null;
   onerror: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  /** Opcionales: animan la onda del botón cuando el navegador oye sonido. */
+  onsoundend?: (() => void) | null;
+  onsoundstart?: (() => void) | null;
   start(): void;
   stop(): void;
 }
@@ -379,6 +384,7 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
+  const [isHearingSound, setIsHearingSound] = useState(false);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   // Contador monotónico para keys locales estables (evita colisiones de key de
@@ -439,6 +445,11 @@ export function ChatPanel({
         )?.id,
     [messages],
   );
+  // La invitación a reportar se muestra tras unas consultas (no en la primera).
+  const userMessageCount = useMemo(
+    () => messages.filter((message) => message.role === "user").length,
+    [messages],
+  );
 
   function changeModuleContext(
     moduleId: string | undefined,
@@ -492,6 +503,8 @@ export function ChatPanel({
         recognition.onend = null;
         recognition.onerror = null;
         recognition.onresult = null;
+        recognition.onsoundstart = null;
+        recognition.onsoundend = null;
         recognition.stop();
       }
       recognitionRef.current = null;
@@ -502,6 +515,7 @@ export function ChatPanel({
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setIsDictating(false);
+    setIsHearingSound(false);
     setStatus("Dictado detenido. Revisa el texto antes de enviarlo.");
   }
 
@@ -519,6 +533,8 @@ export function ChatPanel({
     recognition.lang = "es-PE";
     recognition.continuous = false;
     recognition.interimResults = false;
+    recognition.onsoundstart = () => setIsHearingSound(true);
+    recognition.onsoundend = () => setIsHearingSound(false);
     recognition.onresult = (event) => {
       const clean = Array.from(event.results)
         .slice(event.resultIndex)
@@ -536,6 +552,7 @@ export function ChatPanel({
       recognitionFailed = true;
       recognitionRef.current = null;
       setIsDictating(false);
+      setIsHearingSound(false);
       setStatus(
         "No se pudo usar el micrófono. Escribe tu consulta o revisa el permiso del navegador.",
       );
@@ -543,6 +560,7 @@ export function ChatPanel({
     recognition.onend = () => {
       recognitionRef.current = null;
       setIsDictating(false);
+      setIsHearingSound(false);
       if (!recognitionFailed) {
         setStatus("Dictado finalizado. Revisa el texto antes de enviarlo.");
       }
@@ -1101,6 +1119,9 @@ export function ChatPanel({
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
                   )}
+                  {message.id === "streaming" && isStreaming ? (
+                    <ChatWriting />
+                  ) : null}
                 </div>
                 {message.unanswered ? (
                   <p className="avend-chat-unanswered-note" role="note">
@@ -1170,6 +1191,9 @@ export function ChatPanel({
               </article>
             ))
           )}
+          {isStreaming && messages.at(-1)?.role === "user" ? (
+            <ChatThinking />
+          ) : null}
         </section>
 
         {error ? (
@@ -1202,33 +1226,28 @@ export function ChatPanel({
             />
             <div className="avend-chat-composer-buttons">
               {micSupported ? (
-                <button
-                  aria-label={
-                    isDictating
-                      ? "Detener el dictado por voz"
-                      : "Dictar la consulta por voz"
-                  }
-                  aria-pressed={isDictating}
-                  className={`avend-chat-mic${isDictating ? " avend-chat-mic--active" : ""}`}
-                  disabled={isStreaming}
-                  onClick={toggleDictation}
-                  type="button"
+                <div
+                  className="avend-chat-voice"
+                  data-listening={isDictating ? "" : undefined}
                 >
-                  <svg
+                  <VoicePill
+                    // Nombre fijo: el estado lo anuncia `aria-pressed`.
+                    ariaLabel="Dictar la consulta por voz"
+                    disabled={isStreaming}
+                    listening={isDictating}
+                    onToggle={toggleDictation}
+                    soundActive={isHearingSound}
+                  />
+                  {/* Rótulo visible junto al icono (público 30+). El botón ya
+                      tiene nombre accesible, así que aquí es solo visual. */}
+                  <span
                     aria-hidden="true"
-                    className="avend-chat-mic-icon"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.6"
-                    viewBox="0 0 24 24"
+                    className="avend-chat-voice-label"
+                    onClick={isStreaming ? undefined : toggleDictation}
                   >
-                    <rect height="11" rx="3" width="6" x="9" y="3" />
-                    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-                  </svg>
-                  <span>{isDictating ? "Escuchando…" : "Voz"}</span>
-                </button>
+                    {isDictating ? "Detener" : "Voz"}
+                  </span>
+                </div>
               ) : null}
               <button
                 className="avend-button avend-button--primary"
@@ -1261,6 +1280,7 @@ export function ChatPanel({
           answerMessageId={latestReportableAnswerId}
           conversationId={conversationId}
           disabled={isStreaming}
+          userMessageCount={userMessageCount}
         />
       </section>
     </TeacherShell>
