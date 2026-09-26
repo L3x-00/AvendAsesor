@@ -25,6 +25,21 @@ describe("DocumentEditSection", () => {
     expect(details).toHaveAttribute("id", "edit-section");
   });
 
+  it("se abre sola cuando se llega con el ancla del lápiz", () => {
+    window.history.replaceState(null, "", "#edit-document");
+    try {
+      const { container } = render(
+        <DocumentEditSection id="edit-document">
+          <span>Contenido</span>
+        </DocumentEditSection>,
+      );
+
+      expect(container.querySelector("details")).toHaveAttribute("open");
+    } finally {
+      window.history.replaceState(null, "", "#");
+    }
+  });
+
   it("renders without an id when none is provided", () => {
     const { container } = render(
       <DocumentEditSection>

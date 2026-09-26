@@ -1,0 +1,387 @@
+/* Biblioteca documental: búsqueda minimalista, filtros plegables, título a lo
+   ancho y acciones con ícono. Movimiento breve y anulado con reduced-motion. */
+
+.searchCard {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  box-shadow: var(--avend-shadow-surface);
+  padding: 1rem;
+}
+
+.searchRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.searchField {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-control-border);
+  border-radius: 0.625rem;
+  display: flex;
+  flex: 1 1 18rem;
+  gap: 0.5rem;
+  min-height: 2.875rem;
+  padding: 0 0.75rem;
+  transition:
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+.searchField:focus-within {
+  border-color: var(--avend-accent);
+  box-shadow: 0 0 0 3px var(--avend-soft-blue);
+}
+
+.searchField input {
+  background: transparent;
+  border: 0;
+  color: var(--avend-text);
+  flex: 1;
+  font: inherit;
+  font-size: 1rem;
+  min-height: 2.75rem;
+  min-width: 0;
+  outline: none;
+}
+
+.searchIcon {
+  color: var(--avend-text-muted);
+  display: inline-flex;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.searchIcon svg,
+.advancedToggle svg,
+.action svg {
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 100%;
+}
+
+.advanced {
+  margin-top: 0.75rem;
+}
+
+.advancedToggle {
+  align-items: center;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  list-style: none;
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  transition: background-color 150ms ease-out;
+  user-select: none;
+}
+
+.advancedToggle::-webkit-details-marker {
+  display: none;
+}
+
+.advancedToggle:hover {
+  background: var(--avend-soft-blue);
+}
+
+.advancedToggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.advancedToggle > svg:first-child {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.chevron {
+  height: 1.125rem !important;
+  transition: transform 200ms ease-out;
+  width: 1.125rem !important;
+}
+
+.advanced[open] .chevron {
+  transform: rotate(180deg);
+}
+
+.badge {
+  align-items: center;
+  background: var(--avend-accent-strong);
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 700;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0 0.4rem;
+}
+
+.filtersGrid {
+  animation: filters-open 220ms ease-out both;
+  border: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.filtersGrid label {
+  display: block;
+}
+
+.advancedActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.activeSummary {
+  align-items: center;
+  color: var(--avend-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1rem;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.activeSummary a {
+  color: var(--avend-navy);
+  font-weight: 600;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  text-underline-offset: 0.2em;
+}
+
+/* ---------- Tabla ---------- */
+.documentGroup {
+  border-top: 1px solid var(--avend-border);
+}
+
+.titleCell {
+  font-weight: 400;
+  padding: 1rem 1rem 0.25rem;
+}
+
+/* `width: 0; min-width: 100%`: el título ocupa todo el ancho disponible pero
+   no aporta su largo al cálculo del ancho de la tabla ni de la página, así
+   que se recorta con "…" en lugar de ensancharlo todo. */
+.titleLink {
+  color: var(--avend-navy);
+  display: block;
+  font-weight: 700;
+  min-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 0;
+}
+
+.titleLink:hover {
+  text-decoration: underline;
+}
+
+.table tbody:hover {
+  background: rgb(232 241 255 / 45%);
+}
+
+/* ---------- Acciones con ícono ---------- */
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actionsTable {
+  justify-content: flex-end;
+}
+
+.action {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  color: var(--avend-navy);
+  display: inline-flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  position: relative;
+  transition:
+    background-color 160ms ease-out,
+    border-color 160ms ease-out;
+  white-space: nowrap;
+}
+
+.action svg {
+  flex: none;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.action:hover,
+.action:focus-visible {
+  background: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 40%);
+}
+
+.action:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.actionLabel {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Tabla: el nombre es una etiqueta flotante encima del botón; aparece al
+   pasar el mouse o con el foco del teclado y no desplaza ninguna columna. */
+.actionsTable .action {
+  padding: 0;
+  width: 2.75rem;
+}
+
+.actionsTable .actionLabel {
+  background: var(--avend-navy);
+  border-radius: 0.5rem;
+  bottom: calc(100% + 0.5rem);
+  box-shadow: 0 8px 20px rgb(13 27 61 / 22%);
+  color: #ffffff;
+  font-size: 0.9375rem;
+  opacity: 0;
+  padding: 0.3rem 0.625rem;
+  pointer-events: none;
+  position: absolute;
+  right: 50%;
+  transform: translate(50%, 4px);
+  transition:
+    opacity 140ms ease-out,
+    transform 180ms ease-out;
+  z-index: 3;
+}
+
+.actionsTable .action:hover .actionLabel,
+.actionsTable .action:focus-visible .actionLabel {
+  opacity: 1;
+  transform: translate(50%, 0);
+}
+
+/* Tarjetas: ícono y nombre siempre visibles. */
+.actionsCard {
+  flex-wrap: wrap;
+}
+
+.actionsCard .action {
+  padding: 0 1rem;
+}
+
+@keyframes filters-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filtersGrid {
+    animation: none;
+  }
+
+  .chevron,
+  .action,
+  .actionLabel {
+    transition: none;
+  }
+}
+
+/* Ancho reservado: el nombre que se despliega al pasar el mouse no empuja la
+   tabla ni provoca un salto de diseño. */
+.actionsCell {
+  width: 8rem;
+}
+
+/* Si la tabla se desplaza en horizontal, las acciones quedan siempre a la
+   vista, fijas al borde derecho. */
+.table .actionsCell {
+  background: var(--avend-surface);
+  border-left: 1px solid var(--avend-border);
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+
+.table thead .actionsCell {
+  background: var(--avend-surface-muted);
+}
+
+.table tbody:hover .actionsCell {
+  background: #f3f8ff;
+}
+
+/* Diseño fijo: las columnas se reparten desde la cabecera y nada que ocurra
+   dentro de una celda (p. ej. desplegar "Ver detalle") las mueve. */
+.table {
+  table-layout: fixed;
+}
+
+.table thead th:nth-child(1) {
+  width: 12%;
+}
+
+.table thead th:nth-child(2) {
+  width: 7%;
+}
+
+.table thead th:nth-child(3) {
+  width: 9%;
+}
+
+.table thead th:nth-child(4) {
+  width: 16%;
+}
+
+.table thead th:nth-child(5) {
+  width: 11%;
+}
+
+.table thead th:nth-child(6) {
+  width: 12%;
+}
+
+.table thead th:nth-child(7) {
+  width: 15%;
+}
+
+.table td {
+  overflow-wrap: break-word;
+}
+
+/* En las tarjetas (pantallas pequeñas) una sola línea ocultaría casi todo el
+   nombre: se permiten dos líneas y el resto va en el tooltip y el detalle. */
+.cardTitle {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--avend-navy);
+  display: -webkit-box;
+  font-weight: 700;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.cardTitle:hover {
+  text-decoration: underline;
+}

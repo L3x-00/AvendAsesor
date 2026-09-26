@@ -524,12 +524,12 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     await user.click(
       screen.getByRole("button", {
-        name: /¿Qué requisitos necesito para solicitar una reasignación?/,
+        name: "¿Qué requisitos necesito para…?",
       }),
     );
 
     const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
-    expect(box).toHaveValue("¿Qué requisitos necesito para solicitar una reasignación?");
+    expect(box).toHaveValue("¿Qué requisitos necesito para ");
     expect(box).toHaveFocus();
     expect(request).not.toHaveBeenCalledWith("/api/chat/stream", expect.anything());
   });
