@@ -120,12 +120,40 @@ describe('SupabaseChatCatalogGatewayAdapter', () => {
         documentType: 'LEY',
         id: 'd1',
         issuanceYear: 2012,
+        moduleIds: ['sub', 'root'],
         moduleNames: ['Cargos y plazas'],
         resolutionNumber: null,
         sectionTitles: ['Funciones', 'Perfil del cargo'],
         title: 'Ley A',
+        versionId: 'v1',
       },
     ]);
+  });
+
+  it('lee el inicio del texto indexado para resumir el documento', async () => {
+    const adapter = new SupabaseChatCatalogGatewayAdapter(
+      fakeClient({
+        ...baseTables,
+        document_chunks: [
+          { chunk_content: '  Artículo 1. Aprobar.  ' },
+          { chunk_content: 'Artículo 2. Encargar.' },
+        ],
+      }),
+    );
+
+    await expect(adapter.getOpeningText('v1')).resolves.toBe(
+      'Artículo 1. Aprobar.\n\nArtículo 2. Encargar.',
+    );
+    await expect(
+      new SupabaseChatCatalogGatewayAdapter(
+        fakeClient(baseTables, 'document_chunks'),
+      ).getOpeningText('v1'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(
+      new SupabaseChatCatalogGatewayAdapter(
+        fakeClient({ ...baseTables, document_chunks: null as never }),
+      ).getOpeningText('v1'),
+    ).resolves.toBe('');
   });
 
   it('sin documentos no consulta el resto', async () => {

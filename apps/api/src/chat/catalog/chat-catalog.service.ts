@@ -1,12 +1,15 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { SUPABASE_CHAT_CATALOG_GATEWAY } from '../../supabase/supabase.constants';
 import {
+  DOCUMENT_SUMMARY_GATEWAY,
   SUGGESTED_QUESTIONS_GATEWAY,
   type AvailableDocument,
   type ChatCatalogGateway,
   type ChatCatalogReply,
+  type DocumentSummaryGateway,
   type SuggestedQuestionsGateway,
 } from './chat-catalog.types';
+import type { TopicModule } from './topic-match';
 
 /** Las sugerencias se regeneran solo si cambia el catálogo o pasa este tiempo. */
 export const SUGGESTIONS_CACHE_MS = 30 * 60 * 1000;
@@ -16,6 +19,39 @@ export const FAILED_SUGGESTIONS_CACHE_MS = 2 * 60 * 1000;
 export const COVERAGE_CACHE_MS = 5 * 60 * 1000;
 export const FAILED_COVERAGE_CACHE_MS = 60 * 1000;
 const OTHER_TOPICS = 'otros temas';
+/** Documentos disponibles para panoramas y vocabulario: se releen cada 2 min. */
+export const DOCUMENTS_CACHE_MS = 2 * 60 * 1000;
+/** Un resumen depende solo de la versión del documento: se guarda un día. */
+export const SUMMARY_CACHE_MS = 24 * 60 * 60 * 1000;
+export const FAILED_SUMMARY_CACHE_MS = 5 * 60 * 1000;
+const MAX_OVERVIEW_DOCUMENTS = 8;
+/** Cuánto espera el chat por los resúmenes antes de mostrar la lista. */
+export const SUMMARY_WAIT_MS = 6_000;
+
+export interface OverviewDocument {
+  documentType: string;
+  id: string;
+  issuanceYear: number | null;
+  resolutionNumber: string | null;
+  /** Resumen orientativo generado por la IA a partir del texto; null si no hay. */
+  summary: string | null;
+  title: string;
+}
+
+/**
+ * Panorama de un tema del chat: sus documentos con un resumen corto. Si el
+ * subtema aún no tiene documentos se muestran los de su tema principal
+ * (`scope: 'parent'`); `empty` indica que no hay ninguno.
+ */
+export interface ModuleOverview {
+  documents: OverviewDocument[];
+  /** Total de documentos del alcance (la lista puede venir recortada). */
+  total: number;
+  moduleId: string;
+  moduleName: string;
+  scope: 'empty' | 'module' | 'parent';
+  scopeName: string;
+}
 
 function joinSpanish(items: string[]): string {
   if (items.length <= 1) return items.join('');
@@ -69,7 +105,48 @@ function documentLine(document: AvailableDocument): string {
  * Preguntas de respaldo si la IA no responde: no afirman contenido, solo
  * invitan a consultar un documento concreto por su nombre.
  */
-export function fallbackSuggestions(documents: AvailableDocument[]): string[] {
+function documentDetails(document: {
+  documentType: string;
+  issuanceYear: number | null;
+  resolutionNumber: string | null;
+}): string {
+  const details = [
+    DOCUMENT_TYPE_LABELS[document.documentType],
+    document.resolutionNumber,
+    document.issuanceYear ? String(document.issuanceYear) : null,
+  ].filter(Boolean);
+  return details.length ? ` (${details.join(', ')})` : '';
+}
+
+/** Respuesta del chat para «¿de qué trata…?» o al pedir el panorama de un tema. */
+export function overviewMessage(overview: ModuleOverview): string {
+  const count = overview.total;
+  const intro =
+    overview.scope === 'parent'
+      ? `Aún no tengo documentos cargados en «${overview.moduleName}». Dentro de **${overview.scopeName}** tengo ${count === 1 ? 'este documento' : `estos ${count} documentos`}:`
+      : `Sobre **${overview.scopeName}** tengo ${count === 1 ? 'este documento' : `estos ${count} documentos`}:`;
+  const items = overview.documents.map((document) => {
+    const title = document.title.trim().replace(/[.;:]+$/u, '');
+    return `- **${title}**${documentDetails(document)}${document.summary ? `: ${document.summary}` : ''}`;
+  });
+  const more =
+    overview.total > overview.documents.length
+      ? [
+          `Y ${overview.total - overview.documents.length} documentos más en este tema.`,
+        ]
+      : [];
+  const ask =
+    count === 1
+      ? 'Cuéntame qué necesitas saber de este documento y te respondo con la cita exacta.'
+      : 'Cuéntame qué necesitas saber de estos documentos y te respondo con la cita exacta.';
+  // Transparencia: el resumen orienta, la respuesta con cita es la que vale.
+  const closing = overview.documents.some((document) => document.summary)
+    ? `Los resúmenes son orientativos: los genera la IA a partir del texto de cada documento. ${ask}`
+    : ask;
+  return [intro, items.join('\n'), ...more, closing].join('\n\n');
+}
+
+export function fallbackSuggestions(documents: { title: string }[]): string[] {
   return documents
     .slice(0, MAX_FALLBACK_SUGGESTIONS)
     .map((document) => `¿Qué establece «${shortTitle(document.title)}»?`);
@@ -93,13 +170,133 @@ export class ChatCatalogService {
     promise: Promise<string[]>;
     signature: string;
   } | null = null;
+  private documents: {
+    expiresAt: number;
+    promise: Promise<AvailableDocument[]>;
+  } | null = null;
+  private readonly summaries = new Map<
+    string,
+    { expiresAt: number; promise: Promise<string | null> }
+  >();
 
   constructor(
     @Inject(SUPABASE_CHAT_CATALOG_GATEWAY)
     private readonly catalogGateway: ChatCatalogGateway,
     @Inject(SUGGESTED_QUESTIONS_GATEWAY)
     private readonly suggestionsGateway: SuggestedQuestionsGateway,
+    @Optional()
+    @Inject(DOCUMENT_SUMMARY_GATEWAY)
+    private readonly summaryGateway?: DocumentSummaryGateway,
   ) {}
+
+  /** Documentos disponibles con caché corta (consultas simultáneas comparten una lectura). */
+  availableDocuments(): Promise<AvailableDocument[]> {
+    if (this.documents && this.documents.expiresAt > Date.now()) {
+      return this.documents.promise;
+    }
+    const promise = this.catalogGateway.listAvailableDocuments();
+    const entry = { expiresAt: Date.now() + DOCUMENTS_CACHE_MS, promise };
+    this.documents = entry;
+    // Un fallo no se guarda: la próxima consulta vuelve a intentarlo.
+    promise.catch(() => {
+      if (this.documents === entry) this.documents = null;
+    });
+    return promise;
+  }
+
+  /**
+   * Panorama de un tema: sus documentos con un resumen corto de cada uno, para
+   * que el docente sepa de qué trata antes de preguntar.
+   */
+  async moduleOverview(input: {
+    module: TopicModule;
+    parent: TopicModule | null;
+  }): Promise<ModuleOverview> {
+    const documents = await this.availableDocuments();
+    const inModule = documents.filter((document) =>
+      document.moduleIds.includes(input.module.id),
+    );
+    const inParent = input.parent
+      ? documents.filter((document) =>
+          document.moduleIds.includes(input.parent?.id ?? ''),
+        )
+      : [];
+    const scope = inModule.length
+      ? 'module'
+      : inParent.length
+        ? 'parent'
+        : 'empty';
+    const inScope = scope === 'module' ? inModule : inParent;
+    const selected = inScope.slice(0, MAX_OVERVIEW_DOCUMENTS);
+    // Espera acotada: si la IA tarda, se muestra la lista sin ese resumen y
+    // el resumen queda en caché para la próxima vez.
+    const summaries = await Promise.all(
+      selected.map((document) =>
+        Promise.race([
+          this.summaryFor(document),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), SUMMARY_WAIT_MS).unref?.();
+          }),
+        ]),
+      ),
+    );
+    return {
+      documents: selected.map((document, index) => ({
+        documentType: document.documentType,
+        id: document.id,
+        issuanceYear: document.issuanceYear,
+        resolutionNumber: document.resolutionNumber,
+        summary: summaries[index] ?? null,
+        title: document.title,
+      })),
+      moduleId: input.module.id,
+      moduleName: input.module.name,
+      scope,
+      total: inScope.length,
+      scopeName:
+        scope === 'parent' && input.parent
+          ? input.parent.name
+          : input.module.name,
+    };
+  }
+
+  private async generateSummary(
+    document: AvailableDocument,
+    gateway: DocumentSummaryGateway,
+  ): Promise<string | null> {
+    try {
+      const excerpt = await this.catalogGateway.getOpeningText(
+        document.versionId,
+      );
+      return await gateway.summarize({ excerpt, title: document.title });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo resumir el documento ${document.id}: ${error instanceof Error ? error.message : 'error desconocido'}`,
+      );
+      return null;
+    }
+  }
+
+  /** Resumen de un documento, compartido y en caché por versión. */
+  private summaryFor(document: AvailableDocument): Promise<string | null> {
+    if (!this.summaryGateway) return Promise.resolve(null);
+    const cached = this.summaries.get(document.versionId);
+    if (cached && cached.expiresAt > Date.now()) return cached.promise;
+    const entry = {
+      expiresAt: Date.now() + SUMMARY_CACHE_MS,
+      promise: this.generateSummary(document, this.summaryGateway),
+    };
+    // Sin resumen (fallo o salida vacía) se reintenta en unos minutos.
+    void entry.promise.then((summary) => {
+      if (!summary) entry.expiresAt = Date.now() + FAILED_SUMMARY_CACHE_MS;
+    });
+    const now = Date.now();
+    for (const [versionId, cached] of this.summaries) {
+      if (cached.expiresAt <= now) this.summaries.delete(versionId);
+    }
+    this.summaries.set(document.versionId, entry);
+    return entry.promise;
+  }
 
   /**
    * Una línea de asesor para cuando el RAG no encuentra sustento: qué temas

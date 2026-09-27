@@ -14,11 +14,13 @@ function document(
     documentType: 'RESOLUCION_VICEMINISTERIAL',
     id: 'd1',
     issuanceYear: 2023,
+    moduleIds: ['cargos'],
     moduleNames: ['Cargos y plazas'],
     resolutionNumber: 'RVM 011-2023',
     sectionTitles: ['Funciones del Coordinador Pedagógico'],
     title:
       'Incorporan en el Clasificador de Cargos de la Carrera Pública Magisterial',
+    versionId: 'v1',
     ...overrides,
   };
 }
@@ -30,6 +32,7 @@ function service(
     .mockResolvedValue(['¿Qué funciones tiene el Coordinador Pedagógico?']),
 ) {
   const catalogGateway = {
+    getOpeningText: jest.fn().mockResolvedValue('Texto inicial del documento.'),
     listAvailableDocuments: jest.fn().mockResolvedValue(documents),
   };
   const suggestionsGateway = { suggest };

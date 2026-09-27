@@ -37,6 +37,16 @@ export class ChatController {
     return this.chatService.listModules();
   }
 
+  /** Panorama del tema abierto: sus documentos con un resumen corto. */
+  @Get('modules/:moduleId/overview')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  moduleOverview(
+    // Cualquier versión de UUID: el seed de demostración usa UUID v5.
+    @Param('moduleId', new ParseUUIDPipe()) moduleId: string,
+  ) {
+    return this.chatService.moduleOverview(moduleId);
+  }
+
   @Get('conversations')
   listConversations(
     @Query() dto: ListChatConversationsQueryDto,

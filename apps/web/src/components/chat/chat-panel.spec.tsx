@@ -115,6 +115,16 @@ async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
 }
 
+/**
+ * Solo las llamadas del chat: la tarjeta «Documentos de este tema» también
+ * consulta la red al abrir un tema.
+ */
+function chatCalls(mock: { mock: { calls: unknown[][] } }) {
+  return mock.mock.calls.filter(
+    (call) => !String(call[0]).includes("/api/chat/modules/"),
+  ) as [RequestInfo | URL, RequestInit | undefined][];
+}
+
 function requestBody(
   call: [input: RequestInfo | URL, init?: RequestInit] | undefined,
 ) {
@@ -570,8 +580,8 @@ describe("ChatPanel", () => {
       screen.getByRole("button", { name: /licencia por salud/i }),
     );
     await submitQuestion(user);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(requestBody(fetchMock.mock.calls[0])).toEqual({
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(1));
+    expect(requestBody(chatCalls(fetchMock)[0])).toEqual({
       moduleId: childModule.id,
       question: "¿Cómo solicito una licencia?",
     });
@@ -589,8 +599,8 @@ describe("ChatPanel", () => {
       }),
     );
     await submitQuestion(user);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(requestBody(fetchMock.mock.calls[1])).toEqual({
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
+    expect(requestBody(chatCalls(fetchMock)[1])).toEqual({
       moduleId: chatModule.id,
       question: "¿Cómo solicito una licencia?",
     });
@@ -1009,9 +1019,9 @@ describe("ChatPanel", () => {
 
     // La pregunta original se reenvía sola, en una conversación nueva del tema
     // elegido: el docente no tiene que reescribirla.
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
     expect(
-      requestBody(fetchMock.mock.calls[1] as [RequestInfo, RequestInit]),
+      requestBody(chatCalls(fetchMock)[1] as [RequestInfo, RequestInit]),
     ).toEqual({
       moduleId: chatModule.id,
       question: "¿Cómo solicito una licencia?",
@@ -1083,7 +1093,7 @@ describe("ChatPanel", () => {
     // Recargar ahora no reabre la conversación anterior.
     expect(window.location.pathname).not.toContain(conversationId);
     await submitQuestion(user);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
     // La pregunta siguiente se muestra como tema nuevo.
     expect(
       await screen.findByText(/Nuevo tema: esta consulta se guardó/u),
@@ -1091,12 +1101,12 @@ describe("ChatPanel", () => {
 
     expect(
       requestBody(
-        fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit],
+        chatCalls(fetchMock)[0] as unknown as [RequestInfo, RequestInit],
       ),
     ).toMatchObject({ conversationId });
     expect(
       requestBody(
-        fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
+        chatCalls(fetchMock)[1] as unknown as [RequestInfo, RequestInit],
       ),
     ).not.toHaveProperty("conversationId");
   });
@@ -1150,17 +1160,17 @@ describe("ChatPanel", () => {
     await submitQuestion(user);
     await screen.findByText("No hay sustento suficiente.");
     await submitQuestion(user);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
 
     // Primera consulta: inicia la conversación con el módulo elegido.
     expect(
       requestBody(
-        fetchMock.mock.calls[0] as unknown as [RequestInfo, RequestInit],
+        chatCalls(fetchMock)[0] as unknown as [RequestInfo, RequestInit],
       ),
     ).toMatchObject({ moduleId: chatModule.id });
     // Seguimiento: solo la conversación; el servidor usa su módulo guardado.
     const followUp = requestBody(
-      fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit],
+      chatCalls(fetchMock)[1] as unknown as [RequestInfo, RequestInit],
     );
     expect(followUp).toMatchObject({ conversationId });
     expect(followUp).not.toHaveProperty("moduleId");
@@ -1192,6 +1202,49 @@ describe("ChatPanel", () => {
       ),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
+  });
+
+  it("al abrir un tema muestra sus documentos y deja lista una pregunta sobre ellos", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              documents: [
+                {
+                  documentType: "LEY",
+                  id: "33333333-3333-4333-8333-333333333333",
+                  issuanceYear: 2012,
+                  resolutionNumber: null,
+                  summary: "Regula las licencias del profesorado.",
+                  title: "Ley de licencias",
+                },
+              ],
+              moduleId: chatModule.id,
+              moduleName: "Licencias",
+              scope: "module",
+              scopeName: "Licencias",
+              total: 1,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    render(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Preguntar sobre este documento/,
+      }),
+    );
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    expect(box).toHaveValue("¿Qué establece «Ley de licencias»?");
+    expect(box).toHaveFocus();
   });
 
   it("muestra el catálogo con preguntas recomendadas que rellenan el cuadro", async () => {

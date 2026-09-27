@@ -1270,3 +1270,131 @@ ul.avend-chat-list {
 .avend-chat-welcome h2 {
   margin-top: 0.75rem;
 }
+
+/* ---------- Documentos de este tema (TSK-0062) ---------- */
+.avend-chat-overview {
+  animation: avend-rise-in 320ms var(--avend-ease-interaction) both;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+}
+
+.avend-chat-overview-title {
+  color: var(--avend-navy);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.avend-chat-overview-loading,
+.avend-chat-overview-note,
+.avend-chat-overview-foot {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.5rem 0 0;
+}
+
+.avend-chat-overview-foot {
+  background: var(--avend-surface-muted);
+  border-radius: 0.625rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.avend-chat-overview-skeleton {
+  animation: avend-overview-pulse 1.4s ease-in-out infinite;
+  background: var(--avend-surface-muted);
+  border-radius: 0.5rem;
+  display: block;
+  height: 0.875rem;
+  margin-top: 0.625rem;
+  width: 100%;
+}
+
+.avend-chat-overview-skeleton + .avend-chat-overview-skeleton {
+  width: 72%;
+}
+
+@keyframes avend-overview-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.avend-chat-overview-list {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.avend-chat-overview-list li {
+  padding: 0.75rem 0;
+}
+
+.avend-chat-overview-list li + li {
+  border-top: 1px solid var(--avend-border);
+}
+
+.avend-chat-overview-doc {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--avend-text);
+  display: -webkit-box;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+  overflow: hidden;
+}
+
+.avend-chat-overview-meta {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  margin: 0.25rem 0 0;
+}
+
+.avend-chat-overview-summary {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.5rem 0 0;
+}
+
+.avend-chat-overview-ask {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--avend-accent-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.25rem 0 0 -0.5rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+}
+
+.avend-chat-overview-ask:not(:disabled):hover {
+  background: var(--avend-soft-blue);
+}
+
+.avend-chat-overview-ask:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-overview,
+  .avend-chat-overview-skeleton {
+    animation: none;
+  }
+}
