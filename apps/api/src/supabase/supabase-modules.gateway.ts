@@ -52,6 +52,8 @@ export class SupabaseModulesGatewayAdapter implements ModulesGateway {
   async create(input: CreateModuleRecord): Promise<ManagedModule> {
     const client = this.requireClient();
     const record: ModuleInsert = {
+      // Responsable explícito para la auditoría (el trigger lo consume).
+      audit_actor: input.createdBy,
       code: input.code,
       created_by: input.createdBy,
       description: input.description ?? null,
@@ -166,6 +168,8 @@ export class SupabaseModulesGatewayAdapter implements ModulesGateway {
   ): Promise<ManagedModule | null> {
     const client = this.requireClient();
     const record: ModuleUpdate = {
+      // Responsable explícito para la auditoría (el trigger lo consume).
+      audit_actor: input.updatedBy,
       code: input.code,
       deactivated_at: input.deactivatedAt,
       deactivated_by: input.deactivatedBy,

@@ -105,6 +105,8 @@ describe('SupabaseModulesGatewayAdapter', () => {
     expect(builder.insert.mock.calls).toEqual([
       [
         expect.objectContaining({
+          // Responsable explícito que el trigger de auditoría consume.
+          audit_actor: moduleRow.created_by,
           code: 'MODULE_TEST',
           created_by: moduleRow.created_by,
           parent_module_id: null,
@@ -198,6 +200,12 @@ describe('SupabaseModulesGatewayAdapter', () => {
         updatedBy: moduleRow.updated_by,
       }),
     ).resolves.toMatchObject({ id: moduleRow.id });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audit_actor: moduleRow.updated_by,
+        is_active: false,
+      }),
+    );
 
     builder.data = null;
     await expect(

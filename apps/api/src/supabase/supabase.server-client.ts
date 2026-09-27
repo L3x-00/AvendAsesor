@@ -68,6 +68,7 @@ export interface SupabaseDatabase {
       };
       modules: {
         Row: {
+          audit_actor: string | null;
           code: string;
           created_at: string;
           created_by: string | null;
@@ -89,6 +90,7 @@ export interface SupabaseDatabase {
           updated_by: string | null;
         };
         Insert: {
+          audit_actor?: string | null;
           code: string;
           created_at?: string;
           created_by?: string | null;
@@ -110,6 +112,7 @@ export interface SupabaseDatabase {
           updated_by?: string | null;
         };
         Update: {
+          audit_actor?: string | null;
           code?: string;
           created_at?: string;
           created_by?: string | null;
@@ -920,7 +923,12 @@ export interface SupabaseDatabase {
           action:
             | 'access_window_changed'
             | 'chat_history_deleted'
+            | 'module_created'
+            | 'module_deleted'
+            | 'module_status_changed'
+            | 'module_updated'
             | 'unanswered_question_reviewed'
+            | 'user_created'
             | 'user_role_changed'
             | 'user_status_changed';
           actor_id: string;
@@ -930,7 +938,7 @@ export interface SupabaseDatabase {
           occurred_at: string;
           resource_id: string;
           resource_type:
-            'chat_conversation' | 'unanswered_question' | 'profile';
+            'chat_conversation' | 'unanswered_question' | 'profile' | 'module';
         }[];
       };
       touch_profile_last_access: {
@@ -1070,6 +1078,10 @@ export interface SupabaseDatabase {
       operational_audit_action:
         | 'access_window_changed'
         | 'chat_history_deleted'
+        | 'module_created'
+        | 'module_deleted'
+        | 'module_status_changed'
+        | 'module_updated'
         | 'user_created'
         | 'unanswered_question_reviewed'
         | 'user_role_changed'
