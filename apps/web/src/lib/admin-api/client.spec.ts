@@ -4,12 +4,27 @@ import { AdminApiClient, AdminApiError } from "./client";
 it.each([
   ["That email address already has an account.", "email"],
   ["The administrative user change cannot be applied.", undefined],
-])("maps only the known duplicate-email conflict to its field", async (message, field) => {
-  const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message }), { status: 409 }));
-  const client = new AdminApiClient("test-token", "http://localhost:3001", request);
-  await expect(client.createAdministrativeUser({ email: "ana@example.test", fullName: "Ana Quispe" }))
-    .rejects.toMatchObject({ status: 409, field });
-});
+])(
+  "maps only the known duplicate-email conflict to its field",
+  async (message, field) => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message }), { status: 409 }),
+      );
+    const client = new AdminApiClient(
+      "test-token",
+      "http://localhost:3001",
+      request,
+    );
+    await expect(
+      client.createAdministrativeUser({
+        email: "ana@example.test",
+        fullName: "Ana Quispe",
+      }),
+    ).rejects.toMatchObject({ status: 409, field });
+  },
+);
 
 const moduleRecord = {
   code: "NORMATIVA",
@@ -437,6 +452,31 @@ describe("AdminApiClient", () => {
     await expect(client.listModules()).rejects.toThrow(
       "Administrative API returned an invalid response.",
     );
+  });
+
+  it("acepta en la actividad auditada las altas de usuarios y los cambios de módulos", async () => {
+    const events = [
+      {
+        ...auditEvent,
+        action: "user_created" as const,
+        id: "a84e1198-6c7d-4fa2-998e-2dced81389d8",
+      },
+      {
+        ...auditEvent,
+        action: "module_status_changed" as const,
+        id: "b84e1198-6c7d-4fa2-998e-2dced81389d8",
+        metadata: { isActive: false, moduleName: "Permuta docente" },
+        resourceType: "module" as const,
+      },
+    ];
+    const request = vi.fn(async () => successfulJson(events));
+    const client = new AdminApiClient(
+      "verified-token",
+      "http://localhost:3001",
+      request,
+    );
+
+    await expect(client.listOperationalAuditEvents()).resolves.toEqual(events);
   });
 
   it("maps Hito 4 operational and superadministration contracts without exposing a browser client", async () => {

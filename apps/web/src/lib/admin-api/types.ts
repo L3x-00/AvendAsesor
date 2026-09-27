@@ -467,7 +467,14 @@ export const operationalAuditEventSchema = z.object({
   action: z.enum([
     "access_window_changed",
     "chat_history_deleted",
+    "module_created",
+    "module_deleted",
+    "module_status_changed",
+    "module_updated",
     "unanswered_question_reviewed",
+    // Lo registra el alta de usuarios desde el panel: sin él, la primera alta
+    // hacía fallar toda la lista de actividad auditada.
+    "user_created",
     "user_role_changed",
     "user_status_changed",
   ]),
@@ -477,7 +484,12 @@ export const operationalAuditEventSchema = z.object({
   metadata: jsonObjectSchema,
   occurredAt: timestampSchema,
   resourceId: z.string().uuid(),
-  resourceType: z.enum(["chat_conversation", "unanswered_question", "profile"]),
+  resourceType: z.enum([
+    "chat_conversation",
+    "module",
+    "unanswered_question",
+    "profile",
+  ]),
 });
 
 export type OperationalAuditEvent = z.infer<typeof operationalAuditEventSchema>;

@@ -85,13 +85,19 @@ const documentIngestionStatusContent = {
 const operationalAuditActionLabels = {
   access_window_changed: "Vigencia de acceso actualizada",
   chat_history_deleted: "Historial de conversación eliminado",
+  module_created: "Módulo creado",
+  module_deleted: "Módulo eliminado",
+  module_status_changed: "Estado de módulo actualizado",
+  module_updated: "Módulo editado",
   unanswered_question_reviewed: "Consulta no resuelta revisada",
+  user_created: "Usuario creado",
   user_role_changed: "Rol de usuario actualizado",
   user_status_changed: "Estado de cuenta actualizado",
 } as const satisfies Record<OperationalAuditEvent["action"], string>;
 
 const operationalAuditResourceLabels = {
   chat_conversation: "Conversación",
+  module: "Módulo o submódulo",
   profile: "Perfil de usuario",
   unanswered_question: "Consulta no resuelta",
 } as const satisfies Record<OperationalAuditEvent["resourceType"], string>;
@@ -141,4 +147,67 @@ export function formatOperationalAuditResourceType(
   resourceType: OperationalAuditEvent["resourceType"],
 ): string {
   return operationalAuditResourceLabels[resourceType];
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Qué cambió, en una línea legible («Escala remunerativa: desactivado —
+ * Temporada cerrada»). Solo usa los datos que guarda el propio evento.
+ */
+export function formatOperationalAuditDetail(
+  event: Pick<OperationalAuditEvent, "action" | "metadata">,
+): string | null {
+  const metadata = event.metadata;
+  const moduleName = text(metadata.moduleName);
+  const reason = text(metadata.reason);
+  switch (event.action) {
+    case "module_created":
+      return moduleName;
+    case "module_updated": {
+      const previous = text(metadata.previousName);
+      return previous && moduleName
+        ? `${previous} → ${moduleName}`
+        : moduleName;
+    }
+    case "module_status_changed": {
+      const state = metadata.isActive === true ? "activado" : "desactivado";
+      const base = moduleName ? `${moduleName}: ${state}` : state;
+      return reason ? `${base} — ${reason}` : base;
+    }
+    case "module_deleted":
+      return moduleName && reason
+        ? `${moduleName} — ${reason}`
+        : (moduleName ?? reason);
+    case "user_role_changed": {
+      const from = text(metadata.fromRole);
+      const to = text(metadata.toRole);
+      return from &&
+        to &&
+        Object.hasOwn(userRoleLabels, from) &&
+        Object.hasOwn(userRoleLabels, to)
+        ? `${userRoleLabels[from as keyof typeof userRoleLabels]} → ${userRoleLabels[to as keyof typeof userRoleLabels]}`
+        : null;
+    }
+    case "user_status_changed": {
+      const from = text(metadata.fromStatus);
+      const to = text(metadata.toStatus);
+      return from &&
+        to &&
+        Object.hasOwn(accountStatusLabels, from) &&
+        Object.hasOwn(accountStatusLabels, to)
+        ? `${accountStatusLabels[from as keyof typeof accountStatusLabels]} → ${accountStatusLabels[to as keyof typeof accountStatusLabels]}`
+        : null;
+    }
+    case "user_created": {
+      const role = text(metadata.role);
+      return role && Object.hasOwn(userRoleLabels, role)
+        ? `Rol: ${userRoleLabels[role as keyof typeof userRoleLabels]}`
+        : null;
+    }
+    default:
+      return null;
+  }
 }

@@ -52,6 +52,10 @@ export interface AdministrativeUserCounts {
 export type OperationalAuditAction =
   | 'access_window_changed'
   | 'chat_history_deleted'
+  | 'module_created'
+  | 'module_deleted'
+  | 'module_status_changed'
+  | 'module_updated'
   | 'unanswered_question_reviewed'
   | 'user_created'
   | 'user_role_changed'
@@ -65,7 +69,8 @@ export interface OperationalAuditEvent {
   metadata: Record<string, unknown>;
   occurredAt: string;
   resourceId: string;
-  resourceType: 'chat_conversation' | 'unanswered_question' | 'profile';
+  resourceType:
+    'chat_conversation' | 'module' | 'unanswered_question' | 'profile';
 }
 
 export interface UserAdministrationGateway {

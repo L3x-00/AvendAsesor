@@ -7,6 +7,7 @@ import { getAdminApiUrl } from "@/lib/admin-api/config";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   formatOperationalAuditAction,
+  formatOperationalAuditDetail,
   formatOperationalAuditResourceType,
   formatUserRole,
 } from "@/lib/admin-api/labels";
@@ -95,6 +96,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                     <th>Acción</th>
                     <th>Rol ejecutor</th>
                     <th>Recurso</th>
+                    <th>Detalle</th>
                     <th>Fecha</th>
                   </tr>
                 </thead>
@@ -106,6 +108,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                       <td>
                         {formatOperationalAuditResourceType(event.resourceType)}
                       </td>
+                      <td>{formatOperationalAuditDetail(event) ?? "—"}</td>
                       <td>{formatAuditDate(event.occurredAt)}</td>
                     </tr>
                   ))}
