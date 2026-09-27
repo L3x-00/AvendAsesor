@@ -33,6 +33,14 @@ describe("DocumentUploadPanel", () => {
     expect(screen.getByText(/Evaluación docente/)).toBeInTheDocument();
   });
 
+  it("llega abierto desde «Cargar documento en este tema»", () => {
+    render(<DocumentUploadPanel {...baseProps} defaultOpen />);
+
+    expect(
+      screen.getByRole("button", { name: /agregar documento/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("expands the form when the toggle is clicked", () => {
     render(<DocumentUploadPanel {...baseProps} />);
 

@@ -1,5 +1,16 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { SUPABASE_CONSULTATION_CASES_GATEWAY } from '../supabase/supabase.constants';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import type { ChatHistoryGateway } from '../chat/chat-history.gateway';
+import {
+  SUPABASE_CHAT_GATEWAY,
+  SUPABASE_CONSULTATION_CASES_GATEWAY,
+} from '../supabase/supabase.constants';
 import { AttachmentInspectionService } from './attachment-inspection.service';
 import type {
   ConsultationAttachmentDisposition,
@@ -15,6 +26,13 @@ import type {
   ConsultationTopic,
   ConsultationCaseSummary,
 } from './consultation-cases.gateway';
+import {
+  groupUnansweredCases,
+  type UnansweredGroup,
+} from './unanswered-groups';
+
+/** Casos abiertos que se agrupan por estado: el máximo que admite la RPC. */
+const MAX_GROUPED_CASES = 100;
 
 @Injectable()
 export class ConsultationCasesService {
@@ -22,7 +40,48 @@ export class ConsultationCasesService {
     @Inject(SUPABASE_CONSULTATION_CASES_GATEWAY)
     private readonly gateway: ConsultationCasesGateway,
     private readonly attachments: AttachmentInspectionService,
+    @Optional()
+    @Inject(SUPABASE_CHAT_GATEWAY)
+    private readonly modulesGateway?: Pick<
+      ChatHistoryGateway,
+      'listActiveModules'
+    >,
   ) {}
+
+  /**
+   * Consultas sin sustento abiertas (pendientes o en revisión), agrupadas por
+   * tema. Usa el mismo listado con permisos de la bandeja de casos.
+   */
+  async getUnansweredGroups(
+    reviewerId: string,
+    period: ConsultationPeriod,
+  ): Promise<UnansweredGroup[]> {
+    const [open, modules] = await Promise.all([
+      this.openUnansweredCases(reviewerId, period),
+      this.modulesGateway?.listActiveModules() ?? Promise.resolve([]),
+    ]);
+    return groupUnansweredCases(open, modules);
+  }
+
+  /** Consultas sin sustento aún abiertas (pendientes o en revisión). */
+  private async openUnansweredCases(
+    reviewerId: string,
+    period: ConsultationPeriod,
+  ): Promise<ConsultationCaseSummary[]> {
+    const query = {
+      issueType: 'support_insufficient' as const,
+      kind: 'automatic_alert' as const,
+      limit: MAX_GROUPED_CASES,
+      offset: 0,
+      period,
+      reviewerId,
+    };
+    const [pending, inReview] = await Promise.all([
+      this.gateway.listCases({ ...query, status: 'pending' }),
+      this.gateway.listCases({ ...query, status: 'in_review' }),
+    ]);
+    return [...pending, ...inReview];
+  }
 
   async createTeacherReport(input: {
     answerMessageId: string;
@@ -140,6 +199,58 @@ export class ConsultationCasesService {
       reviewerId: input.reviewerId,
       status: input.status ?? null,
     });
+  }
+
+  /**
+   * Resuelve (o descarta) de una vez los casos de un grupo. Cada caso pasa por
+   * la misma operación con permisos y deja su nota en el historial; si alguno
+   * cambió mientras tanto (ya no existe o ya se cerró), se omite y se informa.
+   */
+  async resolveGroup(input: {
+    caseIds: string[];
+    note: string;
+    period: ConsultationPeriod;
+    reviewerId: string;
+    status: 'discarded' | 'resolved';
+  }): Promise<{ failed: number; skipped: number; updated: number }> {
+    // Se revalida en el servidor: solo se cierran consultas sin sustento que
+    // sigan abiertas. Una que otra persona cerró o cambió mientras tanto se
+    // omite (no se reabre ni se avisa al docente por error).
+    const open = new Set(
+      (await this.openUnansweredCases(input.reviewerId, input.period)).map(
+        (item) => item.id,
+      ),
+    );
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const caseId of new Set(input.caseIds)) {
+      if (!open.has(caseId)) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await this.updateCase({
+          caseId,
+          note: input.note,
+          reviewerId: input.reviewerId,
+          status: input.status,
+        });
+        updated += 1;
+      } catch (error) {
+        if (
+          error instanceof NotFoundException ||
+          error instanceof ConflictException
+        ) {
+          skipped += 1;
+        } else {
+          // Se sigue con el resto y se informa: los ya cerrados no se repiten
+          // al reintentar porque dejan de estar abiertos.
+          failed += 1;
+        }
+      }
+    }
+    return { failed, skipped, updated };
   }
 
   linkDocument(

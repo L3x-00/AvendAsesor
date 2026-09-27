@@ -1204,6 +1204,73 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
   });
 
+  it("avisa que hay información nueva y deja lista la consulta para volver a enviarla", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+        resolvedUpdate={{
+          conversationId,
+          question: "¿Qué requisitos corresponden?",
+          resolvedAt: "2026-09-26T10:00:00.000Z",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Hay información nueva.",
+    );
+    await user.click(screen.getByRole("button", { name: "Volver a preguntar" }));
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    expect(box).toHaveValue("¿Qué requisitos corresponden?");
+    expect(box).toHaveFocus();
+
+    rerender(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+        resolvedUpdate={{
+          conversationId,
+          question: null,
+          resolvedAt: "2026-09-26T10:00:00.000Z",
+        }}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Volver a preguntar" }),
+    ).toBeNull();
+  });
+
+  it("el aviso de información nueva desaparece al volver a preguntar", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([conversationEvent(), doneEvent("rule")]),
+      ),
+    );
+    render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+        resolvedUpdate={{
+          conversationId,
+          question: "¿Qué requisitos corresponden?",
+          resolvedAt: "2026-09-26T10:00:00.000Z",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Volver a preguntar" }));
+    await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Hay información nueva/)).toBeNull(),
+    );
+  });
+
   it("al abrir un tema muestra sus documentos y deja lista una pregunta sobre ellos", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(

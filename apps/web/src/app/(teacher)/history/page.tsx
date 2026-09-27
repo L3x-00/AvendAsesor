@@ -19,7 +19,10 @@ export default async function HistoryPage({
   // El marco y los módulos los aporta el layout del grupo; esta ruta revalida
   // su propio acceso y pide solo lo suyo.
   const { client } = await resolveAuthorizedChatContext();
-  const conversationPage = await client.listConversations({ cursor });
+  const [conversationPage, updates] = await Promise.all([
+    client.listConversations({ cursor }),
+    client.listUpdates(),
+  ]);
 
   return (
     <section aria-labelledby="history-title" className="avend-content-page">
@@ -35,6 +38,7 @@ export default async function HistoryPage({
         conversations={conversationPage.items}
         nextCursor={conversationPage.nextCursor}
         now={requestTime()}
+        updates={updates}
       />
     </section>
   );

@@ -7,6 +7,8 @@ import { FieldError } from "@/components/ui/form-field";
 import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
 
 interface DocumentUploadPanelProps {
+  /** Abre el formulario al llegar desde «Cargar documento en este tema». */
+  defaultOpen?: boolean;
   apiBaseUrl: string;
   moduleId: string;
   moduleName: string;
@@ -17,12 +19,13 @@ interface DocumentUploadPanelProps {
 export function DocumentUploadPanel({
   apiBaseUrl,
   moduleId,
+  defaultOpen = false,
   moduleName,
   replacementCandidates,
   suggestions,
 }: DocumentUploadPanelProps) {
   const prefix = `module-document-${moduleId}`;
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const contentId = `${prefix}-content`;
 
   return (

@@ -187,9 +187,15 @@ export function ChatHistoryList({
   conversations,
   nextCursor,
   now: nowMs,
+  updates = [],
 }: {
   conversations: ChatConversation[];
   nextCursor: string | null;
+  /**
+   * Conversaciones con una consulta que quedó sin sustento y que la
+   * administración ya resolvió: el docente puede volver a preguntar.
+   */
+  updates?: Array<{ conversationId: string; resolvedAt: string }>;
   /**
    * Instante de referencia fijado por el servidor: así "Hoy"/"Ayer" coincide
    * entre el HTML del servidor y la hidratación, incluso cerca de medianoche.
@@ -218,6 +224,23 @@ export function ChatHistoryList({
   }
 
   const now = nowMs === undefined ? new Date() : new Date(nowMs);
+  // Solo mientras la persona no haya vuelto a preguntar en esa conversación.
+  const updated = new Set(
+    updates
+      .filter((update) => {
+        const conversation = conversations.find(
+          (item) => item.id === update.conversationId,
+        );
+        return (
+          conversation !== undefined &&
+          Date.parse(conversation.updatedAt) <= Date.parse(update.resolvedAt)
+        );
+      })
+      .map((update) => update.conversationId),
+  );
+  const updatedVisible = conversations.filter((conversation) =>
+    updated.has(conversation.id),
+  ).length;
   const groups = new Map<HistoryGroup, ChatConversation[]>();
   for (const conversation of conversations) {
     const group = historyGroupOf(conversation.updatedAt, now);
@@ -226,6 +249,14 @@ export function ChatHistoryList({
 
   return (
     <div className="avend-history-results">
+      {updatedVisible > 0 ? (
+        <p className="avend-history-update-notice" role="status">
+          <strong>Hay novedades.</strong>{" "}
+          {updatedVisible === 1
+            ? "Se incorporó documentación sobre una consulta que antes no tenía respuesta. Ábrela y vuelve a preguntar."
+            : `Se incorporó documentación sobre ${updatedVisible} consultas que antes no tenían respuesta. Ábrelas y vuelve a preguntar.`}
+        </p>
+      ) : null}
       {[...groups].map(([group, items]) => (
         <section aria-labelledby={`history-group-${group}`} key={group}>
           <h2 className="avend-history-group-title" id={`history-group-${group}`}>
@@ -238,6 +269,11 @@ export function ChatHistoryList({
                 <li className="avend-history-item" key={conversation.id}>
                   <div>
                     <h3 title={conversation.title ?? undefined}>{title}</h3>
+                    {updated.has(conversation.id) ? (
+                      <span className="avend-history-update-badge">
+                        Nueva información disponible
+                      </span>
+                    ) : null}
                     <p>
                       <span className="avend-visually-hidden">
                         Última actualización:{" "}

@@ -221,3 +221,23 @@ export const consultationAttachmentDownloadSchema = z.object({
   expiresAt: timestampSchema,
   url: z.string().url(),
 });
+
+/** Consultas sin sustento abiertas, agrupadas por tema. */
+export const unansweredGroupSchema = z.object({
+  caseIds: z.array(uuid).min(1).max(50),
+  count: z.number().int().positive(),
+  examples: z.array(z.string().max(400)).max(3),
+  kind: z.enum(["catalog", "topic", "unknown"]),
+  latestAt: timestampSchema,
+  moduleId: uuid.nullable(),
+  moduleName: z.string().max(255).nullable(),
+  parentModuleName: z.string().max(255).nullable(),
+});
+export type UnansweredGroup = z.infer<typeof unansweredGroupSchema>;
+
+export const resolveGroupResultSchema = z.object({
+  failed: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+});
+export type ResolveGroupResult = z.infer<typeof resolveGroupResultSchema>;

@@ -8,6 +8,8 @@ import {
   consultationReviewPrioritySchema,
   consultationReportsDashboardSchema,
   consultationTopicSchema,
+  resolveGroupResultSchema,
+  unansweredGroupSchema,
   type ConsultationCaseIssue,
   type ConsultationCaseKind,
   type ConsultationCaseStatus,
@@ -17,6 +19,8 @@ import {
   type ConsultationCaseSummary,
   type ConsultationReviewPriority,
   type ConsultationTopic,
+  type ResolveGroupResult,
+  type UnansweredGroup,
 } from "./types";
 
 export class ConsultationReportsApiError extends Error {
@@ -53,6 +57,29 @@ export class ConsultationReportsApiClient {
       `/admin/consultation-cases/dashboard/topics?${new URLSearchParams({ period })}`,
       { method: "GET" },
       consultationTopicSchema.array(),
+    );
+  }
+
+  async getUnansweredGroups(
+    period: ConsultationPeriod,
+  ): Promise<UnansweredGroup[]> {
+    return this.send(
+      `/admin/consultation-cases/dashboard/unanswered-groups?${new URLSearchParams({ period })}`,
+      { method: "GET" },
+      unansweredGroupSchema.array(),
+    );
+  }
+
+  async resolveGroup(payload: {
+    caseIds: string[];
+    note: string;
+    period: ConsultationPeriod;
+    status: "discarded" | "resolved";
+  }): Promise<ResolveGroupResult> {
+    return this.send(
+      "/admin/consultation-cases/resolve-group",
+      { body: JSON.stringify(payload), method: "POST" },
+      resolveGroupResultSchema,
     );
   }
 

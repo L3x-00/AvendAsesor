@@ -280,6 +280,40 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     expect(ragService.retrieve).toHaveBeenCalled();
   });
 
+  describe('listUpdates (consultas ya resueltas)', () => {
+    it('pide las resoluciones de los últimos 30 días del propio docente', async () => {
+      const now = jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(Date.parse('2026-09-30T00:00:00.000Z'));
+      try {
+        const listResolvedConsultations = jest.fn().mockResolvedValue([]);
+        const service = new ChatService(
+          { generate: jest.fn() },
+          {} as never,
+          {} as never,
+          { get: jest.fn() } as never,
+          { prepare: jest.fn() } as never,
+          undefined,
+          { listResolvedConsultations },
+        );
+
+        await expect(service.listUpdates(authorization)).resolves.toEqual([]);
+        expect(listResolvedConsultations).toHaveBeenCalledWith({
+          since: '2026-08-31T00:00:00.000Z',
+          userId: authorization.userId,
+        });
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('sin la fuente de novedades devuelve una lista vacía', async () => {
+      const { service } = setup();
+
+      await expect(service.listUpdates(authorization)).resolves.toEqual([]);
+    });
+  });
+
   describe('moduleOverview (panorama al abrir un tema)', () => {
     it('devuelve el panorama del tema con su tema principal', async () => {
       const { catalogService, service } = setup();

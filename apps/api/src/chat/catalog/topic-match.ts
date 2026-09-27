@@ -157,6 +157,7 @@ function wordsMatch(left: string, right: string): boolean {
 export function matchTopicModule<T extends TopicModule>(
   topic: string,
   modules: T[],
+  options: { requireTopicCoverage?: boolean } = {},
 ): T | null {
   const topicWords = significantWords(topic);
   if (!topicWords.length) return null;
@@ -173,7 +174,12 @@ export function matchTopicModule<T extends TopicModule>(
     const topicMatched = topicWords.filter((topicWord) =>
       nameWords.some((nameWord) => wordsMatch(nameWord, topicWord)),
     ).length;
-    if (topicMatched / topicWords.length < 0.5) continue;
+    if (
+      options.requireTopicCoverage !== false &&
+      topicMatched / topicWords.length < 0.5
+    ) {
+      continue;
+    }
     const score = matched / nameWords.length;
     if (score < 0.5) continue;
     // A igual puntaje gana el módulo principal: es el tema más amplio.
