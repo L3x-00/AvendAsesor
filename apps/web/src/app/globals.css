@@ -2022,11 +2022,13 @@ textarea[aria-invalid="true"]:focus,
   }
 
   .avend-audit-table thead {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
     height: 1px;
     overflow: hidden;
     position: absolute;
+    white-space: nowrap;
     width: 1px;
-    clip: rect(0 0 0 0);
   }
 
   .avend-audit-table tr {
@@ -2045,7 +2047,15 @@ textarea[aria-invalid="true"]:focus,
   .avend-audit-table td::before {
     color: var(--avend-text);
     content: attr(data-label) ": ";
+    /* Texto alternativo vacío: el lector ya anuncia el encabezado de la
+       columna; así no repite «Acción… Acción:». */
+    content: attr(data-label) ": " / "";
     font-weight: 700;
+  }
+
+  /* En el celular un toque dejaba la tarjeta resaltada en azul. */
+  .avend-admin-content .avend-audit-table tbody tr:hover {
+    background: var(--avend-surface);
   }
 }
 

@@ -553,6 +553,36 @@ describe('API endpoints (e2e)', () => {
     expect(modulesService.logicalDelete).toHaveBeenCalled();
   });
 
+  it('route ids accept any UUID version (demo data uses v5) and still reject malformed ids', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    modulesService.setStatus.mockResolvedValue(moduleRecord);
+    const demoModuleId = 'ed06b6cb-7dd3-5a69-b8b7-6bfeaaa52bd8';
+
+    await request(app.getHttpServer())
+      .patch(`/admin/modules/${demoModuleId}/status`)
+      .set('Authorization', 'Bearer admin-token')
+      .send({ isActive: false, reason: 'Actualización normativa' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch('/admin/modules/not-a-uuid/status')
+      .set('Authorization', 'Bearer admin-token')
+      .send({ isActive: false, reason: 'Actualización normativa' })
+      .expect(400);
+
+    expect(modulesService.setStatus).toHaveBeenCalledTimes(1);
+    expect(modulesService.setStatus).toHaveBeenCalledWith(
+      demoModuleId,
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('/admin/documents denies a docente before invoking document behavior', async () => {
     resolveContext.mockResolvedValue({
       email: 'docente@example.com',
