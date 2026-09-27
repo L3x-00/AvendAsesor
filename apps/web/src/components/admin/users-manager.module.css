@@ -278,6 +278,8 @@
 .statusCount {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+  /* En un contenedor flex el espacio del texto se pierde: «Todos56». */
+  margin-left: 0.375rem;
 }
 
 .formHint {

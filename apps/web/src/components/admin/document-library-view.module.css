@@ -47,6 +47,15 @@
   outline: none;
 }
 
+/* La regla global de formularios (alta especificidad) le devolvía al campo su
+   propio borde y fondo dentro de la cápsula: se veía un recuadro doble. */
+.searchField :global(#library-search) {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
 .searchIcon {
   color: var(--avend-text-muted);
   display: inline-flex;

@@ -167,7 +167,7 @@ export class AdminConsultationCasesController {
 
   @Get(':caseId')
   getCaseDetail(
-    @Param('caseId', new ParseUUIDPipe({ version: '4' })) caseId: string,
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ConsultationCaseDetail> {
     return this.service.getCaseDetail(authorization.userId, caseId);
@@ -176,7 +176,7 @@ export class AdminConsultationCasesController {
   @Patch(':caseId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async updateCase(
-    @Param('caseId', new ParseUUIDPipe({ version: '4' })) caseId: string,
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
     @Body() dto: UpdateConsultationCaseDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {
@@ -202,7 +202,7 @@ export class AdminConsultationCasesController {
   @Post(':caseId/documents')
   @HttpCode(HttpStatus.NO_CONTENT)
   async linkDocument(
-    @Param('caseId', new ParseUUIDPipe({ version: '4' })) caseId: string,
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
     @Body() dto: LinkConsultationCaseDocumentDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {
@@ -216,8 +216,8 @@ export class AdminConsultationCasesController {
   @Post(':caseId/attachments/:attachmentId/decision')
   @HttpCode(HttpStatus.NO_CONTENT)
   async decideAttachment(
-    @Param('caseId', new ParseUUIDPipe({ version: '4' })) caseId: string,
-    @Param('attachmentId', new ParseUUIDPipe({ version: '4' }))
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('attachmentId', new ParseUUIDPipe())
     attachmentId: string,
     @Body() dto: DecideConsultationAttachmentDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -234,8 +234,8 @@ export class AdminConsultationCasesController {
 
   @Post(':caseId/attachments/:attachmentId/download-url')
   createAttachmentDownloadUrl(
-    @Param('caseId', new ParseUUIDPipe({ version: '4' })) caseId: string,
-    @Param('attachmentId', new ParseUUIDPipe({ version: '4' }))
+    @Param('caseId', new ParseUUIDPipe()) caseId: string,
+    @Param('attachmentId', new ParseUUIDPipe())
     attachmentId: string,
     @Query() dto: ConsultationAttachmentAccessQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,

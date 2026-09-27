@@ -51,7 +51,7 @@ export class OperationsController {
   @Patch('unanswered-questions/:id/review')
   @HttpCode(HttpStatus.NO_CONTENT)
   async reviewUnansweredQuestion(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) questionId: string,
+    @Param('id', new ParseUUIDPipe()) questionId: string,
     @Body() dto: ReviewUnansweredQuestionDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {

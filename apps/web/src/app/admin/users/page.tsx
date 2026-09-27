@@ -103,13 +103,21 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
                 <tbody>
                   {events.map((event) => (
                     <tr key={event.id}>
-                      <td>{formatOperationalAuditAction(event.action)}</td>
-                      <td>{formatUserRole(event.actorRole)}</td>
-                      <td>
+                      <td data-label="Acción">
+                        {formatOperationalAuditAction(event.action)}
+                      </td>
+                      <td data-label="Rol ejecutor">
+                        {formatUserRole(event.actorRole)}
+                      </td>
+                      <td data-label="Recurso">
                         {formatOperationalAuditResourceType(event.resourceType)}
                       </td>
-                      <td>{formatOperationalAuditDetail(event) ?? "—"}</td>
-                      <td>{formatAuditDate(event.occurredAt)}</td>
+                      <td data-label="Detalle">
+                        {formatOperationalAuditDetail(event) ?? "—"}
+                      </td>
+                      <td data-label="Fecha">
+                        {formatAuditDate(event.occurredAt)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

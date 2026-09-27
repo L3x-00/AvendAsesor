@@ -35,7 +35,7 @@ export class ModulePermissionsController {
 
   @Patch(':id')
   set(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
+    @Param('id', new ParseUUIDPipe()) targetUserId: string,
     @Body() dto: SetModulePermissionDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdminModulePermission> {

@@ -51,7 +51,7 @@ export class FaqMemoryAdminController {
   @Patch('candidates/:id/review')
   @HttpCode(HttpStatus.NO_CONTENT)
   async reviewCandidate(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) candidateId: string,
+    @Param('id', new ParseUUIDPipe()) candidateId: string,
     @Body() dto: ReviewFaqMemoryCandidateDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {

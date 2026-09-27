@@ -118,7 +118,7 @@ export class UserAdministrationController {
 
   @Patch(':id/access-window')
   updateAccessWindow(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
+    @Param('id', new ParseUUIDPipe()) targetUserId: string,
     @Body() dto: UpdateAccessWindowDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdministrativeUserDirectoryEntry> {
@@ -131,7 +131,7 @@ export class UserAdministrationController {
 
   @Patch(':id')
   updateUser(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
+    @Param('id', new ParseUUIDPipe()) targetUserId: string,
     @Body() dto: UpdateAdministrativeUserDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdministrativeUser> {

@@ -2001,6 +2001,54 @@ textarea[aria-invalid="true"]:focus,
   color: var(--avend-text-muted);
 }
 
+/* En el celular cada evento es una tarjeta: sin desplazamiento lateral. */
+@media (max-width: 40rem) {
+  .avend-audit-scroll {
+    overflow-x: visible;
+  }
+
+  .avend-audit-table,
+  .avend-audit-table tbody,
+  .avend-audit-table tr,
+  .avend-audit-table td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .avend-audit-table {
+    background: transparent;
+    font-size: 1rem;
+  }
+
+  .avend-audit-table thead {
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+    clip: rect(0 0 0 0);
+  }
+
+  .avend-audit-table tr {
+    background: var(--avend-surface);
+    border: 1px solid var(--avend-border);
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .avend-audit-table td {
+    border: 0;
+    padding: 0.25rem 0;
+  }
+
+  .avend-audit-table td::before {
+    color: var(--avend-text);
+    content: attr(data-label) ": ";
+    font-weight: 700;
+  }
+}
+
 @media (min-width: 48rem) {
   .avend-operation-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));
