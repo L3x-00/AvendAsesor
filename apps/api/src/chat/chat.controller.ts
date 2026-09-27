@@ -23,6 +23,7 @@ import {
 } from '../authorization';
 import type { ChatStreamEvent } from './chat.service';
 import { ChatService } from './chat.service';
+import { classifyStreamFailure } from './stream-failure';
 import { ListChatConversationsQueryDto } from './dto/list-chat-conversations-query.dto';
 import { StreamChatDto } from './dto/stream-chat.dto';
 
@@ -129,14 +130,14 @@ export class ChatController {
         }
         this.writeEvent(response, event);
       }
-    } catch {
+    } catch (error) {
       if (!abortController.signal.aborted) {
         if (startedTurn) {
           try {
             await this.chatService.recordTechnicalFailure(
               {
                 ...startedTurn,
-                errorCode: 'CHAT_STREAM_FAILED',
+                errorCode: this.streamFailureCode(error),
               },
               authorization,
             );
@@ -154,6 +155,10 @@ export class ChatController {
       response.removeListener('close', onClose);
       if (!response.writableEnded) response.end();
     }
+  }
+
+  private streamFailureCode(error: unknown): string {
+    return classifyStreamFailure(error);
   }
 
   private writeEvent(
