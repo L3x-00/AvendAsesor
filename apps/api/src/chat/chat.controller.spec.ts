@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import type { Response } from 'express';
 import { ChatController } from './chat.controller';
 import type { ChatService } from './chat.service';
@@ -11,6 +12,7 @@ describe('ChatController', () => {
     listModules: jest.fn(),
     listUpdates: jest.fn(),
     moduleOverview: jest.fn(),
+    recordTechnicalFailure: jest.fn(),
     stream: jest.fn(),
   };
   const controller = new ChatController(service as unknown as ChatService);
@@ -111,6 +113,86 @@ describe('ChatController', () => {
       'event: error\ndata: {"code":"CHAT_STREAM_FAILED"}\n\n',
     ]);
     expect(end).toHaveBeenCalled();
+  });
+
+  it('registra la causa del proveedor y mantiene el mensaje genérico para el usuario', async () => {
+    service.stream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield {
+          data: {
+            conversationId: 'conversation-id',
+            userMessageId: 'user-message-id',
+          },
+          type: 'conversation',
+        };
+        throw Object.assign(new Error('Insufficient credits'), { status: 402 });
+      },
+    });
+    const writes: string[] = [];
+    const response = {
+      end: jest.fn(),
+      flushHeaders: jest.fn(),
+      once: jest.fn(),
+      removeListener: jest.fn(),
+      setHeader: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      writableEnded: false,
+      write: jest.fn((value: string) => writes.push(value)),
+    } as unknown as Response;
+
+    await controller.stream({ question: 'Consulta' }, authorization, response);
+
+    expect(service.recordTechnicalFailure).toHaveBeenCalledWith(
+      {
+        conversationId: 'conversation-id',
+        errorCode: 'AI_PROVIDER_CREDITS',
+        userMessageId: 'user-message-id',
+      },
+      authorization,
+    );
+    expect(writes.at(-1)).toBe(
+      'event: error\ndata: {"code":"CHAT_STREAM_FAILED"}\n\n',
+    );
+  });
+
+  it('registra la falta de configuración del gateway de IA', async () => {
+    service.stream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield {
+          data: {
+            conversationId: 'conversation-id',
+            userMessageId: 'user-message-id',
+          },
+          type: 'conversation',
+        };
+        throw new ServiceUnavailableException(
+          'The AI gateway is not configured.',
+        );
+      },
+    });
+    const response = {
+      end: jest.fn(),
+      flushHeaders: jest.fn(),
+      once: jest.fn(),
+      removeListener: jest.fn(),
+      setHeader: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      writableEnded: false,
+      write: jest.fn(),
+    } as unknown as Response;
+
+    await controller.stream({ question: 'Consulta' }, authorization, response);
+
+    expect(service.recordTechnicalFailure).toHaveBeenCalledWith(
+      {
+        conversationId: 'conversation-id',
+        errorCode: 'AI_GATEWAY_NOT_CONFIGURED',
+        userMessageId: 'user-message-id',
+      },
+      authorization,
+    );
   });
 
   it('stops writing immediately when the client disconnects', async () => {
