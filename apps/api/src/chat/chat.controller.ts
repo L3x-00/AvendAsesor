@@ -37,6 +37,12 @@ export class ChatController {
     return this.chatService.listModules();
   }
 
+  /** Consultas propias ya resueltas por la administración (últimos 30 días). */
+  @Get('updates')
+  listUpdates(@CurrentAuthorization() authorization: AuthorizationContext) {
+    return this.chatService.listUpdates(authorization);
+  }
+
   /** Panorama del tema abierto: sus documentos con un resumen corto. */
   @Get('modules/:moduleId/overview')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })

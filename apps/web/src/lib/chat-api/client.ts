@@ -6,11 +6,13 @@ import {
   chatConversationPageSchema,
   chatModuleSchema,
   chatSourceDownloadSchema,
+  chatUpdateSchema,
   moduleOverviewSchema,
   type ChatConversationPage,
   type ChatConversationDetail,
   type ChatModule,
   type ChatSourceDownload,
+  type ChatUpdate,
   type ModuleOverview,
 } from "./types";
 
@@ -62,6 +64,18 @@ export class ChatApiClient {
       revalidate: 120,
       tags: ["chat-modules"],
     });
+  }
+
+  /**
+   * Consultas propias ya resueltas por la administración. Es un aviso
+   * opcional: si falla, la página se muestra igual sin novedades.
+   */
+  async listUpdates(): Promise<ChatUpdate[]> {
+    try {
+      return await this.send("/chat/updates", chatUpdateSchema.array().max(50));
+    } catch {
+      return [];
+    }
   }
 
   getModuleOverview(moduleId: string): Promise<ModuleOverview> {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
+import { UnansweredGroups } from "@/components/admin/unanswered-groups";
 import { createAuthorizedConsultationReportsApiContext } from "@/lib/consultation-reports-api/authorized-client";
 import {
   consultationCaseIssueSchema,
@@ -281,9 +282,10 @@ export default async function OperationsPage({
   const query = one(requested.query)?.trim();
   const currentPage = pageNumber(requested.page);
   const offset = (currentPage - 1) * CASES_PER_PAGE;
-  const { client } =
+  const { access, client } =
     await createAuthorizedConsultationReportsApiContext();
-  const [dashboard, topics, reviewPriorities, cases] = await Promise.all([
+  const [dashboard, topics, reviewPriorities, cases, unansweredGroups] =
+    await Promise.all([
     client.getDashboard(period),
     client.getTopics(period),
     client.getReviewPriorities(period),
@@ -298,6 +300,8 @@ export default async function OperationsPage({
       status,
       submoduleId,
     }),
+    // Un resumen opcional: si falla, el resto de la página se muestra igual.
+    client.getUnansweredGroups(period).catch(() => null),
   ]);
   const totalCases = cases[0]?.totalCount ?? 0;
   const caseFilters = {
@@ -324,6 +328,12 @@ export default async function OperationsPage({
       title="Consultas y reportes"
     >
       <main className={styles.page}>
+        <UnansweredGroups
+          canUpload={access.modulesAccess}
+          groups={unansweredGroups}
+          period={period}
+        />
+
         <section
           aria-labelledby="consultation-dashboard-title"
           className={styles.section}

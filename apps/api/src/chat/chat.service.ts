@@ -48,7 +48,15 @@ import {
   citesAnySource,
   withoutCitations,
 } from '../rag/citations';
-import { SUPABASE_CHAT_GATEWAY } from '../supabase/supabase.constants';
+import {
+  SUPABASE_CHAT_GATEWAY,
+  SUPABASE_TEACHER_UPDATES_GATEWAY,
+} from '../supabase/supabase.constants';
+import {
+  TEACHER_UPDATES_WINDOW_DAYS,
+  type ResolvedConsultation,
+  type TeacherUpdatesGateway,
+} from './teacher-updates.types';
 import type {
   ActiveChatModule,
   ChatCitationInput,
@@ -497,7 +505,27 @@ export class ChatService {
     private readonly configService: ConfigService,
     private readonly faqMemoryService: FaqMemoryService,
     @Optional() private readonly catalogService?: ChatCatalogService,
+    @Optional()
+    @Inject(SUPABASE_TEACHER_UPDATES_GATEWAY)
+    private readonly teacherUpdates?: TeacherUpdatesGateway,
   ) {}
+
+  /**
+   * Consultas del docente que quedaron sin sustento y ya se resolvieron (se
+   * cargó la documentación), de los últimos 30 días: puede volver a preguntar.
+   */
+  listUpdates(
+    authorization: AuthorizationContext,
+  ): Promise<ResolvedConsultation[]> {
+    if (!this.teacherUpdates) return Promise.resolve([]);
+    const since = new Date(
+      Date.now() - TEACHER_UPDATES_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    return this.teacherUpdates.listResolvedConsultations({
+      since,
+      userId: authorization.userId,
+    });
+  }
 
   getConversation(
     conversationId: string,

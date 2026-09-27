@@ -49,7 +49,10 @@ export default async function ModuleDetailPage({
     : undefined;
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
-  const requestedQuery = parseDocumentLibraryQuery(await searchParams);
+  const requestedSearch = await searchParams;
+  const requestedQuery = parseDocumentLibraryQuery(requestedSearch);
+  // «Cargar documento en este tema» (desde Consultas y reportes) abre el formulario.
+  const openUpload = requestedSearch.cargar === "1";
   const scopedQuery = {
     ...requestedQuery,
     moduleId: current.parentModuleId ? undefined : current.id,
@@ -167,6 +170,7 @@ export default async function ModuleDetailPage({
         {canUpload ? (
           <DocumentUploadPanel
             apiBaseUrl={getAdminApiUrl()}
+            defaultOpen={openUpload}
             moduleId={current.id}
             moduleName={current.name}
             replacementCandidates={replacementCandidates}

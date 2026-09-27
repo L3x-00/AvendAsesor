@@ -17,6 +17,7 @@ import type {
   ChatModule,
   ChatSource,
   ClarificationModule,
+  ChatUpdate,
 } from "@/lib/chat-api/types";
 import { chatStreamPayloadSchemas } from "@/lib/chat-api/types";
 import { TeacherShell } from "@/components/teacher/teacher-shell";
@@ -69,6 +70,11 @@ interface ChatPanelProps {
   /** Nombre del perfil, para saludar en la bienvenida y en la barra lateral. */
   fullName?: string | null;
   modules: ChatModule[];
+  /**
+   * La consulta de esta conversación quedó sin sustento y la administración
+   * ya cargó la documentación: se invita a volver a preguntar.
+   */
+  resolvedUpdate?: ChatUpdate;
   role?: "docente" | "admin" | "superadmin";
 }
 
@@ -442,6 +448,7 @@ export function ChatPanel({
   initialConversation,
   initialModuleId,
   modules,
+  resolvedUpdate,
   role,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | undefined>(
@@ -461,6 +468,7 @@ export function ChatPanel({
   const hasScrolledRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const [isHearingSound, setIsHearingSound] = useState(false);
   const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -847,6 +855,8 @@ export function ChatPanel({
   ) {
     if (!normalizedQuestion || isStreaming) return;
     if (isDictating) stopDictation();
+    // Ya volvió a preguntar: el aviso de información nueva cumplió su función.
+    setUpdateDismissed(true);
 
     // El módulo solo se envía al INICIAR una conversación: al continuarla, el
     // servidor usa el módulo guardado. Reenviar el módulo de la pantalla tras
@@ -1255,6 +1265,31 @@ export function ChatPanel({
         </div>
 
         <section aria-busy={isStreaming} className="avend-chat-conversation">
+          {resolvedUpdate && !updateDismissed && messages.length > 0 ? (
+            <div className="avend-chat-update-note" role="note">
+              <p>
+                <strong>Hay información nueva.</strong> Desde tu consulta se
+                incorporó documentación sobre este tema. Vuelve a preguntar
+                para recibir una respuesta con sustento.
+              </p>
+              {resolvedUpdate.question ? (
+                <button
+                  className="avend-button avend-button--secondary"
+                  disabled={isStreaming}
+                  onClick={() => {
+                    setQuestion(resolvedUpdate.question ?? "");
+                    setStatus(
+                      "Consulta lista en el cuadro: revísala y envíala.",
+                    );
+                    questionInputRef.current?.focus();
+                  }}
+                  type="button"
+                >
+                  Volver a preguntar
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {messages.length === 0 ? (
             <ChatWelcome
               disabled={isStreaming}

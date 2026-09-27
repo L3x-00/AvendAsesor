@@ -4,6 +4,7 @@ import {
   SUPABASE_ADMIN_DASHBOARD_GATEWAY,
   SUPABASE_AUTH_GATEWAY,
   SUPABASE_CHAT_CATALOG_GATEWAY,
+  SUPABASE_TEACHER_UPDATES_GATEWAY,
   SUPABASE_CHAT_GATEWAY,
   SUPABASE_CONSULTATION_CASES_GATEWAY,
   SUPABASE_DOCUMENTS_GATEWAY,
@@ -23,6 +24,7 @@ import {
 import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
 import { SupabaseAuthGatewayAdapter } from './supabase-auth.gateway';
 import { SupabaseChatCatalogGatewayAdapter } from './supabase-chat-catalog.gateway';
+import { SupabaseTeacherUpdatesGatewayAdapter } from './supabase-teacher-updates.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
 import { SupabaseConsultationCasesGatewayAdapter } from './supabase-consultation-cases.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
@@ -134,6 +136,12 @@ import {
         new SupabaseChatGatewayAdapter(client),
     },
     {
+      provide: SUPABASE_TEACHER_UPDATES_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseTeacherUpdatesGatewayAdapter(client),
+    },
+    {
       provide: SUPABASE_CHAT_CATALOG_GATEWAY,
       inject: [SUPABASE_SERVER_CLIENT],
       useFactory: (client: SupabaseServerClient | null) =>
@@ -180,6 +188,7 @@ import {
     SUPABASE_ADMIN_DASHBOARD_GATEWAY,
     SUPABASE_AUTH_GATEWAY,
     SUPABASE_CHAT_CATALOG_GATEWAY,
+    SUPABASE_TEACHER_UPDATES_GATEWAY,
     SUPABASE_CHAT_GATEWAY,
     SUPABASE_CONSULTATION_CASES_GATEWAY,
     SUPABASE_DOCUMENTS_GATEWAY,

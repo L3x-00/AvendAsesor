@@ -153,3 +153,11 @@ export const moduleOverviewSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type ModuleOverview = z.infer<typeof moduleOverviewSchema>;
+
+/** Consulta propia sin sustento que la administración ya resolvió. */
+export const chatUpdateSchema = z.object({
+  conversationId: z.string().uuid(),
+  question: z.string().min(1).max(8_000).nullable(),
+  resolvedAt: timestampSchema,
+});
+export type ChatUpdate = z.infer<typeof chatUpdateSchema>;

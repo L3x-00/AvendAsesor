@@ -78,6 +78,28 @@ describe("ChatApiClient", () => {
     );
   });
 
+  it("lee las novedades del docente y, si fallan, sigue sin ellas", async () => {
+    const update = {
+      conversationId: "9c8b56af-6d0c-4fef-881e-7c00907540dd",
+      question: "¿Qué dice la escala?",
+      resolvedAt: "2026-09-26T10:00:00.000Z",
+    };
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([update]), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const client = new ChatApiClient("verified-token", undefined, request);
+
+    await expect(client.listUpdates()).resolves.toEqual([update]);
+    expect(request).toHaveBeenCalledWith(
+      "http://localhost:3001/chat/updates",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    await expect(client.listUpdates()).resolves.toEqual([]);
+  });
+
   it("fails closed for non-HTTP source URLs or extra response fields", async () => {
     const sourceId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
     const client = new ChatApiClient(

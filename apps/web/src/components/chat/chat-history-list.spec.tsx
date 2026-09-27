@@ -45,6 +45,41 @@ describe("ChatHistoryList", () => {
     ).toHaveAttribute("href", "/chat");
   });
 
+  it("señala las consultas que ya tienen información nueva", () => {
+    const other = { ...conversation, id: "8c8b56af-6d0c-4fef-881e-7c00907540dd", title: "Otra" };
+    const { rerender } = render(
+      <ChatHistoryList
+        conversations={[conversation, other]}
+        nextCursor={null}
+        updates={[
+          { conversationId: conversation.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
+          { conversationId: "no-visible", resolvedAt: "2026-09-26T10:00:00.000Z" },
+          // Volvió a preguntar después de resolverse: sin aviso.
+          { conversationId: other.id, resolvedAt: "2026-08-01T10:00:00.000Z" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Hay novedades. Se incorporó documentación sobre una consulta",
+    );
+    expect(screen.getAllByText("Nueva información disponible")).toHaveLength(1);
+
+    rerender(
+      <ChatHistoryList
+        conversations={[conversation, other]}
+        nextCursor={null}
+        updates={[
+          { conversationId: conversation.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
+          { conversationId: other.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Se incorporó documentación sobre 2 consultas",
+    );
+  });
+
   it("renders only the owned conversation actions and receives deletion feedback", async () => {
     const user = userEvent.setup();
     render(

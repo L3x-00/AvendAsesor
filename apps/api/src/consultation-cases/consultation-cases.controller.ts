@@ -33,6 +33,7 @@ import { ConsultationAttachmentAccessQueryDto } from './dto/consultation-attachm
 import { DecideConsultationAttachmentDto } from './dto/decide-consultation-attachment.dto';
 import { LinkConsultationCaseDocumentDto } from './dto/link-consultation-case-document.dto';
 import { ListConsultationCasesQueryDto } from './dto/list-consultation-cases-query.dto';
+import { ResolveConsultationGroupDto } from './dto/resolve-consultation-group.dto';
 import { UpdateConsultationCaseDto } from './dto/update-consultation-case.dto';
 import type {
   ConsultationCaseDetail,
@@ -41,6 +42,7 @@ import type {
   ConsultationReviewPriority,
   ConsultationTopic,
 } from './consultation-cases.gateway';
+import type { UnansweredGroup } from './unanswered-groups';
 
 @Controller('consultation-cases')
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
@@ -125,6 +127,17 @@ export class AdminConsultationCasesController {
     );
   }
 
+  @Get('dashboard/unanswered-groups')
+  getUnansweredGroups(
+    @Query() dto: ConsultationPeriodQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<UnansweredGroup[]> {
+    return this.service.getUnansweredGroups(
+      authorization.userId,
+      dto.period ?? 'month',
+    );
+  }
+
   @Get('dashboard/topics')
   getTopics(
     @Query() dto: ConsultationPeriodQueryDto,
@@ -170,6 +183,18 @@ export class AdminConsultationCasesController {
     await this.service.updateCase({
       ...dto,
       caseId,
+      reviewerId: authorization.userId,
+    });
+  }
+
+  @Post('resolve-group')
+  resolveGroup(
+    @Body() dto: ResolveConsultationGroupDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<{ failed: number; skipped: number; updated: number }> {
+    return this.service.resolveGroup({
+      ...dto,
+      period: dto.period ?? 'month',
       reviewerId: authorization.userId,
     });
   }
