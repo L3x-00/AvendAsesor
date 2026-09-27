@@ -63,14 +63,14 @@ export class ModulesController {
 
   @Get(':id')
   findOne(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) moduleId: string,
   ): Promise<ManagedModule> {
     return this.modulesService.findOne(moduleId);
   }
 
   @Patch(':id/status')
   setStatus(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) moduleId: string,
     @Body() dto: SetModuleStatusDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
@@ -79,7 +79,7 @@ export class ModulesController {
 
   @Patch(':id/position')
   setPosition(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) moduleId: string,
     @Body() dto: UpdateModulePositionDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
@@ -88,7 +88,7 @@ export class ModulesController {
 
   @Patch(':id')
   update(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) moduleId: string,
     @Body() dto: UpdateModuleDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
@@ -98,7 +98,7 @@ export class ModulesController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logicalDelete(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) moduleId: string,
     @Body() dto: LogicalDeleteModuleDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {

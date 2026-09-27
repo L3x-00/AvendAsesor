@@ -98,7 +98,7 @@ export class DocumentsController {
 
   @Get(':id')
   findOne(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
   ): Promise<ManagedDocumentDetails> {
     return this.documentsService.findOne(documentId);
   }
@@ -112,7 +112,7 @@ export class DocumentsController {
   )
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   addVersion(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
@@ -121,7 +121,7 @@ export class DocumentsController {
 
   @Post(':id/download-url')
   createDownloadUrl(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: DocumentDownloadUrlDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<{ expiresAt: string; url: string; versionId: string }> {
@@ -135,7 +135,7 @@ export class DocumentsController {
   @Post(':id/modules')
   @HttpCode(HttpStatus.NO_CONTENT)
   async linkModule(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: DocumentModuleDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {
@@ -144,7 +144,7 @@ export class DocumentsController {
 
   @Patch(':id/status')
   setStatus(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: SetDocumentStatusDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
@@ -153,7 +153,7 @@ export class DocumentsController {
 
   @Patch(':id/situation')
   setSituation(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: SetDocumentSituationDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
@@ -162,7 +162,7 @@ export class DocumentsController {
 
   @Patch(':id/technical-status')
   setTechnicalStatus(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: SetDocumentTechnicalStatusDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
@@ -175,7 +175,7 @@ export class DocumentsController {
 
   @Patch(':id')
   updateMetadata(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: UpdateDocumentMetadataDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
@@ -185,8 +185,8 @@ export class DocumentsController {
   @Delete(':id/modules/:moduleId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async unlinkModule(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
-    @Param('moduleId', new ParseUUIDPipe({ version: '4' })) moduleId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
+    @Param('moduleId', new ParseUUIDPipe()) moduleId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {
     await this.documentsService.unlinkModule(
@@ -199,7 +199,7 @@ export class DocumentsController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logicalDelete(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @Param('id', new ParseUUIDPipe()) documentId: string,
     @Body() dto: LogicalDeleteDocumentDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<void> {

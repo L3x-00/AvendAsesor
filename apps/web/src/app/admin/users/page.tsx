@@ -90,26 +90,36 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
             </p>
           ) : (
             <div className="avend-audit-scroll">
-              <table className="avend-audit-table">
-                <thead>
-                  <tr>
-                    <th>Acción</th>
-                    <th>Rol ejecutor</th>
-                    <th>Recurso</th>
-                    <th>Detalle</th>
-                    <th>Fecha</th>
+              {/* Roles explícitos: en el celular la tabla se muestra como tarjetas y
+                  algunos navegadores pierden la semántica de tabla. */}
+              <table className="avend-audit-table" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader">Acción</th>
+                    <th role="columnheader">Rol ejecutor</th>
+                    <th role="columnheader">Recurso</th>
+                    <th role="columnheader">Detalle</th>
+                    <th role="columnheader">Fecha</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {events.map((event) => (
-                    <tr key={event.id}>
-                      <td>{formatOperationalAuditAction(event.action)}</td>
-                      <td>{formatUserRole(event.actorRole)}</td>
-                      <td>
+                    <tr key={event.id} role="row">
+                      <td data-label="Acción" role="cell">
+                        {formatOperationalAuditAction(event.action)}
+                      </td>
+                      <td data-label="Rol ejecutor" role="cell">
+                        {formatUserRole(event.actorRole)}
+                      </td>
+                      <td data-label="Recurso" role="cell">
                         {formatOperationalAuditResourceType(event.resourceType)}
                       </td>
-                      <td>{formatOperationalAuditDetail(event) ?? "—"}</td>
-                      <td>{formatAuditDate(event.occurredAt)}</td>
+                      <td data-label="Detalle" role="cell">
+                        {formatOperationalAuditDetail(event) ?? "—"}
+                      </td>
+                      <td data-label="Fecha" role="cell">
+                        {formatAuditDate(event.occurredAt)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

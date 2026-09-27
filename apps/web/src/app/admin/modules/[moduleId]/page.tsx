@@ -144,7 +144,7 @@ export default async function ModuleDetailPage({
             <ModuleManageDetails
               module={currentView}
               parents={parents}
-              summary="Editar ese módulo"
+              summary="Editar este módulo"
             />
           </div>
 

@@ -67,7 +67,7 @@ export class ChatController {
 
   @Get('conversations/:id')
   getConversation(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) conversationId: string,
+    @Param('id', new ParseUUIDPipe()) conversationId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ) {
     return this.chatService.getConversation(conversationId, authorization);
@@ -75,7 +75,7 @@ export class ChatController {
 
   @Get('sources/:sourceId/download-url')
   createSourceDownloadUrl(
-    @Param('sourceId', new ParseUUIDPipe({ version: '4' })) sourceId: string,
+    @Param('sourceId', new ParseUUIDPipe()) sourceId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ) {
     return this.chatService.createSourceDownloadUrl(sourceId, authorization);
@@ -83,7 +83,7 @@ export class ChatController {
 
   @Delete('conversations/:id')
   deleteConversation(
-    @Param('id', new ParseUUIDPipe({ version: '4' })) conversationId: string,
+    @Param('id', new ParseUUIDPipe()) conversationId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ) {
     return this.chatService.deleteConversation(conversationId, authorization);
