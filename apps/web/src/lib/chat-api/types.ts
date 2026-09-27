@@ -131,3 +131,25 @@ export const chatStreamPayloadSchemas = {
   sources: z.object({ sources: z.array(chatSourceSchema).max(10) }),
   token: z.object({ text: z.string().min(1).max(20_000) }),
 };
+
+/** Panorama del tema abierto en el chat: documentos con un resumen corto. */
+export const moduleOverviewSchema = z.object({
+  documents: z
+    .array(
+      z.object({
+        documentType: z.string().max(64),
+        id: z.string().uuid(),
+        issuanceYear: z.number().int().nullable(),
+        resolutionNumber: z.string().max(255).nullable(),
+        summary: z.string().max(1_000).nullable(),
+        title: z.string().min(1).max(1_000),
+      }),
+    )
+    .max(20),
+  moduleId: z.string().uuid(),
+  moduleName: z.string().min(1).max(255),
+  scope: z.enum(["empty", "module", "parent"]),
+  scopeName: z.string().min(1).max(255),
+  total: z.number().int().nonnegative(),
+});
+export type ModuleOverview = z.infer<typeof moduleOverviewSchema>;

@@ -11,6 +11,9 @@ const MAX_CANDIDATES = 200;
 /** Documentos listados y descritos a la IA (ver ChatCatalogService). */
 const MAX_DESCRIBED_DOCUMENTS = 25;
 const MAX_SECTIONS_PER_DOCUMENT = 6;
+/** Fragmentos iniciales que se envían a la IA para resumir un documento. */
+const OPENING_CHUNKS = 8;
+const OPENING_TEXT_CHARS = 6_000;
 
 function databaseError(error: PostgrestError): never {
   throw new ServiceUnavailableException({
@@ -110,12 +113,18 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
     };
 
     const rootNamesByDocument = new Map<string, Set<string>>();
+    const moduleIdsByDocument = new Map<string, Set<string>>();
     for (const link of links.data ?? []) {
       const name = activeRootName(link.module_id);
       if (!name) continue;
       const names = rootNamesByDocument.get(link.document_id) ?? new Set();
       names.add(name);
       rootNamesByDocument.set(link.document_id, names);
+      const ids = moduleIdsByDocument.get(link.document_id) ?? new Set();
+      ids.add(link.module_id);
+      const parentId = moduleById.get(link.module_id)?.parent_module_id;
+      if (parentId) ids.add(parentId);
+      moduleIdsByDocument.set(link.document_id, ids);
     }
 
     const eligible = candidates.filter(
@@ -155,10 +164,27 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       documentType: document.document_type,
       id: document.id,
       issuanceYear: document.issuance_year,
+      moduleIds: [...(moduleIdsByDocument.get(document.id) ?? [])],
       moduleNames: [...(rootNamesByDocument.get(document.id) ?? [])].sort(),
       resolutionNumber: document.resolution_number,
       sectionTitles: sectionsByDocument.get(document.id) ?? [],
       title: document.title,
+      versionId: document.approved_version_id,
     }));
+  }
+
+  async getOpeningText(versionId: string): Promise<string> {
+    const client = this.requireClient();
+    const chunks = await client
+      .from('document_chunks')
+      .select('chunk_content')
+      .eq('document_version_id', versionId)
+      .order('chunk_index', { ascending: true })
+      .limit(OPENING_CHUNKS);
+    if (chunks.error) databaseError(chunks.error);
+    return (chunks.data ?? [])
+      .map((chunk) => chunk.chunk_content.trim())
+      .join('\n\n')
+      .slice(0, OPENING_TEXT_CHARS);
   }
 }

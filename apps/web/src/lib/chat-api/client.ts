@@ -6,10 +6,12 @@ import {
   chatConversationPageSchema,
   chatModuleSchema,
   chatSourceDownloadSchema,
+  moduleOverviewSchema,
   type ChatConversationPage,
   type ChatConversationDetail,
   type ChatModule,
   type ChatSourceDownload,
+  type ModuleOverview,
 } from "./types";
 
 export class ChatApiError extends Error {
@@ -60,6 +62,13 @@ export class ChatApiClient {
       revalidate: 120,
       tags: ["chat-modules"],
     });
+  }
+
+  getModuleOverview(moduleId: string): Promise<ModuleOverview> {
+    return this.send(
+      `/chat/modules/${moduleId}/overview`,
+      moduleOverviewSchema,
+    );
   }
 
   getSourceDownloadUrl(sourceId: string): Promise<ChatSourceDownload> {

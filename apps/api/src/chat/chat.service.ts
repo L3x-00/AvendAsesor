@@ -3,11 +3,23 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ChatCatalogService } from './catalog/chat-catalog.service';
+import {
+  ChatCatalogService,
+  fallbackSuggestions,
+  overviewMessage,
+  type ModuleOverview,
+} from './catalog/chat-catalog.service';
+import {
+  buildVocabulary,
+  correctDomainTypos,
+  detectOverviewRequest,
+  matchTopicModule,
+} from './catalog/topic-match';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
@@ -462,9 +474,20 @@ export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
   return RAG_NO_EVIDENCE_MESSAGE;
 }
 
+/** Los módulos activos cambian poco: se releen cada 2 minutos. */
+const MODULES_CACHE_MS = 2 * 60 * 1000;
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+  private vocabularyCache: {
+    expiresAt: number;
+    value: Map<string, string>;
+  } | null = null;
+  private modulesCache: {
+    expiresAt: number;
+    promise: Promise<ActiveChatModule[]>;
+  } | null = null;
 
   constructor(
     @Inject(RAG_ANSWER_GATEWAY) private readonly answerGateway: AnswerGateway,
@@ -570,9 +593,28 @@ export class ChatService {
     // enruta `classifyTurnIntent` a `domain`, que sigue el flujo evidence-only
     // de abajo. No crear conversación por "hola"/"gracias" cumple el lineamiento
     // de historial.
-    const intent = classifyTurnIntent(input.question, {
+    // Errores de escritura contra el vocabulario de temas y documentos
+    // («renumeración» → «remuneración»). Se usa para entender y buscar; en
+    // el historial queda lo que la persona escribió.
+    const question = await this.correctedQuestion(input.question);
+    const intent = classifyTurnIntent(question, {
       inConversation: Boolean(input.conversationId),
     });
+    if (
+      intent.lane === 'social' &&
+      intent.subtype === 'catalog' &&
+      input.selectedModuleId
+    ) {
+      const scoped = await this.overviewReply(question, {
+        forceSelected: true,
+        inConversation: false,
+        selectedModuleId: input.selectedModuleId,
+      });
+      if (scoped) {
+        yield scoped;
+        return;
+      }
+    }
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
       const reply = await this.conversationalReply(
         intent.lane === 'social' ? intent.subtype : 'out_of_domain',
@@ -585,11 +627,22 @@ export class ChatService {
         input.conversationId &&
         intent.lane === 'social' &&
         intent.subtype === 'ask_announcement' &&
-        announcesNewTopic(input.question)
+        announcesNewTopic(question)
       ) {
         reply.data.startsNewTopic = true;
       }
       yield reply;
+      return;
+    }
+
+    // «¿De qué trata la remuneración?»: panorama del tema con sus documentos
+    // y un resumen corto de cada uno, en lugar de buscar una cita puntual.
+    const overview = await this.overviewReply(question, {
+      inConversation: Boolean(input.conversationId),
+      selectedModuleId: input.selectedModuleId,
+    });
+    if (overview) {
+      yield overview;
       return;
     }
 
@@ -600,7 +653,7 @@ export class ChatService {
     if (
       !input.conversationId &&
       !input.selectedModuleId &&
-      isTopiclessQuestion(input.question)
+      isTopiclessQuestion(question)
     ) {
       yield* this.askForTopic({
         faqMemory,
@@ -613,8 +666,7 @@ export class ChatService {
     // "Otra consulta: …" o "cambiando de tema…": la consulta se busca y se
     // responde en una conversación nueva, sin arrastrar el tema anterior.
     const explicitTopicChange =
-      Boolean(input.conversationId) &&
-      announcesNewTopicWithSubject(input.question);
+      Boolean(input.conversationId) && announcesNewTopicWithSubject(question);
     const storedContext =
       input.conversationId && !explicitTopicChange
         ? await this.historyGateway.getConversationContext({
@@ -644,7 +696,7 @@ export class ChatService {
       .filter((message) => message.role === 'user')
       .map((message) => message.content);
     const retrieval = await this.ragService.retrieve(
-      input.question,
+      question,
       selectedModuleId,
       priorUserQuestions,
       {
@@ -654,7 +706,7 @@ export class ChatService {
 
     if (input.abortSignal?.aborted) return;
 
-    const retrievalScope = detectRetrievalScope(input.question);
+    const retrievalScope = detectRetrievalScope(question);
 
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
@@ -714,7 +766,7 @@ export class ChatService {
       // el alcance. Se guarda igual como pendiente: puede ser una consulta del
       // ámbito con un término que el léxico no conoce ("DS 004-2013-ED").
       const unrelated =
-        !input.conversationId && !hasEducationalSignal(input.question);
+        !input.conversationId && !hasEducationalSignal(question);
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -1092,6 +1144,117 @@ export class ChatService {
   }
 
   /** Módulos raíz activos, en su orden; si la lista falla, la respuesta sigue sin ellos. */
+  /** Módulos activos con caché corta: se consultan en cada turno. */
+  private cachedModules(): Promise<ActiveChatModule[]> {
+    if (this.modulesCache && this.modulesCache.expiresAt > Date.now()) {
+      return this.modulesCache.promise;
+    }
+    const promise = this.historyGateway.listActiveModules();
+    const entry = { expiresAt: Date.now() + MODULES_CACHE_MS, promise };
+    this.modulesCache = entry;
+    promise.catch(() => {
+      if (this.modulesCache === entry) this.modulesCache = null;
+    });
+    return promise;
+  }
+
+  private async correctedQuestion(question: string): Promise<string> {
+    try {
+      if (
+        !this.vocabularyCache ||
+        this.vocabularyCache.expiresAt <= Date.now()
+      ) {
+        const [modules, documents] = await Promise.all([
+          this.cachedModules(),
+          this.catalogService?.availableDocuments() ?? Promise.resolve([]),
+        ]);
+        this.vocabularyCache = {
+          expiresAt: Date.now() + MODULES_CACHE_MS,
+          value: buildVocabulary([
+            ...modules.map((module) => module.name),
+            ...documents.map((document) => document.title),
+          ]),
+        };
+      }
+      return correctDomainTypos(question, this.vocabularyCache.value);
+    } catch {
+      // Sin vocabulario se entiende la pregunta tal como vino.
+      return question;
+    }
+  }
+
+  /**
+   * Panorama del tema si la pregunta lo pide («¿de qué trata…?», «¿qué
+   * información tienes sobre…?»). Devuelve null para seguir con el RAG: sin
+   * tema reconocible o sin documentos, la búsqueda normal decide.
+   */
+  private async overviewReply(
+    question: string,
+    context: {
+      forceSelected?: boolean;
+      inConversation: boolean;
+      selectedModuleId: string | null;
+    },
+  ): Promise<ChatStreamEvent | null> {
+    if (!this.catalogService) return null;
+    const request = context.forceSelected
+      ? { topic: null }
+      : detectOverviewRequest(question);
+    if (!request) return null;
+    // «¿De qué trata?» a secas dentro de una conversación se refiere a lo
+    // que se está hablando: lo resuelve el RAG con el contexto.
+    if (!request.topic && context.inConversation) return null;
+    try {
+      const modules = await this.cachedModules();
+      const module = request.topic
+        ? matchTopicModule(request.topic, modules)
+        : (modules.find((item) => item.id === context.selectedModuleId) ??
+          null);
+      if (!module) return null;
+      const overview = await this.catalogService.moduleOverview({
+        module,
+        parent:
+          modules.find((item) => item.id === module.parentModuleId) ?? null,
+      });
+      if (overview.scope === 'empty') return null;
+      const suggestions = fallbackSuggestions(overview.documents);
+      return {
+        data: {
+          message: overviewMessage(overview),
+          ...(suggestions.length ? { suggestions } : {}),
+        },
+        type: 'conversational',
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Panorama del tema no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
+      );
+      return null;
+    }
+  }
+
+  /** Panorama de un tema para mostrarlo al abrirlo en el chat. */
+  async moduleOverview(moduleId: string): Promise<ModuleOverview> {
+    if (!this.catalogService) {
+      throw new ServiceUnavailableException({
+        code: 'CHAT_CATALOG_UNAVAILABLE',
+        message: 'El catálogo no está disponible.',
+      });
+    }
+    const modules = await this.cachedModules();
+    const module = modules.find((item) => item.id === moduleId);
+    if (!module) {
+      throw new NotFoundException({
+        code: 'CHAT_MODULE_NOT_FOUND',
+        message: 'El tema no existe o no está activo.',
+      });
+    }
+    return this.catalogService.moduleOverview({
+      module,
+      parent: modules.find((item) => item.id === module.parentModuleId) ?? null,
+    });
+  }
+
   private async activeTopics(): Promise<ResolvedModule[] | undefined> {
     try {
       const modules = await this.historyGateway.listActiveModules();

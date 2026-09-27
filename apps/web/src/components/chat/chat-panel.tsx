@@ -29,6 +29,7 @@ import {
 import { ChatThinking, ChatWriting } from "./chat-thinking";
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
+import { ModuleOverviewCard } from "./module-overview";
 import {
   CITATION_TOKEN,
   ChatSources,
@@ -1235,6 +1236,21 @@ export function ChatPanel({
                 </svg>
               </button>
             </div>
+          ) : null}
+
+          {messages.length === 0 && (selectedModuleId ?? activeParentId) ? (
+            <ModuleOverviewCard
+              disabled={isStreaming}
+              key={selectedModuleId ?? activeParentId}
+              moduleId={(selectedModuleId ?? activeParentId) as string}
+              onAsk={(text) => {
+                setQuestion(text);
+                setStatus(
+                  "Pregunta lista en el cuadro: ajústala a tu caso y envíala.",
+                );
+                questionInputRef.current?.focus();
+              }}
+            />
           ) : null}
         </div>
 

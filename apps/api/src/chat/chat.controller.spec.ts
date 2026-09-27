@@ -9,6 +9,7 @@ describe('ChatController', () => {
     getConversation: jest.fn(),
     listConversations: jest.fn(),
     listModules: jest.fn(),
+    moduleOverview: jest.fn(),
     stream: jest.fn(),
   };
   const controller = new ChatController(service as unknown as ChatService);
@@ -39,6 +40,13 @@ describe('ChatController', () => {
     });
 
     await expect(controller.listModules()).resolves.toEqual([]);
+    service.moduleOverview.mockResolvedValue({ documents: [] });
+    await expect(
+      controller.moduleOverview('4c8b56af-6d0c-4fef-881e-7c00907540dd'),
+    ).resolves.toEqual({ documents: [] });
+    expect(service.moduleOverview).toHaveBeenCalledWith(
+      '4c8b56af-6d0c-4fef-881e-7c00907540dd',
+    );
     await expect(
       controller.listConversations({ limit: 10 }, authorization),
     ).resolves.toEqual({ items: [], nextCursor: null });
