@@ -1160,12 +1160,17 @@ textarea[aria-invalid="true"]:focus,
 
 /* Cita [n] enlazada a su fila en Referencias (Hito 3, punto 8). */
 .avend-chat-citation {
-  border-radius: 0.25rem;
+  background: var(--avend-soft-blue);
+  border-radius: 0.45rem;
   color: var(--avend-accent-strong);
+  display: inline-block;
+  font-size: 0.85em;
   font-weight: 700;
-  padding: 0 0.1rem;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
+  line-height: 1.5;
+  margin-left: 0.15rem;
+  padding: 0 0.4rem;
+  text-decoration: none;
+  vertical-align: baseline;
 }
 
 .avend-chat-citation:focus-visible {

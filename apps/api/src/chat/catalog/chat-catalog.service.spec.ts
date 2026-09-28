@@ -238,7 +238,7 @@ describe('ChatCatalogService', () => {
     const reply = await catalog.reply();
 
     expect(reply.suggestions).toEqual([]);
-    expect(reply.message).toContain('no tengo documentos disponibles');
+    expect(reply.message).toContain('Aún estoy preparándome');
     expect(suggest).not.toHaveBeenCalled();
   });
 

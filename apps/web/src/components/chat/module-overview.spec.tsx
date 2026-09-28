@@ -96,7 +96,7 @@ describe("ModuleOverviewCard", () => {
 
     expect(
       await screen.findByText(
-        "Aún no hay documentos en «Escala remunerativa». Estos son los de «Remuneraciones»:",
+        "Estos son los documentos disponibles sobre «Remuneraciones»:",
       ),
     ).toBeVisible();
     expect(screen.queryByText(/Resumen orientativo/)).not.toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("ModuleOverviewCard", () => {
 
     expect(
       await screen.findByText(
-        /Aún no hay documentos cargados en «Remuneraciones»/,
+        /Estoy listo para orientarte con este tema/,
       ),
     ).toBeVisible();
   });

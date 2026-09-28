@@ -99,15 +99,15 @@ export function ModuleOverviewCard({
       <p className="avend-chat-overview-title">Documentos de este tema</p>
       {overview.scope === "empty" ? (
         <p className="avend-chat-overview-note">
-          Aún no hay documentos cargados en «{overview.moduleName}». Puedes
-          consultar igual: buscaré en todos los documentos disponibles.
+          Estoy listo para orientarte con este tema. Escribe tu consulta y la
+          buscaré en todos los documentos disponibles; si aún falta respaldo, te
+          lo diré con claridad.
         </p>
       ) : (
         <>
           {overview.scope === "parent" ? (
             <p className="avend-chat-overview-note">
-              Aún no hay documentos en «{overview.moduleName}». Estos son los de
-              «{overview.scopeName}»:
+              Estos son los documentos disponibles sobre «{overview.scopeName}»:
             </p>
           ) : null}
           {hasSummaries ? (
