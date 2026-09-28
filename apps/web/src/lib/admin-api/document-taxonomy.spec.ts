@@ -11,7 +11,7 @@ describe("document taxonomy labels", () => {
     expect(documentTypeLabel("NORMA_TECNICA")).toBe("Norma Técnica");
     expect(issuingEntityLabel("DRE_GRE")).toBe("DRE/GRE");
     expect(archiveReasonLabel("DEROGATED_OR_EXPIRED")).toBe(
-      "Documento derogado o sin vigencia",
+      "Documento derogado o sin vigencia (fue anulado o venció su plazo)",
     );
   });
 

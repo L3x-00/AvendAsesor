@@ -34,6 +34,8 @@ export type SocialSubtype =
   | 'capabilities'
   | 'catalog';
 
+export type OutOfScopeSubtype = 'out_of_domain' | 'system_limit';
+
 /**
  * Unión discriminada por `lane`: si `lane` es `social`, `subtype` es un
  * `SocialSubtype` (permite despachar la respuesta amable sin castear).
@@ -41,7 +43,7 @@ export type SocialSubtype =
 export type TurnIntent =
   | { lane: 'social'; subtype: SocialSubtype }
   | { lane: 'domain'; subtype: 'domain_query' }
-  | { lane: 'out_of_scope'; subtype: 'out_of_domain' };
+  | { lane: 'out_of_scope'; subtype: OutOfScopeSubtype };
 
 export interface TurnIntentContext {
   /** El turno continúa una conversación existente del usuario. */
@@ -274,6 +276,35 @@ function isOutOfScope(normalized: string): boolean {
   );
 }
 
+/**
+ * Intentos de manipular al asistente (ignorar instrucciones, cambios de rol,
+ * jailbreak) o de extraer información interna de la plataforma (prompt, reglas
+ * internas, credenciales, configuración). Se declinan con un límite amable y
+ * NUNCA pasan al RAG ni reciben detalles técnicos.
+ */
+const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
+  // Manipulación de instrucciones
+  /\b(ignora|olvida|omite|desobedece|saltate|anula) (?:todas )?(?:tus |las |estas )?(?:instrucciones|reglas|ordenes|indicaciones|directrices|restricciones|limites|filtros)\b/u,
+  /\b(?:dime|muestra|revela|explica|lista|cuales son) (?:todas )?tus (?:reglas|instrucciones|limites|restricciones|directrices)\b/u,
+  /\b(?:actua|comportate|responde|habla|escribe) como (?:si )?(?:fueras |fuese |un |una )?(?:chatgpt|gpt|gemini|claude|deepseek|copilot|otro (?:modelo|asistente|bot)|dios|hacker)\b/u,
+  /\b(?:modo|mode) (?:desarrollador|developer|dios|god|jailbreak|sin (?:restricciones|filtros|limites))\b/u,
+  /\b(jailbreak|prompt injection|inyeccion de prompt|dan mode|bypass)\b/u,
+  // Extracción de instrucciones o configuración interna
+  /\b(?:muestra|muestrame|revela|revelame|dime|ensename|explicame|imprime|repite|repiteme|cual es|que dice|comparte) (?:tu |el |tus |los )?(?:prompt|system prompt|prompt del sistema|instrucciones internas|reglas internas|configuracion interna|configuracion del sistema)\b/u,
+  /\b(?:tus|las) (?:instrucciones|reglas|directrices) (?:internas|del sistema|de sistema)\b/u,
+  /\b(?:que|cual) (?:modelo|version|llm|ia) (?:de (?:ia|lenguaje) )?(?:usas|utilizas|eres|hay detras|esta detras)\b/u,
+  /\beres (?:un )?(?:gpt|chatgpt|gemini|claude|modelo de lenguaje|llm)\b/u,
+  // Secretos y detalles técnicos
+  /\b(?:api key|clave de api|api token|token de api|access token|service role|service_role)\b/u,
+  /\b(?:contrasena|password|credenciales) (?:de |del |de la )?(?:admin(?:istrador)?|superadmin|sistema|base de datos|plataforma)\b/u,
+  /\b(?:variables de entorno|environment variables|esquema de la base|tablas de la base|connection string|cadena de conexion)\b/u,
+  /\b(?:supabase|openrouter|openai|render|vercel|github) (?:key|token|secret|credenciales|url interna)\b/u,
+];
+
+function isSystemProbing(normalized: string): boolean {
+  return SYSTEM_PROBING_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function stripped(value: string, ...patterns: RegExp[]): string {
   return patterns
     .reduce((text, pattern) => text.replace(pattern, ' '), value)
@@ -396,6 +427,12 @@ export function classifyTurnIntent(
       return { lane: 'social', subtype: 'acknowledgment' };
     }
     return DOMAIN;
+  }
+
+  // Antes de cualquier señal: un intento de manipulación o de extraer
+  // información interna se declina con un límite amable, sin pasar al RAG.
+  if (isSystemProbing(normalized)) {
+    return { lane: 'out_of_scope', subtype: 'system_limit' };
   }
 
   // Antes de la señal fuerte de dominio: «¿qué normas tienes?» nombra "normas"

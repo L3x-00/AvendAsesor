@@ -9,6 +9,7 @@ describe('buildConversationalReply', () => {
     'ask_announcement',
     'capabilities',
     'out_of_domain',
+    'system_limit',
     'unrelated_no_evidence',
   ] as const)(
     'devuelve una respuesta no vacía y SIN citas de fuentes para "%s"',
@@ -56,7 +57,16 @@ describe('buildConversationalReply', () => {
   it('fuera de ámbito declina con cortesía y reorienta al ámbito educativo', () => {
     const reply = buildConversationalReply('out_of_domain');
 
+    expect(reply).toContain('Me encantaría ayudarte');
     expect(reply).toContain('educativo');
-    expect(reply.toLowerCase()).toContain('no puedo ayudarte');
+    expect(reply.toLowerCase()).not.toContain('no puedo ayudarte');
+  });
+
+  it('ante un intento de manipulación pone un límite amable sin revelar nada', () => {
+    const reply = buildConversationalReply('system_limit');
+
+    expect(reply).toContain('no puedo compartir información interna');
+    expect(reply).toContain('ámbito educativo');
+    expect(reply.toLowerCase()).not.toContain('prompt');
   });
 });

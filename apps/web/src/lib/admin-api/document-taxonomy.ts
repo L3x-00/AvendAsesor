@@ -53,21 +53,43 @@ export const DOCUMENT_SITUATION_OPTIONS = [
 ] as const;
 
 export const ARCHIVE_REASON_OPTIONS = [
-  { label: "Documento ya no aplicable al proceso", value: "NOT_APPLICABLE" },
-  { label: "Documento derogado o sin vigencia", value: "DEROGATED_OR_EXPIRED" },
-  { label: "Documento duplicado", value: "DUPLICATE" },
-  { label: "Documento cargado por error", value: "UPLOADED_BY_ERROR" },
-  { label: "Información incompleta", value: "INCOMPLETE_INFORMATION" },
-  { label: "Pendiente de validación", value: "PENDING_VALIDATION" },
   {
-    label: "Conservado únicamente como antecedente histórico",
+    label:
+      "Documento ya no aplicable al proceso (el trámite cambió y ya no corresponde)",
+    value: "NOT_APPLICABLE",
+  },
+  {
+    label: "Documento derogado o sin vigencia (fue anulado o venció su plazo)",
+    value: "DEROGATED_OR_EXPIRED",
+  },
+  {
+    label: "Documento duplicado (ya existe otro igual en la biblioteca)",
+    value: "DUPLICATE",
+  },
+  {
+    label: "Documento cargado por error (archivo equivocado)",
+    value: "UPLOADED_BY_ERROR",
+  },
+  {
+    label: "Información incompleta (faltan páginas, firmas o datos)",
+    value: "INCOMPLETE_INFORMATION",
+  },
+  {
+    label:
+      "Pendiente de validación (aún no se confirma si es el documento oficial)",
+    value: "PENDING_VALIDATION",
+  },
+  {
+    label:
+      "Conservado únicamente como antecedente histórico (no alimenta las respuestas, pero queda disponible para consulta)",
     value: "HISTORICAL_ANTECEDENT",
   },
   {
-    label: "Reemplazado por una versión o documento más reciente",
+    label:
+      "Reemplazado por una versión o documento más reciente (existe uno nuevo que lo sustituye)",
     value: "REPLACED_BY_NEWER",
   },
-  { label: "Otro", value: "OTHER" },
+  { label: "Otro (explica el motivo en la observación)", value: "OTHER" },
 ] as const;
 
 export type ArchiveReasonCode =
