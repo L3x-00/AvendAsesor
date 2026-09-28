@@ -123,7 +123,7 @@ export function overviewMessage(overview: ModuleOverview): string {
   const count = overview.total;
   const intro =
     overview.scope === 'parent'
-      ? `Aún no tengo documentos cargados en «${overview.moduleName}». Dentro de **${overview.scopeName}** tengo ${count === 1 ? 'este documento' : `estos ${count} documentos`}:`
+      ? `Estos son los documentos disponibles sobre **${overview.scopeName}**:`
       : `Sobre **${overview.scopeName}** tengo ${count === 1 ? 'este documento' : `estos ${count} documentos`}:`;
   const items = overview.documents.map((document) => {
     const title = document.title.trim().replace(/[.;:]+$/u, '');
@@ -350,7 +350,7 @@ export class ChatCatalogService {
     if (!documents.length) {
       return {
         message:
-          'Por ahora no tengo documentos disponibles para responder consultas. Cuando la administración cargue y apruebe documentos, podrás preguntarme sobre ellos aquí mismo.',
+          'Aún estoy preparándome con los documentos oficiales de este tema. Cuéntame igual tu consulta: buscaré en todos los documentos disponibles y, si no encuentro respaldo, te lo diré con claridad para que puedas verificarlo con tu UGEL, tu DRE o el MINEDU.',
         suggestions: [],
       };
     }

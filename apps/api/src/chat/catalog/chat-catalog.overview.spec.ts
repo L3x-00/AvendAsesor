@@ -127,7 +127,7 @@ describe('ChatCatalogService — panorama de un tema', () => {
     expect(overview.scope).toBe('parent');
     expect(overview.scopeName).toBe('Remuneraciones');
     expect(overviewMessage(overview)).toBe(
-      'Aún no tengo documentos cargados en «Escala remunerativa». Dentro de **Remuneraciones** tengo este documento:\n\n- **Aprueban Padrones de Instituciones Educativas** (Resolución Ministerial, 2026): Aprueba los padrones para las asignaciones.\n\nLos resúmenes son orientativos: los genera la IA a partir del texto de cada documento. Cuéntame qué necesitas saber de este documento y te respondo con la cita exacta.',
+      'Estos son los documentos disponibles sobre **Remuneraciones**:\n\n- **Aprueban Padrones de Instituciones Educativas** (Resolución Ministerial, 2026): Aprueba los padrones para las asignaciones.\n\nLos resúmenes son orientativos: los genera la IA a partir del texto de cada documento. Cuéntame qué necesitas saber de este documento y te respondo con la cita exacta.',
     );
   });
 

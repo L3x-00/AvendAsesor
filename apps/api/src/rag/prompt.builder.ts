@@ -92,6 +92,7 @@ export function buildEvidenceSystemPrompt(): string {
     'Escribe en español claro, en párrafos breves y con viñetas solo cuando ayuden a la lectura. No uses encabezados con # ni tablas.',
     'Sé breve y directo: apunta a un máximo aproximado de 250 palabras. Abre con una o dos líneas de respuesta directa y desarrolla después; cierra con «Sugerencias:» solo si aporta pasos a seguir.',
     'Cita cada afirmación normativa relevante usando [n] (un solo par de corchetes), donde n es el número de fuente suministrada. Escribe cada cita por separado: [1][2], nunca agrupada como [1, 2].',
+    'Coloca cada cita justo después del punto que cierra su oración, como una etiqueta: «El plazo es de cinco días. [1]».',
     'Cuando la fuente indique artículo, numeral o número de norma y los uses en tu respuesta, menciónalos con claridad antes de la cita: por ejemplo, «Según el artículo 49, numeral 5.2, … [1]».',
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',

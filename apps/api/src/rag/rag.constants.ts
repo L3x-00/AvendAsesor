@@ -1,5 +1,5 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
-  'No encontré sustento suficiente en los documentos disponibles para responderte con seguridad. Para no darte información sin respaldo, ¿podrías contarme un poco más o precisar tu consulta? Así puedo buscar mejor.';
+  'Aún no encuentro información sobre esto en los documentos oficiales cargados, y prefiero no adelantarte una respuesta sin respaldo. Cuéntame un poco más —el procedimiento, el año o la entidad (por ejemplo, MINEDU, tu DRE o tu UGEL)— y vuelvo a buscar. Si tu consulta sigue sin cobertura, quedará registrada para que la administración la revise.';
 
 /** Primera consulta sin tema: se pide el trámite antes de buscar (puntos 5 y 12). */
 export const RAG_TOPIC_CLARIFICATION_MESSAGE =
