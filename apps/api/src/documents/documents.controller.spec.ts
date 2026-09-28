@@ -85,6 +85,7 @@ describe('DocumentsController', () => {
       auditEvents: [],
       createdByName: 'Administrador de prueba',
       moduleIds: [],
+      usage: { downloads: 0, lastDownloadAt: null, opens: 0 },
       versions: [],
     };
     documentsService.create.mockResolvedValue(documentRecord);

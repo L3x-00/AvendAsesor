@@ -108,6 +108,9 @@ describe("DocumentSituationSummary", () => {
       ),
     ).toBeVisible();
     expect(screen.getByText("Queda como antecedente")).toBeVisible();
+    expect(
+      screen.getByText(/ya no alimenta las respuestas del chat/),
+    ).toBeVisible();
     // Un archivado no muestra datos de reemplazo que no existen.
     expect(screen.queryByText("Documento que lo reemplaza")).toBeNull();
   });

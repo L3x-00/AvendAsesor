@@ -141,10 +141,18 @@ export const documentAuditEventSchema = z.object({
 
 export type DocumentAuditEvent = z.infer<typeof documentAuditEventSchema>;
 
+export const documentUsageCountersSchema = z.object({
+  downloads: z.number().int().nonnegative(),
+  lastDownloadAt: z.string().nullable(),
+  opens: z.number().int().nonnegative(),
+});
+
 export const managedDocumentDetailsSchema = managedDocumentSchema.extend({
   auditEvents: z.array(documentAuditEventSchema),
   createdByName: z.string().nullable(),
   moduleIds: z.array(z.string().uuid()),
+  /** Ausente en respuestas anteriores al despliegue de contadores. */
+  usage: documentUsageCountersSchema.optional(),
   versions: z.array(managedDocumentVersionSchema),
 });
 

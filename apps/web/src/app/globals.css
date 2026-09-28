@@ -2311,3 +2311,28 @@ textarea[aria-invalid="true"]:focus,
 .avend-admin-chat-entry {
   font-weight: 600;
 }
+
+/* Resalta el campo de motivo al abrir Archivar/Desactivar (O-29). */
+@keyframes avend-field-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(22 119 255 / 0%);
+  }
+
+  35% {
+    box-shadow: 0 0 0 4px rgb(22 119 255 / 35%);
+  }
+}
+
+.avend-field-highlight {
+  animation: avend-field-highlight-pulse 1.5s ease-out 1;
+  border-color: var(--avend-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-field-highlight {
+    animation: none;
+    outline: 3px solid var(--avend-focus);
+    outline-offset: 2px;
+  }
+}

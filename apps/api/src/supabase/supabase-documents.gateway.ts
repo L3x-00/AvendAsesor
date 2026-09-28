@@ -13,6 +13,7 @@ import {
   toStoredDocumentAuditEvent,
   toStoredDocumentVersion,
   type DocumentLibraryPage,
+  type DocumentUsageCounters,
   type ManagedDocument,
   type StoredDocumentVersion,
   type StoredDocumentAuditEvent,
@@ -439,11 +440,13 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     documentId: string,
     versionId: string,
     actorId: string,
+    disposition?: 'attachment' | 'inline',
   ): Promise<void> {
     const { error } = await this.requireClient().rpc(
       'record_document_download_url',
       {
         p_actor_id: actorId,
+        p_disposition: disposition ?? null,
         p_document_id: documentId,
         p_document_version_id: versionId,
       },
@@ -452,6 +455,27 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     if (error) {
       databaseError(error);
     }
+  }
+
+  async getUsageCounters(documentId: string): Promise<DocumentUsageCounters> {
+    const { data, error } = await this.requireClient().rpc(
+      'get_document_usage_counters',
+      {
+        p_document_id: documentId,
+      },
+    );
+
+    if (error) {
+      databaseError(error);
+    }
+
+    const row = data?.[0];
+
+    return {
+      downloads: row?.downloads ?? 0,
+      lastDownloadAt: row?.last_download_at ?? null,
+      opens: row?.opens ?? 0,
+    };
   }
 
   async setStatus(

@@ -5,6 +5,7 @@ import type {
   DocumentPublicationFilter,
   DocumentSituation,
   DocumentTechnicalStatus,
+  DocumentUsageCounters,
   ManagedDocument,
   StoredDocumentAuditEvent,
   StoredDocumentVersion,
@@ -101,6 +102,7 @@ export interface DocumentsGateway {
     documentId: string,
     versionId: string,
   ): Promise<StoredDocumentVersion | null>;
+  getUsageCounters(documentId: string): Promise<DocumentUsageCounters>;
   listAuditEvents(documentId: string): Promise<StoredDocumentAuditEvent[]>;
   linkModule(
     documentId: string,
@@ -131,6 +133,7 @@ export interface DocumentsGateway {
     documentId: string,
     versionId: string,
     actorId: string,
+    disposition?: 'attachment' | 'inline',
   ): Promise<void>;
   setStatus(
     documentId: string,

@@ -320,6 +320,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       documentRow.id,
       versionRow.id,
       documentRow.created_by,
+      'inline',
     );
 
     expect(rpc).toHaveBeenCalledWith(
@@ -348,8 +349,33 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     );
     expect(rpc).toHaveBeenCalledWith(
       'record_document_download_url',
-      expect.objectContaining({ p_document_version_id: versionRow.id }),
+      expect.objectContaining({
+        p_disposition: 'inline',
+        p_document_version_id: versionRow.id,
+      }),
     );
+  });
+
+  it('maps the document usage counters from the dedicated RPC', async () => {
+    const { client, rpc } = createClient({
+      rpcData: [
+        {
+          downloads: 2,
+          last_download_at: '2026-09-20T12:00:00+00:00',
+          opens: 7,
+        },
+      ],
+    });
+    const gateway = new SupabaseDocumentsGatewayAdapter(client);
+
+    await expect(gateway.getUsageCounters(documentRow.id)).resolves.toEqual({
+      downloads: 2,
+      lastDownloadAt: '2026-09-20T12:00:00+00:00',
+      opens: 7,
+    });
+    expect(rpc).toHaveBeenCalledWith('get_document_usage_counters', {
+      p_document_id: documentRow.id,
+    });
   });
 
   it('uses private Storage with non-overwrite upload, short-lived signing and removable compensation', async () => {

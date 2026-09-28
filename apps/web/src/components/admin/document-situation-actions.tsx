@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { FieldError } from "@/components/ui/form-field";
 import type { FieldRules } from "@/lib/ui/field-validation";
 import { setDocumentSituationAction } from "@/app/admin/actions";
@@ -23,6 +23,8 @@ export function DocumentSituationActions({
   situation,
 }: DocumentSituationActionsProps) {
   const prefix = useId();
+  const reasonSelectRef = useRef<HTMLSelectElement | null>(null);
+  const [highlightReason, setHighlightReason] = useState(false);
   const [reasonCode, setReasonCode] =
     useState<ArchiveReasonCode>("NOT_APPLICABLE");
   const [replacementDate, setReplacementDate] = useState("");
@@ -71,8 +73,10 @@ export function DocumentSituationActions({
     <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
       <h2 className="text-xl font-bold">Gestión documental</h2>
       <p className="mt-1 text-base leading-7 text-avend-text-muted">
-        Cambia la vigencia o archiva el documento. El motivo y la observación
-        quedarán registrados en su historial.
+        Cambia la vigencia o archiva el documento. Al archivar o reemplazar, el
+        documento deja de alimentar las respuestas del chat y se conserva como
+        antecedente histórico. El motivo y la observación quedarán registrados
+        en su historial.
       </p>
 
       {situation !== "current" ? (
@@ -88,7 +92,19 @@ export function DocumentSituationActions({
       ) : null}
 
       <details className="mt-4 rounded-lg border border-avend-border p-4">
-        <summary className="cursor-pointer text-base font-bold">
+        <summary
+          className="cursor-pointer text-base font-bold"
+          onClick={() => {
+            // Al abrir, el motivo se enfoca y se resalta para que se
+            // identifique de inmediato (O-29).
+            window.requestAnimationFrame(() => {
+              if (!reasonSelectRef.current?.closest("details")?.open) return;
+              setHighlightReason(true);
+              window.setTimeout(() => setHighlightReason(false), 1_800);
+              reasonSelectRef.current.focus();
+            });
+          }}
+        >
           {situation === "current"
             ? "Archivar / Desactivar"
             : situation === "replaced"
@@ -113,7 +129,9 @@ export function DocumentSituationActions({
           <label className="block sm:col-span-2" htmlFor={`${prefix}-reason`}>
             <span className="text-base font-semibold">Motivo</span>
             <select
-              className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+              className={`mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base${
+                highlightReason ? " avend-field-highlight" : ""
+              }`}
               id={`${prefix}-reason`}
               name="archiveReasonCode"
               onChange={(event) => {
@@ -124,6 +142,7 @@ export function DocumentSituationActions({
                   setReplacementYear("");
                 }
               }}
+              ref={reasonSelectRef}
               value={selectedReason}
             >
               {availableReasons.map((option) => (

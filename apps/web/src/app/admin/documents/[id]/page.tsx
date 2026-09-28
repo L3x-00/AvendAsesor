@@ -624,6 +624,34 @@ export default async function DocumentDetailPage({
               )}
             </section>
 
+            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
+              <h2 className="text-xl font-bold">Uso del documento</h2>
+              <p className="mt-1 text-base text-avend-text-muted">
+                Veces abierto y descargado desde la plataforma, y la última
+                descarga registrada.
+              </p>
+              <dl className="mt-4 grid gap-4 text-base sm:grid-cols-3">
+                <div>
+                  <dt className="font-semibold">Veces abierto</dt>
+                  <dd className="mt-1">{document.usage?.opens ?? 0}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Veces descargado</dt>
+                  <dd className="mt-1">{document.usage?.downloads ?? 0}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Última descarga</dt>
+                  <dd className="mt-1">
+                    {document.usage?.lastDownloadAt
+                      ? dateTimeFormatter.format(
+                          new Date(document.usage.lastDownloadAt),
+                        )
+                      : "Aún sin descargas"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
             <DocumentAuditHistory
               context={{
                 documentTitleById: new Map(

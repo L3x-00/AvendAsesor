@@ -112,6 +112,7 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
     createDownloadUrl: jest.fn(),
     findById: jest.fn(),
     findVersion: jest.fn(),
+    getUsageCounters: jest.fn(),
     listAuditEvents: jest.fn(),
     linkModule: jest.fn(),
     list: jest.fn(),
@@ -325,12 +326,22 @@ describe('DocumentsService', () => {
     documentsGateway.listActorNames.mockResolvedValue({
       [authorization.userId]: 'Administrador de prueba',
     });
+    documentsGateway.getUsageCounters.mockResolvedValue({
+      downloads: 3,
+      lastDownloadAt: '2026-09-20T12:00:00.000Z',
+      opens: 12,
+    });
 
     await expect(service.findOne(documentRecord.id)).resolves.toEqual({
       ...documentRecord,
       auditEvents: [],
       createdByName: 'Administrador de prueba',
       moduleIds: ['8d4b660b-9e94-4d34-a3d2-2548a83587e1'],
+      usage: {
+        downloads: 3,
+        lastDownloadAt: '2026-09-20T12:00:00.000Z',
+        opens: 12,
+      },
       versions: [
         {
           fileSizeBytes: versionRecord.fileSizeBytes,
@@ -372,6 +383,7 @@ describe('DocumentsService', () => {
       documentRecord.id,
       versionRecord.id,
       authorization.userId,
+      'attachment',
     );
   });
 
