@@ -23,6 +23,7 @@ import {
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
+import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import {
   MAX_CHAT_CONTEXT_CHARS,
@@ -646,6 +647,7 @@ export class ChatService {
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
       const reply = await this.conversationalReply(
         intent.subtype,
+        input.authorization.role,
         input.abortSignal,
       );
       // «Otra consulta» a secas dentro de una conversación: la siguiente
@@ -865,6 +867,10 @@ export class ChatService {
     // sustento»), el turno se cierra como «sin evidencia» y el usuario nunca ve
     // una tabla de «documentos que sustentan» que no sustentan nada.
     const marker = new NoSupportMarkerFilter();
+    // Una cita agrupada («[1, 2]») se reescribe como citas individuales
+    // («[1][2]») sin cortar una cita a medias: retiene el corchete abierto
+    // hasta que cierra.
+    const citator = new CitationGroupNormalizer();
     // Ventana inicial: hasta ver una cita [n] (o suficiente texto) no se
     // muestra nada. Así una negativa breve sin citas («Las fuentes no contienen
     // …», con o sin la marca) se cierra como «sin evidencia» antes de exhibir
@@ -904,7 +910,7 @@ export class ChatService {
     })) {
       if (input.abortSignal?.aborted) return;
 
-      const visible = marker.push(token);
+      const visible = citator.push(marker.push(token));
       if (!streaming) {
         leadIn += visible;
         if (marker.partialSupport && !cites(leadIn)) {
@@ -931,12 +937,13 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     const ending = marker.finish();
-    const unstreamed = streaming ? '' : `${leadIn}${ending.tail}`;
+    const tail = `${citator.push(ending.tail)}${citator.flush()}`;
+    const unstreamed = streaming ? '' : `${leadIn}${tail}`;
     // Fail-closed (punto 4): una respuesta que no cita ninguna fuente no puede
     // demostrar de dónde sale —suele ser una negativa («Lo siento, las fuentes
     // no mencionan…») o la marca mal escrita— y se cierra como «sin
     // evidencia». Si ya se mostró texto, el evento «no_evidence» lo reemplaza.
-    const whole = `${answer}${streaming ? ending.tail : unstreamed}`;
+    const whole = `${answer}${streaming ? tail : unstreamed}`;
     if (
       ending.noSupport ||
       declined ||
@@ -952,7 +959,7 @@ export class ChatService {
       });
       return;
     }
-    const pending = streaming ? ending.tail : unstreamed;
+    const pending = streaming ? tail : unstreamed;
     if (pending && !cutByLength) {
       if (!streaming) {
         streaming = true;
@@ -1081,6 +1088,7 @@ export class ChatService {
   /** Respuesta amable efímera; la capacidad y el anuncio listan los temas reales. */
   private async conversationalReply(
     kind: ConversationalReplyKind,
+    role: AuthorizationContext['role'],
     abortSignal?: AbortSignal,
   ): Promise<ChatStreamEvent> {
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
@@ -1110,7 +1118,7 @@ export class ChatService {
         ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {
-      data: { message: buildConversationalReply(kind, { topics }) },
+      data: { message: buildConversationalReply(kind, { role, topics }) },
       type: 'conversational',
     };
   }

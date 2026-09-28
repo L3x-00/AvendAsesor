@@ -22,6 +22,8 @@ export type ConversationalReplyKind =
   SocialSubtype | OutOfScopeSubtype | 'unrelated_no_evidence';
 
 export interface ConversationalReplyOptions {
+  /** Rol de la persona que consulta: ajusta el saludo sin prometer nada nuevo. */
+  role?: 'docente' | 'admin' | 'superadmin';
   /** Temas (módulos raíz activos) que hoy se pueden consultar. */
   topics?: readonly string[];
 }
@@ -39,13 +41,25 @@ function topicsSentence(topics: readonly string[] | undefined): string {
   return ` Hoy puedes consultarme sobre: ${list}.`;
 }
 
+/**
+ * Saludo amable por rol: a la persona administradora se le recuerda su acceso
+ * al panel, sin prometer funciones nuevas ni exponer nada interno.
+ */
+function buildGreeting(role: ConversationalReplyOptions['role']): string {
+  if (role === 'admin' || role === 'superadmin') {
+    return `¡Hola! Qué gusto saludarte. Soy AVEND ASESOR, tu asistente de consulta y apoyo administrativo. ${SCOPE_SENTENCE} Además, tienes a tu disposición el panel de administración. ¿En qué te ayudo hoy?`;
+  }
+
+  return `¡Hola! Qué gusto saludarte. Soy AVEND ASESOR, tu asistente de consulta. ${SCOPE_SENTENCE} ¿En qué te ayudo hoy?`;
+}
+
 export function buildConversationalReply(
   kind: ConversationalReplyKind,
   options: ConversationalReplyOptions = {},
 ): string {
   switch (kind) {
     case 'greeting':
-      return `¡Hola! Qué gusto saludarte. Soy AVEND ASESOR, tu asistente de consulta. ${SCOPE_SENTENCE} ¿En qué te ayudo hoy?`;
+      return buildGreeting(options.role);
     case 'thanks':
       return 'Con mucho gusto. Si necesitas otra orientación del ámbito educativo, aquí estoy para ayudarte.';
     case 'acknowledgment':

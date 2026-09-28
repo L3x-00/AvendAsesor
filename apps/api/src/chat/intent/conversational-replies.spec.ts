@@ -27,6 +27,17 @@ describe('buildConversationalReply', () => {
     expect(buildConversationalReply('capabilities')).toContain('docentes');
   });
 
+  it('el saludo reconoce el rol administrador sin exponer nada interno', () => {
+    const adminReply = buildConversationalReply('greeting', { role: 'admin' });
+    const teacherReply = buildConversationalReply('greeting', {
+      role: 'docente',
+    });
+
+    expect(adminReply).toContain('panel de administración');
+    expect(teacherReply).not.toContain('panel de administración');
+    expect(teacherReply).toContain('educativo');
+  });
+
   it('la capacidad y el anuncio de consulta listan los temas disponibles', () => {
     const topics = [
       'Situaciones administrativas',
