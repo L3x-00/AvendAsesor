@@ -28,7 +28,9 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           document_id: 'document',
           document_situation: 'replaced',
           document_title: 'Norma',
+          document_type: 'RESOLUCION_MINISTERIAL',
           document_version_id: 'version',
+          issuance_year: 2024,
           lexical_score: 0.4,
           module_associations: [
             {
@@ -43,6 +45,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           numeral_reference: null,
           page_end: 2,
           page_start: 1,
+          resolution_number: 'RM-123-2024-MINEDU',
           section_title: null,
           semantic_score: 0.9,
           version_number: 1,
@@ -58,6 +61,8 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
         chunkId: 'chunk',
         documentSituation: 'replaced',
         documentTitle: 'Norma',
+        documentType: 'RESOLUCION_MINISTERIAL',
+        issuanceYear: 2024,
         moduleAssociations: [
           {
             rootModuleId: 'module',
@@ -66,6 +71,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
             submoduleName: 'Submódulo',
           },
         ],
+        resolutionNumber: 'RM-123-2024-MINEDU',
         semanticScore: 0.9,
       }),
     ]);

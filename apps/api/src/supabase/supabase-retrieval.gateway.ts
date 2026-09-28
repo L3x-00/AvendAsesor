@@ -13,7 +13,9 @@ interface SituationAwareRetrievalRow {
   document_id: string;
   document_situation: 'archived' | 'current' | 'replaced';
   document_title: string;
+  document_type: string | null;
   document_version_id: string;
+  issuance_year: number | null;
   lexical_score: number;
   module_associations: Array<{
     rootModuleId: string;
@@ -26,6 +28,7 @@ interface SituationAwareRetrievalRow {
   numeral_reference: string | null;
   page_end: number;
   page_start: number;
+  resolution_number: string | null;
   section_title: string | null;
   semantic_score: number;
   version_number: number;
@@ -84,7 +87,9 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       documentId: row.document_id,
       documentSituation: row.document_situation,
       documentTitle: row.document_title,
+      documentType: row.document_type,
       documentVersionId: row.document_version_id,
+      issuanceYear: row.issuance_year,
       lexicalScore: row.lexical_score,
       moduleAssociations: row.module_associations,
       moduleIds: row.module_ids,
@@ -92,6 +97,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       numeralReference: row.numeral_reference,
       pageEnd: row.page_end,
       pageStart: row.page_start,
+      resolutionNumber: row.resolution_number,
       sectionTitle: row.section_title,
       semanticScore: row.semantic_score,
       versionNumber: row.version_number,
