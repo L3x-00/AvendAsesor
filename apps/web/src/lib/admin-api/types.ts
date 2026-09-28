@@ -46,6 +46,7 @@ export type ManagedModuleSummary = z.infer<typeof managedModuleSummarySchema>;
 export const adminModulePermissionSchema = z.object({
   canAccess: z.boolean(),
   fullName: z.string(),
+  moduleIds: z.array(z.string().uuid()).default([]),
   role: z.enum(["admin", "superadmin"]),
   updatedAt: timestampSchema.nullable(),
   updatedBy: z.string().uuid().nullable(),

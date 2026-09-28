@@ -37,21 +37,23 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const { access, client } = await createAuthorizedAdminApiContext();
   if (access.role !== "superadmin") redirect("/access-denied");
   const query = parseUserDirectoryQuery(await searchParams);
-  const [userPage, counts, events, modulePermissions] = await Promise.all([
-    client.listAdministrativeUsers({
-      accessState: accessStateFilter(query.status),
-      group: query.group,
-      limit: USER_DIRECTORY_PAGE_SIZE,
-      offset: (query.page - 1) * USER_DIRECTORY_PAGE_SIZE,
-      search: query.search,
-    }),
-    client.countAdministrativeUsers({
-      group: query.group,
-      search: query.search,
-    }),
-    client.listOperationalAuditEvents(),
-    client.listAdminModulePermissions(),
-  ]);
+  const [userPage, counts, events, modulePermissions, modules] =
+    await Promise.all([
+      client.listAdministrativeUsers({
+        accessState: accessStateFilter(query.status),
+        group: query.group,
+        limit: USER_DIRECTORY_PAGE_SIZE,
+        offset: (query.page - 1) * USER_DIRECTORY_PAGE_SIZE,
+        search: query.search,
+      }),
+      client.countAdministrativeUsers({
+        group: query.group,
+        search: query.search,
+      }),
+      client.listOperationalAuditEvents(),
+      client.listAdminModulePermissions(),
+      client.listModuleSummaries("all"),
+    ]);
 
   if (query.page > 1 && userPage.items.length === 0 && userPage.total > 0) {
     redirect(
@@ -71,11 +73,23 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         <UsersManager
           apiBaseUrl={getAdminApiUrl()}
           counts={counts}
+          modules={modules.map((module) => ({
+            id: module.id,
+            name: module.name,
+            parentModuleId: module.parentModuleId,
+          }))}
           page={userPage}
           query={query}
           today={toDateInputValue(new Date().toISOString())}
         />
-        <ModulePermissionsManager permissions={modulePermissions} />
+        <ModulePermissionsManager
+          modules={modules.map((module) => ({
+            id: module.id,
+            name: module.name,
+            parentModuleId: module.parentModuleId,
+          }))}
+          permissions={modulePermissions}
+        />
 
         <section
           aria-labelledby="audit-title"

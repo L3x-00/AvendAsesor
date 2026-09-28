@@ -508,6 +508,17 @@ export class AdminApiClient {
     );
   }
 
+  /** Reemplaza los módulos concedidos a un administrador. */
+  async setAdminModuleGrants(
+    userId: string,
+    payload: { moduleIds: string[]; reason: string },
+  ): Promise<void> {
+    await this.send(`/admin/module-permissions/${userId}/grants`, {
+      body: JSON.stringify(payload),
+      method: "PATCH",
+    });
+  }
+
   private async send<T>(
     path: string,
     options: { body?: RequestBody; method: string },

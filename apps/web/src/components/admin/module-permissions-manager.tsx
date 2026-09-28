@@ -3,7 +3,10 @@
 import { useId } from "react";
 import { FieldError } from "@/components/ui/form-field";
 import type { FieldRules } from "@/lib/ui/field-validation";
-import { setAdminModulePermissionAction } from "@/app/admin/actions";
+import {
+  setAdminModuleGrantsAction,
+  setAdminModulePermissionAction,
+} from "@/app/admin/actions";
 import type { AdminModulePermission } from "@/lib/admin-api/types";
 import { AdminActionForm } from "./admin-action-form";
 
@@ -15,15 +18,26 @@ const PERMISSION_RULES: FieldRules = {
   ],
 };
 
+export interface PermissionModuleOption {
+  id: string;
+  name: string;
+  parentModuleId: string | null;
+}
+
 export function ModulePermissionsManager({
+  modules,
   permissions,
 }: {
+  modules: PermissionModuleOption[];
   permissions: AdminModulePermission[];
 }) {
   const prefix = useId();
   const editable = permissions.filter(
     (permission) => permission.role === "admin",
   );
+  const roots = modules.filter((module) => module.parentModuleId === null);
+  const childrenOf = (rootId: string) =>
+    modules.filter((module) => module.parentModuleId === rootId);
 
   return (
     <section
@@ -34,9 +48,10 @@ export function ModulePermissionsManager({
         Acceso a Módulos e Historial de documentos
       </h2>
       <p className="mt-1 text-base leading-7 text-avend-text-muted">
-        Un solo permiso cubre las dos secciones: «Módulos» y «Historial de
-        documentos». Controla la navegación, las URLs directas y todas las APIs
-        de módulos, biblioteca y PDF. Los superadministradores conservan acceso.
+        El interruptor habilita el área completa; las casillas deciden a qué
+        módulos y submódulos puede entrar cada administrador. Un permiso sobre un
+        módulo principal cubre sus submódulos. Los superadministradores
+        conservan acceso total.
       </p>
       {editable.length ? (
         <ul className="mt-4 space-y-3" role="list">
@@ -104,6 +119,85 @@ export function ModulePermissionsManager({
                   <FieldError name="reason" />
                 </label>
               </AdminActionForm>
+
+              <details className="mt-3 rounded-lg border border-avend-border p-4">
+                <summary className="cursor-pointer text-base font-bold">
+                  Módulos con acceso ({permission.moduleIds.length})
+                </summary>
+                <AdminActionForm
+                  action={setAdminModuleGrantsAction}
+                  rules={PERMISSION_RULES}
+                  className="mt-3 space-y-4"
+                  confirmMessage="¿Confirmas reemplazar los módulos de este administrador con lo marcado?"
+                  submitLabel="Guardar módulos"
+                >
+                  <input
+                    name="userId"
+                    type="hidden"
+                    value={permission.userId}
+                  />
+                  <fieldset className="grid gap-3 md:grid-cols-2">
+                    <legend className="text-base font-semibold">
+                      Marca los módulos y submódulos permitidos
+                    </legend>
+                    {roots.map((root) => (
+                      <div
+                        className="rounded-md border border-avend-border p-3"
+                        key={root.id}
+                      >
+                        <label className="flex min-h-11 items-center gap-2 text-base font-semibold">
+                          <input
+                            defaultChecked={permission.moduleIds.includes(
+                              root.id,
+                            )}
+                            name="moduleId"
+                            type="checkbox"
+                            value={root.id}
+                          />
+                          {root.name}
+                        </label>
+                        {childrenOf(root.id).map((child) => (
+                          <label
+                            className="ml-6 flex min-h-11 items-center gap-2 text-base"
+                            key={child.id}
+                          >
+                            <input
+                              defaultChecked={permission.moduleIds.includes(
+                                child.id,
+                              )}
+                              name="moduleId"
+                              type="checkbox"
+                              value={child.id}
+                            />
+                            {child.name}
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </fieldset>
+                  <label
+                    className="block"
+                    htmlFor={`${prefix}-${permission.userId}-grants-reason`}
+                  >
+                    <span className="text-base font-semibold">
+                      Motivo del cambio (auditado)
+                    </span>
+                    <input
+                      className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                      id={`${prefix}-${permission.userId}-grants-reason`}
+                      maxLength={500}
+                      minLength={4}
+                      name="reason"
+                      required
+                    />
+                    <FieldError name="reason" />
+                  </label>
+                  <p className="text-sm text-avend-text-muted">
+                    Si dejas todo sin marcar, el administrador conserva el área
+                    habilitada pero sin módulos asignados.
+                  </p>
+                </AdminActionForm>
+              </details>
             </li>
           ))}
         </ul>

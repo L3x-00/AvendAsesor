@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { AuthorizationContext } from '../authorization';
 import { SUPABASE_MODULE_PERMISSIONS_GATEWAY } from '../supabase/supabase.constants';
+import type { SetModuleGrantsDto } from './dto/set-module-grants.dto';
 import type { SetModulePermissionDto } from './dto/set-module-permission.dto';
 import type {
   AdminModulePermission,
@@ -26,6 +27,19 @@ export class ModulePermissionsService {
     return this.gateway.set({
       actorId: authorization.userId,
       canAccess: dto.canAccess,
+      reason: dto.reason,
+      targetUserId,
+    });
+  }
+
+  async setGrants(
+    targetUserId: string,
+    dto: SetModuleGrantsDto,
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    await this.gateway.setGrants({
+      actorId: authorization.userId,
+      moduleIds: dto.moduleIds,
       reason: dto.reason,
       targetUserId,
     });

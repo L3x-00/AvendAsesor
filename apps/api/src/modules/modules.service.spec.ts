@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ModulesService } from './modules.service';
@@ -16,7 +17,7 @@ import type { AuthorizationContext } from '../authorization';
 const authorization: AuthorizationContext = {
   email: 'admin@example.com',
   emailConfirmedAt: '2026-08-09T00:00:00.000Z',
-  role: 'admin',
+  role: 'superadmin',
   userId: '4c8b56af-6d0c-4fef-881e-7c00907540dd',
 };
 
@@ -47,6 +48,7 @@ function createModule(overrides: Partial<ManagedModule> = {}): ManagedModule {
 
 function createGateway(): jest.Mocked<ModulesGateway> {
   return {
+    canManageModule: jest.fn().mockResolvedValue(true),
     create: jest.fn<Promise<ManagedModule>, [CreateModuleRecord]>(),
     findById: jest.fn<Promise<ManagedModule | null>, [string]>(),
     hasNonDeletedChildren: jest.fn<Promise<boolean>, [string]>(),
@@ -93,6 +95,29 @@ describe('ModulesService', () => {
         },
       ],
     ]);
+  });
+
+  it('rechaza crear un módulo raíz a un administrador no superadmin', async () => {
+    await expect(
+      service.create(
+        { code: 'ROOT_X', name: 'Raíz X' },
+        { ...authorization, role: 'admin' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rechaza gestionar un módulo sin concesión', async () => {
+    const module = createModule();
+    gateway.findById.mockResolvedValue(module);
+    gateway.canManageModule.mockResolvedValue(false);
+
+    await expect(
+      service.setStatus(
+        module.id,
+        { isActive: false, reason: 'Motivo válido' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects creation under a missing or deleted parent', async () => {

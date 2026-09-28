@@ -12,6 +12,7 @@ const targetUserId = '30db913a-7c14-4eaa-872c-fa4eaf6e68b2';
 const permissionRow = {
   can_access: false,
   full_name: 'Administradora de prueba',
+  module_ids: ['3c000000-0000-0000-0000-000000000101'],
   role: 'admin' as const,
   updated_at: '2026-09-05T12:00:00Z',
   updated_by: actorId,
@@ -52,6 +53,7 @@ describe('SupabaseModulePermissionsGatewayAdapter', () => {
       {
         canAccess: false,
         fullName: permissionRow.full_name,
+        moduleIds: ['3c000000-0000-0000-0000-000000000101'],
         role: 'admin',
         updatedAt: permissionRow.updated_at,
         updatedBy: actorId,
@@ -116,5 +118,31 @@ describe('SupabaseModulePermissionsGatewayAdapter', () => {
     await expect(gateway.set(change)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+
+  it('reemplaza las concesiones por módulo con el actor y el motivo', async () => {
+    const { gateway, rpc } = createGateway(null);
+
+    await expect(
+      gateway.setGrants({
+        actorId,
+        moduleIds: [
+          '3c000000-0000-0000-0000-000000000101',
+          '3c000000-0000-0000-0000-000000000102',
+        ],
+        reason: 'Asignación inicial de módulos',
+        targetUserId,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(rpc).toHaveBeenCalledWith('set_admin_module_grants', {
+      p_actor_id: actorId,
+      p_module_ids: [
+        '3c000000-0000-0000-0000-000000000101',
+        '3c000000-0000-0000-0000-000000000102',
+      ],
+      p_reason: 'Asignación inicial de módulos',
+      p_target_user_id: targetUserId,
+    });
   });
 });
