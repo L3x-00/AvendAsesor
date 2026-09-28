@@ -389,6 +389,14 @@ export function ConsultationFeedback({
           onClick={(event) => open("report", event.currentTarget)}
           type="button"
         >
+          <svg
+            aria-hidden="true"
+            className={styles.reportFlag}
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6Z" />
+          </svg>
           Reportar
         </button>
         <button

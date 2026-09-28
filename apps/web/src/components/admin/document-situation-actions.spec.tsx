@@ -162,7 +162,7 @@ describe("DocumentSituationActions", () => {
       "REPLACED_BY_NEWER",
     );
     expect(
-      screen.queryByRole("option", { name: "Documento duplicado" }),
+      screen.queryByRole("option", { name: /Documento duplicado/ }),
     ).toBeNull();
     await user.selectOptions(
       screen.getByRole("combobox", { name: /Documento que lo reemplaza/ }),

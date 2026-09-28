@@ -82,7 +82,7 @@ describe("describeAuditEvent", () => {
       ).details,
     ).toEqual([
       "Nueva situación: Reemplazado / sin vigencia.",
-      "Motivo del archivo: Documento duplicado.",
+      "Motivo del archivo: Documento duplicado (ya existe otro igual en la biblioteca).",
       "Reemplazado por: Norma 2026.",
     ]);
   });

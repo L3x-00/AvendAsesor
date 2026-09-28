@@ -103,7 +103,9 @@ describe("DocumentSituationSummary", () => {
 
     expect(screen.getByText("Documento archivado")).toBeVisible();
     expect(
-      screen.getByText("Documento derogado o sin vigencia"),
+      screen.getByText(
+        "Documento derogado o sin vigencia (fue anulado o venció su plazo)",
+      ),
     ).toBeVisible();
     expect(screen.getByText("Queda como antecedente")).toBeVisible();
     // Un archivado no muestra datos de reemplazo que no existen.
