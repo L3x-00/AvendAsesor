@@ -1,4 +1,4 @@
-import type { SocialSubtype } from './intent-classifier';
+import type { OutOfScopeSubtype, SocialSubtype } from './intent-classifier';
 
 /**
  * Respuestas amables DETERMINISTAS para los carriles no-RAG (Hito 3, Fases 2 y 10):
@@ -19,7 +19,9 @@ const EXAMPLES_SENTENCE =
   'Por ejemplo, puedes preguntarme por los requisitos de una reasignación, el plazo de una licencia o qué corresponde ante una inasistencia.';
 
 export type ConversationalReplyKind =
-  SocialSubtype | 'out_of_domain' | 'unrelated_no_evidence';
+  | SocialSubtype
+  | OutOfScopeSubtype
+  | 'unrelated_no_evidence';
 
 export interface ConversationalReplyOptions {
   /** Temas (módulos raíz activos) que hoy se pueden consultar. */
@@ -60,7 +62,9 @@ export function buildConversationalReply(
     case 'capabilities':
       return `Soy AVEND ASESOR. ${SCOPE_SENTENCE}${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} ¿Qué necesitas consultar?`;
     case 'out_of_domain':
-      return `Gracias por escribirme. Me especializo en el ámbito educativo, así que con ese tema no puedo ayudarte, pero sí en esto: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} ¿Hay algo de eso en lo que pueda orientarte?`;
+      return `Me encantaría ayudarte con eso, pero mi especialidad es el ámbito educativo peruano. ${SCOPE_SENTENCE} ¿Hay algo de eso en lo que pueda orientarte hoy?`;
+    case 'system_limit':
+      return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
     case 'unrelated_no_evidence':
       return `No encontré información sobre esto en los documentos disponibles, y prefiero decírtelo antes que adivinar. Me especializo en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más —por ejemplo, el trámite o tu situación laboral— y la busco con gusto.`;
   }

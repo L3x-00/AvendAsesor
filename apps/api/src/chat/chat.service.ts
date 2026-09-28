@@ -645,7 +645,7 @@ export class ChatService {
     }
     if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
       const reply = await this.conversationalReply(
-        intent.lane === 'social' ? intent.subtype : 'out_of_domain',
+        intent.subtype,
         input.abortSignal,
       );
       // «Otra consulta» a secas dentro de una conversación: la siguiente
