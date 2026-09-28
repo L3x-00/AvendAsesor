@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ServiceUnavailableException } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -22,6 +22,7 @@ import { OperationsService } from './../src/operations/operations.service';
 import { UserAdministrationService } from './../src/user-administration/user-administration.service';
 import type { AdministrativeUserPage } from './../src/user-administration/user-administration.gateway';
 import { AdministrationService } from './../src/administration/administration.service';
+import { HealthService } from './../src/health/health.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -188,7 +189,14 @@ describe('API endpoints (e2e)', () => {
       .expect({ service: 'avend-asesor-api', status: 'ok' });
   });
 
-  it('/health/ready (GET) fails closed without a server data-store configuration', () => {
+  it('/health/ready (GET) fails closed when a dependency is unavailable', () => {
+    jest
+      .spyOn(app.get(HealthService), 'getReadiness')
+      .mockRejectedValue(
+        new ServiceUnavailableException(
+          'Service dependencies are unavailable.',
+        ),
+      );
     return request(app.getHttpServer())
       .get('/health/ready')
       .expect(503)
@@ -362,7 +370,13 @@ describe('API endpoints (e2e)', () => {
       .expect(200)
       .expect([moduleRecord]);
 
-    expect(modulesService.list).toHaveBeenCalledWith({ status: 'active' });
+    expect(modulesService.list).toHaveBeenCalledWith(
+      { status: 'active', parentModuleId: undefined },
+      expect.objectContaining({
+        role: 'admin',
+        userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+      }),
+    );
   });
 
   it('/admin/modules denies a direct URL when the administrator lacks the Modules permission', async () => {
@@ -633,6 +647,10 @@ describe('API endpoints (e2e)', () => {
         q: 'licencia',
         sort: 'title',
         technicalStatus: 'ready',
+      }),
+      expect.objectContaining({
+        role: 'admin',
+        userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
       }),
     );
 

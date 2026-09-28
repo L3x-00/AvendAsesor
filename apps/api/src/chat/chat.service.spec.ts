@@ -1073,6 +1073,73 @@ describe('ChatService', () => {
     );
   });
 
+  it.each(['Quiero descargar el primer documento', 'Quiero descargarlos'])(
+    'usa el documento de la respuesta anterior al pedir «%s»',
+    async (question) => {
+      const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+      historyGateway.getConversationContext.mockResolvedValue({
+        conversationId,
+        messages: [
+          { content: '¿Qué documentos tienes sobre cargos?', role: 'user' },
+          {
+            content:
+              'El primer documento es Resolución de cargos docentes. [1]',
+            role: 'assistant',
+          },
+          { content: 'Con gusto, dime qué necesitas.', role: 'assistant' },
+        ],
+        selectedModuleId: null,
+      });
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      await collect(service, {
+        conversationId,
+        question,
+      });
+
+      expect(ragService.retrieve).toHaveBeenCalledWith(
+        question,
+        null,
+        [
+          '¿Qué documentos tienes sobre cargos?',
+          'Respuesta anterior: El primer documento es Resolución de cargos docentes. [1]',
+        ],
+        { forceContext: true },
+      );
+    },
+  );
+
+  it('no arrastra documentos anteriores al pedir una resolución con número propio', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: '¿Qué documentos tienes sobre cargos?', role: 'user' },
+        { content: 'Resolución de cargos docentes. [1]', role: 'assistant' },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      conversationId,
+      question: 'Quiero ver esa RM 123',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'Quiero ver esa resolución ministerial 123',
+      null,
+      ['¿Qué documentos tienes sobre cargos?'],
+      { forceContext: false },
+    );
+  });
+
   it('keeps the stored module when a continuation omits the optional module id', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({

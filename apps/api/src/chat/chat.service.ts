@@ -93,6 +93,20 @@ const LEAD_IN_WINDOW_CHARS = 400;
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
 
+/** Recupera el tema previo cuando se pide un documento por referencia indirecta. */
+function refersToPreviouslyMentionedDocument(question: string): boolean {
+  const text = question.toLocaleLowerCase('es');
+  // Un número de norma identifica un tema propio; no lo sustituimos por el
+  // documento citado en un turno anterior.
+  if (/\d/u.test(text)) return false;
+  return (
+    /\b(?:descarg\p{L}*|abrir|ver)\b/iu.test(text) &&
+    /\b(?:primero?|segundo?|tercero?|anterior(?:es)?|mencionad[oa]s?|ese|esa|esos|esas|descargarl[oa]s?|descargal[oa]s?)\b/iu.test(
+      text,
+    )
+  );
+}
+
 /** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
 export const RAG_TRUNCATION_NOTE =
   '(La respuesta se acortó por su extensión. Si necesitas más detalle, pregúntame por un punto específico).';
@@ -752,12 +766,33 @@ export class ChatService {
     const priorUserQuestions = conversationContext
       .filter((message) => message.role === 'user')
       .map((message) => message.content);
+    const documentFollowUp =
+      continuesConversation && refersToPreviouslyMentionedDocument(question);
+    const lastDocumentAnswer = documentFollowUp
+      ? [...conversationContext]
+          .reverse()
+          .find(
+            (message) =>
+              message.role === 'assistant' &&
+              /\b(?:documento|fuente|norma|resoluci[oó]n|anexo)\b/iu.test(
+                message.content,
+              ),
+          )
+      : null;
+    const retrievalContext = lastDocumentAnswer
+      ? [
+          ...priorUserQuestions,
+          `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
+        ]
+      : priorUserQuestions;
     const retrieval = await this.ragService.retrieve(
       question,
       selectedModuleId,
-      priorUserQuestions,
+      retrievalContext,
       {
-        forceContext: conversationContext.at(-1)?.role === 'clarification',
+        forceContext:
+          Boolean(lastDocumentAnswer) ||
+          conversationContext.at(-1)?.role === 'clarification',
       },
     );
 
