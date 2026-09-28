@@ -16,7 +16,11 @@ export interface RetrievedChunk {
   documentId: string;
   documentSituation: DocumentSituation;
   documentTitle: string;
+  /** Código del tipo documental (p. ej. RESOLUCION_MINISTERIAL). */
+  documentType?: string | null;
   documentVersionId: string;
+  /** Año de emisión del documento, si está registrado. */
+  issuanceYear?: number | null;
   lexicalScore: number;
   /** Present for the consultation-control search; legacy test doubles may omit it. */
   moduleAssociations?: RetrievedModuleAssociation[];
@@ -25,6 +29,8 @@ export interface RetrievedChunk {
   numeralReference: string | null;
   pageEnd: number;
   pageStart: number;
+  /** Número de resolución u otro identificador de la norma. */
+  resolutionNumber?: string | null;
   sectionTitle: string | null;
   semanticScore: number;
   versionNumber: number;

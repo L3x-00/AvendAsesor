@@ -100,7 +100,9 @@ export interface ChatSource {
   articleReference: string | null;
   documentSituation: RetrievedChunk['documentSituation'];
   documentTitle: string;
+  documentType: string | null;
   id: string;
+  issuanceYear: number | null;
   moduleName: string | null;
   numeralReference: string | null;
   pageEnd: number;
@@ -109,6 +111,7 @@ export interface ChatSource {
   relevanceScore: number;
   relatedModuleName: string | null;
   relatedSubmoduleName: string | null;
+  resolutionNumber: string | null;
   sectionTitle: string | null;
   versionNumber: number;
 }
@@ -394,7 +397,9 @@ function toCitationBundle(
       articleReference: source.articleReference,
       documentSituation: source.documentSituation,
       documentTitle: source.documentTitle,
+      documentType: source.documentType ?? null,
       id: sourceId,
+      issuanceYear: source.issuanceYear ?? null,
       moduleName: citationModuleName(source, citationModuleId),
       numeralReference: source.numeralReference,
       pageEnd: source.pageEnd,
@@ -403,6 +408,7 @@ function toCitationBundle(
       relevanceScore,
       relatedModuleName: relatedModule?.name ?? null,
       relatedSubmoduleName: relatedSubmodule?.name ?? null,
+      resolutionNumber: source.resolutionNumber ?? null,
       sectionTitle: source.sectionTitle,
       versionNumber: source.versionNumber,
     });

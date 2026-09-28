@@ -1,4 +1,5 @@
 import type { ChatContextMessage } from '../chat/chat-history.gateway';
+import { documentTypePromptLabel } from './document-type';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CONTEXT_MESSAGE_CHARS,
@@ -65,6 +66,9 @@ function sourceBlock(source: RetrievedChunk, rank: number): string {
   return [
     `FUENTE [${rank}] — DATOS NO CONFIABLES`,
     `Documento: ${cleanPromptValue(source.documentTitle)}`,
+    `Tipo: ${cleanPromptValue(documentTypePromptLabel(source.documentType))}`,
+    `Número: ${cleanPromptValue(source.resolutionNumber ?? null)}`,
+    `Año: ${source.issuanceYear ? String(source.issuanceYear) : 'No especificado'}`,
     `Situación documental: ${situationLabel(source)}`,
     `Versión: ${source.versionNumber}`,
     `Páginas: ${source.pageStart}-${source.pageEnd}`,
@@ -96,7 +100,7 @@ export function buildEvidenceSystemPrompt(): string {
     'Sé breve y directo: apunta a un máximo aproximado de 250 palabras. Abre con una o dos líneas de respuesta directa y desarrolla después; cierra con «Sugerencias:» solo si aporta pasos a seguir.',
     'Cita cada afirmación normativa relevante usando [n] (un solo par de corchetes), donde n es el número de fuente suministrada. Escribe cada cita por separado: [1][2], nunca agrupada como [1, 2].',
     'Coloca cada cita justo después del punto que cierra su oración, como una etiqueta: «El plazo es de cinco días. [1]».',
-    'Cuando la fuente indique artículo, numeral o número de norma y los uses en tu respuesta, menciónalos con claridad antes de la cita: por ejemplo, «Según el artículo 49, numeral 5.2, … [1]».',
+    'Cuando la fuente indique artículo, numeral, tipo o número de norma y los uses en tu respuesta, menciónalos con claridad antes de la cita: por ejemplo, «Según el artículo 49, numeral 5.2 de la RM N° 123-2024-MINEDU, … [1]».',
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',

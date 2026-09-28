@@ -72,6 +72,25 @@ describe('buildEvidenceUserPrompt', () => {
     expect(prompt.endsWith('¿Cuál es el plazo?')).toBe(true);
   });
 
+  it('incluye tipo, número y año de la norma en cada fuente', () => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Cuál es el plazo?',
+      [],
+      [
+        {
+          ...source,
+          documentType: 'RESOLUCION_MINISTERIAL',
+          issuanceYear: 2024,
+          resolutionNumber: 'RM-123-2024-MINEDU',
+        },
+      ],
+    );
+
+    expect(prompt).toContain('Tipo: Resolución Ministerial (RM)');
+    expect(prompt).toContain('Número: RM-123-2024-MINEDU');
+    expect(prompt).toContain('Año: 2024');
+  });
+
   it('removes controls and neutralizes real source-delimiter injection', () => {
     const prompt = buildEvidenceUserPrompt(
       'Consulta',

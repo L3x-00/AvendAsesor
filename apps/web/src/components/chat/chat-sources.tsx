@@ -1,3 +1,4 @@
+import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
 
@@ -75,6 +76,16 @@ function situationLabel(source: ChatSource): string {
   }
 }
 
+/** «Resolución Ministerial · RM-123-2024 · 2024» cuando hay datos. */
+function normReference(source: ChatSource): string | null {
+  const parts = [
+    source.documentType ? documentTypeLabel(source.documentType) : null,
+    source.resolutionNumber,
+    source.issuanceYear ? String(source.issuanceYear) : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(" · ") : null;
+}
+
 function SourceTable({
   caption,
   messageId,
@@ -126,6 +137,11 @@ function SourceTable({
                   <strong className={styles.documentTitle}>
                     {source.documentTitle}
                   </strong>
+                  {normReference(source) ? (
+                    <span className={styles.documentMeta}>
+                      Norma: {normReference(source)}
+                    </span>
+                  ) : null}
                   <span className={styles.documentMeta}>
                     Proceso: {source.moduleName ?? "No especificado"}
                   </span>

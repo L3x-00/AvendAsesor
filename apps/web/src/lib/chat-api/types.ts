@@ -21,7 +21,9 @@ export const chatSourceSchema = z.object({
   articleReference: z.string().max(500).nullable(),
   documentSituation: z.enum(["current", "replaced", "archived"]),
   documentTitle: z.string().min(1).max(500),
+  documentType: z.string().max(64).nullish(),
   id: z.string().uuid(),
+  issuanceYear: z.number().int().nullable().optional(),
   moduleName: z.string().max(255).nullable(),
   numeralReference: z.string().max(255).nullable(),
   pageEnd: z.number().int().min(1).max(300),
@@ -30,6 +32,7 @@ export const chatSourceSchema = z.object({
   relevanceScore: z.number().min(0).max(1),
   relatedModuleName: z.string().max(255).nullable().optional(),
   relatedSubmoduleName: z.string().max(255).nullable().optional(),
+  resolutionNumber: z.string().max(255).nullish(),
   sectionTitle: z.string().max(500).nullable(),
   versionNumber: z.number().int().positive(),
 });
