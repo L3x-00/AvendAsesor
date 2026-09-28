@@ -128,24 +128,71 @@ describe("ChatHistoryList", () => {
     );
   });
 
-  it("agrupa por fecha en hora de Perú", () => {
+  it("agrupa por módulo y submódulo, y deja los chats libres en Consultas generales", () => {
+    render(
+      <ChatHistoryList
+        conversations={[
+          {
+            ...conversation,
+            id: "a1a1a1a1-1111-4111-8111-111111111111",
+            lastQuestion: "¿Cuánto dura la licencia?",
+            selectedModuleId: "11111111-1111-4111-8111-111111111111",
+            selectedModuleName: "Licencias",
+            selectedModuleParentId: null,
+            selectedModuleParentName: null,
+          },
+          {
+            ...conversation,
+            id: "b2b2b2b2-2222-4222-8222-222222222222",
+            lastQuestion: "¿Y el plazo de la escala?",
+            selectedModuleId: "22222222-2222-4222-8222-222222222222",
+            selectedModuleName: "Escala",
+            selectedModuleParentId: "33333333-3333-4333-8333-333333333333",
+            selectedModuleParentName: "Remuneraciones",
+            title: "Primera pregunta del tema",
+          },
+          {
+            ...conversation,
+            id: "c3c3c3c3-3333-4333-8333-333333333333",
+            lastQuestion: null,
+            selectedModuleId: null,
+            title: "Consulta libre",
+          },
+        ]}
+        nextCursor={null}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Licencias" })).toBeVisible();
+    const remuneraciones = screen.getByRole("region", {
+      name: "Remuneraciones",
+    });
+    expect(within(remuneraciones).getByText("Submódulo: Escala")).toBeVisible();
+    // La última pregunta manda sobre el título de la conversación.
+    expect(
+      within(remuneraciones).getByText("¿Y el plazo de la escala?"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Consultas generales" }),
+    ).toBeVisible();
+  });
+
+  it("la fecha por consulta se sigue mostrando en hora de Perú", () => {
     vi.useFakeTimers({ now: new Date("2026-09-25T15:00:00.000Z") });
     try {
       render(
         <ChatHistoryList
           conversations={[
-            { ...conversation, id: "a", title: "Hoy", updatedAt: "2026-09-25T14:00:00.000Z" },
-            { ...conversation, id: "b", title: "Ayer", updatedAt: "2026-09-24T20:00:00.000Z" },
-            { ...conversation, id: "c", title: "Antes", updatedAt: "2026-08-01T12:00:00.000Z" },
+            {
+              ...conversation,
+              updatedAt: "2026-09-25T14:00:00.000Z",
+            },
           ]}
           nextCursor={null}
         />,
       );
 
-      const today = screen.getByRole("region", { name: "Hoy" });
-      expect(within(today).getByText("Hoy, 9:00 a. m.")).toBeVisible();
-      expect(screen.getByRole("region", { name: "Ayer" })).toBeVisible();
-      expect(screen.getByRole("region", { name: "Anteriores" })).toBeVisible();
+      expect(screen.getByText("Hoy, 9:00 a. m.")).toBeVisible();
     } finally {
       vi.useRealTimers();
     }

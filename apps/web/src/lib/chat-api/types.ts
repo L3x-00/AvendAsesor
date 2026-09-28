@@ -58,7 +58,13 @@ export type ChatSourceDownload = z.infer<typeof chatSourceDownloadSchema>;
 export const chatConversationSchema = z.object({
   createdAt: timestampSchema,
   id: z.string().uuid(),
+  /** Última pregunta; el título conserva la primera. */
+  lastQuestion: z.string().max(8_000).nullable().optional(),
   selectedModuleId: z.string().uuid().nullable(),
+  /** Snapshot del tema elegido (ausente en respuestas anteriores). */
+  selectedModuleName: z.string().max(255).nullable().optional(),
+  selectedModuleParentId: z.string().uuid().nullable().optional(),
+  selectedModuleParentName: z.string().max(255).nullable().optional(),
   title: z.string().nullable(),
   updatedAt: timestampSchema,
 });

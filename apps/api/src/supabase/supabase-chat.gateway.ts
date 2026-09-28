@@ -364,7 +364,11 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
     return (data ?? []).map((conversation) => ({
       createdAt: conversation.created_at,
       id: conversation.id,
+      lastQuestion: conversation.last_question,
       selectedModuleId: conversation.selected_module_id,
+      selectedModuleName: conversation.selected_module_name,
+      selectedModuleParentId: conversation.selected_module_parent_id,
+      selectedModuleParentName: conversation.selected_module_parent_name,
       title: conversation.title,
       updatedAt: conversation.updated_at,
     }));

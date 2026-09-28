@@ -40,7 +40,13 @@ export interface FaqMemoryObservationInput {
 export interface ChatConversationSummary {
   createdAt: string;
   id: string;
+  /** Última pregunta de la conversación; el título conserva la primera. */
+  lastQuestion: string | null;
   selectedModuleId: string | null;
+  /** Snapshot del módulo/submódulo elegido al crear la conversación. */
+  selectedModuleName: string | null;
+  selectedModuleParentId: string | null;
+  selectedModuleParentName: string | null;
   title: string | null;
   updatedAt: string;
 }
