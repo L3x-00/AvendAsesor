@@ -14,12 +14,50 @@ describe('UserAdministrationService', () => {
     createUser: jest.fn(),
     listAuditEvents: jest.fn(),
     listUsers: jest.fn(),
+    sendPasswordReset: jest.fn(),
     updateAccessWindow: jest.fn(),
     updateUser: jest.fn(),
   };
-  const service = new UserAdministrationService(gateway);
+  const configService = {
+    get: jest.fn((key: string) =>
+      key === 'WEB_ORIGIN' ? 'https://web.avend.example/' : undefined,
+    ),
+  };
+  const service = new UserAdministrationService(
+    gateway,
+    configService as never,
+  );
 
   beforeEach(() => jest.clearAllMocks());
+
+  it('envía el restablecimiento con el origen web y registra el actor', async () => {
+    gateway.sendPasswordReset.mockResolvedValue(undefined);
+
+    await expect(
+      service.sendPasswordReset(
+        '70fe3e8e-5a9d-4c7d-8a86-303b49e4c2d6',
+        authorization,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(gateway.sendPasswordReset).toHaveBeenCalledWith({
+      actorId: authorization.userId,
+      redirectTo: 'https://web.avend.example/auth/update-password',
+      targetUserId: '70fe3e8e-5a9d-4c7d-8a86-303b49e4c2d6',
+    });
+  });
+
+  it('falla de forma cerrada si no hay origen web configurado', async () => {
+    configService.get.mockReturnValueOnce(undefined);
+
+    await expect(
+      service.sendPasswordReset(
+        '70fe3e8e-5a9d-4c7d-8a86-303b49e4c2d6',
+        authorization,
+      ),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(gateway.sendPasswordReset).not.toHaveBeenCalled();
+  });
 
   it('preserves the bounded 50-user legacy default and a null search', async () => {
     gateway.listUsers.mockResolvedValue({

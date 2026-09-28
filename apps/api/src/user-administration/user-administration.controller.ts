@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   Post,
   UploadedFile,
   UseInterceptors,
@@ -114,6 +116,18 @@ export class UserAdministrationController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<OperationalAuditEvent[]> {
     return this.userAdministrationService.listAuditEvents(dto, authorization);
+  }
+
+  @Post(':id/password-reset')
+  @HttpCode(HttpStatus.ACCEPTED)
+  sendPasswordReset(
+    @Param('id', new ParseUUIDPipe()) userId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<void> {
+    return this.userAdministrationService.sendPasswordReset(
+      userId,
+      authorization,
+    );
   }
 
   @Patch(':id/access-window')

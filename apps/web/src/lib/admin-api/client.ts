@@ -465,6 +465,14 @@ export class AdminApiClient {
     );
   }
 
+  /** Envía el enlace de restablecimiento; nunca maneja la contraseña. */
+  async sendPasswordReset(userId: string): Promise<void> {
+    await this.send(`/admin/users/${userId}/password-reset`, {
+      body: JSON.stringify({}),
+      method: "POST",
+    });
+  }
+
   async updateAdministrativeUserAccessWindow(
     userId: string,
     payload: {

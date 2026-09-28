@@ -326,6 +326,13 @@ export interface SupabaseDatabase {
     };
     Views: Record<string, never>;
     Functions: {
+      record_user_password_reset: {
+        Args: {
+          p_actor_id: string;
+          p_target_user_id: string;
+        };
+        Returns: null;
+      };
       add_governed_document_version: {
         Args: {
           p_actor_id: string;

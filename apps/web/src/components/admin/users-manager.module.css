@@ -504,3 +504,62 @@
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
+
+/* Iconos de acciones y vigencias rápidas (B5). */
+.summaryIcon {
+  flex: none;
+  height: 1.1rem;
+  margin-right: 0.45rem;
+  width: 1.1rem;
+}
+
+.manageSummaryDanger {
+  color: var(--avend-danger);
+}
+
+.validityRow {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.validityButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.validityButton {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+}
+
+.validityButton:hover {
+  border-color: var(--avend-accent);
+  color: var(--avend-accent-strong);
+}
+
+.validityButton:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.details {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+.details dt {
+  color: var(--avend-text-muted);
+  font-weight: 600;
+}
+
+.details dd {
+  margin: 0;
+}

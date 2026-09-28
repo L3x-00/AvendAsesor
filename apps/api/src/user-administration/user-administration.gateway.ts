@@ -97,6 +97,16 @@ export interface UserAdministrationGateway {
     actorId: string;
     limit: number;
   }): Promise<OperationalAuditEvent[]>;
+  /**
+   * Envía a la persona un enlace para restablecer su contraseña (recuperación
+   * del proveedor) y registra el envío en la auditoría. Nunca maneja
+   * contraseñas ni las muestra.
+   */
+  sendPasswordReset(input: {
+    actorId: string;
+    redirectTo: string;
+    targetUserId: string;
+  }): Promise<void>;
   listUsers(input: {
     accessState: AdministrativeUserAccessState | null;
     actorId: string;

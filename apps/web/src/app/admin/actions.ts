@@ -698,6 +698,21 @@ export async function updateAdministrativeUserAction(
   });
 }
 
+export async function sendPasswordResetAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const userId = requiredText(formData, "userId", "El usuario");
+    await client.sendPasswordReset(userId);
+    return {
+      message:
+        "Enlace enviado. La persona recibirá un correo para crear una contraseña nueva.",
+      status: "success",
+    };
+  });
+}
+
 export async function createAdministrativeUserAction(
   _previousState: AdminActionState,
   formData: FormData,

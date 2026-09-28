@@ -3,7 +3,9 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { AuthorizationContext } from '../authorization';
 import { SUPABASE_USER_ADMINISTRATION_GATEWAY } from '../supabase/supabase.constants';
 import type { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
@@ -45,7 +47,31 @@ export class UserAdministrationService {
   constructor(
     @Inject(SUPABASE_USER_ADMINISTRATION_GATEWAY)
     private readonly gateway: UserAdministrationGateway,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * Envía un enlace de restablecimiento de contraseña al correo del usuario.
+   * Solo superadministradores (guard del controlador) y queda auditado.
+   */
+  async sendPasswordReset(
+    userId: string,
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    const webOrigin = this.configService.get<string>('WEB_ORIGIN');
+
+    if (!webOrigin) {
+      throw new ServiceUnavailableException(
+        'The web origin is not configured.',
+      );
+    }
+
+    await this.gateway.sendPasswordReset({
+      actorId: authorization.userId,
+      redirectTo: `${webOrigin.replace(/\/+$/u, '')}/auth/update-password`,
+      targetUserId: userId,
+    });
+  }
 
   listAuditEvents(
     dto: ListOperationalAuditEventsQueryDto,
