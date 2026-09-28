@@ -12,11 +12,8 @@ import type {
   ChatTurnCompletion,
   ChatTurnStart,
 } from './chat-history.gateway';
-import {
-  ChatService,
-  noEvidenceMessage,
-  type ChatStreamEvent,
-} from './chat.service';
+import { ChatService, type ChatStreamEvent } from './chat.service';
+import { buildConversationalReply } from './intent/conversational-replies';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -238,6 +235,10 @@ class RecordingAnswerGateway implements AnswerGateway {
   async *generate(input: AnswerGatewayInput): AsyncIterable<string> {
     await Promise.resolve();
     this.inputs.push(input);
+    if (input.mode === 'advisory') {
+      yield 'Orientación general para resolver el trámite.';
+      return;
+    }
     yield `Orientación sustentada en ${input.sources[0]?.documentTitle}. [1]`;
   }
 }
@@ -409,13 +410,13 @@ describe('ChatService + RagService integration', () => {
     expect(answers.inputs).toHaveLength(0);
   });
 
-  it('registers no evidence and does not invoke the provider', async () => {
+  it('sin señal educativa registra el pendiente sin invocar al proveedor', async () => {
     const events = await collect(service, {
-      question: '¿Cuáles son los requisitos de un trámite fuera del corpus?',
+      question: '¿Cuál es la mejor época para sembrar papa?',
     });
 
     expect(events).toContainEqual({
-      data: { message: noEvidenceMessage('current') },
+      data: { message: buildConversationalReply('unrelated_no_evidence') },
       type: 'no_evidence',
     });
     expect(history.completions[0]).toMatchObject({
@@ -424,6 +425,31 @@ describe('ChatService + RagService integration', () => {
       unansweredReason: 'insufficient_evidence',
     });
     expect(answers.inputs).toHaveLength(0);
+  });
+
+  it('sin sustento en el corpus ofrece orientación general y registra el hueco', async () => {
+    const events = await collect(service, {
+      question: '¿Cuáles son los requisitos de un trámite fuera del corpus?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'token',
+      'done',
+    ]);
+    const token = events[1] as { data: { text: string } };
+    expect(token.data.text).toContain(
+      'Orientación general (sin cita de norma):',
+    );
+    expect(token.data.text).not.toMatch(/\[\d+\]/u);
+    expect(answers.inputs).toHaveLength(1);
+    expect(answers.inputs[0]?.mode).toBe('advisory');
+    expect(history.completions[0]).toMatchObject({
+      qualitySignals: ['support_insufficient'],
+      replyRole: 'assistant',
+      sources: [],
+      unansweredReason: 'insufficient_evidence',
+    });
   });
 
   it('retrieves a newly incorporated version without losing the prior document', async () => {

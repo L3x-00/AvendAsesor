@@ -12,6 +12,16 @@ export const MAX_RAG_ANSWER_CHARS = 20_000;
 /** Tope de tokens de salida del proveedor: acota coste/latencia y mantiene la
  * respuesta muy por debajo de MAX_RAG_ANSWER_CHARS (evita el corte por longitud). */
 export const MAX_RAG_ANSWER_TOKENS = 1_500;
+/** Orientación general (modo asesor): breve y acotada. */
+export const MAX_RAG_ADVISORY_TOKENS = 600;
+export const MAX_RAG_ADVISORY_CHARS = 4_000;
+/** Etiqueta visible de una respuesta de orientación general. */
+export const RAG_ADVISORY_LEAD_IN = 'Orientación general (sin cita de norma):';
+/** Cierre determinista: verificación oficial y registro para administración. */
+export const RAG_ADVISORY_CLOSING =
+  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU o en tu UGEL/DRE antes de decidir. Dejé tu consulta registrada para que la administración incorpore el documento que la respalde.';
+/** El modelo la emite si el pedido se sale del ámbito educativo. */
+export const RAG_ADVISORY_OUT_OF_SCOPE_MARKER = '[[FUERA_DE_AMBITO]]';
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;
 export const MAX_CHAT_CONTEXT_CHARS = 10_000;
 export const MAX_CHAT_CONTEXT_MESSAGES = 12;

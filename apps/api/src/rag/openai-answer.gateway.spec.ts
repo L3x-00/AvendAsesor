@@ -157,4 +157,53 @@ describe('OpenAiAnswerGateway', () => {
       expect.any(Object),
     );
   });
+
+  it('en modo asesor usa la política de orientación general sin bloque de fuentes', async () => {
+    mockCreate.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield { choices: [{ delta: { content: 'Orientación general.' } }] };
+      },
+    });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : 'gpt-4o-mini',
+      ),
+    } as never);
+
+    const tokens: string[] = [];
+    for await (const token of gateway.generate({
+      conversationContext: [],
+      mode: 'advisory',
+      question: 'Consulta',
+      sources: [],
+    })) {
+      tokens.push(token);
+    }
+
+    expect(tokens).toEqual(['Orientación general.']);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_tokens: 600,
+        temperature: 0.4,
+      }),
+      expect.any(Object),
+    );
+    const calls = mockCreate.mock.calls as Array<
+      [
+        {
+          messages: Array<{ content: string; role: string }>;
+        },
+      ]
+    >;
+    const messages = calls[0]?.[0].messages;
+    const systemMessage = messages?.find(
+      (message) => message.role === 'system',
+    );
+    const userMessage = messages?.find((message) => message.role === 'user');
+
+    expect(systemMessage?.content).toContain('ORIENTACIÓN GENERAL');
+    expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
+    expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
+  });
 });
