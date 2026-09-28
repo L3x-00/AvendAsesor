@@ -291,6 +291,42 @@ describe('ChatService — lineamientos del cliente', () => {
         expect(completion()?.replyRole).toBe('assistant');
       },
     );
+
+    it('reescribe una cita agrupada en citas individuales, en pantalla y al guardar', async () => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'evidence',
+        resolvedModule: { id: MODULE_ID, name: 'Licencias' },
+        sources: [source],
+        topRelevanceScore: 0.9,
+      });
+      answerGateway.generate.mockReturnValue(
+        tokens(
+          'Los documentos indican que la licencia se solicita dentro de 5 días [1, 2].',
+        ),
+      );
+
+      const events = await collect();
+
+      const streamed = events
+        .filter((event) => event.type === 'token')
+        .map((event) => event.data.text)
+        .join('');
+      expect(streamed).toContain('días [1][2].');
+      expect(streamed).not.toContain('[1, 2]');
+      expect(completion()?.answer).toContain('días [1][2].');
+    });
+  });
+
+  it('saluda según el rol: el administrador recibe el recordatorio de su panel', async () => {
+    const events = await collect({
+      authorization: { ...authorization, role: 'admin' },
+      question: 'Hola',
+    });
+
+    const conversational = events.find(
+      (event) => event.type === 'conversational',
+    ) as { data: { message: string } } | undefined;
+    expect(conversational?.data.message).toContain('panel de administración');
   });
 
   it('una aclaración con coincidencias débiles no cita documentos como orientación', async () => {
