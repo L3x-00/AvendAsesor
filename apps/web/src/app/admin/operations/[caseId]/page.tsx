@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { CaseDocumentUpload } from "@/components/admin/case-document-upload";
 import { FieldError } from "@/components/ui/form-field";
 import { ConsultationRouteFields } from "@/components/admin/consultation-route-fields";
 import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
+import { getAdminApiUrl } from "@/lib/admin-api/config";
 import type {
   ManagedDocument,
   ManagedModuleSummary,
@@ -89,6 +91,29 @@ function eventDescription(event: {
   return null;
 }
 
+function missingDocumentGuidance(issueType: string): string {
+  if (issueType === "support_insufficient") {
+    return "No se encontró sustento documental para esta consulta. Carga el documento que la respalde: quedará asociado al módulo del tema y vinculado al caso.";
+  }
+  if (
+    issueType === "support_partial" ||
+    issueType === "citation_insufficient"
+  ) {
+    return "La respuesta quedó con sustento parcial o citas insuficientes: puede faltar un documento o una sección. Súbela aquí y quedará vinculada al caso.";
+  }
+  if (issueType === "stale_document") {
+    return "La respuesta citó documentación no vigente. Verifica la versión vigente y cárgala aquí si falta.";
+  }
+  return "Revisa el caso; si falta un documento que sustente la respuesta, cárgalo aquí y quedará vinculado al caso.";
+}
+
+const SUPPORT_ISSUES = new Set([
+  "citation_insufficient",
+  "stale_document",
+  "support_insufficient",
+  "support_partial",
+]);
+
 export default async function ConsultationCasePage({
   params,
 }: {
@@ -121,6 +146,18 @@ export default async function ConsultationCasePage({
   }
   const roots = modules.filter((module) => module.parentModuleId === null);
   const submodules = modules.filter((module) => module.parentModuleId !== null);
+  const caseIsOpen =
+    caseData.status === "pending" || caseData.status === "in_review";
+  const showMissingDocument =
+    access.modulesAccess && caseIsOpen && SUPPORT_ISSUES.has(caseData.issueType);
+  const missingDocumentModuleId =
+    caseData.detectedSubmoduleId ??
+    caseData.detectedModuleId ??
+    caseData.requestedModuleId;
+  const missingDocumentModuleLabel =
+    caseData.detectedSubmoduleName ??
+    caseData.detectedModuleName ??
+    caseData.requestedModuleName;
 
   return (
     <AdminPage
@@ -212,6 +249,38 @@ export default async function ConsultationCasePage({
             </p>
           ) : null}
         </section>
+
+        {showMissingDocument ? (
+          <section
+            aria-labelledby="case-missing-title"
+            className={styles.section}
+          >
+            <h2 className={styles.detailTitle} id="case-missing-title">
+              Qué falta para resolver
+            </h2>
+            <p className={styles.description}>
+              {missingDocumentGuidance(caseData.issueType)}
+            </p>
+            {missingDocumentModuleId ? (
+              <CaseDocumentUpload
+                apiBaseUrl={getAdminApiUrl()}
+                caseId={caseId}
+                moduleId={missingDocumentModuleId}
+                moduleLabel={missingDocumentModuleLabel ?? "el tema del caso"}
+                suggestedTitle={
+                  (caseData.questionSnapshot ?? "").trim().slice(0, 200) ||
+                  "Documento de sustento"
+                }
+              />
+            ) : (
+              <p className={styles.meta}>
+                Este caso no tiene un módulo identificado. Carga el documento
+                desde <Link href="/admin/modules">Módulos</Link> y luego
+                vincúlalo en «Documentos vinculados».
+              </p>
+            )}
+          </section>
+        ) : null}
 
         <section className={styles.section} aria-labelledby="case-action-title">
           <h2 className={styles.detailTitle} id="case-action-title">

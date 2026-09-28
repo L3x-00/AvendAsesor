@@ -27,11 +27,19 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
-function renderUploadForm(endpoint = "/admin/documents", includeModule = true) {
+function renderUploadForm(
+  endpoint = "/admin/documents",
+  includeModule = true,
+  onUploaded?: (created: { id: string; title: string }) =>
+    | Promise<{ message?: string; ok: boolean } | void>
+    | { message?: string; ok: boolean }
+    | void,
+) {
   render(
     <DocumentPdfUploadForm
       apiBaseUrl="https://api.avend.example"
       endpoint={endpoint}
+      onUploaded={onUploaded}
       submitLabel="Cargar PDF"
       successMessage="Documento PDF creado."
     >
@@ -111,6 +119,68 @@ describe("DocumentPdfUploadForm", () => {
     expect(payload.get("issuanceYear")).toBe("2026");
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Título")).toHaveValue("");
+  });
+
+  it("vincula el documento recién creado antes de avisar del éxito", async () => {
+    const user = userEvent.setup();
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: "verified-token" } },
+      error: null,
+    });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: "document-id", title: "Norma educativa" }),
+        { status: 201 },
+      ),
+    );
+    const onUploaded = vi.fn().mockResolvedValue({ ok: true });
+    renderUploadForm("/admin/documents", true, onUploaded);
+    const file = new File(["%PDF-1.7"], "norma.pdf", {
+      type: "application/pdf",
+    });
+
+    await user.upload(screen.getByLabelText("Archivo"), file);
+    await user.type(screen.getByLabelText("Título"), "Norma educativa");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
+
+    await waitFor(() =>
+      expect(onUploaded).toHaveBeenCalledWith({
+        id: "document-id",
+        title: "Norma educativa",
+      }),
+    );
+    expect(
+      await screen.findByText("Documento PDF creado."),
+    ).toBeInTheDocument();
+  });
+
+  it("avisa si la vinculación posterior falla sin perder la carga", async () => {
+    const user = userEvent.setup();
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: "verified-token" } },
+      error: null,
+    });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ id: "document-id" }), { status: 201 }),
+    );
+    const onUploaded = vi.fn().mockResolvedValue({
+      message: "No se pudo vincular al caso.",
+      ok: false,
+    });
+    renderUploadForm("/admin/documents", true, onUploaded);
+    const file = new File(["%PDF-1.7"], "norma.pdf", {
+      type: "application/pdf",
+    });
+
+    await user.upload(screen.getByLabelText("Archivo"), file);
+    await user.type(screen.getByLabelText("Título"), "Norma educativa");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
+
+    expect(
+      await screen.findByText(/No se pudo vincular al caso\./),
+    ).toBeInTheDocument();
+    // Sin modal de éxito: la carga se completó, pero falta la vinculación.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("keeps the PDF and entered fields when the API rejects the upload", async () => {
