@@ -501,4 +501,81 @@ describe('SupabaseUserAdministrationGatewayAdapter', () => {
       '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
     );
   });
+
+  it('envía el enlace de recuperación y audita el intento sin exponer la contraseña', async () => {
+    const getUserById = jest.fn().mockResolvedValue({
+      data: { user: { email: 'docente@example.test', id: 'target-id' } },
+      error: null,
+    });
+    const resetPasswordForEmail = jest
+      .fn()
+      .mockResolvedValue({ data: {}, error: null });
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    const gateway = new SupabaseUserAdministrationGatewayAdapter({
+      auth: { admin: { getUserById }, resetPasswordForEmail },
+      rpc,
+    } as unknown as SupabaseServerClient);
+
+    await expect(
+      gateway.sendPasswordReset({
+        actorId: 'actor-id',
+        redirectTo: 'https://web.avend.example/auth/update-password',
+        targetUserId: 'target-id',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('docente@example.test', {
+      redirectTo: 'https://web.avend.example/auth/update-password',
+    });
+    expect(rpc).toHaveBeenCalledWith('record_user_password_reset', {
+      p_actor_id: 'actor-id',
+      p_target_user_id: 'target-id',
+    });
+  });
+
+  it('falla de forma cerrada si la cuenta no existe y no llama al proveedor', async () => {
+    const getUserById = jest.fn().mockResolvedValue({
+      data: { user: null },
+      error: { message: 'not found' },
+    });
+    const resetPasswordForEmail = jest.fn();
+    const rpc = jest.fn();
+    const gateway = new SupabaseUserAdministrationGatewayAdapter(
+      clientWithAuth(rpc, { getUserById, resetPasswordForEmail }),
+    );
+
+    await expect(
+      gateway.sendPasswordReset({
+        actorId: 'actor-id',
+        redirectTo: 'https://web.avend.example/auth/update-password',
+        targetUserId: 'target-id',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(resetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it('si la auditoría falla, el correo ya enviado no se convierte en error', async () => {
+    const getUserById = jest.fn().mockResolvedValue({
+      data: { user: { email: 'docente@example.test', id: 'target-id' } },
+      error: null,
+    });
+    const resetPasswordForEmail = jest
+      .fn()
+      .mockResolvedValue({ data: {}, error: null });
+    const rpc = jest
+      .fn()
+      .mockResolvedValue({ data: null, error: { message: 'audit down' } });
+    const gateway = new SupabaseUserAdministrationGatewayAdapter({
+      auth: { admin: { getUserById }, resetPasswordForEmail },
+      rpc,
+    } as unknown as SupabaseServerClient);
+
+    await expect(
+      gateway.sendPasswordReset({
+        actorId: 'actor-id',
+        redirectTo: 'https://web.avend.example/auth/update-password',
+        targetUserId: 'target-id',
+      }),
+    ).resolves.toBeUndefined();
+  });
 });

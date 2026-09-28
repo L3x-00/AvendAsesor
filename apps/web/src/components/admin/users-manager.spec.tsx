@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/admin/actions", () => ({
   createAdministrativeUserAction: vi.fn(async () => ({ status: "idle" })),
+  sendPasswordResetAction: vi.fn(async () => ({ status: "idle" })),
   updateAccessWindowAction: vi.fn(async () => ({ status: "idle" })),
   updateAdministrativeUserAction: vi.fn(async () => ({ status: "idle" })),
 }));
@@ -243,16 +244,17 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const maria = rowFor("María Docente");
-    expect(within(maria).getByText("maria@example.test")).toBeVisible();
-    expect(within(maria).getByText("987654321")).toBeVisible();
+    // El dato se ve en la fila y también en la ficha de solo lectura.
+    expect(within(maria).getAllByText("maria@example.test").length).toBe(2);
+    expect(within(maria).getAllByText("987654321").length).toBe(2);
 
     const ana = rowFor("Ana PorVencer");
-    expect(within(ana).getByText("Superadministrador Demo")).toBeVisible();
+    expect(within(ana).getAllByText("Superadministrador Demo").length).toBe(2);
 
     // Sin correo ni celular se dice explicitamente, no se deja en blanco.
     const luis = rowFor("Luis Expirado");
-    expect(within(luis).getByText("Sin correo")).toBeVisible();
-    expect(within(luis).getByText("Sin celular")).toBeVisible();
+    expect(within(luis).getAllByText("Sin correo").length).toBe(2);
+    expect(within(luis).getAllByText("Sin celular").length).toBe(2);
   });
 
   it("offers Excel import and an export that carries the visible filters", () => {
@@ -343,5 +345,53 @@ describe("UsersManager", () => {
     expect(
       screen.getByRole("searchbox", { name: "Buscar usuario" }),
     ).toHaveValue("María");
+  });
+
+  it("ofrece vigencias rápidas de 3, 6 y 12 meses y anuncia la fecha", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    // Ana no tiene fecha de inicio: la vigencia rápida la completa.
+    const ana = rowFor("Ana PorVencer");
+    fireEvent.click(within(ana).getByText("Extender vigencia"));
+    fireEvent.click(within(ana).getByRole("button", { name: "6 meses" }));
+
+    expect(within(ana).getByText(/Vigencia hasta/)).toBeVisible();
+    // 2026-09-05 + 6 meses = 2027-03-05 en Lima.
+    expect(within(ana).getByLabelText("Fin")).toHaveValue("2027-03-05");
+    expect(within(ana).getByLabelText("Inicio")).toHaveValue("2026-09-05");
+  });
+
+  it("una fecha de inicio existente no se pisa al usar la vigencia rápida", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    const maria = rowFor("María Docente");
+    fireEvent.click(within(maria).getByText("Extender vigencia"));
+    fireEvent.click(within(maria).getByRole("button", { name: "3 meses" }));
+
+    // María ya tenía inicio: se conserva y solo cambia el fin.
+    expect(within(maria).getByLabelText("Inicio")).toHaveValue("2026-01-01");
+    expect(within(maria).getByLabelText("Fin")).toHaveValue("2026-12-05");
+  });
+
+  it("solo las cuentas activas ofrecen suspender y todas ofrecen el enlace de contraseña", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    // María, Ana y Luis están activos; Pedro está pausado.
+    expect(screen.getAllByText("Ver ficha")).toHaveLength(4);
+    expect(screen.getAllByText("Enviar enlace de contraseña")).toHaveLength(4);
+    expect(
+      screen.getAllByText("Suspender acceso", { selector: "summary" }),
+    ).toHaveLength(3);
+  });
+
+  it("la ficha muestra el estado de la cuenta y quién la creó", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    const pedro = rowFor("Pedro Pausado");
+    fireEvent.click(within(pedro).getByText("Ver ficha"));
+
+    expect(within(pedro).getByText("Estado de la cuenta")).toBeVisible();
+    expect(within(pedro).getAllByText("Pausada").length).toBeGreaterThan(0);
+    expect(within(pedro).getByText("Creado por")).toBeVisible();
   });
 });

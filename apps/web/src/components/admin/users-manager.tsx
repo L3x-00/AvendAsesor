@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useId } from "react";
+import { type ReactNode, useId, useState } from "react";
 import {
   createAdministrativeUserAction,
+  sendPasswordResetAction,
   updateAccessWindowAction,
   updateAdministrativeUserAction,
 } from "@/app/admin/actions";
@@ -130,12 +131,81 @@ const BADGE_CLASS: Record<AdministrativeUser["accessState"], string> = {
   por_vencer: styles.badgeExpiring,
 };
 
+/** Icono de las acciones de fila; siempre acompaña a una etiqueta de texto. */
+function ManageIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.summaryIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      {children}
+    </svg>
+  );
+}
+
+/**
+ * Fecha fin resultante de sumar meses al día de hoy (Lima). El día llega del
+ * servidor para que el cálculo coincida entre servidor y navegador.
+ */
+function quickValidity(
+  today: string,
+  months: number,
+): { expiresAt: string; label: string; startAt: string } {
+  const base = new Date(`${today}T12:00:00.000Z`);
+  const target = new Date(
+    Date.UTC(
+      base.getUTCFullYear(),
+      base.getUTCMonth() + months,
+      base.getUTCDate(),
+      12,
+    ),
+  );
+  return {
+    expiresAt: toDateInputValue(target.toISOString()),
+    label: accessDayFormatter.format(target),
+    startAt: toDateInputValue(base.toISOString()),
+  };
+}
+
+function QuickValidityButtons({
+  onApply,
+}: {
+  onApply: (months: number) => void;
+}) {
+  return (
+    <div
+      aria-label="Vigencias rápidas"
+      className={styles.validityButtons}
+      role="group"
+    >
+      {[3, 6, 12].map((months) => (
+        <button
+          className={styles.validityButton}
+          key={months}
+          onClick={() => onApply(months)}
+          type="button"
+        >
+          {months} meses
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function UserEditForm({ user }: { user: AdministrativeUser }) {
   const fieldId = useId();
 
   return (
     <details className={styles.manage}>
-      <summary className={styles.manageSummary}>Editar acceso</summary>
+      <summary className={styles.manageSummary}>
+        <ManageIcon>
+          <path d="M4 20h4l10-10-4-4L4 16v4Z" />
+          <path d="m13.5 6.5 4 4" />
+        </ManageIcon>
+        Editar acceso
+      </summary>
       <AdminActionForm
         action={updateAdministrativeUserAction}
         className={styles.form}
@@ -197,10 +267,30 @@ function AccessWindowForm({
   user: AdministrativeUser;
 }) {
   const fieldId = useId();
+  const [startAt, setStartAt] = useState(toDateInputValue(user.accessStartAt));
+  const [expiresAt, setExpiresAt] = useState(
+    toDateInputValue(user.accessExpiresAt),
+  );
+  const [validitySummary, setValiditySummary] = useState<string | null>(null);
+
+  function applyQuickValidity(months: number) {
+    const quick = quickValidity(today, months);
+    setExpiresAt(quick.expiresAt);
+    setStartAt((current) => current || quick.startAt);
+    setValiditySummary(
+      `Vigencia hasta ${quick.label} (${months === 12 ? "un año" : `${months} meses`}).`,
+    );
+  }
 
   return (
     <details className={styles.manage}>
-      <summary className={styles.manageSummary}>Extender vigencia</summary>
+      <summary className={styles.manageSummary}>
+        <ManageIcon>
+          <rect height="16" rx="2" width="18" x="3" y="5" />
+          <path d="M8 3v4M16 3v4M3 11h18" />
+        </ManageIcon>
+        Extender vigencia
+      </summary>
       <AdminActionForm
         action={updateAccessWindowAction}
         className={styles.form}
@@ -215,15 +305,25 @@ function AccessWindowForm({
           Para bloquear el acceso de inmediato usa «Editar acceso» y pausa la
           cuenta.
         </p>
+        <div className={styles.validityRow}>
+          <span className={styles.fieldLabel}>Vigencia rápida</span>
+          <QuickValidityButtons onApply={applyQuickValidity} />
+          {validitySummary ? (
+            <p aria-live="polite" className={styles.formHint}>
+              {validitySummary}
+            </p>
+          ) : null}
+        </div>
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
           Inicio
         </label>
         <input
           className={styles.input}
-          defaultValue={toDateInputValue(user.accessStartAt)}
           id={`${fieldId}-start`}
           name="accessStartAt"
+          onChange={(event) => setStartAt(event.target.value)}
           type="date"
+          value={startAt}
         />
         <FieldError name="accessStartAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
@@ -231,11 +331,12 @@ function AccessWindowForm({
         </label>
         <input
           className={styles.input}
-          defaultValue={toDateInputValue(user.accessExpiresAt)}
           id={`${fieldId}-expires`}
           min={today}
           name="accessExpiresAt"
+          onChange={(event) => setExpiresAt(event.target.value)}
           type="date"
+          value={expiresAt}
         />
         <FieldError name="accessExpiresAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-reason`}>
@@ -258,6 +359,138 @@ function AccessWindowForm({
 
 
 /**
+ * Ojo: ficha de solo lectura con los datos completos del usuario, sin salir de
+ * la fila ni cargar otra página.
+ */
+function UserDetails({ user }: { user: AdministrativeUser }) {
+  return (
+    <details className={styles.manage}>
+      <summary className={styles.manageSummary}>
+        <ManageIcon>
+          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+          <circle cx="12" cy="12" r="3" />
+        </ManageIcon>
+        Ver ficha
+      </summary>
+      <dl className={styles.details}>
+        <div>
+          <dt>Nombre</dt>
+          <dd>{user.fullName}</dd>
+        </div>
+        <div>
+          <dt>Rol</dt>
+          <dd>{formatUserRole(user.role)}</dd>
+        </div>
+        <div>
+          <dt>Estado de la cuenta</dt>
+          <dd>{user.accountStatus === "active" ? "Activa" : "Pausada"}</dd>
+        </div>
+        <div>
+          <dt>Correo</dt>
+          <dd>{user.email ?? "Sin correo"}</dd>
+        </div>
+        <div>
+          <dt>Celular</dt>
+          <dd>{user.phone ?? "Sin celular"}</dd>
+        </div>
+        <div>
+          <dt>Vigencia</dt>
+          <dd>
+            {formatDay(user.accessStartAt, "Sin inicio")} –{" "}
+            {formatDay(user.accessExpiresAt, "Sin vencimiento")}
+          </dd>
+        </div>
+        <div>
+          <dt>Último acceso</dt>
+          <dd>{formatAccess(user.lastAccessAt)}</dd>
+        </div>
+        <div>
+          <dt>Creado por</dt>
+          <dd>{user.createdByName ?? "No registrado"}</dd>
+        </div>
+      </dl>
+    </details>
+  );
+}
+
+/** Llave: envía el enlace de restablecimiento; nadie ve la contraseña. */
+function PasswordResetForm({ user }: { user: AdministrativeUser }) {
+  return (
+    <details className={styles.manage}>
+      <summary className={styles.manageSummary}>
+        <ManageIcon>
+          <circle cx="8" cy="15" r="4" />
+          <path d="m11 12 9-9M17 6l3 3M14 9l3 3" />
+        </ManageIcon>
+        Enviar enlace de contraseña
+      </summary>
+      <AdminActionForm
+        action={sendPasswordResetAction}
+        className={styles.form}
+        confirmMessage={`¿Enviar a ${user.email ?? "esta persona"} un enlace para crear una contraseña nueva?`}
+        submitLabel="Enviar enlace"
+        successMessage="Enlace enviado. La persona recibirá un correo para crear una contraseña nueva."
+      >
+        <input name="userId" type="hidden" value={user.id} />
+        <p className={styles.formHint}>
+          El enlace llega al correo registrado y solo lo puede usar esa persona;
+          aquí nadie ve ni define la contraseña. Queda auditado.
+        </p>
+      </AdminActionForm>
+    </details>
+  );
+}
+
+/** Tacho: suspensión lógica (no borra identidad ni historial). */
+function SuspendUserForm({ user }: { user: AdministrativeUser }) {
+  const fieldId = useId();
+
+  return (
+    <details className={styles.manage}>
+      <summary
+        className={`${styles.manageSummary} ${styles.manageSummaryDanger}`}
+      >
+        <ManageIcon>
+          <path d="M5 7h14M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+        </ManageIcon>
+        Suspender acceso
+      </summary>
+      <AdminActionForm
+        action={updateAdministrativeUserAction}
+        className={styles.form}
+        confirmMessage={`¿Suspender el acceso de ${user.fullName}? Podrás reactivarlo después; todo queda auditado.`}
+        rules={USER_EDIT_RULES}
+        submitLabel="Suspender acceso"
+        successMessage="Acceso suspendido. La persona no podrá iniciar sesión."
+      >
+        <input name="userId" type="hidden" value={user.id} />
+        <input name="accountStatus" type="hidden" value="suspended" />
+        <p className={styles.formHint}>
+          La cuenta se pausa y el historial se conserva. Es una suspensión
+          lógica, no un borrado: podrás reactivarla cuando corresponda.
+        </p>
+        <label
+          className={styles.fieldLabel}
+          htmlFor={`${fieldId}-suspend-reason`}
+        >
+          Motivo de la suspensión (queda auditado)
+        </label>
+        <textarea
+          className={styles.textarea}
+          id={`${fieldId}-suspend-reason`}
+          maxLength={500}
+          minLength={4}
+          name="reason"
+          required
+          rows={3}
+        />
+        <FieldError name="reason" />
+      </AdminActionForm>
+    </details>
+  );
+}
+
+/**
  * Registration form. The email is the login and the person sets their own
  * password from the invitation, so no password is ever typed here.
  */
@@ -273,6 +506,18 @@ function CreateUserForm({
   today: string;
 }) {
   const fieldId = useId();
+  const [startAt, setStartAt] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [validitySummary, setValiditySummary] = useState<string | null>(null);
+
+  function applyQuickValidity(months: number) {
+    const quick = quickValidity(today, months);
+    setExpiresAt(quick.expiresAt);
+    setStartAt((current) => current || quick.startAt);
+    setValiditySummary(
+      `Vigencia hasta ${quick.label} (${months === 12 ? "un año" : `${months} meses`}).`,
+    );
+  }
 
   return (
     <details className={styles.create}>
@@ -328,11 +573,22 @@ function CreateUserForm({
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
           Inicio de vigencia (opcional)
         </label>
+        <div className={styles.validityRow}>
+          <span className={styles.fieldLabel}>Vigencia rápida (opcional)</span>
+          <QuickValidityButtons onApply={applyQuickValidity} />
+          {validitySummary ? (
+            <p aria-live="polite" className={styles.formHint}>
+              {validitySummary}
+            </p>
+          ) : null}
+        </div>
         <input
           className={styles.input}
           id={`${fieldId}-start`}
           name="accessStartAt"
+          onChange={(event) => setStartAt(event.target.value)}
           type="date"
+          value={startAt}
         />
         <FieldError name="accessStartAt" />
         <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
@@ -343,7 +599,9 @@ function CreateUserForm({
           id={`${fieldId}-expires`}
           min={today}
           name="accessExpiresAt"
+          onChange={(event) => setExpiresAt(event.target.value)}
           type="date"
+          value={expiresAt}
         />
         <FieldError name="accessExpiresAt" />
         <p className={styles.formHint}>
@@ -540,8 +798,13 @@ export function UsersManager({
                 {formatAccessState(user.accessState)}
               </span>
               <div className={styles.rowActions}>
+                <UserDetails user={user} />
                 <UserEditForm user={user} />
                 <AccessWindowForm today={today} user={user} />
+                <PasswordResetForm user={user} />
+                {user.accountStatus === "active" ? (
+                  <SuspendUserForm user={user} />
+                ) : null}
               </div>
             </li>
           ))}

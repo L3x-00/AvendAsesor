@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -81,7 +82,50 @@ function requireCount(value: unknown, message: string): number {
 
 @Injectable()
 export class SupabaseUserAdministrationGatewayAdapter implements UserAdministrationGateway {
+  private readonly logger = new Logger(
+    SupabaseUserAdministrationGatewayAdapter.name,
+  );
+
   constructor(private readonly client: SupabaseServerClient | null) {}
+
+  async sendPasswordReset(
+    input: Parameters<UserAdministrationGateway['sendPasswordReset']>[0],
+  ): Promise<void> {
+    const client = this.requireClient();
+    const { data, error } = await client.auth.admin.getUserById(
+      input.targetUserId,
+    );
+
+    if (error || !data.user?.email) {
+      throw new NotFoundException('The user account was not found.');
+    }
+
+    const { error: resetError } = await client.auth.resetPasswordForEmail(
+      data.user.email,
+      { redirectTo: input.redirectTo },
+    );
+
+    if (resetError) {
+      throw new ServiceUnavailableException(
+        'The password recovery email could not be sent. Try again later.',
+      );
+    }
+
+    const { error: auditError } = await client.rpc(
+      'record_user_password_reset',
+      {
+        p_actor_id: input.actorId,
+        p_target_user_id: input.targetUserId,
+      },
+    );
+
+    if (auditError) {
+      // El correo ya salió; la auditoría no debe ocultar ese hecho al panel.
+      this.logger.warn(
+        `No se pudo auditar el restablecimiento de contraseña: ${auditError.message}`,
+      );
+    }
+  }
 
   async listAuditEvents(
     input: Parameters<UserAdministrationGateway['listAuditEvents']>[0],
