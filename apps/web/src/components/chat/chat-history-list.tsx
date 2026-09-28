@@ -38,13 +38,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type HistoryGroup = "earlier" | "today" | "week" | "yesterday";
 
-const GROUP_LABELS: Record<HistoryGroup, string> = {
-  earlier: "Anteriores",
-  today: "Hoy",
-  week: "Últimos 7 días",
-  yesterday: "Ayer",
-};
-
 /** Días calendario (en Lima) entre dos instantes. */
 function calendarDaysBetween(value: Date, now: Date): number {
   return Math.round(
@@ -241,10 +234,25 @@ export function ChatHistoryList({
   const updatedVisible = conversations.filter((conversation) =>
     updated.has(conversation.id),
   ).length;
-  const groups = new Map<HistoryGroup, ChatConversation[]>();
+  // El historial se agrupa por tema: módulo raíz (con su submódulo a la vista)
+  // y «Consultas generales» para los chats libres. Como llegan ordenadas por
+  // actividad, los grupos aparecen con el tema usado más recientemente primero.
+  const groups = new Map<string, { items: ChatConversation[]; label: string }>();
   for (const conversation of conversations) {
-    const group = historyGroupOf(conversation.updatedAt, now);
-    groups.set(group, [...(groups.get(group) ?? []), conversation]);
+    const key =
+      conversation.selectedModuleParentId ??
+      conversation.selectedModuleId ??
+      "general";
+    const label =
+      conversation.selectedModuleParentName ??
+      conversation.selectedModuleName ??
+      (key === "general" ? "Consultas generales" : "Tema seleccionado");
+    const group = groups.get(key);
+    if (group) {
+      group.items.push(conversation);
+    } else {
+      groups.set(key, { items: [conversation], label });
+    }
   }
 
   return (
@@ -257,18 +265,32 @@ export function ChatHistoryList({
             : `Se incorporó documentación sobre ${updatedVisible} consultas que antes no tenían respuesta. Ábrelas y vuelve a preguntar.`}
         </p>
       ) : null}
-      {[...groups].map(([group, items]) => (
-        <section aria-labelledby={`history-group-${group}`} key={group}>
-          <h2 className="avend-history-group-title" id={`history-group-${group}`}>
-            {GROUP_LABELS[group]}
+      {[...groups].map(([key, group]) => (
+        <section aria-labelledby={`history-topic-${key}`} key={key}>
+          <h2
+            className="avend-history-group-title"
+            id={`history-topic-${key}`}
+          >
+            {group.label}
           </h2>
           <ul className="avend-history-list">
-            {items.map((conversation) => {
-              const title = readableConversationTitle(conversation.title);
+            {group.items.map((conversation) => {
+              const title = readableConversationTitle(
+                conversation.lastQuestion ?? conversation.title,
+              );
               return (
                 <li className="avend-history-item" key={conversation.id}>
                   <div>
                     <h3 title={conversation.title ?? undefined}>{title}</h3>
+                    {conversation.selectedModuleParentId &&
+                    conversation.selectedModuleName ? (
+                      <p>
+                        <span className="avend-visually-hidden">
+                          Submódulo:{" "}
+                        </span>
+                        Submódulo: {conversation.selectedModuleName}
+                      </p>
+                    ) : null}
                     {updated.has(conversation.id) ? (
                       <span className="avend-history-update-badge">
                         Nueva información disponible

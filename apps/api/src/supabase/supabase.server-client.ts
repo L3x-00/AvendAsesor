@@ -756,7 +756,11 @@ export interface SupabaseDatabase {
         Returns: {
           created_at: string;
           id: string;
+          last_question: string | null;
           selected_module_id: string | null;
+          selected_module_name: string | null;
+          selected_module_parent_id: string | null;
+          selected_module_parent_name: string | null;
           title: string | null;
           updated_at: string;
         }[];
