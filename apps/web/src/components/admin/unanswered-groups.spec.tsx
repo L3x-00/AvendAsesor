@@ -1,26 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { UnansweredGroup } from "@/lib/consultation-reports-api/types";
 import { UnansweredGroups } from "./unanswered-groups";
-
-vi.mock("@/app/admin/operations/consultation-actions", () => ({
-  resolveUnansweredGroupAction: vi.fn(),
-}));
-
-vi.mock("./admin-action-form", () => ({
-  AdminActionForm: ({
-    children,
-    submitLabel,
-  }: {
-    children: React.ReactNode;
-    submitLabel: string;
-  }) => (
-    <form>
-      {children}
-      <button type="submit">{submitLabel}</button>
-    </form>
-  ),
-}));
 
 const topic: UnansweredGroup = {
   caseIds: [
@@ -96,13 +77,9 @@ describe("UnansweredGroups", () => {
       ),
     );
     expect(
-      within(group).getByRole("button", { name: "Cerrar 2 consultas" }),
-    ).toBeInTheDocument();
-    // Un tema con documentación cargada se cierra como resuelto (avisa al docente).
-    expect(
-      within(group).getByRole("combobox", { name: "Cómo se cierra" }),
-    ).toHaveValue("resolved");
-    expect(group.querySelectorAll('input[name="caseId"]')).toHaveLength(2);
+      within(group).getByRole("link", { name: "Cerrar 2 consultas" }),
+    ).toHaveAttribute("href", expect.stringContaining("/grupos/cerrar?"));
+    expect(group.querySelector('form')).toBeNull();
 
     const catalog = screen.getByRole("listitem", {
       name: "Preguntas sobre los documentos disponibles",
@@ -114,12 +91,8 @@ describe("UnansweredGroups", () => {
       within(catalog).getByText(/ya responde estas preguntas/),
     ).toBeVisible();
     expect(
-      within(catalog).getByRole("button", { name: "Cerrar consulta" }),
+      within(catalog).getByRole("link", { name: "Cerrar la consulta" }),
     ).toBeInTheDocument();
-    // Lo que no requiere documento se descarta por defecto: sin aviso al docente.
-    expect(
-      within(catalog).getByRole("combobox", { name: "Cómo se cierra" }),
-    ).toHaveValue("discarded");
 
     const unknown = screen.getByRole("listitem", {
       name: "Sin tema identificado",
@@ -170,7 +143,7 @@ describe("UnansweredGroups", () => {
 
     expect(
       screen.getByText(
-        "Se cierran 2 de 73; el resto queda abierto para la próxima vez.",
+        "Puedes revisar 2 de 73 consultas en la pantalla de cierre; el resto sigue pendiente.",
       ),
     ).toBeInTheDocument();
   });

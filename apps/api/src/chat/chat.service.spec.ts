@@ -175,22 +175,22 @@ describe('ChatService', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'token',
+      'no_evidence',
       'done',
     ]);
-    const token = events[1] as { data: { text: string } };
-    expect(token.data.text).toContain(
+    const advisory = events[1] as { data: { message: string } };
+    expect(advisory.data.message).toContain(
       'Orientación general (sin cita de norma):',
     );
-    expect(token.data.text).toContain('Sugerencias:');
-    expect(token.data.text).not.toMatch(/\[\d+\]/u);
+    expect(advisory.data.message).toContain('Sugerencias:');
+    expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'advisory', sources: [] }),
     );
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         qualitySignals: ['support_insufficient'],
-        replyRole: 'assistant',
+        replyRole: 'no_evidence',
         sources: [],
         unansweredReason: 'insufficient_evidence',
       }),
@@ -218,15 +218,35 @@ describe('ChatService', () => {
     );
   });
 
-  it('tells what the loaded documents cover when there is no evidence', async () => {
+  it('rechaza cifras y citas inventadas en la orientación sin fuentes', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Según el artículo 49, tienes 5 días. [1]';
+      })(),
+    );
+
+    const events = await collect(service);
+    const reply = events.find((event) => event.type === 'no_evidence');
+    expect(reply?.data.message).toContain('No pude completar');
+    expect(reply?.data.message).not.toContain('artículo 49');
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ replyRole: 'no_evidence', sources: [] }),
+    );
+  });
+
+  it('no divulga el inventario de documentos cuando falta evidencia', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
     });
     const coverageSummary = jest
       .fn()
-      .mockResolvedValueOnce('Por ahora mis documentos cubren: Remuneraciones.')
-      .mockRejectedValueOnce(new Error('db down'));
+      .mockResolvedValue('Por ahora mis documentos cubren: Remuneraciones.');
     const withCatalog = new ChatService(
       answerGateway,
       historyGateway,
@@ -250,13 +270,11 @@ describe('ChatService', () => {
 
     const withCoverage = await messageOf();
     expect(withCoverage).toContain('antecedente');
-    expect(withCoverage).toContain(
-      '\n\nPor ahora mis documentos cubren: Remuneraciones.',
-    );
+    expect(withCoverage).not.toContain('Remuneraciones');
+    expect(coverageSummary).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ answer: withCoverage }),
     );
-    // Si el catálogo falla, el «sin sustento» sale igual, sin la línea extra.
     expect(await messageOf()).toBe(noEvidenceMessage('current'));
   });
 

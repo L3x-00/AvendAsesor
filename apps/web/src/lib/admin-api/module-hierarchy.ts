@@ -31,6 +31,7 @@ export function toModuleView(
   module: ManagedModuleSummary,
 ): ModuleView {
   return {
+    canManage: module.canManage ?? true,
     code: module.code,
     description: module.description,
     documentCount: module.documentCount,

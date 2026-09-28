@@ -292,7 +292,7 @@ describe('ChatService — lineamientos del cliente', () => {
       },
     );
 
-    it('reescribe una cita agrupada en citas individuales, en pantalla y al guardar', async () => {
+    it('conserva solo la fuente existente en una cita agrupada, en pantalla y al guardar', async () => {
       ragService.retrieve.mockResolvedValue({
         kind: 'evidence',
         resolvedModule: { id: MODULE_ID, name: 'Licencias' },
@@ -311,9 +311,9 @@ describe('ChatService — lineamientos del cliente', () => {
         .filter((event) => event.type === 'token')
         .map((event) => event.data.text)
         .join('');
-      expect(streamed).toContain('días [1][2].');
+      expect(streamed).toContain('días [1].');
       expect(streamed).not.toContain('[1, 2]');
-      expect(completion()?.answer).toContain('días [1][2].');
+      expect(completion()?.answer).toContain('días [1].');
     });
   });
 

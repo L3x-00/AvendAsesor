@@ -161,6 +161,11 @@ const consultationCaseCoreSchema = consultationCaseSummarySchema
   });
 
 export const consultationCaseDetailSchema = z.object({
+  conversationQuestions: z.array(z.object({
+    id: uuid,
+    content: z.string().max(20000),
+    createdAt: timestampSchema,
+  })).default([]),
   attachments: z.array(
     z.object({
       attachmentKind: z.enum(["report_image", "suggestion_file"]),

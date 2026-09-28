@@ -16,6 +16,7 @@ import type { FieldRules } from "@/lib/ui/field-validation";
 import styles from "./modules-explorer.module.css";
 
 export interface ModuleView {
+  canManage?: boolean;
   code: string;
   description: string | null;
   id: string;
@@ -37,6 +38,7 @@ export type ExplorerContext =
   { kind: "root" } | { kind: "module"; moduleId: string; moduleName: string };
 
 interface ModulesExplorerProps {
+  canCreate?: boolean;
   context: ExplorerContext;
   modules: ModuleView[];
   parents: ModuleParentOption[];
@@ -412,6 +414,7 @@ function CreateModal({
  * the documents view; it performs no document management itself.
  */
 export function ModulesExplorer({
+  canCreate = true,
   context,
   modules,
   parents,
@@ -446,6 +449,15 @@ export function ModulesExplorer({
           <span className={styles.count}>{modules.length} en total</span>
         </div>
         <div className={styles.toolbarActions}>
+          {canCreate ? (
+            <button
+              className={`avend-button avend-button--primary ${styles.createButton}`}
+              onClick={() => setCreateOpen(true)}
+              type="button"
+            >
+              {isRoot ? "+ Crear módulo" : "+ Crear submódulo"}
+            </button>
+          ) : null}
           <input
             aria-label={
               isRoot
@@ -459,13 +471,6 @@ export function ModulesExplorer({
             type="search"
             value={query}
           />
-          <button
-            className={`avend-button avend-button--primary ${styles.createButton}`}
-            onClick={() => setCreateOpen(true)}
-            type="button"
-          >
-            {isRoot ? "+ Crear módulo" : "+ Crear submódulo"}
-          </button>
         </div>
       </div>
 
@@ -473,8 +478,12 @@ export function ModulesExplorer({
         <p className={styles.empty}>
           {modules.length === 0
             ? isRoot
-              ? "Aún no hay módulos. Crea el primero con el botón «Crear módulo o submódulo»."
-              : "Este módulo aún no tiene submódulos. Puedes crear uno o ver sus documentos."
+              ? canCreate
+                ? "Aún no hay módulos. Crea el primero con el botón «Crear módulo»."
+                : "No tienes módulos asignados."
+              : canCreate
+                ? "Este módulo aún no tiene submódulos. Puedes crear uno o ver sus documentos."
+                : "No tienes submódulos asignados."
             : "Ningún resultado coincide con la búsqueda."}
         </p>
       ) : (

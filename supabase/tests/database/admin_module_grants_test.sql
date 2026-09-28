@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(14);
 
 -- Identidades y módulos de prueba ----------------------------------------------
 
@@ -94,6 +94,57 @@ select is(
   'Sin concesión no puede gestionar otro módulo'
 );
 
+select public.create_governed_document_with_initial_version(
+  p_document_id := '3c000000-0000-0000-0000-000000000201',
+  p_version_id := '3c000000-0000-0000-0000-000000000301',
+  p_title := 'Documento concedido QA', p_document_type := 'DIRECTIVA',
+  p_issuing_entity := 'MINEDU', p_issuance_year := 2026::smallint,
+  p_resolution_number := null, p_article_reference := null,
+  p_metadata := '{"specificDependency":"QA"}',
+  p_module_ids := array['3c000000-0000-0000-0000-000000000102']::uuid[],
+  p_storage_path := 'qa-grants/document-201/v1.pdf',
+  p_original_file_name := 'grants-a.pdf', p_file_size_bytes := 2048::bigint,
+  p_page_count := 1, p_sha256 := repeat('a', 64),
+  p_actor_id := '3c000000-0000-0000-0000-000000000901'
+);
+
+select public.create_governed_document_with_initial_version(
+  p_document_id := '3c000000-0000-0000-0000-000000000202',
+  p_version_id := '3c000000-0000-0000-0000-000000000302',
+  p_title := 'Documento ajeno QA', p_document_type := 'DIRECTIVA',
+  p_issuing_entity := 'MINEDU', p_issuance_year := 2026::smallint,
+  p_resolution_number := null, p_article_reference := null,
+  p_metadata := '{"specificDependency":"QA"}',
+  p_module_ids := array['3c000000-0000-0000-0000-000000000103']::uuid[],
+  p_storage_path := 'qa-grants/document-202/v1.pdf',
+  p_original_file_name := 'grants-b.pdf', p_file_size_bytes := 2048::bigint,
+  p_page_count := 1, p_sha256 := repeat('b', 64),
+  p_actor_id := '3c000000-0000-0000-0000-000000000901'
+);
+
+select is(
+  (select count(*) from public.list_documents_for_actor(
+    '3c000000-0000-0000-0000-000000000902', 'all', 25, 0
+  ) where id in (
+    '3c000000-0000-0000-0000-000000000201',
+    '3c000000-0000-0000-0000-000000000202'
+  )),
+  1::bigint,
+  'El listado del administrador excluye documentos de módulos ajenos'
+);
+
+select is(
+  (select count(*) from public.list_document_library_for_actor(
+    p_actor_id := '3c000000-0000-0000-0000-000000000902',
+    p_query := 'Documento', p_limit := 25
+  ) where id in (
+    '3c000000-0000-0000-0000-000000000201',
+    '3c000000-0000-0000-0000-000000000202'
+  )),
+  1::bigint,
+  'La biblioteca filtra el módulo ajeno antes de contar y paginar'
+);
+
 -- Cambiar a solo el submódulo retira la raíz ------------------------------------
 
 select lives_ok(
@@ -115,6 +166,32 @@ select is(
   ),
   false,
   'El módulo raíz retirado deja de permitirse'
+);
+
+-- La concesión permite reactivar un módulo desactivado -------------------------
+update public.modules
+set is_active = false,
+  deactivated_at = now(),
+  deactivated_by = '3c000000-0000-0000-0000-000000000901',
+  deactivation_reason = 'Prueba de reactivación'
+where id = '3c000000-0000-0000-0000-000000000102';
+
+select is(
+  public.admin_can_manage_module(
+    '3c000000-0000-0000-0000-000000000902',
+    '3c000000-0000-0000-0000-000000000102'
+  ),
+  true,
+  'El administrador conserva la concesión sobre su submódulo inactivo'
+);
+
+select is(
+  public.admin_can_manage_module(
+    '3c000000-0000-0000-0000-000000000902',
+    '3c000000-0000-0000-0000-000000000103'
+  ),
+  false,
+  'Un submódulo inactivo concedido no autoriza otra raíz'
 );
 
 -- El interruptor maestro bloquea aunque exista concesión -----------------------

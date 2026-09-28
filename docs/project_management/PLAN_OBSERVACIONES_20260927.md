@@ -340,3 +340,82 @@ Regla permanente: cada fase termina con lint/typecheck/pruebas, actualización d
 2. Confirmar decisiones G1–G5 (o autorizar el diseño propuesto con ADR).
 3. Construir el arnés y el golden set (T0.2/T0.3) con los casos conocidos: preguntas fuera de ámbito, sin evidencia, con artículos, con errores ortográficos, multi-turno y manipulación.
 4. Ejecutar F1 (quick wins sin migración) mientras se aprueban los ADR.
+
+---
+
+## 11. Observaciones originales ordenadas y plan de auditoría (2026-09-28)
+
+Esta sección conserva la intención del Product Owner y es la lista de aceptación para auditar lo entregado en los PR #72–#85. Las secciones 1–10 describen el plan inicial del 27 de septiembre y contienen estados históricos: ninguna afirmación de «pendiente» o «completado» allí sustituye la verificación actual. Una implementación solo se marca conforme si se comprueba el comportamiento, la autorización correspondiente y la experiencia del docente y del administrador. El trabajo sin commit en `fix/auditoria-observaciones-20260928` se preserva y se revisa antes de integrarlo.
+
+### 11.1 Requisitos agrupados en cuatro bloques
+
+| Bloque y responsable de auditoría | Observaciones que debe verificar | Resultado esperado |
+| --- | --- | --- |
+| **A. Respuestas del asesor y seguridad — Codex** | O-01 a O-10, O-12 a O-15, O-17; T0.2/T0.3/T0.5; T1.1–T1.5; T2.1–T2.8. Revisar las pruebas RAG con rol Administrador y las respuestas realmente emitidas. | Respuesta breve, natural y amable, con saludo acorde al rol; citas individuales, cliqueables y junto a cada afirmación después del punto; artículo/numeral, número y abreviatura correctos cuando la fuente los tenga. Si falta sustento, orientación general de IA identificada como tal, sugerencia oficial útil y aviso administrativo, sin fingir una cita. Sin inventarios vacíos al docente, revelación de instrucciones internas ni respuestas ajenas al ámbito educativo. Seguimiento de conversación, errores ortográficos, sinónimos y solicitud de un documento mencionado. Diagnóstico visible al administrador si falla el proveedor. |
+| **B. Chat, voz y ciclo de consultas — Codex** | O-11, O-16, O-21 a O-26; B3, B4 y B7. | Historial con la última pregunta, agrupado por módulo/submódulo y con chat libre aparte. Dictado o envío de audio funcional, o error reproducido y resuelto con alternativa clara. Consultas y Reportes con objetivos distintos, periodos 6 h/24 h y filtros útiles; caso con preguntas, respuesta IA, fuentes y necesidad documental; cierre en pantalla propia; carga desde el caso en su tema, vinculación comprobada; reportes por módulo. Bandera roja que abre un modal accesible de motivo. |
+| **C. Usuarios, permisos y módulos — Claude Code** | O-18 a O-20; B5, T6.1 y permisos de documentos vinculados a T5.4. | Enlace seguro de contraseña; vigencias rápidas de 3 y 6 meses; promoción controlada de rol, ver/editar/suspender con confirmación, habilitar/inhabilitar y casillas por módulo/submódulo. Un administrador sin concesión debe ser denegado por el servidor también en documentos. Botón Crear en la esquina opuesta de la barra según el pedido, comprobado en escritorio y móvil. |
+| **D. Gestión documental y contenido por tema — Claude Code** | O-27 a O-33; B6 salvo T6.1, B8. | Aperturas/descargas y fecha de última descarga reales; nueva versión con año y relación reemplaza/complementa; campo de motivo claramente resaltado; asociación debajo de la lista; estados de vigencia con efecto real en retrieval y acceso histórico claro, motivos explicados. Normativa, cronograma, anexos numerados y preguntas frecuentes por submódulo, visibles y fáciles de actualizar, verificando Jefatura docente y Reasignación con datos reales. |
+
+La frase final de la observación sobre versiones («un documento no reemplaz…») quedó incompleta. Se conserva como requisito de no reemplazar automáticamente: el autor elige explícitamente *reemplaza* o *complementa* y la auditoría comprueba el efecto de cada opción. Si el Product Owner precisa otra regla de vigencia, se incorpora sin inferirla.
+
+### 11.2 Orden de ejecución y coordinación
+
+1. **Inventario y evidencia.** Comparar cada fila anterior con el plan, PRs fusionados, rama actual, pruebas RAG del Administrador, migraciones y estado real de producción. Registrar por requisito: conforme, parcial, falla o sin evidencia, con enlace a prueba. El documento de planificación no constituye prueba de aceptación.
+2. **División de trabajo.** Codex toma A y B. Claude Code toma C y D mediante encargos verificables y sin editar simultáneamente los archivos de Codex. `ACTIVE_TASKS.md` registra que Claude ya inició TSK-0068; primero recuperar su progreso, resultados y archivos reclamados. Si su ejecución no puede confirmarse, no atribuirle auditoría ni correcciones. Mantener un auditor distinto del implementador final de cada cambio importante.
+3. **Corrección.** Priorizar fallas que impidan consultar, citas erróneas, fuga de información, permisos y pérdida de integridad. Corregir después los incumplimientos de flujo y presentación. Preservar el trabajo sin commit de T2.7 y cualquier cambio ajeno. No usar datos o respuestas simuladas como evidencia de producción.
+4. **Verificación.** Pruebas focales y de integración para RAG, seguridad, autorización, versiones y casos; pruebas de accesibilidad y pantalla cuando corresponda; suite, tipos, lint y build. Repetir la auditoría sobre la revisión integrada. Las migraciones y el despliegue deben comprobarse por separado del éxito local.
+5. **Entrega.** Registrar hallazgos y correcciones en esta matriz, commits solo de producto, push, PR y fusión a `main` después de gates reales. Dejar el repositorio central y la coordinación sin trabajo inconcluso ni ramas activas asumidas como entregadas. Reportar cualquier requisito que dependa de una decisión del Product Owner o de acceso no disponible.
+
+### 11.3 Criterio para cerrar cada bloque
+
+| Bloque | Evidencia mínima de cierre |
+| --- | --- |
+| A | Casos reales del Administrador y conjunto adversarial; citas cotejadas con fuentes; orientación y límites probados; fallo del proveedor clasificable. |
+| B | Recorrido docente → reporte/caso → administrador → documento → cierre; historial y audio probados en navegador o causa concreta documentada. |
+| C | Pruebas de concesión y denegación por rol/módulo en API de módulos y documentos, más flujo de usuarios accesible. |
+| D | Conteos cotejados con eventos, versiones y estados contra datos/RPC; organización y acciones de ambos temas reales revisadas en pantalla. |
+
+### 11.4 Resultado de la auditoría local del 28 de septiembre
+
+**Alcance de la evidencia:** los PR #72–#85 estaban en `main=fd2eb49` al iniciar. Claude Code ejecutó la auditoría de nueve áreas `wf_e992e97f-80b`, pero agotó su límite antes de implementar correcciones. Codex continuó los cuatro bloques, con revisión independiente de los cambios de chat y operaciones. Los cambios de esta sección están en `fix/auditoria-observaciones-20260928`: la conformidad local no acredita todavía migración, despliegue, datos productivos ni recorrido visual autenticado. El audio (O-11) fue confirmado resuelto por el Product Owner.
+
+| Obs. | Estado local | Evidencia y límite concreto |
+| --- | --- | --- |
+| O-01 | Corregido | Normalización de citas y pruebas `citation-format`; las etiquetas se asignan por afirmación. Falta cotejo con respuestas reales del Administrador. |
+| O-02 | Corregido | Prompt y formato de cita conservan artículo/numeral y número cuando la fuente los ofrece; pruebas `prompt.builder`. |
+| O-03 | Corregido | El carril orientativo invoca el proveedor al faltar evidencia y se persiste como `no_evidence`, compatible con la RPC; `chat.service.compliance`. |
+| O-04 | Corregido | Cocina se clasifica fuera de ámbito con límite amable; `intent-classifier`. |
+| O-05 | Corregido | El submódulo vacío usa orientación sin anunciar ausencia de archivos al docente; `chat.service`. |
+| O-06 | Corregido | Separación y validación de índices en citas; `citation-format` y render de fuentes. |
+| O-07 | Existente; verificación parcial | Saludo por rol en respuesta; falta sesión real de cada rol para comprobar tono. |
+| O-08 | Corregido | Citas junto a la afirmación y etiquetas cliqueables, incluso en el historial; `chat-sources` y `chat-panel`. |
+| O-09 | Corregido | El texto al docente evita «no hay sustento» y ofrece orientación o consulta a entidades oficiales; no simula fuente. |
+| O-10 | Existente | Mapeo de tipos documentales y abreviaturas RM/M en RAG; pruebas de `document-type`. |
+| O-11 | Resuelto por PO | El Product Owner confirmó que el error de audio ya está resuelto; no se modificó esa ruta. |
+| O-12 | Verificación parcial | Prompt de respuesta breve y sugerencias más concisas; falta evaluar una muestra de respuestas reales. |
+| O-13 | Corregido | Sin evidencia se omite el inventario documental en la respuesta al docente. |
+| O-14 | Corregido | Clasificador evita revelar reglas del sistema y distingue «reglas internas del colegio» como consulta educativa; pruebas de intención. |
+| O-15 | Parcial | Normalización de errores comunes y sinónimos; citas descargables desde fuentes. Falta recorrido conversacional autenticado para referencias vagas a documentos anteriores. |
+| O-16 | Corregido local; migración pendiente | Historial agrupa por módulo y última pregunta. Migración `20260928010000` repara la fecha y última pregunta históricas; aplicada solo en BD local. |
+| O-17 | Criterio transversal | Se comprobó respuesta orientativa y acceso a caso/documento; requiere validación de uso por docentes. |
+| O-18 | Corregido | Enlace seguro de contraseña y atajos 3/6 meses; cálculo de meses corregido para fin de mes. |
+| O-19 | Corregido local; migración pendiente | Roles, acciones con etiquetas, confirmación y casillas; API de módulos y documentos verifica concesiones. |
+| O-20 | Corregido | «Crear módulo» se movió al extremo opuesto del buscador; falta comprobación visual en móvil. |
+| O-21 | Corregido | Consultar y Reportes separados, 6 h/24 h, indicadores y motivo de incidencia; DTO ahora admite esos periodos. |
+| O-22 | Corregido | Ver caso muestra pregunta/respuesta del incidente, fuentes, motivo, sugerencia de documento y hasta 100 preguntas previas del mismo chat. |
+| O-23 | Corregido | Cierre individual y grupal en pantallas propias; el grupo exige resultado y nota, con relectura del servidor. |
+| O-24 | Corregido | Carga desde el caso envía `moduleIds` y `specificDependency`, permite elegir submódulo y vincula el documento. |
+| O-25 | Corregido | Reportes de docentes agrupados por módulo en la página visible; carga desde el caso usa la ruta seleccionada. El conteo por módulo indica que corresponde a la página, no al total. |
+| O-26 | Corregido | Bandera roja y modal de motivo; disponible desde la primera respuesta, con prueba de interfaz. |
+| O-27 | Existente | RPC de eventos reales de apertura/descarga y fecha final; ficha documental y pruebas de `usage`. |
+| O-28 | Corregido local; migración pendiente | Año y relación explícita reemplaza/complementa; el RAG puede usar base aprobada y complemento aprobado sin tratarlo como sustitución. |
+| O-29 | Existente | Al archivar/desactivar se enfoca y resalta el motivo; prueba `document-situation-actions`. |
+| O-30 | Existente | Asociación de documentos se muestra bajo la lista; pendiente recorrido visual autenticado. |
+| O-31 | Corregido local; migración pendiente | Situación/vigencia gobierna retrieval; histórico separado. Motivos explicados en el formulario y concesión mantiene gestión de módulo inactivo. |
+| O-32 | Corregido local; migración pendiente | La cadena de versiones distingue reemplazo de complemento y restringe evidencia a versiones aprobadas. |
+| O-33 | Parcial | Secciones Normativa/Cronograma/Anexos/FAQ y anexos numerados existen; CHECK de FAQ corregido localmente. Falta verificar contenido real de Jefatura docente y Reasignación en sesión autenticada. |
+| O-34 | En curso | Auditoría, pruebas y revisión documentadas; falta cerrar migración/despliegue, PR y contraste funcional productivo. |
+
+**Pruebas de esta auditoría:** API 1046/1048 inicialmente, con dos expectativas obsoletas actualizadas y 31/31 focales posteriores; cumplimiento 43/43; gateway/casos/chat/documentos 79/79; web 589/589 con un trabajador; typecheck API/web, lint API `src` y web sin errores, build API/web; pgTAP focal 32/32 y asesor de seguridad local sin hallazgos de nivel error. La ejecución web paralela agotó memoria y se repitió correctamente en serie. La suite API completa no se repitió tras actualizar únicamente esas dos expectativas y pruebas focales: el resto había pasado. El lint global de API incluye un archivo temporal de aceptación ignorado y por eso se validó `src` por separado.
+
+**Gates pendientes para entrega productiva:** verificar las seis migraciones nuevas sobre staging y un respaldo recuperable del proyecto correcto; aplicar migraciones antes de que se despliegue código que llama a nuevas RPC; comprobar CI/PR y recorridos autenticados de docente/administrador. El enlace CLI apunta a `blxrdotroysitfyehmqw`, pero una configuración de enlace no sustituye la huella de datos previa a la escritura. Las migraciones nuevas aún no están en producción según `supabase migration list --linked`.

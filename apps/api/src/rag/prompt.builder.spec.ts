@@ -48,6 +48,14 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('[[SIN_SUSTENTO]]');
     expect(prompt).toContain('pide al usuario que precise');
   });
+
+  it('separa la información y su cita por fuente', () => {
+    const prompt = buildEvidenceSystemPrompt();
+    expect(prompt).toContain('Cada oración debe apoyarse en una sola fuente');
+    expect(prompt).toContain('Nunca escribas dos citas seguidas');
+    expect(prompt).toContain('justo después del punto');
+    expect(prompt).not.toContain('Escribe cada cita por separado: [1][2]');
+  });
 });
 
 describe('no-support marker injection', () => {

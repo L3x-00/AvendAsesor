@@ -16,6 +16,7 @@ import type {
 } from './document-governance.constants';
 
 export interface DocumentLibraryQuery {
+  actorId: string;
   createdBy?: string;
   createdFrom?: string;
   createdTo?: string;
@@ -94,6 +95,7 @@ export interface DocumentMetadataPatch {
 }
 
 export interface DocumentsGateway {
+  canManageModule(actorId: string, moduleId: string): Promise<boolean>;
   addVersion(input: AddDocumentVersionRecord): Promise<ManagedDocument>;
   create(input: CreateDocumentRecord): Promise<ManagedDocument>;
   createDownloadUrl(
@@ -114,6 +116,7 @@ export interface DocumentsGateway {
     actorId: string,
   ): Promise<void>;
   list(options: {
+    actorId: string;
     limit: number;
     offset: number;
     status: DocumentPublicationFilter;

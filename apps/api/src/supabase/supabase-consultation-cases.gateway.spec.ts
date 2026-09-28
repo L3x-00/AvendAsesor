@@ -279,6 +279,48 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
     });
   });
 
+  it('shows the questions from the authorized case conversation in chronological order', async () => {
+    const conversationId = 'bc8b56af-6d0c-4fef-881e-7c00907540dd';
+    const original = detailPayload();
+    const payload = {
+      ...original,
+      case: { ...original.case, conversationId },
+    };
+    const rpc = jest.fn().mockResolvedValue({ data: payload, error: null });
+    const { client } = clientWith(rpc);
+    const query = {
+      eq: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({
+        data: [
+          { id: sourceId, content: 'Segunda pregunta', created_at: date },
+          { id: attachmentId, content: 'Primera pregunta', created_at: date },
+        ],
+        error: null,
+      }),
+      order: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+    };
+    (client as unknown as { from: jest.Mock }).from = jest
+      .fn()
+      .mockReturnValue(query);
+
+    await expect(
+      new SupabaseConsultationCasesGatewayAdapter(client).getCaseDetail({
+        caseId,
+        reviewerId: actorId,
+      }),
+    ).resolves.toMatchObject({
+      conversationQuestions: [
+        { content: 'Primera pregunta' },
+        { content: 'Segunda pregunta' },
+      ],
+    });
+    expect(query.eq).toHaveBeenCalledWith('conversation_id', conversationId);
+    expect(query.eq).toHaveBeenCalledWith('role', 'user');
+    expect(query.lte).toHaveBeenCalledWith('created_at', date);
+  });
+
   it('maps detected topics and grouped open-answer priorities', async () => {
     const rpc = jest
       .fn()

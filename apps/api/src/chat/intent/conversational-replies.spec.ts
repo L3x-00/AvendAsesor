@@ -60,7 +60,7 @@ describe('buildConversationalReply', () => {
   it('sin evidencia y sin relación aparente, orienta sin afirmar que es ajeno', () => {
     const reply = buildConversationalReply('unrelated_no_evidence');
 
-    expect(reply).toContain('Aún no encuentro información');
+    expect(reply).toContain('Me especializo en el ámbito educativo');
     expect(reply).toContain('docentes, auxiliares de educación y directivos');
     expect(reply.toLowerCase()).not.toContain('no puedo ayudarte');
   });

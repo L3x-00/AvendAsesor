@@ -212,7 +212,10 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
   });
 
   it('maps live document, version and module relation reads without exposing storage in document rows', async () => {
-    const { builder, client, from } = createClient({ data: documentRow });
+    const { builder, client, from, rpc } = createClient({
+      data: documentRow,
+      rpcData: [documentRow],
+    });
     const gateway = new SupabaseDocumentsGatewayAdapter(client);
 
     await expect(gateway.findById(documentRow.id)).resolves.toMatchObject({
@@ -220,13 +223,19 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     });
     builder.data = [documentRow];
     await expect(
-      gateway.list({ limit: 25, offset: 0, status: 'active' }),
+      gateway.list({
+        actorId: documentRow.created_by,
+        limit: 25,
+        offset: 0,
+        status: 'active',
+      }),
     ).resolves.toHaveLength(1);
-    expect(builder.order.mock.calls.slice(0, 3)).toEqual([
-      ['updated_at', { ascending: false }],
-      ['title', { ascending: true }],
-      ['id', { ascending: true }],
-    ]);
+    expect(rpc).toHaveBeenCalledWith('list_documents_for_actor', {
+      p_actor_id: documentRow.created_by,
+      p_limit: 25,
+      p_offset: 0,
+      p_status: 'active',
+    });
 
     builder.data = versionRow;
     await expect(
@@ -464,7 +473,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     const gateway = new SupabaseDocumentsGatewayAdapter(client);
 
     await expect(
-      gateway.listLibrary({ limit: 25, offset: 0, sort: 'newest' }),
+      gateway.listLibrary({
+        actorId: documentRow.created_by,
+        limit: 25,
+        offset: 0,
+        sort: 'newest',
+      }),
     ).resolves.toMatchObject({
       items: [
         expect.objectContaining({
@@ -481,8 +495,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     });
 
     expect(rpc).toHaveBeenCalledWith(
-      'list_document_library',
-      expect.objectContaining({ p_limit: 25, p_sort: 'newest' }),
+      'list_document_library_for_actor',
+      expect.objectContaining({
+        p_actor_id: documentRow.created_by,
+        p_limit: 25,
+        p_sort: 'newest',
+      }),
     );
     expect(builder.in).toHaveBeenCalledWith('id', [documentRow.created_by]);
   });
@@ -621,6 +639,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     rpc.mockResolvedValue({ data: null, error: null });
     const gateway = new SupabaseDocumentsGatewayAdapter(client);
     const options = {
+      actorId: documentRow.created_by,
       limit: 10,
       offset: 20,
       sort: 'year' as const,
@@ -642,7 +661,8 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       offset: 20,
       total: 0,
     });
-    expect(rpc).toHaveBeenCalledWith('list_document_library', {
+    expect(rpc).toHaveBeenCalledWith('list_document_library_for_actor', {
+      p_actor_id: documentRow.created_by,
       p_limit: 10,
       p_offset: 20,
       p_sort: 'year',
@@ -665,7 +685,7 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
   });
 
   it('keeps empty reads empty and avoids a profile query when no actors are requested', async () => {
-    const { client, builder, from } = createClient({ data: null });
+    const { client, builder, from } = createClient({ data: null, rpcData: [] });
     const gateway = new SupabaseDocumentsGatewayAdapter(client);
     await expect(gateway.listActorNames([])).resolves.toEqual({});
     expect(from).not.toHaveBeenCalled();
@@ -673,7 +693,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
       gateway.listActorNames([documentRow.created_by]),
     ).resolves.toEqual({});
     await expect(
-      gateway.list({ limit: 25, offset: 0, status: 'all' }),
+      gateway.list({
+        actorId: documentRow.created_by,
+        limit: 25,
+        offset: 0,
+        status: 'all',
+      }),
     ).resolves.toEqual([]);
     expect(builder.eq).not.toHaveBeenCalledWith(
       'publication_status',
@@ -760,12 +785,24 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     const operations: Array<() => Promise<unknown>> = [
       () => gateway.findById(documentRow.id),
       () => gateway.findVersion(documentRow.id, versionRow.id),
-      () => gateway.list({ limit: 25, offset: 0, status: 'all' }),
+      () =>
+        gateway.list({
+          actorId: documentRow.created_by,
+          limit: 25,
+          offset: 0,
+          status: 'all',
+        }),
       () => gateway.listVersions(documentRow.id),
       () => gateway.listModuleIds(documentRow.id),
       () => gateway.listActorNames([documentRow.created_by]),
       () => gateway.listAuditEvents(documentRow.id),
-      () => gateway.listLibrary({ limit: 25, offset: 0, sort: 'newest' }),
+      () =>
+        gateway.listLibrary({
+          actorId: documentRow.created_by,
+          limit: 25,
+          offset: 0,
+          sort: 'newest',
+        }),
       () =>
         gateway.linkModule(
           documentRow.id,

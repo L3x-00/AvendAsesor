@@ -12,10 +12,11 @@ const DOCUMENT_TYPE_PROMPT_LABELS: Record<string, string> = {
   NORMA_TECNICA: 'Norma Técnica',
   OFICIO: 'Oficio',
   OTRO: 'Otro',
+  PREGUNTAS_FRECUENTES: 'Preguntas frecuentes',
   REGLAMENTO: 'Reglamento',
   RESOLUCION_DIRECTORAL: 'Resolución Directoral (RD)',
   RESOLUCION_MINISTERIAL: 'Resolución Ministerial (RM)',
-  RESOLUCION_VICEMINISTERIAL: 'Resolución Viceministerial (RV)',
+  RESOLUCION_VICEMINISTERIAL: 'Resolución Viceministerial (RVM)',
 };
 
 /** Etiqueta legible con abreviatura para el prompt (RM, RD, DS, M…). */

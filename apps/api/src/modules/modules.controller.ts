@@ -50,22 +50,27 @@ export class ModulesController {
   }
 
   @Get()
-  list(@Query() dto: ListModulesQueryDto): Promise<ManagedModule[]> {
-    return this.modulesService.list(dto);
+  list(
+    @Query() dto: ListModulesQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<ManagedModule[]> {
+    return this.modulesService.list(dto, authorization);
   }
 
   @Get('summary')
   listSummaries(
     @Query() dto: ListModulesQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedModuleSummary[]> {
-    return this.modulesService.listSummaries(dto);
+    return this.modulesService.listSummaries(dto, authorization);
   }
 
   @Get(':id')
   findOne(
     @Param('id', new ParseUUIDPipe()) moduleId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
-    return this.modulesService.findOne(moduleId);
+    return this.modulesService.findOne(moduleId, authorization);
   }
 
   @Patch(':id/status')

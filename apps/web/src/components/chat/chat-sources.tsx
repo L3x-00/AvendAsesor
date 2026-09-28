@@ -76,10 +76,29 @@ function situationLabel(source: ChatSource): string {
   }
 }
 
+const DOCUMENT_TYPE_ABBREVIATIONS: Record<string, string> = {
+  DECRETO_LEGISLATIVO: "DL",
+  DECRETO_SUPREMO: "DS",
+  MEMORANDUM: "M",
+  RESOLUCION_DIRECTORAL: "RD",
+  RESOLUCION_MINISTERIAL: "RM",
+  RESOLUCION_VICEMINISTERIAL: "RVM",
+};
+
+/** Abreviatura visible junto al número de la cita cuando la fuente la tiene. */
+export function sourceCitationLabel(source: ChatSource): string {
+  const abbreviation = source.documentType
+    ? DOCUMENT_TYPE_ABBREVIATIONS[source.documentType]
+    : undefined;
+  return abbreviation ? `[${source.rank}] ${abbreviation}` : `[${source.rank}]`;
+}
+
 /** «Resolución Ministerial · RM-123-2024 · 2024» cuando hay datos. */
 function normReference(source: ChatSource): string | null {
   const parts = [
-    source.documentType ? documentTypeLabel(source.documentType) : null,
+    source.documentType
+      ? `${documentTypeLabel(source.documentType)}${DOCUMENT_TYPE_ABBREVIATIONS[source.documentType] ? ` (${DOCUMENT_TYPE_ABBREVIATIONS[source.documentType]})` : ""}`
+      : null,
     source.resolutionNumber,
     source.issuanceYear ? String(source.issuanceYear) : null,
   ].filter((part): part is string => Boolean(part));

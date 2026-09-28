@@ -953,7 +953,7 @@ describe("ChatPanel", () => {
     ).toBeVisible();
   });
 
-  it("links grouped citations ([1, 2]) to their sources", () => {
+  it("normalizes old grouped citations and omits unknown sources", () => {
     render(
       <ChatPanel
         initialConversation={{
@@ -978,7 +978,7 @@ describe("ChatPanel", () => {
       .getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
       .closest("p");
     expect(paragraph?.textContent).toBe(
-      "La licencia se solicita dentro de 5 días [1, 2].",
+      "La licencia se solicita dentro de 5 días [1].",
     );
   });
 
@@ -1198,7 +1198,7 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "No se encontró sustento suficiente en los documentos disponibles.",
+        "Respuesta lista.",
       ),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();

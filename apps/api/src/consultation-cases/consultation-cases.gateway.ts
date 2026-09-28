@@ -103,6 +103,11 @@ export interface ConsultationCaseSummary {
 }
 
 export interface ConsultationCaseDetail {
+  conversationQuestions: Array<{
+    id: string;
+    content: string;
+    createdAt: string;
+  }>;
   attachments: Array<{
     attachmentKind: 'report_image' | 'suggestion_file';
     createdAt: string;

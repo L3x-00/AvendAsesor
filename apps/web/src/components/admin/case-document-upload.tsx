@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { linkUploadedDocumentToCaseAction } from "@/app/admin/operations/consultation-actions";
 import {
   DOCUMENT_TYPE_OPTIONS,
@@ -7,6 +8,7 @@ import {
   documentYears,
 } from "@/lib/admin-api/document-taxonomy";
 import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
+import type { ConsultationRouteModule } from "./consultation-route-fields";
 
 /**
  * Carga el documento que falta sin salir del caso: se asocia al módulo del tema
@@ -15,17 +17,34 @@ import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
 export function CaseDocumentUpload({
   apiBaseUrl,
   caseId,
-  moduleId,
-  moduleLabel,
-  suggestedTitle,
+  initialModuleId,
+  initialSubmoduleId,
+  roots,
+  submodules,
 }: {
   apiBaseUrl: string;
   caseId: string;
-  moduleId: string;
-  moduleLabel: string;
-  suggestedTitle: string;
+  initialModuleId: string | null;
+  initialSubmoduleId: string | null;
+  roots: ConsultationRouteModule[];
+  submodules: ConsultationRouteModule[];
 }) {
   const currentYear = documentYears()[0];
+  const [rootId, setRootId] = useState(
+    initialModuleId ??
+      submodules.find((item) => item.id === initialSubmoduleId)
+        ?.parentModuleId ??
+      "",
+  );
+  const [submoduleId, setSubmoduleId] = useState(initialSubmoduleId ?? "");
+  const availableSubmodules = useMemo(
+    () => submodules.filter((item) => item.parentModuleId === rootId),
+    [rootId, submodules],
+  );
+  const destinationId = availableSubmodules.length ? submoduleId : rootId;
+  const destinationName =
+    submodules.find((item) => item.id === destinationId)?.name ??
+    roots.find((item) => item.id === destinationId)?.name;
 
   return (
     <details className="mt-4 rounded-lg border border-avend-border p-4">
@@ -33,8 +52,8 @@ export function CaseDocumentUpload({
         Cargar documento para este caso
       </summary>
       <p className="mt-2 text-base text-avend-text-muted">
-        El documento se asociará a «{moduleLabel}» y quedará vinculado al caso.
-        Al terminar podrás cerrar la consulta con una nota.
+        Elige el módulo y, si corresponde, el submódulo donde quedará el
+        documento. Al terminar se vinculará al caso.
       </p>
       <DocumentPdfUploadForm
         apiBaseUrl={apiBaseUrl}
@@ -44,17 +63,59 @@ export function CaseDocumentUpload({
         submitLabel="Cargar y vincular al caso"
         successMessage="Documento cargado y vinculado al caso."
       >
-        <input name="moduleId" type="hidden" value={moduleId} />
+        <input
+          name="moduleIds"
+          type="hidden"
+          value={destinationId ? JSON.stringify([destinationId]) : "[]"}
+        />
+        <label className="block" htmlFor="case-doc-module">
+          <span className="text-base font-semibold avend-field-label--required">Módulo</span>
+          <select
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            id="case-doc-module"
+            onChange={(event) => {
+              setRootId(event.target.value);
+              setSubmoduleId("");
+            }}
+            required
+            value={rootId}
+          >
+            <option value="">Selecciona un módulo</option>
+            {roots.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+        </label>
+        {availableSubmodules.length ? (
+          <label className="block" htmlFor="case-doc-submodule">
+            <span className="text-base font-semibold avend-field-label--required">Submódulo</span>
+            <select
+              className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+              id="case-doc-submodule"
+              onChange={(event) => setSubmoduleId(event.target.value)}
+              required
+              value={submoduleId}
+            >
+              <option value="">Selecciona un submódulo</option>
+              {availableSubmodules.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {destinationName ? (
+          <p role="status">Se guardará en: {destinationName}</p>
+        ) : null}
         <label className="block" htmlFor="case-doc-title">
           <span className="text-base font-semibold avend-field-label--required">
             Título del documento
           </span>
           <input
             className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-            defaultValue={suggestedTitle}
             id="case-doc-title"
             maxLength={500}
             name="title"
+            placeholder="Ej.: RM 123-2026-MINEDU – Lineamientos de licencias"
             required
           />
         </label>
@@ -91,6 +152,20 @@ export function CaseDocumentUpload({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block" htmlFor="case-doc-dependency">
+          <span className="text-base font-semibold avend-field-label--required">
+            Dependencia específica
+          </span>
+          <input
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            id="case-doc-dependency"
+            maxLength={255}
+            minLength={2}
+            name="specificDependency"
+            placeholder="Por ejemplo, UGEL 01 o DIGEDD"
+            required
+          />
         </label>
         <label className="block" htmlFor="case-doc-year">
           <span className="text-base font-semibold avend-field-label--required">

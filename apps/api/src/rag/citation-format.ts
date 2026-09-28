@@ -5,14 +5,24 @@ const MAX_PENDING_CHARS = 80;
 
 /**
  * Reescribe cada cita a su forma individual: «[1, 2]», «[1-3]» o «[[4]]» se
- * convierten en «[1][2]», «[1][2][3]» y «[4]». Una fecha entre corchetes o un
- * rango absurdo se conservan tal cual. Solo se tocan corchetes con números.
+ * convierten en «[1][2]», «[1][2][3]» y «[4]». Con el número de fuentes,
+ * descarta índices inventados; conserva años y fechas entre corchetes.
  */
-export function normalizeCitationGroups(text: string): string {
+export function normalizeCitationGroups(
+  text: string,
+  sourceCount?: number,
+): string {
   return text.replace(CITATION_GROUP, (match) => {
     const indexes = citedIndexes(match);
     if (!indexes.length) return match;
-    return indexes.map((index) => `[${index}]`).join('');
+    // Un año aislado no es una cita. No alterar tampoco números grandes de
+    // documentos que puedan aparecer entre corchetes.
+    if (indexes.some((index) => index > 50)) return match;
+    const valid =
+      sourceCount === undefined
+        ? indexes
+        : indexes.filter((index) => index >= 1 && index <= sourceCount);
+    return [...new Set(valid)].map((index) => `[${index}]`).join('');
   });
 }
 
@@ -24,6 +34,8 @@ export function normalizeCitationGroups(text: string): string {
 export class CitationGroupNormalizer {
   private pending = '';
 
+  constructor(private readonly sourceCount?: number) {}
+
   push(chunk: string): string {
     this.pending += chunk;
     if (!this.pending) return '';
@@ -31,17 +43,22 @@ export class CitationGroupNormalizer {
     const lastOpen = this.pending.lastIndexOf('[');
     const closedAfterOpen =
       lastOpen !== -1 && this.pending.indexOf(']', lastOpen) !== -1;
+    // [[n]] puede llegar en tres tokens. Esperar el segundo cierre evita
+    // publicar [n] seguido de un «]» suelto.
+    const doubleOpen = this.pending.lastIndexOf('[[');
+    const doubleClosed =
+      doubleOpen !== -1 && this.pending.indexOf(']]', doubleOpen + 2) === -1;
     if (
-      lastOpen === -1 ||
-      closedAfterOpen ||
+      ((lastOpen === -1 || closedAfterOpen) && !doubleClosed) ||
       this.pending.length - lastOpen > MAX_PENDING_CHARS
     ) {
       return this.take();
     }
 
-    const safe = this.pending.slice(0, lastOpen);
-    this.pending = this.pending.slice(lastOpen);
-    return normalizeCitationGroups(safe);
+    const holdFrom = doubleClosed ? doubleOpen : lastOpen;
+    const safe = this.pending.slice(0, holdFrom);
+    this.pending = this.pending.slice(holdFrom);
+    return normalizeCitationGroups(safe, this.sourceCount);
   }
 
   flush(): string {
@@ -51,6 +68,6 @@ export class CitationGroupNormalizer {
   private take(): string {
     const pending = this.pending;
     this.pending = '';
-    return normalizeCitationGroups(pending);
+    return normalizeCitationGroups(pending, this.sourceCount);
   }
 }

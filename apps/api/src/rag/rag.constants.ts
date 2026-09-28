@@ -1,5 +1,5 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
-  'Aún no encuentro información sobre esto en los documentos oficiales cargados, y prefiero no adelantarte una respuesta sin respaldo. Cuéntame un poco más —el procedimiento, el año o la entidad (por ejemplo, MINEDU, tu DRE o tu UGEL)— y vuelvo a buscar. Si tu consulta sigue sin cobertura, quedará registrada para que la administración la revise.';
+  'No pude completar una orientación fiable en este momento. Cuéntame un poco más sobre el trámite o la situación y vuelvo a intentarlo. También puedes consultar el portal oficial del MINEDU o comunicarte con tu UGEL o DRE.';
 
 /** Primera consulta sin tema: se pide el trámite antes de buscar (puntos 5 y 12). */
 export const RAG_TOPIC_CLARIFICATION_MESSAGE =
@@ -19,7 +19,7 @@ export const MAX_RAG_ADVISORY_CHARS = 4_000;
 export const RAG_ADVISORY_LEAD_IN = 'Orientación general (sin cita de norma):';
 /** Cierre determinista: verificación oficial y registro para administración. */
 export const RAG_ADVISORY_CLOSING =
-  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU o en tu UGEL/DRE antes de decidir. Dejé tu consulta registrada para que la administración incorpore el documento que la respalde.';
+  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU o con tu UGEL o DRE antes de decidir.';
 /** El modelo la emite si el pedido se sale del ámbito educativo. */
 export const RAG_ADVISORY_OUT_OF_SCOPE_MARKER = '[[FUERA_DE_AMBITO]]';
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;

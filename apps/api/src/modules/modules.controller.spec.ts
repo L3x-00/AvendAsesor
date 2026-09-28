@@ -37,6 +37,7 @@ describe('ModulesController', () => {
     create: jest.fn(),
     findOne: jest.fn(),
     list: jest.fn(),
+    listSummaries: jest.fn(),
     logicalDelete: jest.fn(),
     setStatus: jest.fn(),
     update: jest.fn(),
@@ -50,16 +51,34 @@ describe('ModulesController', () => {
   it('delegates create, list and retrieval to the module service', async () => {
     modulesService.create.mockResolvedValue(moduleRecord);
     modulesService.list.mockResolvedValue([moduleRecord]);
+    modulesService.listSummaries.mockResolvedValue([
+      { ...moduleRecord, canManage: true, documentCount: 1, submoduleCount: 0 },
+    ]);
     modulesService.findOne.mockResolvedValue(moduleRecord);
 
     await expect(
       controller.create({ code: 'MODULE_TEST', name: 'Módulo' }, authorization),
     ).resolves.toEqual(moduleRecord);
-    await expect(controller.list({ status: 'active' })).resolves.toEqual([
-      moduleRecord,
-    ]);
-    await expect(controller.findOne(moduleRecord.id)).resolves.toEqual(
-      moduleRecord,
+    await expect(
+      controller.list({ status: 'active' }, authorization),
+    ).resolves.toEqual([moduleRecord]);
+    await expect(
+      controller.findOne(moduleRecord.id, authorization),
+    ).resolves.toEqual(moduleRecord);
+    expect(modulesService.list).toHaveBeenCalledWith(
+      { status: 'active' },
+      authorization,
+    );
+    expect(modulesService.findOne).toHaveBeenCalledWith(
+      moduleRecord.id,
+      authorization,
+    );
+    await expect(
+      controller.listSummaries({}, authorization),
+    ).resolves.toHaveLength(1);
+    expect(modulesService.listSummaries).toHaveBeenCalledWith(
+      {},
+      authorization,
     );
   });
 

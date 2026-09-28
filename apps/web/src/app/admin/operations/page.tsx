@@ -8,6 +8,7 @@ import {
   consultationCaseKindSchema,
   consultationCaseStatusSchema,
   consultationPeriodSchema,
+  type ConsultationCaseSummary,
   type ConsultationPeriod,
   type ConsultationReportsDashboard,
 } from "@/lib/consultation-reports-api/types";
@@ -310,13 +311,34 @@ export default async function OperationsPage({
       : null;
   const report =
     view === "reportes"
-      ? await Promise.all([client.getDashboard(period), client.getTopics(period)])
+      ? await Promise.all([
+          client.getDashboard(period),
+          client.getTopics(period),
+          client.listCases({
+            kind: "teacher_report",
+            limit: CASES_PER_PAGE,
+            moduleId,
+            offset,
+            period,
+            submoduleId,
+          }),
+        ])
       : null;
   const cases = queue?.[0] ?? [];
   const unansweredGroups = queue?.[1] ?? null;
   const reviewPriorities = queue?.[2] ?? [];
   const dashboard = report?.[0] ?? null;
   const topics = report?.[1] ?? [];
+  const teacherReports = report?.[2] ?? [];
+  const reportsByModule = new Map<string, ConsultationCaseSummary[]>();
+  for (const teacherReport of teacherReports) {
+    const name = teacherReport.detectedModuleName ??
+      teacherReport.requestedModuleName ?? "Sin módulo identificado";
+    reportsByModule.set(name, [
+      ...(reportsByModule.get(name) ?? []),
+      teacherReport,
+    ]);
+  }
   const totalCases = cases[0]?.totalCount ?? 0;
   const caseFilters = {
     issueType,
@@ -524,6 +546,53 @@ export default async function OperationsPage({
             <TopicsRanking period={period} topics={topics} />
           </div>
         </section>
+        ) : null}
+
+        {view === "reportes" ? (
+          <section aria-labelledby="teacher-reports-title" className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <h2 id="teacher-reports-title">Reportes de docentes por módulo</h2>
+                <p>Abre un caso para revisar la pregunta, la respuesta y el motivo.</p>
+              </div>
+            </div>
+            {teacherReports.length === 0 ? (
+              <p className={styles.empty}>No hay reportes en este periodo.</p>
+            ) : [...reportsByModule].map(([moduleName, moduleReports]) => (
+              <div key={moduleName}>
+                <h3>{moduleName} ({moduleReports.length} en esta página)</h3>
+                <ul className={styles.caseList}>
+                  {moduleReports.map((item) => (
+                    <li className={styles.caseItem} key={item.id}>
+                      <p className={styles.caseQuestion}>
+                        {item.questionSnapshot ?? item.reporterComment ?? "Reporte del docente"}
+                      </p>
+                      <p className={styles.meta}>
+                        {item.detectedSubmoduleName ? `${item.detectedSubmoduleName} · ` : ""}
+                        {item.reportReason ? `${reportReasonLabels[item.reportReason]} · ` : ""}
+                        {formatDate(item.createdAt)}
+                      </p>
+                      <Link className={styles.caseLink} href={`/admin/operations/${item.id}`}>
+                        Ver caso
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {currentPage > 1 ? (
+              <Link href={`/admin/operations?${queryString({
+                vista: "reportes", period, moduleId, submoduleId,
+                page: currentPage - 1,
+              })}`}>Ver reportes más recientes</Link>
+            ) : null}
+            {teacherReports[0]?.totalCount > (currentPage * CASES_PER_PAGE) ? (
+              <Link href={`/admin/operations?${queryString({
+                vista: "reportes", period, moduleId, submoduleId,
+                page: currentPage + 1,
+              })}`}>Ver más reportes</Link>
+            ) : null}
+          </section>
         ) : null}
 
         {view === "consultar" ? (

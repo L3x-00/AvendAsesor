@@ -249,7 +249,7 @@ export function DocumentPdfUploadForm({
       }
 
       const finalMessage = linkWarning
-        ? `${successMessage} ${linkWarning}`
+        ? `Documento cargado. ${linkWarning}`
         : successMessage;
       form.reset();
       setFeedback({ message: finalMessage, status: "success" });

@@ -524,6 +524,21 @@ export interface SupabaseDatabase {
           updated_by: string | null;
         }[];
       };
+      list_document_library_for_actor: {
+        Args: SupabaseDatabase['public']['Functions']['list_document_library']['Args'] & {
+          p_actor_id: string;
+        };
+        Returns: SupabaseDatabase['public']['Functions']['list_document_library']['Returns'];
+      };
+      list_documents_for_actor: {
+        Args: {
+          p_actor_id: string;
+          p_status: 'active' | 'all' | 'inactive';
+          p_limit: number;
+          p_offset: number;
+        };
+        Returns: SupabaseDatabase['public']['Tables']['documents']['Row'][];
+      };
       record_document_download_url: {
         Args: {
           p_actor_id: string;

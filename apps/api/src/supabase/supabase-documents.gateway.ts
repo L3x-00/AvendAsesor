@@ -86,6 +86,16 @@ function storageError(error: { message?: string }): never {
 export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
 
+  async canManageModule(actorId: string, moduleId: string): Promise<boolean> {
+    const { data, error } = await this.requireClient().rpc(
+      'admin_can_manage_module',
+      { p_actor_id: actorId, p_module_id: moduleId },
+    );
+
+    if (error) databaseError(error);
+    return data === true;
+  }
+
   async addVersion(input: AddDocumentVersionRecord): Promise<ManagedDocument> {
     const { data, error } = await this.requireClient().rpc(
       'add_governed_document_version',
@@ -244,24 +254,20 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
   }
 
   async list(options: {
+    actorId: string;
     limit: number;
     offset: number;
     status: 'active' | 'all' | 'inactive';
   }): Promise<ManagedDocument[]> {
-    let query = this.requireClient()
-      .from('documents')
-      .select(DOCUMENT_COLUMNS)
-      .eq('is_deleted', false);
-
-    if (options.status !== 'all') {
-      query = query.eq('publication_status', options.status);
-    }
-
-    const { data, error } = await query
-      .order('updated_at', { ascending: false })
-      .order('title', { ascending: true })
-      .order('id', { ascending: true })
-      .range(options.offset, options.offset + options.limit - 1);
+    const { data, error } = await this.requireClient().rpc(
+      'list_documents_for_actor',
+      {
+        p_actor_id: options.actorId,
+        p_limit: options.limit,
+        p_offset: options.offset,
+        p_status: options.status,
+      },
+    );
 
     if (error) {
       databaseError(error);
@@ -305,8 +311,9 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     options: DocumentLibraryQuery,
   ): Promise<DocumentLibraryPage> {
     const { data, error } = await this.requireClient().rpc(
-      'list_document_library',
+      'list_document_library_for_actor',
       {
+        p_actor_id: options.actorId,
         p_created_by: options.createdBy ?? null,
         p_created_from: options.createdFrom ?? null,
         p_created_to: options.createdTo ?? null,

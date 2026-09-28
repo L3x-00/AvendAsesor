@@ -192,6 +192,7 @@ function parseCaseDetail(value: unknown): ConsultationCaseDetail {
   };
 
   return {
+    conversationQuestions: [],
     attachments: toItems('attachments').map((item) => ({
       attachmentKind: String(item.attachmentKind) as
         'report_image' | 'suggestion_file',
@@ -496,7 +497,31 @@ export class SupabaseConsultationCasesGatewayAdapter implements ConsultationCase
       },
     );
     if (error) databaseError(error);
-    return parseCaseDetail(data);
+    const detail = parseCaseDetail(data);
+    if (!detail.case.conversationId) return detail;
+    const { data: questions, error: questionsError } =
+      await this.requireClient()
+        .from('chat_messages')
+        .select('id, content, created_at')
+        .eq('conversation_id', detail.case.conversationId)
+        .eq('role', 'user')
+        .lte('created_at', detail.case.createdAt)
+        .order('created_at', { ascending: false })
+        .limit(100);
+    if (questionsError) databaseError(questionsError);
+    const questionRows = (questions ?? []) as unknown as Array<{
+      id: string;
+      content: string;
+      created_at: string;
+    }>;
+    return {
+      ...detail,
+      conversationQuestions: questionRows.reverse().map((question) => ({
+        id: question.id,
+        content: question.content,
+        createdAt: question.created_at,
+      })),
+    };
   }
 
   async updateCase(

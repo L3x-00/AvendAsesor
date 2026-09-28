@@ -230,7 +230,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     expect(ragService.retrieve).toHaveBeenCalled();
   });
 
-  it('sin vocabulario disponible entiende la pregunta tal como vino', async () => {
+  it('corrige errores comunes aunque el catálogo de módulos no esté disponible', async () => {
     const { historyGateway, ragService, service } = setup({
       moduleOverview: jest
         .fn()
@@ -247,7 +247,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     });
 
     expect(ragService.retrieve).toHaveBeenCalledWith(
-      '¿Cuál es el plazo de la renumeracion?',
+      '¿Cuál es el plazo de la remuneración?',
       'esc',
       [],
       { forceContext: false },

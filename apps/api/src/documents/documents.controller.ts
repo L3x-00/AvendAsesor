@@ -73,15 +73,19 @@ export class DocumentsController {
   }
 
   @Get()
-  list(@Query() dto: ListDocumentsQueryDto): Promise<ManagedDocument[]> {
-    return this.documentsService.list(dto);
+  list(
+    @Query() dto: ListDocumentsQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<ManagedDocument[]> {
+    return this.documentsService.list(dto, authorization);
   }
 
   @Get('library')
   listLibrary(
     @Query() dto: ListDocumentLibraryQueryDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<DocumentLibraryPage> {
-    return this.documentsService.listLibrary(dto);
+    return this.documentsService.listLibrary(dto, authorization);
   }
 
   @Get('suggestions')
@@ -100,8 +104,9 @@ export class DocumentsController {
   @Get(':id')
   findOne(
     @Param('id', new ParseUUIDPipe()) documentId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocumentDetails> {
-    return this.documentsService.findOne(documentId);
+    return this.documentsService.findOne(documentId, authorization);
   }
 
   @Post(':id/versions')
