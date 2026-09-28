@@ -38,6 +38,23 @@ describe("DocumentSituationActions", () => {
     ).toBeNull();
   });
 
+  it("al abrir Archivar/Desactivar enfoca y resalta el motivo", async () => {
+    const user = userEvent.setup();
+    render(
+      <DocumentSituationActions
+        documentId="d60530ac-6fba-46bd-bac7-940c0655db54"
+        replacementCandidates={replacementCandidates}
+        situation="current"
+      />,
+    );
+
+    await user.click(screen.getByText("Archivar / Desactivar"));
+    const reason = screen.getByRole("combobox", { name: "Motivo" });
+
+    await waitFor(() => expect(reason).toHaveFocus());
+    expect(reason.className).toContain("avend-field-highlight");
+  });
+
   it("shows replacement linkage only for the replacement reason", async () => {
     const user = userEvent.setup();
     render(

@@ -419,16 +419,18 @@ export class DocumentsService {
     const expiresAt = new Date(
       Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1_000,
     ).toISOString();
+    const disposition = dto.disposition ?? 'attachment';
     const url = await this.documentsGateway.createDownloadUrl(
       version.storagePath,
       DOWNLOAD_URL_TTL_SECONDS,
-      dto.disposition ?? 'attachment',
+      disposition,
     );
 
     await this.documentsGateway.recordDownloadUrl(
       documentId,
       version.id,
       authorization.userId,
+      disposition,
     );
 
     return {
@@ -440,10 +442,11 @@ export class DocumentsService {
 
   async findOne(documentId: string): Promise<ManagedDocumentDetails> {
     const document = await this.requireLiveDocument(documentId);
-    const [versions, moduleIds, auditEvents] = await Promise.all([
+    const [versions, moduleIds, auditEvents, usage] = await Promise.all([
       this.documentsGateway.listVersions(documentId),
       this.documentsGateway.listModuleIds(documentId),
       this.documentsGateway.listAuditEvents(documentId),
+      this.documentsGateway.getUsageCounters(documentId),
     ]);
     const actorIds = [
       document.createdBy,
@@ -473,6 +476,7 @@ export class DocumentsService {
         ? (actorNames[document.createdBy] ?? null)
         : null,
       moduleIds,
+      usage,
       versions: versions.map((version) =>
         toManagedDocumentVersion(
           version,

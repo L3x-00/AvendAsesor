@@ -93,7 +93,14 @@ export interface ManagedDocumentDetails extends ManagedDocument {
   auditEvents: DocumentAuditEvent[];
   createdByName: string | null;
   moduleIds: string[];
+  usage: DocumentUsageCounters;
   versions: ManagedDocumentVersion[];
+}
+
+export interface DocumentUsageCounters {
+  downloads: number;
+  lastDownloadAt: string | null;
+  opens: number;
 }
 
 export interface DocumentAuditEvent {

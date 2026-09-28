@@ -499,10 +499,21 @@ export interface SupabaseDatabase {
       record_document_download_url: {
         Args: {
           p_actor_id: string;
+          p_disposition?: 'attachment' | 'inline' | null;
           p_document_id: string;
           p_document_version_id: string;
         };
         Returns: null;
+      };
+      get_document_usage_counters: {
+        Args: {
+          p_document_id: string;
+        };
+        Returns: Array<{
+          downloads: number;
+          last_download_at: string | null;
+          opens: number;
+        }>;
       };
       set_document_publication_status: {
         Args: {

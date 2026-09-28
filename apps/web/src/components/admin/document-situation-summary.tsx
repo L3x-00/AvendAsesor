@@ -124,6 +124,11 @@ export function DocumentSituationSummary({
           </div>
         ) : null}
       </dl>
+      <p className="mt-4 text-base leading-7 text-amber-900">
+        Este documento ya no alimenta las respuestas del chat; se conserva como
+        antecedente histórico y puedes volver a marcarlo como vigente cuando
+        corresponda.
+      </p>
     </section>
   );
 }
