@@ -19,9 +19,7 @@ const EXAMPLES_SENTENCE =
   'Por ejemplo, puedes preguntarme por los requisitos de una reasignación, el plazo de una licencia o qué corresponde ante una inasistencia.';
 
 export type ConversationalReplyKind =
-  | SocialSubtype
-  | OutOfScopeSubtype
-  | 'unrelated_no_evidence';
+  SocialSubtype | OutOfScopeSubtype | 'unrelated_no_evidence';
 
 export interface ConversationalReplyOptions {
   /** Temas (módulos raíz activos) que hoy se pueden consultar. */
