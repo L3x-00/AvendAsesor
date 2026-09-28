@@ -35,6 +35,14 @@ interface DocumentPdfUploadFormProps {
   children: ReactNode;
   className?: string;
   endpoint: string;
+  /**
+   * Se llama con el documento recién creado (p. ej., para vincularlo a un caso).
+   * Si devuelve `{ ok: false }`, se avisa que la vinculación no se completó.
+   */
+  onUploaded?: (created: { id: string; title: string }) =>
+    | Promise<{ message?: string; ok: boolean } | void>
+    | { message?: string; ok: boolean }
+    | void;
   submitLabel: string;
   successMessage: string;
 }
@@ -123,6 +131,7 @@ export function DocumentPdfUploadForm({
   children,
   className = "space-y-3",
   endpoint,
+  onUploaded,
   submitLabel,
   successMessage,
 }: DocumentPdfUploadFormProps) {
@@ -210,10 +219,42 @@ export function DocumentPdfUploadForm({
         return;
       }
 
+      let linkWarning: string | undefined;
+      if (onUploaded) {
+        try {
+          const created: unknown = await response.json();
+          if (
+            created &&
+            typeof created === "object" &&
+            "id" in created &&
+            typeof (created as { id?: unknown }).id === "string"
+          ) {
+            const id = (created as { id: string }).id;
+            const title =
+              "title" in created &&
+              typeof (created as { title?: unknown }).title === "string"
+                ? (created as { title: string }).title
+                : "";
+            const result = await onUploaded({ id, title });
+            if (result && !result.ok) {
+              linkWarning =
+                result.message ??
+                "No se pudo vincular automáticamente. Hazlo desde el detalle del caso.";
+            }
+          }
+        } catch {
+          linkWarning =
+            "No se pudo vincular automáticamente. Hazlo desde el detalle del caso.";
+        }
+      }
+
+      const finalMessage = linkWarning
+        ? `${successMessage} ${linkWarning}`
+        : successMessage;
       form.reset();
-      setFeedback({ message: successMessage, status: "success" });
-      setShowSuccess(true);
-      showToast(successMessage);
+      setFeedback({ message: finalMessage, status: "success" });
+      setShowSuccess(!linkWarning);
+      showToast(finalMessage);
       router.refresh();
     } catch {
       setFeedback({

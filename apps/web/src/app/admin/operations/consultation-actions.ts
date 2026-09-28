@@ -152,6 +152,28 @@ export async function closeConsultationCaseAction(
   redirect(`/admin/operations/${caseId}`);
 }
 
+/**
+ * Vincula al caso un documento recién cargado desde su propia pantalla, para
+ * que la carga y la relación ocurran en un solo paso.
+ */
+export async function linkUploadedDocumentToCaseAction(
+  caseId: string,
+  documentId: string,
+): Promise<{ message?: string; ok: boolean }> {
+  try {
+    const { client } = await createAuthorizedConsultationReportsApiContext();
+    await client.linkDocument(caseId, documentId);
+    revalidateCase(caseId);
+    return { ok: true };
+  } catch {
+    return {
+      message:
+        "El documento se cargó, pero no se pudo vincular automáticamente al caso. Vincúlalo desde «Documentos vinculados».",
+      ok: false,
+    };
+  }
+}
+
 const MAX_GROUP_CASES = 50;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
