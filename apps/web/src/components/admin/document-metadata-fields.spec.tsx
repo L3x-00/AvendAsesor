@@ -53,7 +53,7 @@ describe("DocumentMetadataFields", () => {
     const entity = screen.getByRole("combobox", { name: "Entidad emisora" });
     const year = screen.getByRole("combobox", { name: "Año del documento" });
 
-    expect(within(type).getAllByRole("option").slice(1)).toHaveLength(17);
+    expect(within(type).getAllByRole("option").slice(1)).toHaveLength(18);
     expect(
       within(type)
         .getAllByRole("option")

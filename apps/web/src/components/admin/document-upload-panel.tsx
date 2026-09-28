@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { DocumentSuggestions } from "@/lib/admin-api/types";
 import { DocumentMetadataFields } from "./document-metadata-fields";
 import { FieldError } from "@/components/ui/form-field";
@@ -9,6 +9,8 @@ import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
 interface DocumentUploadPanelProps {
   /** Abre el formulario al llegar desde «Cargar documento en este tema». */
   defaultOpen?: boolean;
+  /** Tipo documental preseleccionado (p. ej., al subir un anexo). */
+  defaultDocumentType?: string;
   apiBaseUrl: string;
   moduleId: string;
   moduleName: string;
@@ -18,6 +20,7 @@ interface DocumentUploadPanelProps {
 
 export function DocumentUploadPanel({
   apiBaseUrl,
+  defaultDocumentType,
   moduleId,
   defaultOpen = false,
   moduleName,
@@ -29,7 +32,10 @@ export function DocumentUploadPanel({
   const contentId = `${prefix}-content`;
 
   return (
-    <section className="avend-elevated rounded-xl border border-avend-border bg-avend-surface">
+    <section
+      className="avend-elevated rounded-xl border border-avend-border bg-avend-surface"
+      id="cargar-documento"
+    >
       <div className="p-5">
         <button
           aria-controls={contentId}
@@ -106,6 +112,11 @@ export function DocumentUploadPanel({
               </label>
               <DocumentMetadataFields
                 includeSituation
+                initial={
+                  defaultDocumentType
+                    ? { documentType: defaultDocumentType }
+                    : undefined
+                }
                 replacementCandidates={replacementCandidates}
                 required
                 suggestions={suggestions}

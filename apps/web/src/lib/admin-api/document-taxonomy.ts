@@ -13,6 +13,7 @@ export const DOCUMENT_TYPE_OPTIONS = [
   { label: "Comunicado", value: "COMUNICADO" },
   { label: "Cronograma", value: "CRONOGRAMA" },
   { label: "Anexo", value: "ANEXO" },
+  { label: "Preguntas frecuentes", value: "PREGUNTAS_FRECUENTES" },
   { label: "Informe", value: "INFORME" },
   { label: "Infografía", value: "INFOGRAFIA" },
   { label: "Otro", value: "OTRO" },
