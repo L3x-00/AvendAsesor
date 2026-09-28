@@ -4,10 +4,15 @@ import type OpenAI from 'openai';
 import { createAiGatewayClient } from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
 import {
+  buildAdvisorySystemPrompt,
+  buildAdvisoryUserPrompt,
   buildEvidenceSystemPrompt,
   buildEvidenceUserPrompt,
 } from './prompt.builder';
-import { MAX_RAG_ANSWER_TOKENS } from './rag.constants';
+import {
+  MAX_RAG_ADVISORY_TOKENS,
+  MAX_RAG_ANSWER_TOKENS,
+} from './rag.constants';
 
 @Injectable()
 export class OpenAiAnswerGateway implements AnswerGateway {
@@ -55,23 +60,34 @@ export class OpenAiAnswerGateway implements AnswerGateway {
     input: AnswerGatewayInput,
     model: string,
   ) {
+    const advisory = input.mode === 'advisory';
     return client.chat.completions.create(
       {
         messages: [
-          { content: buildEvidenceSystemPrompt(), role: 'system' },
           {
-            content: buildEvidenceUserPrompt(
-              input.question,
-              input.conversationContext,
-              input.sources,
-            ),
+            content: advisory
+              ? buildAdvisorySystemPrompt()
+              : buildEvidenceSystemPrompt(),
+            role: 'system',
+          },
+          {
+            content: advisory
+              ? buildAdvisoryUserPrompt(
+                  input.question,
+                  input.conversationContext,
+                )
+              : buildEvidenceUserPrompt(
+                  input.question,
+                  input.conversationContext,
+                  input.sources,
+                ),
             role: 'user',
           },
         ],
         model,
         stream: true,
-        temperature: 0,
-        max_tokens: MAX_RAG_ANSWER_TOKENS,
+        temperature: advisory ? 0.4 : 0,
+        max_tokens: advisory ? MAX_RAG_ADVISORY_TOKENS : MAX_RAG_ANSWER_TOKENS,
       },
       { signal: input.abortSignal },
     );

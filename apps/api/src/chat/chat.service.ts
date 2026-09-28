@@ -28,7 +28,11 @@ import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CHAT_CONTEXT_MESSAGES,
+  MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
+  RAG_ADVISORY_CLOSING,
+  RAG_ADVISORY_LEAD_IN,
+  RAG_ADVISORY_OUT_OF_SCOPE_MARKER,
   RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
@@ -797,12 +801,27 @@ export class ChatService {
       // ámbito con un término que el léxico no conoce ("DS 004-2013-ED").
       const unrelated =
         !input.conversationId && !hasEducationalSignal(question);
+      if (!unrelated) {
+        // Consulta del ámbito sin respaldo: orientación general del asesor
+        // (sin citas ni normas inventadas) y el hueco queda registrado para la
+        // administración. Si el proveedor falla, cae al mensaje amable actual.
+        yield* this.advisoryReply({
+          abortSignal: input.abortSignal,
+          conversationContext,
+          conversationId: turn.conversationId,
+          faqMemory,
+          question: input.question,
+          retrievalScope,
+          topRelevanceScore: retrieval.topRelevanceScore,
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        return;
+      }
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
-        message: unrelated
-          ? buildConversationalReply('unrelated_no_evidence')
-          : undefined,
+        message: buildConversationalReply('unrelated_no_evidence'),
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -1040,6 +1059,97 @@ export class ChatService {
     } catch (error) {
       this.logger.warn(
         `Cobertura del catálogo no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Orientación general del modo asesor: cuando el RAG no encontró sustento y
+   * la consulta sí es del ámbito, se responde con una orientación breve SIN
+   * citas (nada de normas, artículos ni plazos inventados) y aviso de
+   * verificación oficial. El hueco queda registrado para administración.
+   */
+  private async *advisoryReply(input: {
+    abortSignal?: AbortSignal;
+    conversationContext: ChatContextMessage[];
+    conversationId: string;
+    faqMemory: ReturnType<FaqMemoryService['prepare']>;
+    question: string;
+    retrievalScope: RetrievalScope;
+    topRelevanceScore: number | null;
+    userId: string;
+    userMessageId: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    const body = await this.generateAdvisoryBody(input);
+    if (input.abortSignal?.aborted) return;
+
+    if (!body) {
+      yield* this.completeWithoutEvidence({
+        conversationId: input.conversationId,
+        faqMemory: input.faqMemory,
+        retrievalScope: input.retrievalScope,
+        topRelevanceScore: input.topRelevanceScore,
+        userId: input.userId,
+        userMessageId: input.userMessageId,
+      });
+      return;
+    }
+
+    const message = `${RAG_ADVISORY_LEAD_IN}\n\n${body}\n\n${RAG_ADVISORY_CLOSING}`;
+    const completed = await this.historyGateway.completeTurn({
+      answer: message,
+      conversationId: input.conversationId,
+      faqMemory: input.faqMemory,
+      detectedModuleId: null,
+      detectedSubmoduleId: null,
+      qualitySignals: ['support_insufficient'],
+      replyRole: 'assistant',
+      retrievalScope: input.retrievalScope,
+      sources: [],
+      topRelevanceScore: input.topRelevanceScore,
+      unansweredReason: 'insufficient_evidence',
+      userId: input.userId,
+      userMessageId: input.userMessageId,
+    });
+    yield { data: { text: message }, type: 'token' };
+    yield {
+      data: {
+        conversationId: input.conversationId,
+        inReplyToMessageId: input.userMessageId,
+        messageId: completed.answerMessageId,
+        provider: 'openai',
+      },
+      type: 'done',
+    };
+  }
+
+  /** Genera el cuerpo de la orientación; `null` si falla o se sale del ámbito. */
+  private async generateAdvisoryBody(input: {
+    abortSignal?: AbortSignal;
+    conversationContext: ChatContextMessage[];
+    question: string;
+  }): Promise<string | null> {
+    try {
+      let body = '';
+      for await (const token of this.answerGateway.generate({
+        abortSignal: input.abortSignal,
+        conversationContext: input.conversationContext,
+        mode: 'advisory',
+        question: input.question,
+        sources: [],
+      })) {
+        if (input.abortSignal?.aborted) return null;
+        if (body.length < MAX_RAG_ADVISORY_CHARS) body += token;
+      }
+      const trimmed = body.trim();
+      if (!trimmed || trimmed.includes(RAG_ADVISORY_OUT_OF_SCOPE_MARKER)) {
+        return null;
+      }
+      return trimmed;
+    } catch (error) {
+      this.logger.warn(
+        `Orientación general no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
       );
       return null;
     }

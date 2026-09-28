@@ -14,6 +14,7 @@ import {
   type ChatStreamEvent,
 } from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
+import { buildConversationalReply } from './intent/conversational-replies';
 
 /** Tope de la respuesta del modelo: se reserva espacio para el aviso de corte. */
 const ANSWER_CAP = MAX_RAG_ANSWER_CHARS - `\n\n${RAG_TRUNCATION_NOTE}`.length;
@@ -114,13 +115,17 @@ describe('ChatService', () => {
     );
   });
 
-  it('records no-evidence without calling the answer provider', async () => {
+  it('sin señal educativa registra el pendiente sin llamar al proveedor', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
     });
 
-    await expect(collect(service)).resolves.toEqual([
+    await expect(
+      collect(service, {
+        question: '¿Cuál es la mejor época para sembrar papa?',
+      }),
+    ).resolves.toEqual([
       {
         data: {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -130,7 +135,10 @@ describe('ChatService', () => {
         },
         type: 'conversation',
       },
-      { data: { message: noEvidenceMessage('current') }, type: 'no_evidence' },
+      {
+        data: { message: buildConversationalReply('unrelated_no_evidence') },
+        type: 'no_evidence',
+      },
       {
         data: {
           conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -148,6 +156,65 @@ describe('ChatService', () => {
         sources: [],
         unansweredReason: 'insufficient_evidence',
       }),
+    );
+  });
+
+  it('sin sustento y consulta del ámbito ofrece orientación general sin citas', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Suele corresponder presentar la solicitud por mesa de partes.';
+      })(),
+    );
+
+    const events = await collect(service);
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'token',
+      'done',
+    ]);
+    const token = events[1] as { data: { text: string } };
+    expect(token.data.text).toContain(
+      'Orientación general (sin cita de norma):',
+    );
+    expect(token.data.text).toContain('Sugerencias:');
+    expect(token.data.text).not.toMatch(/\[\d+\]/u);
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'advisory', sources: [] }),
+    );
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualitySignals: ['support_insufficient'],
+        replyRole: 'assistant',
+        sources: [],
+        unansweredReason: 'insufficient_evidence',
+      }),
+    );
+  });
+
+  it('si la orientación general falla, responde el mensaje de sin evidencia', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('provider down');
+    });
+
+    const events = await collect(service);
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'no_evidence',
+      'done',
+    ]);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ replyRole: 'no_evidence' }),
     );
   });
 
