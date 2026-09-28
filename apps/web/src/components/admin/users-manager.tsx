@@ -68,6 +68,8 @@ interface UsersManagerProps {
   /** Render base URL: the roster upload goes straight to the API. */
   apiBaseUrl: string;
   counts: AdministrativeUserCounts;
+  /** Árbol de módulos para asignar accesos al crear un administrador. */
+  modules?: Array<{ id: string; name: string; parentModuleId: string | null }>;
   page: AdministrativeUserPage;
   query: ParsedUserDirectoryQuery;
   /** Today in Lima (YYYY-MM-DD), resolved on the server so hydration matches. */
@@ -495,11 +497,13 @@ function SuspendUserForm({ user }: { user: AdministrativeUser }) {
  * password from the invitation, so no password is ever typed here.
  */
 function CreateUserForm({
+  modules = [],
   role,
   submitLabel,
   title,
   today,
 }: {
+  modules?: Array<{ id: string; name: string; parentModuleId: string | null }>;
   role: "admin" | "docente";
   submitLabel: string;
   title: string;
@@ -607,6 +611,21 @@ function CreateUserForm({
         <p className={styles.formHint}>
           Si dejas las fechas vacías, el acceso queda sin vencimiento.
         </p>
+        {role === "admin" && modules.length ? (
+          <fieldset className={styles.validityRow}>
+            <legend className={styles.fieldLabel}>
+              Módulos con acceso (opcional; puedes ajustarlos después)
+            </legend>
+            <div className={styles.moduleGrid}>
+              {modules.map((module) => (
+                <label className={styles.moduleOption} key={module.id}>
+                  <input name="moduleId" type="checkbox" value={module.id} />
+                  {module.parentModuleId ? `↳ ${module.name}` : module.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
       </AdminActionForm>
     </details>
   );
@@ -633,6 +652,7 @@ function userExportHref(query: ParsedUserDirectoryQuery): string {
 export function UsersManager({
   apiBaseUrl,
   counts,
+  modules = [],
   page,
   query,
   today,
@@ -659,6 +679,7 @@ export function UsersManager({
           today={today}
         />
         <CreateUserForm
+          modules={modules}
           role="admin"
           submitLabel="Registrar administrador"
           title="+ Agregar administrador"

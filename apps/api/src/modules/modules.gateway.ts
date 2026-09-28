@@ -40,6 +40,8 @@ export interface UpdateModuleRecord {
 }
 
 export interface ModulesGateway {
+  /** ¿El actor puede gestionar este módulo según sus concesiones? */
+  canManageModule(actorId: string, moduleId: string): Promise<boolean>;
   create(input: CreateModuleRecord): Promise<ManagedModule>;
   findById(moduleId: string): Promise<ManagedModule | null>;
   hasNonDeletedChildren(moduleId: string): Promise<boolean>;

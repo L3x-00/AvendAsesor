@@ -394,11 +394,29 @@ export interface SupabaseDatabase {
         Returns: {
           can_access: boolean;
           full_name: string;
+          module_ids: string[];
           role: 'admin' | 'superadmin';
           updated_at: string | null;
           updated_by: string | null;
           user_id: string;
         }[];
+      };
+      list_admin_module_grants: {
+        Args: { p_actor_id: string; p_target_user_id: string };
+        Returns: { module_id: string }[];
+      };
+      admin_can_manage_module: {
+        Args: { p_actor_id: string; p_module_id: string };
+        Returns: boolean;
+      };
+      set_admin_module_grants: {
+        Args: {
+          p_actor_id: string;
+          p_module_ids: string[];
+          p_reason: string;
+          p_target_user_id: string;
+        };
+        Returns: null;
       };
       set_admin_module_permission: {
         Args: {
@@ -410,6 +428,7 @@ export interface SupabaseDatabase {
         Returns: {
           can_access: boolean;
           full_name: string;
+          module_ids: string[];
           role: 'admin' | 'superadmin';
           updated_at: string | null;
           updated_by: string | null;

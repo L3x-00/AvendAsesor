@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -15,6 +17,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { SetModuleGrantsDto } from './dto/set-module-grants.dto';
 import { SetModulePermissionDto } from './dto/set-module-permission.dto';
 import type { AdminModulePermission } from './module-permissions.gateway';
 import { ModulePermissionsService } from './module-permissions.service';
@@ -40,5 +43,15 @@ export class ModulePermissionsController {
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<AdminModulePermission> {
     return this.service.set(targetUserId, dto, authorization);
+  }
+
+  @Patch(':id/grants')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setGrants(
+    @Param('id', new ParseUUIDPipe()) targetUserId: string,
+    @Body() dto: SetModuleGrantsDto,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<void> {
+    await this.service.setGrants(targetUserId, dto, authorization);
   }
 }

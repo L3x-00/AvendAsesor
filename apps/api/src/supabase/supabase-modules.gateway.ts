@@ -49,6 +49,20 @@ function databaseError(error: PostgrestError): never {
 export class SupabaseModulesGatewayAdapter implements ModulesGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
 
+  async canManageModule(actorId: string, moduleId: string): Promise<boolean> {
+    const { data, error } = await this.requireClient().rpc(
+      'admin_can_manage_module',
+      {
+        p_actor_id: actorId,
+        p_module_id: moduleId,
+      },
+    );
+
+    if (error) databaseError(error);
+
+    return data === true;
+  }
+
   async create(input: CreateModuleRecord): Promise<ManagedModule> {
     const client = this.requireClient();
     const record: ModuleInsert = {

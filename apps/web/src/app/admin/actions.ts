@@ -713,6 +713,33 @@ export async function sendPasswordResetAction(
   });
 }
 
+export async function setAdminModuleGrantsAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(async (client) => {
+    const userId = requiredText(formData, "userId", "El administrador");
+    const reason = requiredText(formData, "reason", "El motivo");
+    const moduleIds = formData
+      .getAll("moduleId")
+      .filter(
+        (value): value is string => typeof value === "string" && value !== "",
+      );
+
+    await client.setAdminModuleGrants(userId, { moduleIds, reason });
+    revalidatePath("/admin");
+    revalidatePath("/admin/users");
+
+    return {
+      message:
+        moduleIds.length === 0
+          ? "Módulos actualizados: este administrador queda sin módulos asignados."
+          : `Módulos actualizados: ${moduleIds.length} asignado${moduleIds.length === 1 ? "" : "s"}. La acción quedó auditada.`,
+      status: "success",
+    };
+  });
+}
+
 export async function createAdministrativeUserAction(
   _previousState: AdminActionState,
   formData: FormData,
@@ -791,13 +818,31 @@ export async function createAdministrativeUserAction(
       );
     }
 
-    await client.createAdministrativeUser(payload);
+    const created = await client.createAdministrativeUser(payload);
+    const moduleIds = formData
+      .getAll("moduleId")
+      .filter(
+        (value): value is string => typeof value === "string" && value !== "",
+      );
+    // Al crear un administrador se pueden marcar sus módulos en el mismo paso.
+    // Si la asignación falla, la cuenta ya existe: se avisa sin ocultar el alta.
+    let grantsWarning = "";
+    if (payload.role === "admin" && moduleIds.length) {
+      try {
+        await client.setAdminModuleGrants(created.id, {
+          moduleIds,
+          reason: "Asignación inicial de módulos",
+        });
+      } catch {
+        grantsWarning =
+          " El usuario se creó, pero no se pudieron asignar los módulos; asígnalos en «Acceso a Módulos».";
+      }
+    }
     revalidatePath("/admin");
     revalidatePath("/admin/users");
 
     return {
-      message:
-        "Usuario registrado. Recibirá un correo para crear su contraseña; la acción quedó auditada.",
+      message: `Usuario registrado. Recibirá un correo para crear su contraseña; la acción quedó auditada.${grantsWarning}`,
       status: "success",
     };
   });

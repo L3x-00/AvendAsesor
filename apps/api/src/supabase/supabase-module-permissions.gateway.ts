@@ -24,6 +24,7 @@ function databaseError(error: PostgrestError): never {
 function map(row: {
   can_access: boolean;
   full_name: string;
+  module_ids: string[];
   role: 'admin' | 'superadmin';
   updated_at: string | null;
   updated_by: string | null;
@@ -32,6 +33,7 @@ function map(row: {
   return {
     canAccess: row.can_access,
     fullName: row.full_name,
+    moduleIds: row.module_ids ?? [],
     role: row.role,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
@@ -72,6 +74,21 @@ export class SupabaseModulePermissionsGatewayAdapter implements ModulePermission
       );
     }
     return map(row);
+  }
+
+  async setGrants(
+    input: Parameters<ModulePermissionsGateway['setGrants']>[0],
+  ): Promise<void> {
+    const { error } = await this.requireClient().rpc(
+      'set_admin_module_grants',
+      {
+        p_actor_id: input.actorId,
+        p_module_ids: input.moduleIds,
+        p_reason: input.reason,
+        p_target_user_id: input.targetUserId,
+      },
+    );
+    if (error) databaseError(error);
   }
 
   private requireClient(): SupabaseServerClient {

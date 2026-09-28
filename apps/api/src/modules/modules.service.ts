@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -27,6 +28,17 @@ export class ModulesService {
     authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
     await this.ensureParentIsAvailable(dto.parentModuleId);
+
+    if (dto.parentModuleId) {
+      await this.assertCanManageModule(
+        authorization.userId,
+        dto.parentModuleId,
+      );
+    } else if (authorization.role !== 'superadmin') {
+      throw new ForbiddenException(
+        'Creating a root module requires superadministrator access.',
+      );
+    }
 
     return this.modulesGateway.create({
       code: dto.code,
@@ -64,6 +76,7 @@ export class ModulesService {
     authorization: AuthorizationContext,
   ): Promise<void> {
     const module = await this.requireLiveModule(moduleId);
+    await this.assertCanManageModule(authorization.userId, module.id);
 
     if (await this.modulesGateway.hasNonDeletedChildren(module.id)) {
       throw new ConflictException(
@@ -95,6 +108,7 @@ export class ModulesService {
     authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
     await this.requireLiveModule(moduleId);
+    await this.assertCanManageModule(authorization.userId, moduleId);
 
     if (!dto.isActive && !dto.reason) {
       throw new BadRequestException(
@@ -124,6 +138,7 @@ export class ModulesService {
     authorization: AuthorizationContext,
   ): Promise<ManagedModule> {
     const module = await this.requireLiveModule(moduleId);
+    await this.assertCanManageModule(authorization.userId, module.id);
 
     if (
       dto.code === undefined &&
@@ -142,6 +157,12 @@ export class ModulesService {
 
     if (dto.parentModuleId !== undefined) {
       await this.ensureParentIsAvailable(dto.parentModuleId);
+      if (dto.parentModuleId) {
+        await this.assertCanManageModule(
+          authorization.userId,
+          dto.parentModuleId,
+        );
+      }
     }
 
     const updated = await this.modulesGateway.update(moduleId, {
@@ -172,6 +193,17 @@ export class ModulesService {
 
     if (!parent || parent.isDeleted) {
       throw new ConflictException('The selected parent module is unavailable.');
+    }
+  }
+
+  private async assertCanManageModule(
+    actorId: string,
+    moduleId: string,
+  ): Promise<void> {
+    if (!(await this.modulesGateway.canManageModule(actorId, moduleId))) {
+      throw new ForbiddenException(
+        'Your administrator profile cannot manage this module.',
+      );
     }
   }
 
