@@ -46,7 +46,15 @@ export const consultationCaseIssueSchema = z.enum([
 ]);
 export type ConsultationCaseIssue = z.infer<typeof consultationCaseIssueSchema>;
 
-export const consultationPeriodSchema = z.enum(["today", "week", "month"]);
+export const consultationPeriodSchema = z.enum([
+  "today",
+  "week",
+  "month",
+  "last_6h",
+  "last_24h",
+  "last_7d",
+  "last_30d",
+]);
 export type ConsultationPeriod = z.infer<typeof consultationPeriodSchema>;
 
 export const consultationTopicSchema = z.object({

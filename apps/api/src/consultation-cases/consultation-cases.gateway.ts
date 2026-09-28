@@ -1,4 +1,5 @@
-export type ConsultationPeriod = 'today' | 'week' | 'month';
+export type ConsultationPeriod =
+  'today' | 'week' | 'month' | 'last_6h' | 'last_24h' | 'last_7d' | 'last_30d';
 export type ConsultationCaseKind =
   'automatic_alert' | 'teacher_report' | 'teacher_suggestion';
 export type ConsultationCaseStatus =

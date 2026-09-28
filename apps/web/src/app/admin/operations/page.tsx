@@ -132,7 +132,7 @@ function Ranking({
           {items.map((item) => (
             <li key={item.id}>
               <Link
-                href={`/admin/operations?${queryString({ [filter]: item.id, period })}`}
+                href={`/admin/operations?${queryString({ [filter]: item.id, period, vista: "consultar" })}`}
               >
                 <span>{item.name}</span>
                 <strong>{item.count}</strong>
@@ -178,6 +178,7 @@ function TopicsRanking({
                     ? "submoduleId"
                     : "moduleId"]: topic.id,
                   period,
+                  vista: "consultar",
                 })}`}
               >
                 <span>{topic.name}</span>
@@ -268,8 +269,10 @@ export default async function OperationsPage({
   searchParams: Promise<Record<string, SearchValue>>;
 }) {
   const requested = await searchParams;
+  const view = one(requested.vista) === "reportes" ? "reportes" : "consultar";
   const period =
-    consultationPeriodSchema.safeParse(one(requested.period)).data ?? "month";
+    consultationPeriodSchema.safeParse(one(requested.period)).data ??
+    (view === "reportes" ? "month" : "last_24h");
   const status = consultationCaseStatusSchema.safeParse(
     one(requested.status),
   ).data;
@@ -284,25 +287,36 @@ export default async function OperationsPage({
   const offset = (currentPage - 1) * CASES_PER_PAGE;
   const { access, client } =
     await createAuthorizedConsultationReportsApiContext();
-  const [dashboard, topics, reviewPriorities, cases, unansweredGroups] =
-    await Promise.all([
-    client.getDashboard(period),
-    client.getTopics(period),
-    client.getReviewPriorities(period),
-    client.listCases({
-      issueType,
-      kind,
-      limit: CASES_PER_PAGE,
-      moduleId,
-      offset,
-      period,
-      query,
-      status,
-      submoduleId,
-    }),
-    // Un resumen opcional: si falla, el resto de la página se muestra igual.
-    client.getUnansweredGroups(period).catch(() => null),
-  ]);
+  // Cada pestaña carga solo lo suyo: la bandeja diaria no arrastra reportes y
+  // el tablero no espera a la lista de casos.
+  const queue =
+    view === "consultar"
+      ? await Promise.all([
+          client.listCases({
+            issueType,
+            kind,
+            limit: CASES_PER_PAGE,
+            moduleId,
+            offset,
+            period,
+            query,
+            status,
+            submoduleId,
+          }),
+          // Un resumen opcional: si falla, el resto de la página se muestra igual.
+          client.getUnansweredGroups(period).catch(() => null),
+          client.getReviewPriorities(period),
+        ])
+      : null;
+  const report =
+    view === "reportes"
+      ? await Promise.all([client.getDashboard(period), client.getTopics(period)])
+      : null;
+  const cases = queue?.[0] ?? [];
+  const unansweredGroups = queue?.[1] ?? null;
+  const reviewPriorities = queue?.[2] ?? [];
+  const dashboard = report?.[0] ?? null;
+  const topics = report?.[1] ?? [];
   const totalCases = cases[0]?.totalCount ?? 0;
   const caseFilters = {
     issueType,
@@ -317,6 +331,7 @@ export default async function OperationsPage({
     `/admin/operations?${queryString({
       ...caseFilters,
       page: page > 1 ? page : undefined,
+      vista: "consultar",
     })}`;
   const hasPreviousPage = currentPage > 1;
   const hasNextPage =
@@ -328,12 +343,44 @@ export default async function OperationsPage({
       title="Consultas y reportes"
     >
       <main className={styles.page}>
-        <UnansweredGroups
-          canUpload={access.modulesAccess}
-          groups={unansweredGroups}
-          period={period}
-        />
+        <nav
+          aria-label="Secciones de consultas y reportes"
+          className={styles.viewTabs}
+        >
+          <Link
+            aria-current={view === "consultar" ? "page" : undefined}
+            className={styles.viewTab}
+            data-active={view === "consultar"}
+            href={`/admin/operations?${queryString({
+              ...caseFilters,
+              period,
+              vista: "consultar",
+            })}`}
+          >
+            Consultar
+          </Link>
+          <Link
+            aria-current={view === "reportes" ? "page" : undefined}
+            className={styles.viewTab}
+            data-active={view === "reportes"}
+            href={`/admin/operations?${queryString({
+              period,
+              vista: "reportes",
+            })}`}
+          >
+            Reportes
+          </Link>
+        </nav>
 
+        {view === "consultar" ? (
+          <UnansweredGroups
+            canUpload={access.modulesAccess}
+            groups={unansweredGroups}
+            period={period}
+          />
+        ) : null}
+
+        {view === "reportes" && dashboard ? (
         <section
           aria-labelledby="consultation-dashboard-title"
           className={styles.section}
@@ -349,6 +396,7 @@ export default async function OperationsPage({
               </p>
             </div>
             <form className={styles.periodForm} method="get">
+              <input name="vista" type="hidden" value={view} />
               <label htmlFor="consultation-period">
                 Periodo
                 <select
@@ -356,7 +404,11 @@ export default async function OperationsPage({
                   id="consultation-period"
                   name="period"
                 >
-                  <option value="today">Hoy</option>
+                  <option value="last_6h">Últimas 6 horas</option>
+                  <option value="last_24h">Últimas 24 horas</option>
+                  <option value="last_7d">Últimos 7 días</option>
+                  <option value="last_30d">Últimos 30 días</option>
+                  <option value="today">Hoy (día calendario)</option>
                   <option value="week">Esta semana</option>
                   <option value="month">Este mes</option>
                 </select>
@@ -428,7 +480,9 @@ export default async function OperationsPage({
             />
           </dl>
         </section>
+        ) : null}
 
+        {view === "reportes" && dashboard ? (
         <section
           aria-labelledby="consultation-rankings-title"
           className={styles.section}
@@ -470,9 +524,13 @@ export default async function OperationsPage({
             <TopicsRanking period={period} topics={topics} />
           </div>
         </section>
+        ) : null}
 
-        <ReviewPriorities items={reviewPriorities} />
+        {view === "consultar" ? (
+          <ReviewPriorities items={reviewPriorities} />
+        ) : null}
 
+        {view === "consultar" ? (
         <section
           aria-labelledby="consultation-cases-title"
           className={styles.section}
@@ -666,6 +724,7 @@ export default async function OperationsPage({
             </nav>
           ) : null}
         </section>
+        ) : null}
       </main>
     </AdminPage>
   );
