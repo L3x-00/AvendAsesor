@@ -26,6 +26,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { AddDocumentVersionDto } from './dto/add-document-version.dto';
 import { CreateDocumentUploadDto } from './dto/create-document-upload.dto';
 import { DocumentDownloadUrlDto } from './dto/document-download-url.dto';
 import { DocumentModuleDto } from './dto/document-module.dto';
@@ -114,9 +115,15 @@ export class DocumentsController {
   addVersion(
     @Param('id', new ParseUUIDPipe()) documentId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() dto: AddDocumentVersionDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
-    return this.documentsService.addVersion(documentId, file, authorization);
+    return this.documentsService.addVersion(
+      documentId,
+      file,
+      dto,
+      authorization,
+    );
   }
 
   @Post(':id/download-url')

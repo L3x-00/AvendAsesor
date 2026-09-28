@@ -10,6 +10,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import type { AuthorizationContext } from '../authorization';
 import { SUPABASE_DOCUMENTS_GATEWAY } from '../supabase/supabase.constants';
+import { AddDocumentVersionDto } from './dto/add-document-version.dto';
 import { CreateDocumentUploadDto } from './dto/create-document-upload.dto';
 import { type DocumentDownloadUrlDto } from './dto/document-download-url.dto';
 import { type DocumentModuleDto } from './dto/document-module.dto';
@@ -265,6 +266,7 @@ export class DocumentsService {
   async addVersion(
     documentId: string,
     file: Express.Multer.File | undefined,
+    dto: AddDocumentVersionDto,
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     await this.requireLiveDocument(documentId);
@@ -294,12 +296,14 @@ export class DocumentsService {
         actorId: authorization.userId,
         documentId,
         fileSizeBytes: inspectedPdf.sizeBytes,
+        issuanceYear: dto.issuanceYear ?? null,
         originalFileName: inspectedPdf.originalFileName,
         pageCount: inspectedPdf.pageCount,
         processingError,
         sha256: inspectedPdf.sha256,
         storagePath,
         versionId,
+        versionRelation: dto.versionRelation ?? null,
       });
     } catch (error) {
       return this.resolvePersistenceOrCompensate(

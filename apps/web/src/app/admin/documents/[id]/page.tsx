@@ -592,6 +592,24 @@ export default async function DocumentDetailPage({
                               {version.uploadedByName ?? "Cuenta no disponible"}
                             </dd>
                           </div>
+                          <div>
+                            <dt className="font-semibold text-avend-text-muted">
+                              Año del documento
+                            </dt>
+                            <dd>{version.issuanceYear ?? "No registrado"}</dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-avend-text-muted">
+                              Relación con la versión anterior
+                            </dt>
+                            <dd>
+                              {version.versionRelation === "replaces"
+                                ? "Reemplaza a la versión anterior"
+                                : version.versionRelation === "complements"
+                                  ? "Complementa la versión anterior"
+                                  : "No registrada"}
+                            </dd>
+                          </div>
                         </dl>
                         <div className="mt-4 flex flex-wrap gap-2">
                           <Link
@@ -752,6 +770,44 @@ export default async function DocumentDetailPage({
                     required
                     type="file"
                   />
+                </label>
+                <label className="block" htmlFor="detail-version-year">
+                  <span className="text-base font-semibold avend-field-label--required">
+                    Año del documento
+                  </span>
+                  <input
+                    className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                    defaultValue={
+                      currentVersion?.issuanceYear ??
+                      document.issuanceYear ??
+                      ""
+                    }
+                    id="detail-version-year"
+                    max={2100}
+                    min={1900}
+                    name="issuanceYear"
+                    required
+                    type="number"
+                  />
+                </label>
+                <label className="block" htmlFor="detail-version-relation">
+                  <span className="text-base font-semibold avend-field-label--required">
+                    Relación con la versión anterior
+                  </span>
+                  <select
+                    className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                    defaultValue="complements"
+                    id="detail-version-relation"
+                    name="versionRelation"
+                    required
+                  >
+                    <option value="complements">
+                      Complementa (aporta información adicional)
+                    </option>
+                    <option value="replaces">
+                      Reemplaza (sustituye a la versión anterior)
+                    </option>
+                  </select>
                 </label>
               </DocumentPdfUploadForm>
             </section>

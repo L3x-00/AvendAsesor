@@ -70,12 +70,16 @@ export interface ManagedDocumentVersion {
   id: string;
   ingestionStatus: DocumentIngestionStatus;
   ingestionUpdatedAt: string;
+  /** Año del documento para esta versión; puede no estar registrado. */
+  issuanceYear: number | null;
   originalFileName: string;
   pageCount: number;
   uploadedAt: string;
   uploadedBy: string | null;
   uploadedByName: string | null;
   versionNumber: number;
+  /** `replaces` sustituye a la versión anterior; `complements` la completa. */
+  versionRelation: 'complements' | 'replaces' | null;
 }
 
 /**
@@ -83,7 +87,11 @@ export interface ManagedDocumentVersion {
  * el rastro del responsable debe sobrevivir al borrado de su perfil.
  */
 export interface StoredDocumentVersion extends ManagedDocumentVersion {
-  mimeType: 'application/pdf';
+  mimeType:
+    | 'application/msword'
+    | 'application/pdf'
+    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    | 'text/markdown';
   sha256: string;
   storageBucket: 'normative-documents';
   storagePath: string;
@@ -240,7 +248,13 @@ const storedDocumentVersionRowSchema = z.object({
   id: z.string().uuid(),
   ingestion_status: z.enum(['failed', 'indexed', 'pending', 'processing']),
   ingestion_updated_at: timestampSchema,
-  mime_type: z.literal('application/pdf'),
+  issuance_year: z.number().int().nullable().default(null),
+  mime_type: z.enum([
+    'application/msword',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/markdown',
+  ]),
   original_file_name: z.string().min(1),
   page_count: z.number().int().min(1).max(300),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -250,6 +264,10 @@ const storedDocumentVersionRowSchema = z.object({
   uploaded_by: z.string().uuid().nullable(),
   uploaded_by_name: z.string().nullable().default(null),
   version_number: z.number().int().positive(),
+  version_relation: z
+    .enum(['complements', 'replaces'])
+    .nullable()
+    .default(null),
 });
 
 export function toManagedDocument(value: unknown): ManagedDocument {
@@ -321,6 +339,7 @@ export function toStoredDocumentVersion(value: unknown): StoredDocumentVersion {
     id: result.data.id,
     ingestionStatus: result.data.ingestion_status,
     ingestionUpdatedAt: result.data.ingestion_updated_at,
+    issuanceYear: result.data.issuance_year,
     mimeType: result.data.mime_type,
     originalFileName: result.data.original_file_name,
     pageCount: result.data.page_count,
@@ -331,6 +350,7 @@ export function toStoredDocumentVersion(value: unknown): StoredDocumentVersion {
     uploadedBy: result.data.uploaded_by,
     uploadedByName: result.data.uploaded_by_name,
     versionNumber: result.data.version_number,
+    versionRelation: result.data.version_relation,
   };
 }
 
@@ -343,12 +363,14 @@ export function toManagedDocumentVersion(
     id: version.id,
     ingestionStatus: version.ingestionStatus,
     ingestionUpdatedAt: version.ingestionUpdatedAt,
+    issuanceYear: version.issuanceYear,
     originalFileName: version.originalFileName,
     pageCount: version.pageCount,
     uploadedAt: version.uploadedAt,
     uploadedBy: version.uploadedBy,
     uploadedByName,
     versionNumber: version.versionNumber,
+    versionRelation: version.versionRelation,
   };
 }
 

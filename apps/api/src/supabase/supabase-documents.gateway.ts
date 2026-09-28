@@ -31,7 +31,7 @@ import type { Json, SupabaseServerClient } from './supabase.server-client';
 const DOCUMENT_COLUMNS =
   'id,title,document_type,issuing_entity,issuance_year,resolution_number,article_reference,publication_status,situation,replacement_document_id,replacement_date,replacement_year,replacement_reason,replacement_observation,archive_reason_code,archive_reason_detail,archive_observation,approval_status,approval_updated_at,approval_updated_by,approved_version_id,deactivated_at,deactivated_by,deactivation_reason,is_deleted,deleted_at,deleted_by,deletion_reason,current_version_id,metadata,created_at,created_by,updated_at,updated_by';
 const DOCUMENT_VERSION_COLUMNS =
-  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by,uploaded_by_name';
+  'id,document_id,version_number,storage_bucket,storage_path,original_file_name,mime_type,file_size_bytes,page_count,sha256,ingestion_status,ingestion_updated_at,uploaded_at,uploaded_by,uploaded_by_name,issuance_year,version_relation';
 const NORMATIVE_DOCUMENTS_BUCKET = 'normative-documents';
 
 // `count(*)` viaja como cadena cuando PostgREST serializa un bigint.
@@ -93,12 +93,14 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
         p_actor_id: input.actorId,
         p_document_id: input.documentId,
         p_file_size_bytes: input.fileSizeBytes,
+        p_issuance_year: input.issuanceYear ?? null,
         p_original_file_name: input.originalFileName,
         p_page_count: input.pageCount,
         p_processing_error: input.processingError ?? null,
         p_sha256: input.sha256,
         p_storage_path: input.storagePath,
         p_version_id: input.versionId,
+        p_version_relation: input.versionRelation ?? null,
       },
     );
 

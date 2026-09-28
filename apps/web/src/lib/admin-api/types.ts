@@ -118,12 +118,16 @@ export const managedDocumentVersionSchema = z.object({
   id: z.string().uuid(),
   ingestionStatus: z.enum(["failed", "indexed", "pending", "processing"]),
   ingestionUpdatedAt: timestampSchema,
+  /** Ausente en respuestas anteriores al despliegue de versiones con año. */
+  issuanceYear: z.number().int().nullable().optional(),
   originalFileName: z.string(),
   pageCount: z.number().int().min(1).max(300),
   uploadedAt: timestampSchema,
   uploadedBy: z.string().uuid().nullable(),
   uploadedByName: z.string().nullable(),
   versionNumber: z.number().int().positive(),
+  /** Ausente en respuestas anteriores al despliegue de la relación. */
+  versionRelation: z.enum(["complements", "replaces"]).nullable().optional(),
 });
 
 export type ManagedDocumentVersion = z.infer<

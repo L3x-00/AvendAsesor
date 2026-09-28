@@ -71,12 +71,16 @@ export interface AddDocumentVersionRecord {
   actorId: string;
   documentId: string;
   fileSizeBytes: number;
+  /** Año del documento para esta versión. */
+  issuanceYear?: number | null;
   originalFileName: string;
   pageCount: number;
   processingError?: string;
   sha256: string;
   storagePath: string;
   versionId: string;
+  /** `replaces`: sustituye a la anterior; `complements`: la complementa. */
+  versionRelation?: 'complements' | 'replaces' | null;
 }
 
 export interface DocumentMetadataPatch {
