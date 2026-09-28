@@ -331,12 +331,14 @@ export interface SupabaseDatabase {
           p_actor_id: string;
           p_document_id: string;
           p_file_size_bytes: number;
+          p_issuance_year?: number | null;
           p_original_file_name: string;
           p_page_count: number;
           p_processing_error: string | null;
           p_sha256: string;
           p_storage_path: string;
           p_version_id: string;
+          p_version_relation?: 'complements' | 'replaces' | null;
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };

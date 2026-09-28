@@ -83,6 +83,7 @@ describe('document library domain mapping', () => {
       id: versionId,
       ingestionStatus: 'indexed',
       ingestionUpdatedAt: '2026-08-10T00:00:00.000Z',
+      issuanceYear: null,
       mimeType: 'application/pdf',
       originalFileName: 'ley.pdf',
       pageCount: 1,
@@ -93,6 +94,7 @@ describe('document library domain mapping', () => {
       uploadedBy: actorId,
       uploadedByName: null,
       versionNumber: 1,
+      versionRelation: null,
     };
 
     expect(toManagedDocumentVersion(version).uploadedByName).toBeNull();

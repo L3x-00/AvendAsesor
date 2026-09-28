@@ -165,7 +165,7 @@ describe('DocumentsController', () => {
       details,
     );
     await expect(
-      controller.addVersion(documentRecord.id, file, authorization),
+      controller.addVersion(documentRecord.id, file, {}, authorization),
     ).resolves.toEqual(documentRecord);
     await expect(
       controller.createDownloadUrl(documentRecord.id, {}, authorization),

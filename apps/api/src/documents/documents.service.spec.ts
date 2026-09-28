@@ -78,6 +78,7 @@ const versionRecord: StoredDocumentVersion = {
   id: documentRecord.currentVersionId!,
   ingestionStatus: 'indexed',
   ingestionUpdatedAt: '2026-08-10T00:00:00.000Z',
+  issuanceYear: 2026,
   mimeType: 'application/pdf',
   originalFileName: 'documento.pdf',
   pageCount: 1,
@@ -88,6 +89,7 @@ const versionRecord: StoredDocumentVersion = {
   uploadedBy: authorization.userId,
   uploadedByName: null,
   versionNumber: 1,
+  versionRelation: 'replaces',
 };
 
 function createFile(): Express.Multer.File {
@@ -296,7 +298,7 @@ describe('DocumentsService', () => {
     documentsGateway.findById.mockResolvedValue(null);
 
     await expect(
-      service.addVersion(documentRecord.id, createFile(), authorization),
+      service.addVersion(documentRecord.id, createFile(), {}, authorization),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(documentsGateway.uploadPdf).not.toHaveBeenCalled();
@@ -308,7 +310,7 @@ describe('DocumentsService', () => {
     documentsGateway.removePdf.mockResolvedValue(true);
 
     await expect(
-      service.addVersion(documentRecord.id, createFile(), authorization),
+      service.addVersion(documentRecord.id, createFile(), {}, authorization),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     const addVersionCall = documentsGateway.addVersion.mock.calls.at(0);
@@ -348,12 +350,14 @@ describe('DocumentsService', () => {
           id: versionRecord.id,
           ingestionStatus: versionRecord.ingestionStatus,
           ingestionUpdatedAt: versionRecord.ingestionUpdatedAt,
+          issuanceYear: versionRecord.issuanceYear,
           originalFileName: versionRecord.originalFileName,
           pageCount: versionRecord.pageCount,
           uploadedAt: versionRecord.uploadedAt,
           uploadedBy: versionRecord.uploadedBy,
           uploadedByName: 'Administrador de prueba',
           versionNumber: versionRecord.versionNumber,
+          versionRelation: versionRecord.versionRelation,
         },
       ],
     });
