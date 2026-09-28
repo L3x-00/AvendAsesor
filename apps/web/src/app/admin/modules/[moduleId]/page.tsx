@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
+import { ModuleContentSections } from "@/components/admin/module-content-sections";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
   ModuleManageDetails,
@@ -15,6 +16,7 @@ import {
   parseDocumentLibraryQuery,
   type DocumentLibrarySearchParams,
 } from "@/lib/admin-api/document-library-query";
+import { DOCUMENT_TYPE_OPTIONS } from "@/lib/admin-api/document-taxonomy";
 import {
   childModuleViews,
   findVisibleModule,
@@ -53,6 +55,14 @@ export default async function ModuleDetailPage({
   const requestedQuery = parseDocumentLibraryQuery(requestedSearch);
   // «Cargar documento en este tema» (desde Consultas y reportes) abre el formulario.
   const openUpload = requestedSearch.cargar === "1";
+  // Las secciones de contenido preseleccionan el tipo (p. ej., Anexo).
+  const requestedType =
+    typeof requestedSearch.tipo === "string" &&
+    DOCUMENT_TYPE_OPTIONS.some(
+      (option) => option.value === requestedSearch.tipo,
+    )
+      ? requestedSearch.tipo
+      : undefined;
   const scopedQuery = {
     ...requestedQuery,
     moduleId: current.parentModuleId ? undefined : current.id,
@@ -170,6 +180,7 @@ export default async function ModuleDetailPage({
         {canUpload ? (
           <DocumentUploadPanel
             apiBaseUrl={getAdminApiUrl()}
+            defaultDocumentType={requestedType}
             defaultOpen={openUpload}
             moduleId={current.id}
             moduleName={current.name}
@@ -184,15 +195,22 @@ export default async function ModuleDetailPage({
         ) : null}
 
         {children.length === 0 ? (
-          <DocumentLibraryView
-            activeFilterCount={activeFilterCount}
-            basePath={`/admin/modules/${current.id}`}
-            library={library}
-            lockLocation
-            modules={modules}
-            query={scopedQuery}
-            resultsTitle="Documentos cargados"
-          />
+          <>
+            <ModuleContentSections
+              canUpload={canUpload}
+              documents={library.items}
+              moduleId={current.id}
+            />
+            <DocumentLibraryView
+              activeFilterCount={activeFilterCount}
+              basePath={`/admin/modules/${current.id}`}
+              library={library}
+              lockLocation
+              modules={modules}
+              query={scopedQuery}
+              resultsTitle="Documentos cargados"
+            />
+          </>
         ) : null}
       </div>
     </AdminPage>
