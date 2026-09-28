@@ -145,9 +145,20 @@ export default async function ConsultationCasePage({
                 {formatDate(caseData.updatedAt)}
               </p>
             </div>
-            <span className={styles.badge} data-status={caseData.status}>
-              {statusLabels[caseData.status]}
-            </span>
+            <div className={styles.badgeRow}>
+              <span className={styles.badge} data-status={caseData.status}>
+                {statusLabels[caseData.status]}
+              </span>
+              {caseData.status !== "resolved" &&
+              caseData.status !== "discarded" ? (
+                <Link
+                  className="avend-button avend-button--primary"
+                  href={`/admin/operations/${caseId}/cerrar`}
+                >
+                  Cerrar consulta
+                </Link>
+              ) : null}
+            </div>
           </div>
           <div className={styles.detailGrid}>
             <section className={styles.detailBlock}>

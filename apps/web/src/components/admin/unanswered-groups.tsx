@@ -46,6 +46,7 @@ function casesHref(group: UnansweredGroup, period: string): string {
     issueType: "support_insufficient",
     kind: "automatic_alert",
     period,
+    vista: "consultar",
   });
   if (group.moduleId) {
     params.set(

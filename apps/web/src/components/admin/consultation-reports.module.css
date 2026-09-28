@@ -428,3 +428,28 @@
     min-width: 0;
   }
 }
+
+.viewTabs {
+  border-bottom: 1px solid var(--avend-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.viewTab {
+  border-bottom: 3px solid transparent;
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+}
+
+.viewTab:hover {
+  color: var(--avend-accent-strong);
+}
+
+.viewTab[data-active="true"] {
+  border-bottom-color: var(--avend-accent);
+  color: var(--avend-accent-strong);
+}

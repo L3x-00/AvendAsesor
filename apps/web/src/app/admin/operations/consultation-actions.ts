@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { AdminActionState } from "@/lib/admin-api/action-state";
 import { ConsultationReportsApiError } from "@/lib/consultation-reports-api/client";
 import { createAuthorizedConsultationReportsApiContext } from "@/lib/consultation-reports-api/authorized-client";
@@ -114,6 +115,41 @@ export async function updateConsultationCaseAction(
   } catch (error) {
     return actionFailure(error);
   }
+}
+
+/**
+ * Cierre dedicado de un caso: guarda el resultado y vuelve al detalle. No se
+ * despliega debajo de la tarjeta; tiene su propia pantalla.
+ */
+export async function closeConsultationCaseAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const caseId = optionalText(formData, "caseId") ?? "";
+
+  try {
+    if (!caseId) {
+      throw new FormValidationError("Falta identificar el caso.", "caseId");
+    }
+    const status = requiredText(formData, "status", "El resultado del cierre");
+    if (status !== "resolved" && status !== "discarded") {
+      throw new FormValidationError(
+        "Indica si la consulta se resolvió o se descartó.",
+        "status",
+      );
+    }
+    const note = optionalText(formData, "note");
+    const { client } = await createAuthorizedConsultationReportsApiContext();
+    await client.updateCase(caseId, {
+      ...(note ? { note } : {}),
+      status,
+    });
+    revalidateCase(caseId);
+  } catch (error) {
+    return actionFailure(error);
+  }
+
+  redirect(`/admin/operations/${caseId}`);
 }
 
 const MAX_GROUP_CASES = 50;
