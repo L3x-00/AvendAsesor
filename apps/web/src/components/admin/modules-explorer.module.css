@@ -357,5 +357,6 @@
 .cardFooter {
   display: flex;
   justify-content: flex-end;
-  margin-top: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
 }
