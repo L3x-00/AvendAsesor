@@ -5,6 +5,12 @@ import { createModuleAction, deleteModuleAction, setModuleStatusAction, updateMo
 import { ModuleManageDetails } from "./modules-explorer";
 import { ModulesExplorer, type ModuleView } from "./modules-explorer";
 
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 vi.mock("@/app/admin/actions", () => ({
   createModuleAction: vi.fn(async () => ({ status: "idle" })),
   deleteModuleAction: vi.fn(async () => ({ status: "idle" })),
@@ -44,7 +50,11 @@ const parents = rootModules.map((module) => ({
 }));
 
 describe("ModulesExplorer", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    Element.prototype.scrollIntoView = vi.fn();
+  });
 
   it("shows module cards with submodule counts and the right primary action", () => {
     render(
@@ -181,6 +191,72 @@ describe("ModulesExplorer", () => {
       'input[type="hidden"][name="parentModuleId"]',
     );
     expect(hidden?.value).toBe("m1");
+  });
+
+  it("navigates to the parent so a submodule created from the root can be highlighted", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createModuleAction).mockResolvedValueOnce({
+      entityId: "s2",
+      message: "Módulo creado.",
+      parentEntityId: "m1",
+      status: "success",
+    });
+    render(
+      <ModulesExplorer context={{ kind: "root" }} modules={rootModules} parents={parents} />,
+    );
+
+    await user.click(screen.getByText("+ Crear módulo"));
+    await user.selectOptions(screen.getByLabelText("Tipo de elemento"), "submodule");
+    await user.type(screen.getByLabelText("Nombre"), "Submódulo nuevo");
+    await user.type(screen.getByLabelText("Código"), "SUB_NUEVO");
+    await user.selectOptions(screen.getByLabelText("Módulo padre"), "m1");
+    await user.click(screen.getByRole("button", { name: "Crear" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/admin/modules/m1?creado=s2"),
+    );
+  });
+
+  it("closes the modal and focuses the newly created submodule after success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createModuleAction).mockResolvedValueOnce({
+      entityId: "s2",
+      message: "Módulo creado.",
+      status: "success",
+    });
+    const child: ModuleView = {
+      code: "NUEVO",
+      documentCount: 0,
+      description: "Submódulo nuevo",
+      id: "s2",
+      isActive: true,
+      name: "Submódulo nuevo",
+      parentModuleId: "m1",
+      sortOrder: 2,
+      submoduleCount: 0,
+    };
+    const props = {
+      context: {
+        kind: "module" as const,
+        moduleId: "m1",
+        moduleName: "Evaluación docente",
+      },
+      parents,
+    };
+    const view = render(<ModulesExplorer {...props} modules={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "+ Crear submódulo" }));
+    await user.type(screen.getByLabelText("Nombre"), child.name);
+    await user.type(screen.getByLabelText("Código"), child.code);
+    await user.click(screen.getByRole("button", { name: "Crear submódulo" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    view.rerender(<ModulesExplorer {...props} modules={[child]} />);
+    const card = screen.getByRole("heading", { name: child.name }).closest("li");
+    await waitFor(() => expect(card).toHaveFocus());
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it("marks every missing submodule field and clears the corrected parent", async () => {

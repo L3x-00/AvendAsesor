@@ -49,6 +49,7 @@ export function getSafeInternalPath(
 const allowedAuthCallbackPaths = new Set([
   '/auth/confirmed',
   '/auth/update-password',
+  '/profile',
 ]);
 
 export function getAllowedAuthCallbackPath(candidate: string | null): string {

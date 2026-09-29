@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
   deleteConversationAction,
@@ -97,6 +98,7 @@ function ConversationDeleteForm({
   title: string;
 }) {
   const { showToast } = useToast();
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     async (previous: HistoryActionState, formData: FormData) => {
       const result = await deleteConversationAction(previous, formData);
@@ -105,6 +107,11 @@ function ConversationDeleteForm({
       // componente que ya no estará montado.
       if (result.status === "success" && result.message) {
         showToast(result.message);
+        // Volvemos a la primera página antes de refrescar. Si la conversación
+        // se quitó desde una página con cursor, ese cursor puede dejar de ser
+        // válido después del borrado y no debe llevar al límite de error.
+        router.replace("/history", { scroll: false });
+        router.refresh();
       }
       return result;
     },

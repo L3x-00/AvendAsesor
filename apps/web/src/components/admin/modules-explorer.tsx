@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -13,6 +14,7 @@ import { AdminActionForm } from "@/components/admin/admin-action-form";
 import { DeleteDisclosure } from "@/components/admin/delete-disclosure";
 import { FieldError } from "@/components/ui/form-field";
 import type { FieldRules } from "@/lib/ui/field-validation";
+import type { AdminActionState } from "@/lib/admin-api/action-state";
 import styles from "./modules-explorer.module.css";
 
 export interface ModuleView {
@@ -40,6 +42,7 @@ export type ExplorerContext =
 interface ModulesExplorerProps {
   canCreate?: boolean;
   context: ExplorerContext;
+  initialHighlightId?: string;
   modules: ModuleView[];
   parents: ModuleParentOption[];
 }
@@ -416,14 +419,18 @@ function CreateModal({
 export function ModulesExplorer({
   canCreate = true,
   context,
+  initialHighlightId,
   modules,
   parents,
 }: ModulesExplorerProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [createKind, setCreateKind] = useState<"module" | "submodule">(
     isRootContext(context) ? "module" : "submodule",
   );
   const [isCreateOpen, setCreateOpen] = useState(false);
+  const [newlyCreatedId, setNewlyCreatedId] = useState(initialHighlightId);
+  const cardRefs = useRef(new Map<string, HTMLLIElement>());
   const closeCreate = useCallback(() => setCreateOpen(false), []);
   const searchId = useId();
   const modalTitleId = `${searchId}-create-title`;
@@ -440,6 +447,32 @@ export function ModulesExplorer({
       ),
     [modules, normalized],
   );
+
+  const finishCreate = useCallback((state: AdminActionState) => {
+    setCreateOpen(false);
+    if (!state.entityId) return;
+    if (isRoot && state.parentEntityId) {
+      router.push(
+        `/admin/modules/${encodeURIComponent(state.parentEntityId)}?creado=${encodeURIComponent(state.entityId)}`,
+      );
+      return;
+    }
+    setNewlyCreatedId(state.entityId);
+  }, [isRoot, router]);
+
+  useEffect(() => {
+    if (!newlyCreatedId) return;
+    const createdCard = cardRefs.current.get(newlyCreatedId);
+    if (!createdCard) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    createdCard.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    createdCard.focus({ preventScroll: true });
+    const timer = window.setTimeout(() => setNewlyCreatedId(undefined), 3600);
+    return () => window.clearTimeout(timer);
+  }, [modules, newlyCreatedId]);
 
   return (
     <div className={styles.explorer}>
@@ -490,7 +523,17 @@ export function ModulesExplorer({
         <ul className={styles.grid} role="list">
           {filtered.map((module) => {
             return (
-              <li className={styles.card} key={module.id}>
+              <li
+                className={`${styles.card} ${
+                  newlyCreatedId === module.id ? styles.cardNew : ""
+                }`}
+                key={module.id}
+                ref={(element) => {
+                  if (element) cardRefs.current.set(module.id, element);
+                  else cardRefs.current.delete(module.id);
+                }}
+                tabIndex={newlyCreatedId === module.id ? -1 : undefined}
+              >
                 <div className={styles.cardHeader}>
                   <div className={styles.moduleTag}>
                     {isRoot ? "Módulo" : "Sub Módulo"}: {module.name}
@@ -540,6 +583,7 @@ export function ModulesExplorer({
           <AdminActionForm
             action={createModuleAction}
             className={styles.createForm}
+            onSuccess={finishCreate}
             rules={MODULE_RULES}
             submitLabel={isRoot ? "Crear" : "Crear submódulo"}
             successMessage="Módulo creado con éxito."

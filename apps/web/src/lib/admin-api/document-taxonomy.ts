@@ -19,6 +19,18 @@ export const DOCUMENT_TYPE_OPTIONS = [
   { label: "Otro", value: "OTRO" },
 ] as const;
 
+export const NORMATIVE_DOCUMENT_TYPE_VALUES: ReadonlySet<string> = new Set([
+  "DECRETO_LEGISLATIVO",
+  "DECRETO_SUPREMO",
+  "DIRECTIVA",
+  "LEY",
+  "NORMA_TECNICA",
+  "REGLAMENTO",
+  "RESOLUCION_DIRECTORAL",
+  "RESOLUCION_MINISTERIAL",
+  "RESOLUCION_VICEMINISTERIAL",
+]);
+
 export const ISSUING_ENTITY_OPTIONS = [
   { label: "MINEDU", value: "MINEDU" },
   { label: "MTPE", value: "MTPE" },

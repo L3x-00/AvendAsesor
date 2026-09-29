@@ -220,8 +220,9 @@ describe("UsersManager", () => {
   it("offers the two registration forms the spec asks for", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    expect(screen.getByText("+ Agregar usuario")).toBeVisible();
-    expect(screen.getByText("+ Agregar administrador")).toBeVisible();
+    const actions = screen.getByRole("group", { name: "Acciones de usuarios" });
+    expect(within(actions).getByText("+ Agregar usuario")).toBeVisible();
+    expect(within(actions).getByText("+ Agregar administrador")).toBeVisible();
 
     const emails = screen.getAllByLabelText("Correo electrónico");
     expect(emails[0]).toHaveAttribute("name", "email");
@@ -238,6 +239,26 @@ describe("UsersManager", () => {
     // El rol viaja oculto: distingue el alta de administrador de la de docente.
     expect(screen.getByDisplayValue("docente")).toHaveAttribute("name", "role");
     expect(screen.getByDisplayValue("admin")).toHaveAttribute("name", "role");
+  });
+
+  it("expands each creation option independently", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    const userPanel = screen.getByText("+ Agregar usuario").closest("details");
+    const adminPanel = screen
+      .getByText("+ Agregar administrador")
+      .closest("details");
+    const importPanel = screen.getByText("Importar Excel").closest("details");
+
+    expect(userPanel).not.toHaveAttribute("open");
+    expect(adminPanel).not.toHaveAttribute("open");
+    expect(importPanel).not.toHaveAttribute("open");
+
+    fireEvent.click(screen.getByText("+ Agregar usuario"));
+
+    expect(userPanel).toHaveAttribute("open");
+    expect(adminPanel).not.toHaveAttribute("open");
+    expect(importPanel).not.toHaveAttribute("open");
   });
 
   it("shows the contact details and who registered each user", () => {

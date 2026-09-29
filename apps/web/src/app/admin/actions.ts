@@ -275,12 +275,19 @@ export async function createModuleAction(
       const payload = modulePayload(formData);
       payload.code = requiredText(formData, "code", "El código");
       payload.name = requiredText(formData, "name", "El nombre");
-      await client.createModule(payload);
+      const created = await client.createModule(payload);
       updateTag("chat-modules");
       revalidatePath("/admin/modules", "layout");
       revalidatePath("/admin/documents", "layout");
 
-      return { message: "Módulo creado.", status: "success" };
+      return {
+        entityId: created.id,
+        message: "Módulo creado.",
+        ...(created.parentModuleId
+          ? { parentEntityId: created.parentModuleId }
+          : {}),
+        status: "success",
+      };
     },
     { requireModulesAccess: true },
   );

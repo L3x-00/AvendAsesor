@@ -63,6 +63,7 @@ describe('authentication redirect URLs', () => {
     expect(getAllowedAuthCallbackPath('/auth/update-password')).toBe(
       '/auth/update-password',
     );
+    expect(getAllowedAuthCallbackPath('/profile')).toBe('/profile');
     expect(getAllowedAuthCallbackPath('/admin')).toBe('/auth/code-error');
   });
 

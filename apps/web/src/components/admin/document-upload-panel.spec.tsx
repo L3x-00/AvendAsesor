@@ -54,9 +54,33 @@ describe("DocumentUploadPanel", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: /agregar documento/i }),
+      screen.getByRole("button", { name: /subir en anexos/i }),
     ).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByLabelText(/tipo documental/i)).toHaveValue("ANEXO");
+    expect(screen.getByText("Anexo")).toBeVisible();
+    expect(document.querySelector('input[name="documentType"]')).toHaveValue(
+      "ANEXO",
+    );
+    expect(screen.queryByLabelText(/tipo documental/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Datos opcionales")).toBeVisible();
+  });
+
+  it("limita normativa a tipos que permanecen en esa sección", () => {
+    render(
+      <DocumentUploadPanel
+        {...baseProps}
+        defaultDocumentType="NORMATIVA"
+        defaultOpen
+      />,
+    );
+
+    const type = screen.getByLabelText(/tipo documental/i);
+    expect(type).toHaveValue("");
+    expect(screen.getByRole("option", { name: "Ley" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Resolución Ministerial" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Anexo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Cronograma" })).not.toBeInTheDocument();
   });
 
   it("expands the form when the toggle is clicked", () => {
