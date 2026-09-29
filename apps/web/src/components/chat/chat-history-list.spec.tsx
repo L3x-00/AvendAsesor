@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ChatHistoryList,
   formatHistoryDate,
@@ -9,15 +9,29 @@ import {
 } from "./chat-history-list";
 
 const showToast = vi.fn();
+const { refresh, replace } = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  replace: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh, replace }),
+}));
+
 vi.mock("@/components/ui/toast", () => ({
   useToast: () => ({ showToast }),
 }));
 
 const { deleteConversationAction } = vi.hoisted(() => ({
-  deleteConversationAction: vi.fn(async () => ({
-    message: "La conversación fue retirada de tu historial.",
-    status: "success" as const,
-  })),
+  deleteConversationAction: vi.fn(
+    async (): Promise<{
+      message: string;
+      status: "error" | "success";
+    }> => ({
+      message: "Historial quitado correctamente.",
+      status: "success",
+    }),
+  ),
 }));
 
 vi.mock("@/app/(teacher)/history/actions", () => ({
@@ -34,6 +48,10 @@ const conversation = {
 };
 
 describe("ChatHistoryList", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("communicates an explicit empty state instead of inventing history", () => {
     render(<ChatHistoryList conversations={[]} nextCursor={null} />);
 
@@ -80,7 +98,7 @@ describe("ChatHistoryList", () => {
     );
   });
 
-  it("renders only the owned conversation actions and receives deletion feedback", async () => {
+  it("confirma el borrado, avisa y vuelve a la primera página del historial", async () => {
     const user = userEvent.setup();
     render(
       <ChatHistoryList
@@ -107,9 +125,11 @@ describe("ChatHistoryList", () => {
     expect(deleteConversationAction).toHaveBeenCalled();
     await vi.waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(
-        "La conversación fue retirada de tu historial.",
+        "Historial quitado correctamente.",
       ),
     );
+    expect(replace).toHaveBeenCalledWith("/history", { scroll: false });
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("cancelar la confirmación no quita nada y devuelve el foco", async () => {
@@ -126,6 +146,25 @@ describe("ChatHistoryList", () => {
         screen.getByRole("button", { name: "Quitar del historial" }),
       ).toHaveFocus(),
     );
+  });
+
+  it("mantiene el error visible sin navegar ni anunciar un éxito", async () => {
+    const user = userEvent.setup();
+    deleteConversationAction.mockResolvedValueOnce({
+      message: "No fue posible actualizar tu historial. Inténtalo nuevamente.",
+      status: "error",
+    });
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+
+    await user.click(screen.getByRole("button", { name: "Quitar del historial" }));
+    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No fue posible actualizar tu historial. Inténtalo nuevamente.",
+    );
+    expect(showToast).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("agrupa por módulo y submódulo, y deja los chats libres en Consultas generales", () => {

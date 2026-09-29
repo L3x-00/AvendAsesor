@@ -124,7 +124,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
   }
 
   return (
-    <details className={styles.create}>
+    <details className={`${styles.create} ${styles.createSecondary}`}>
       <summary className={styles.createSummary}>Importar Excel</summary>
       <ValidatedForm
         aria-busy={pending}

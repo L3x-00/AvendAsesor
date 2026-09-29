@@ -72,15 +72,20 @@ export default async function ModuleDetailPage({
     );
   }
   const requestedSearch = await searchParams;
+  const createdModuleId =
+    typeof requestedSearch.creado === "string"
+      ? requestedSearch.creado
+      : undefined;
   const requestedQuery = parseDocumentLibraryQuery(requestedSearch);
   // «Cargar documento en este tema» (desde Consultas y reportes) abre el formulario.
   const openUpload = requestedSearch.cargar === "1";
   // Las secciones de contenido preseleccionan el tipo (p. ej., Anexo).
   const requestedType =
     typeof requestedSearch.tipo === "string" &&
-    DOCUMENT_TYPE_OPTIONS.some(
-      (option) => option.value === requestedSearch.tipo,
-    )
+    (requestedSearch.tipo === "NORMATIVA" ||
+      DOCUMENT_TYPE_OPTIONS.some(
+        (option) => option.value === requestedSearch.tipo,
+      ))
       ? requestedSearch.tipo
       : undefined;
   const scopedQuery = {
@@ -193,6 +198,7 @@ export default async function ModuleDetailPage({
               moduleId: current.id,
               moduleName: current.name,
             }}
+            initialHighlightId={createdModuleId}
             modules={children}
             parents={parents}
           />

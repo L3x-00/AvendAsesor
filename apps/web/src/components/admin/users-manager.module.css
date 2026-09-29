@@ -427,15 +427,35 @@
 .createBar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1rem;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface-muted);
 }
 
 .create {
-  flex: 1 1 18rem;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--avend-accent);
+  flex: 0 1 auto;
+  min-width: max-content;
+  padding: 0 0.85rem;
+  border: 1px solid var(--avend-border);
   border-radius: 0.5rem;
   background: var(--avend-surface);
+}
+
+.create[open] {
+  flex: 1 1 32rem;
+  min-width: min(100%, 18rem);
+  padding-bottom: 1rem;
+}
+
+.createPrimary {
+  border-color: var(--avend-accent);
+}
+
+.createSecondary {
+  color: var(--avend-text-muted);
 }
 
 .createSummary {
@@ -444,7 +464,17 @@
   min-height: 2.75rem;
   align-items: center;
   font-size: 1rem;
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.createPrimary .createSummary {
   font-weight: 700;
+  color: var(--avend-accent-strong);
+}
+
+.createSummary:hover {
   color: var(--avend-accent-strong);
 }
 
@@ -487,22 +517,43 @@
   min-height: 2.75rem;
   align-items: center;
   padding: 0 1rem;
-  border: 1px solid var(--avend-accent);
+  border: 1px solid transparent;
   border-radius: 0.5rem;
-  background: var(--avend-surface);
+  background: transparent;
   font-size: 1rem;
-  font-weight: 700;
-  color: var(--avend-accent-strong);
+  font-weight: 600;
+  color: var(--avend-text-muted);
   text-decoration: none;
 }
 
 .exportLink:hover {
-  background: var(--avend-soft-blue);
+  border-color: var(--avend-border);
+  background: var(--avend-surface);
+  color: var(--avend-accent-strong);
 }
 
 .exportLink:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .createBar {
+    align-items: stretch;
+  }
+
+  .create,
+  .exportLink {
+    width: 100%;
+  }
+
+  .create {
+    min-width: 0;
+  }
+
+  .exportLink {
+    justify-content: center;
+  }
 }
 
 /* Iconos de acciones y vigencias rapidas (B5). */

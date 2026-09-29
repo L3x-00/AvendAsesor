@@ -5,6 +5,21 @@ import type { DocumentSuggestions } from "@/lib/admin-api/types";
 import { DocumentMetadataFields } from "./document-metadata-fields";
 import { FieldError } from "@/components/ui/form-field";
 import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
+import {
+  DOCUMENT_TYPE_OPTIONS,
+  NORMATIVE_DOCUMENT_TYPE_VALUES,
+  documentTypeLabel,
+} from "@/lib/admin-api/document-taxonomy";
+
+const CONTEXT_LABELS: Record<string, string> = {
+  ANEXO: "Anexos",
+  CRONOGRAMA: "Cronograma",
+  NORMATIVA: "Normativa",
+  PREGUNTAS_FRECUENTES: "Preguntas frecuentes",
+};
+const NORMATIVE_DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPE_OPTIONS.filter((option) =>
+  NORMATIVE_DOCUMENT_TYPE_VALUES.has(option.value),
+);
 
 interface DocumentUploadPanelProps {
   /** Abre el formulario al llegar desde «Cargar documento en este tema». */
@@ -30,6 +45,12 @@ export function DocumentUploadPanel({
   const prefix = `module-document-${moduleId}`;
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const contentId = `${prefix}-content`;
+  const isContextual = Boolean(defaultDocumentType);
+  const isNormative = defaultDocumentType === "NORMATIVA";
+  const contextualLabel = defaultDocumentType
+    ? (CONTEXT_LABELS[defaultDocumentType] ??
+      documentTypeLabel(defaultDocumentType))
+    : undefined;
 
   return (
     <section
@@ -44,7 +65,11 @@ export function DocumentUploadPanel({
           onClick={() => setIsOpen((prev) => !prev)}
           type="button"
         >
-          <span>+ Agregar documento</span>
+          <span>
+            {contextualLabel
+              ? `+ Subir en ${contextualLabel}`
+              : "+ Agregar documento"}
+          </span>
           <svg
             aria-hidden="true"
             className={`ml-2 h-4 w-4 transition-transform duration-300 ease-in-out ${
@@ -61,9 +86,11 @@ export function DocumentUploadPanel({
           </svg>
         </button>
         <p className="mt-3 text-base leading-7 text-avend-text-muted">
-          El documento quedará asociado a <strong>{moduleName}</strong>. Admite
-          PDF, Word (.docx o .doc) y Markdown (.md) de hasta 50 MiB; los PDF,
-          hasta 300 páginas. El formulario conserva sus datos ante un error.
+          El documento quedará asociado a <strong>{moduleName}</strong>
+          {contextualLabel ? (
+            <> dentro de <strong>{contextualLabel}</strong></>
+          ) : null}
+          . Admite PDF, Word (.docx o .doc) y Markdown (.md) de hasta 50 MiB.
         </p>
       </div>
 
@@ -112,64 +139,88 @@ export function DocumentUploadPanel({
               </label>
               <DocumentMetadataFields
                 key={defaultDocumentType ?? "without-preselected-document-type"}
-                includeSituation
+                compact={isContextual}
+                documentTypeOptions={
+                  isNormative ? NORMATIVE_DOCUMENT_TYPE_OPTIONS : undefined
+                }
+                includeSituation={!isContextual}
                 initial={
-                  defaultDocumentType
+                  defaultDocumentType && !isNormative
                     ? { documentType: defaultDocumentType }
                     : undefined
                 }
+                lockDocumentType={isContextual && !isNormative}
                 replacementCandidates={replacementCandidates}
                 required
                 suggestions={suggestions}
               />
-              <label className="block" htmlFor={`${prefix}-number`}>
-                <span className="text-base font-semibold">
-                  Número del documento (opcional)
-                </span>
-                <input
-                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                  id={`${prefix}-number`}
-                  maxLength={120}
-                  name="resolutionNumber"
-                />
-              </label>
-              <label className="block" htmlFor={`${prefix}-article`}>
-                <span className="text-base font-semibold">
-                  Referencia de artículo (opcional)
-                </span>
-                <input
-                  className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                  id={`${prefix}-article`}
-                  maxLength={120}
-                  name="articleReference"
-                />
-              </label>
-              <label
-                className="block lg:col-span-2"
-                htmlFor={`${prefix}-metadata`}
-              >
-                <span className="text-base font-semibold">
-                  Palabras clave JSON (opcional)
-                </span>
-                <textarea
-                  aria-describedby={`${prefix}-metadata-help`}
-                  className="mt-1 min-h-24 w-full rounded-md border border-avend-border px-3 py-2 font-mono text-base"
-                  id={`${prefix}-metadata`}
-                  name="metadata"
-                  placeholder='{"keywords":["licencia","salud"]}'
-                />
-                <span
-                  className="mt-1 block text-sm text-avend-text-muted"
-                  id={`${prefix}-metadata-help`}
-                >
-                  Usa la clave keywords con una lista de palabras. Debe ser un
-                  objeto JSON válido.
-                </span>
-              </label>
+              {isContextual ? (
+                <details className="lg:col-span-2 rounded-md border border-avend-border p-3">
+                  <summary className="cursor-pointer text-base font-semibold text-avend-accent-strong">
+                    Datos opcionales
+                  </summary>
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <OptionalDocumentFields prefix={prefix} />
+                  </div>
+                </details>
+              ) : (
+                <OptionalDocumentFields prefix={prefix} />
+              )}
             </DocumentPdfUploadForm>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function OptionalDocumentFields({ prefix }: { prefix: string }) {
+  return (
+    <>
+      <label className="block" htmlFor={`${prefix}-number`}>
+        <span className="text-base font-semibold">
+          Número del documento (opcional)
+        </span>
+        <input
+          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+          id={`${prefix}-number`}
+          maxLength={120}
+          name="resolutionNumber"
+        />
+      </label>
+      <label className="block" htmlFor={`${prefix}-article`}>
+        <span className="text-base font-semibold">
+          Referencia de artículo (opcional)
+        </span>
+        <input
+          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+          id={`${prefix}-article`}
+          maxLength={120}
+          name="articleReference"
+        />
+      </label>
+      <label
+        className="block lg:col-span-2"
+        htmlFor={`${prefix}-metadata`}
+      >
+        <span className="text-base font-semibold">
+          Palabras clave JSON (opcional)
+        </span>
+        <textarea
+          aria-describedby={`${prefix}-metadata-help`}
+          className="mt-1 min-h-24 w-full rounded-md border border-avend-border px-3 py-2 font-mono text-base"
+          id={`${prefix}-metadata`}
+          name="metadata"
+          placeholder='{"keywords":["licencia","salud"]}'
+        />
+        <span
+          className="mt-1 block text-sm text-avend-text-muted"
+          id={`${prefix}-metadata-help`}
+        >
+          Usa la clave keywords con una lista de palabras. Debe ser un objeto
+          JSON válido.
+        </span>
+      </label>
+    </>
   );
 }

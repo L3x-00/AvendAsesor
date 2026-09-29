@@ -1,18 +1,9 @@
 import Link from "next/link";
-import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
+import {
+  NORMATIVE_DOCUMENT_TYPE_VALUES,
+  documentTypeLabel,
+} from "@/lib/admin-api/document-taxonomy";
 import type { DocumentLibraryItem } from "@/lib/admin-api/types";
-
-const NORMATIVE_TYPES = new Set([
-  "DECRETO_LEGISLATIVO",
-  "DECRETO_SUPREMO",
-  "DIRECTIVA",
-  "LEY",
-  "NORMA_TECNICA",
-  "REGLAMENTO",
-  "RESOLUCION_DIRECTORAL",
-  "RESOLUCION_MINISTERIAL",
-  "RESOLUCION_VICEMINISTERIAL",
-]);
 
 interface ContentSection {
   code: string;
@@ -25,7 +16,8 @@ const SECTIONS: ContentSection[] = [
   {
     code: "NORMATIVA",
     hint: "Leyes, resoluciones, decretos y directivas.",
-    matches: (document) => NORMATIVE_TYPES.has(document.documentType),
+    matches: (document) =>
+      NORMATIVE_DOCUMENT_TYPE_VALUES.has(document.documentType),
     title: "Normativa",
   },
   {

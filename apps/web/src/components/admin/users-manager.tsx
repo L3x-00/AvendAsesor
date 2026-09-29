@@ -528,7 +528,7 @@ function CreateUserForm({
   }
 
   return (
-    <details className={styles.create}>
+    <details className={`${styles.create} ${styles.createPrimary}`}>
       <summary className={styles.createSummary}>{title}</summary>
       <AdminActionForm
         action={createAdministrativeUserAction}
@@ -675,7 +675,11 @@ export function UsersManager({
         auditado.
       </p>
 
-      <div className={styles.createBar}>
+      <div
+        aria-label="Acciones de usuarios"
+        className={styles.createBar}
+        role="group"
+      >
         <CreateUserForm
           role="docente"
           submitLabel="Registrar usuario"

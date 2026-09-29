@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createAuthorizedChatApiClient } from "@/lib/chat-api/authorized-client";
 import { ChatApiError } from "@/lib/chat-api/client";
 
@@ -30,9 +29,8 @@ export async function deleteConversationAction(
   try {
     const client = await createAuthorizedChatApiClient();
     await client.deleteConversation(conversationId);
-    revalidatePath("/history");
     return {
-      message: "La conversación fue retirada de tu historial.",
+      message: "Historial quitado correctamente.",
       status: "success",
     };
   } catch (error) {

@@ -9,6 +9,7 @@ import {
   MINEDU_DEPENDENCIES,
   UGEL_DEPENDENCIES,
   documentYears,
+  documentTypeLabel,
   type ArchiveReasonCode,
 } from "@/lib/admin-api/document-taxonomy";
 import type {
@@ -34,8 +35,11 @@ interface ReplacementCandidate {
 }
 
 interface DocumentMetadataFieldsProps {
+  compact?: boolean;
+  documentTypeOptions?: ReadonlyArray<{ label: string; value: string }>;
   includeSituation?: boolean;
   initial?: DocumentMetadataInitialValues;
+  lockDocumentType?: boolean;
   replacementCandidates?: ReplacementCandidate[];
   required?: boolean;
   suggestions?: DocumentSuggestions;
@@ -71,8 +75,11 @@ function initialYearMode(initial?: DocumentMetadataInitialValues): string {
 }
 
 export function DocumentMetadataFields({
+  compact = false,
+  documentTypeOptions = DOCUMENT_TYPE_OPTIONS,
   includeSituation = false,
   initial,
+  lockDocumentType = false,
   replacementCandidates = [],
   required = false,
   suggestions = emptySuggestions,
@@ -141,26 +148,38 @@ export function DocumentMetadataFields({
       data-testid="document-metadata-fields"
       ref={containerRef}
     >
-      <label className="block" htmlFor={`${prefix}-type`}>
-        <span className={requiredLabelClass}>Tipo documental</span>
-        <select
-          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-          id={`${prefix}-type`}
-          name="documentType"
-          onChange={(event) => setDocumentType(event.target.value)}
-          required={required}
-          value={documentType}
-        >
-          <option disabled value="">
-            Selecciona un tipo
-          </option>
-          {DOCUMENT_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+      {lockDocumentType && documentType ? (
+        <div className="block rounded-md border border-avend-border bg-avend-surface-muted px-3 py-2">
+          <span className="block text-sm font-semibold text-avend-text-muted">
+            Tipo documental
+          </span>
+          <strong className="text-base text-avend-text">
+            {documentTypeLabel(documentType)}
+          </strong>
+          <input name="documentType" type="hidden" value={documentType} />
+        </div>
+      ) : (
+        <label className="block" htmlFor={`${prefix}-type`}>
+          <span className={requiredLabelClass}>Tipo documental</span>
+          <select
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            id={`${prefix}-type`}
+            name="documentType"
+            onChange={(event) => setDocumentType(event.target.value)}
+            required={required}
+            value={documentType}
+          >
+            <option disabled value="">
+              Selecciona un tipo
             </option>
-          ))}
-        </select>
-      </label>
+            {documentTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {documentType === "OTRO" ? (
         <label className="block" htmlFor={`${prefix}-type-other`}>
@@ -337,72 +356,76 @@ export function DocumentMetadataFields({
         </div>
       ) : null}
 
-      <div className="block">
-        <label
-          className="text-base font-semibold"
-          htmlFor={`${prefix}-additional-detail`}
-        >
-          Detalle adicional / Área / Oficina (opcional)
-        </label>
-        <input
-          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-          id={`${prefix}-additional-detail`}
-          list={`${prefix}-additional-detail-suggestions`}
-          maxLength={255}
-          name="additionalDetail"
-          onChange={(event) => setAdditionalDetail(event.target.value)}
-          value={additionalDetail}
-        />
-        <datalist id={`${prefix}-additional-detail-suggestions`}>
-          {suggestions.additionalDetails.map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        {suggestions.additionalDetails.length > 0 ? (
-          <div
-            aria-label="Sugerencias de detalle adicional"
-            className="mt-2 flex flex-wrap gap-2"
+      {compact ? null : (
+        <div className="block">
+          <label
+            className="text-base font-semibold"
+            htmlFor={`${prefix}-additional-detail`}
           >
-            {suggestions.additionalDetails.slice(0, 6).map((value) => (
-              <button
-                className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
-                key={value}
-                onClick={() => {
-                  setAdditionalDetail(value);
-                  notifySuggestedValue("additionalDetail");
-                }}
-                type="button"
-              >
-                {value}
-              </button>
+            Detalle adicional / Área / Oficina (opcional)
+          </label>
+          <input
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            id={`${prefix}-additional-detail`}
+            list={`${prefix}-additional-detail-suggestions`}
+            maxLength={255}
+            name="additionalDetail"
+            onChange={(event) => setAdditionalDetail(event.target.value)}
+            value={additionalDetail}
+          />
+          <datalist id={`${prefix}-additional-detail-suggestions`}>
+            {suggestions.additionalDetails.map((value) => (
+              <option key={value} value={value} />
             ))}
-          </div>
-        ) : null}
-      </div>
+          </datalist>
+          {suggestions.additionalDetails.length > 0 ? (
+            <div
+              aria-label="Sugerencias de detalle adicional"
+              className="mt-2 flex flex-wrap gap-2"
+            >
+              {suggestions.additionalDetails.slice(0, 6).map((value) => (
+                <button
+                  className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
+                  key={value}
+                  onClick={() => {
+                    setAdditionalDetail(value);
+                    notifySuggestedValue("additionalDetail");
+                  }}
+                  type="button"
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* La biblioteca ya indexaba metadata.keywords, pero ningún formulario
           permitía capturarlas: la búsqueda por palabras clave que la interfaz
           promete era inalcanzable salvo escribiendo JSON a mano. */}
-      <div className="block sm:col-span-2">
-        <label
-          className="text-base font-semibold"
-          htmlFor={`${prefix}-keywords`}
-        >
-          Palabras clave (opcional)
-        </label>
-        <input
-          className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-          defaultValue={initial?.keywords ?? ""}
-          id={`${prefix}-keywords`}
-          maxLength={500}
-          name="keywords"
-          placeholder="Ej. licencia, ascenso, nombramiento"
-        />
-        <span className="mt-1 block text-sm text-avend-text-muted">
-          Sepáralas con comas. Sirven para encontrar el documento desde el
-          buscador del Historial.
-        </span>
-      </div>
+      {compact ? null : (
+        <div className="block sm:col-span-2">
+          <label
+            className="text-base font-semibold"
+            htmlFor={`${prefix}-keywords`}
+          >
+            Palabras clave (opcional)
+          </label>
+          <input
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            defaultValue={initial?.keywords ?? ""}
+            id={`${prefix}-keywords`}
+            maxLength={500}
+            name="keywords"
+            placeholder="Ej. licencia, ascenso, nombramiento"
+          />
+          <span className="mt-1 block text-sm text-avend-text-muted">
+            Sepáralas con comas. Sirven para encontrar el documento desde el
+            buscador del Historial.
+          </span>
+        </div>
+      )}
 
       {includeSituation ? (
         <>

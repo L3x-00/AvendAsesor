@@ -77,11 +77,40 @@
   overflow-wrap: anywhere;
 }
 
+.cardNew {
+  animation: card-created 900ms ease-in-out 3;
+  border-color: var(--avend-accent);
+}
+
+.cardNew:focus {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 3px;
+}
+
+@keyframes card-created {
+  0%,
+  100% {
+    background: var(--avend-surface);
+    box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+  }
+  50% {
+    background: var(--avend-soft-blue);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--avend-accent) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardNew {
+    animation: none;
+    background: var(--avend-soft-blue);
+  }
+}
+
 .cardHeader {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-rows: minmax(2.5rem, auto) auto;
+  align-content: start;
+  justify-items: start;
   gap: 0.5rem;
 }
 
@@ -247,6 +276,7 @@
 
 .createButton {
   flex: none;
+  margin-right: auto;
 }
 
 @media (max-width: 32rem) {
@@ -345,6 +375,11 @@
   color: var(--avend-text);
 }
 .moduleTag {
+  display: -webkit-box;
+  align-self: start;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
