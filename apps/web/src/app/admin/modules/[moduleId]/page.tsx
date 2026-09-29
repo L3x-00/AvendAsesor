@@ -203,6 +203,7 @@ export default async function ModuleDetailPage({
             apiBaseUrl={getAdminApiUrl()}
             defaultDocumentType={requestedType}
             defaultOpen={openUpload}
+            key={`document-upload-${openUpload ? "open" : "closed"}-${requestedType ?? "no-type"}`}
             moduleId={current.id}
             moduleName={current.name}
             replacementCandidates={replacementCandidates}

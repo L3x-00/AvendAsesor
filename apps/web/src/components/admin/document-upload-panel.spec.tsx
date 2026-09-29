@@ -8,10 +8,6 @@ vi.mock("./document-pdf-upload-form", () => ({
   ),
 }));
 
-vi.mock("./document-metadata-fields", () => ({
-  DocumentMetadataFields: () => <div data-testid="metadata-fields" />,
-}));
-
 vi.mock("@/components/ui/form-field", () => ({
   FieldError: () => null,
 }));
@@ -39,6 +35,28 @@ describe("DocumentUploadPanel", () => {
     expect(
       screen.getByRole("button", { name: /agregar documento/i }),
     ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("abre y preselecciona el tipo al llegar por un enlace de sección", () => {
+    const view = render(<DocumentUploadPanel {...baseProps} />);
+
+    expect(
+      screen.getByRole("button", { name: /agregar documento/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+
+    view.rerender(
+      <DocumentUploadPanel
+        {...baseProps}
+        defaultDocumentType="ANEXO"
+        defaultOpen
+        key="document-upload-open-ANEXO"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /agregar documento/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText(/tipo documental/i)).toHaveValue("ANEXO");
   });
 
   it("expands the form when the toggle is clicked", () => {

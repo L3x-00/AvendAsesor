@@ -111,6 +111,7 @@ export function DocumentUploadPanel({
                 />
               </label>
               <DocumentMetadataFields
+                key={defaultDocumentType ?? "without-preselected-document-type"}
                 includeSituation
                 initial={
                   defaultDocumentType
