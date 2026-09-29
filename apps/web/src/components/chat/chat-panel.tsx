@@ -37,6 +37,7 @@ import {
   citationRanks,
   citedSourceRanks,
   sourceAnchorId,
+  sourceCitationLabel,
 } from "./chat-sources";
 
 type MessageRole = ChatHistoryMessage["role"];
@@ -206,8 +207,8 @@ function openEnclosingDetails(targetId: string) {
 
 /**
  * Convierte cada cita [n] en un enlace a la fila n de «Referencias» (Hito 3,
- * punto 8): el usuario ve de dónde sale cada afirmación sin buscarla. Una cita
- * sin fuente correspondiente queda como texto.
+ * punto 8): el usuario ve de dónde sale cada afirmación sin buscarla. Se
+ * omiten los índices inexistentes de respuestas antiguas.
  */
 function linkCitations(
   text: string,
@@ -215,9 +216,9 @@ function linkCitations(
   keyPrefix: string,
 ): ReactNode[] {
   if (!citations?.sources.length) return [text];
-  const link = (rank: number, key: string, label: ReactNode) => {
+  const link = (rank: number, key: string) => {
     const source = citations.sources.find((item) => item.rank === rank);
-    if (!source) return label;
+    if (!source) return null;
     return (
       <a
         aria-label={`Ver fuente ${rank}: ${source.documentTitle}`}
@@ -228,29 +229,28 @@ function linkCitations(
           openEnclosingDetails(sourceAnchorId(citations.messageId, rank))
         }
       >
-        {label}
+        {sourceCitationLabel(source)}
       </a>
     );
   };
-  // Tolera la cita doble ([[4]]) y la agrupada ([1, 2], [1-3]) del modelo.
+  // También corrige las citas agrupadas de conversaciones ya guardadas.
   return text.split(CITATION_TOKEN).map((part, index) => {
     const ranks = index % 2 === 1 ? citationRanks(part) : [];
-    const known = ranks.filter((rank) =>
+    if (!ranks.length) return part;
+    const known = [...new Set(ranks)].filter((rank) =>
       citations.sources.some((item) => item.rank === rank),
     );
-    if (!known.length) return part;
+    if (!known.length) return "";
     const key = `${keyPrefix}-${index}`;
-    if (ranks.length === 1) return link(ranks[0], key, `[${ranks[0]}]`);
+    if (known.length === 1) return link(known[0], key);
     return (
       <Fragment key={key}>
-        [
-        {ranks.map((rank, position) => (
+        {known.map((rank, position) => (
           <Fragment key={`${key}-${position}`}>
-            {position ? ", " : ""}
-            {link(rank, `${key}-${position}-link`, rank)}
+            {position ? " " : ""}
+            {link(rank, `${key}-${position}-link`)}
           </Fragment>
         ))}
-        ]
       </Fragment>
     );
   });
@@ -1117,8 +1117,7 @@ export function ChatPanel({
                 sources: [],
               },
             ]);
-            completionStatus =
-              "No se encontró sustento suficiente en los documentos disponibles.";
+            completionStatus = "Respuesta lista.";
             setStatus(completionStatus);
             continue;
           }

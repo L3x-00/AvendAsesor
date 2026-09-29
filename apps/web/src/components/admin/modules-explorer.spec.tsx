@@ -105,6 +105,21 @@ describe("ModulesExplorer", () => {
     ).toBeVisible();
   });
 
+  it("offers navigation but no create action for a read-only module container", () => {
+    render(
+      <ModulesExplorer
+        canCreate={false}
+        context={{ kind: "module", moduleId: "m1", moduleName: "Evaluación docente" }}
+        modules={[{ ...rootModules[0], parentModuleId: "m1" }]}
+        parents={parents}
+      />,
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Buscar submódulo por nombre o código" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /Ingresar/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "+ Crear submódulo" })).not.toBeInTheDocument();
+  });
+
   it("offers a parent selector when creating a submodule at the root level", async () => {
     const user = userEvent.setup();
     render(

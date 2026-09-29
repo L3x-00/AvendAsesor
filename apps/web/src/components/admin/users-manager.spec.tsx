@@ -373,6 +373,16 @@ describe("UsersManager", () => {
     expect(within(maria).getByLabelText("Fin")).toHaveValue("2026-12-05");
   });
 
+  it("ajusta fin de mes al usar vigencia rápida en un mes más corto", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today="2026-01-31" />);
+
+    const ana = rowFor("Ana PorVencer");
+    fireEvent.click(within(ana).getByText("Extender vigencia"));
+    fireEvent.click(within(ana).getByRole("button", { name: "3 meses" }));
+
+    expect(within(ana).getByLabelText("Fin")).toHaveValue("2026-04-30");
+  });
+
   it("solo las cuentas activas ofrecen suspender y todas ofrecen el enlace de contraseña", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 

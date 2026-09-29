@@ -51,6 +51,26 @@ export default async function ModuleDetailPage({
     : undefined;
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
+  if (current.canManage === false) {
+    return (
+      <AdminPage
+        description="Selecciona uno de los submódulos asignados para consultar su contenido."
+        title={current.name}
+      >
+        <div className="space-y-6">
+          <Link className="text-base underline" href="/admin/modules">
+            Volver a módulos
+          </Link>
+          <ModulesExplorer
+            canCreate={false}
+            context={{ kind: "module", moduleId: current.id, moduleName: current.name }}
+            modules={children}
+            parents={parents}
+          />
+        </div>
+      </AdminPage>
+    );
+  }
   const requestedSearch = await searchParams;
   const requestedQuery = parseDocumentLibraryQuery(requestedSearch);
   // «Cargar documento en este tema» (desde Consultas y reportes) abre el formulario.
@@ -167,6 +187,7 @@ export default async function ModuleDetailPage({
 
         {current.parentModuleId ? null : (
           <ModulesExplorer
+            canCreate
             context={{
               kind: "module",
               moduleId: current.id,

@@ -130,10 +130,12 @@ describe('DocumentsController', () => {
         authorization,
       ),
     ).resolves.toEqual(documentRecord);
-    await expect(controller.list({ status: 'active' })).resolves.toEqual([
-      documentRecord,
-    ]);
-    await expect(controller.listLibrary({ q: 'licencia' })).resolves.toEqual({
+    await expect(
+      controller.list({ status: 'active' }, authorization),
+    ).resolves.toEqual([documentRecord]);
+    await expect(
+      controller.listLibrary({ q: 'licencia' }, authorization),
+    ).resolves.toEqual({
       items: [],
       limit: 25,
       offset: 0,
@@ -161,9 +163,9 @@ describe('DocumentsController', () => {
         id: 'da6105be-8676-46fe-b2d2-63e5ac83ee8d',
       },
     ]);
-    await expect(controller.findOne(documentRecord.id)).resolves.toEqual(
-      details,
-    );
+    await expect(
+      controller.findOne(documentRecord.id, authorization),
+    ).resolves.toEqual(details);
     await expect(
       controller.addVersion(documentRecord.id, file, {}, authorization),
     ).resolves.toEqual(documentRecord);

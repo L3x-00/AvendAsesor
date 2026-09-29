@@ -246,7 +246,7 @@ const OUT_OF_SCOPE_PATTERNS: readonly RegExp[] = [
   // Deportes
   /\b(futbol|la champions|mundial de|quien gano|resultado del partido|el clasico|eliminatorias|la seleccion peruana|nba)\b/u,
   // Cocina
-  /\b(receta (?:de|para) (?:cocina|preparar|cocinar|hacer)|receta de (?:un|una|el|la|lomo|arroz|pollo|torta|pastel|ceviche|pan)|como (?:cocinar|preparar|preparo|cocino|hago) (?:un|una|el|la) (?:ceviche|torta|pastel|arroz|lomo|pollo|pan|postre|comida)|ingredientes para)\b/u,
+  /\b(receta (?:de|para) (?:cocina|preparar|cocinar|hacer)|receta de (?:un|una|el|la|lomo|arroz|pollo|torta|pastel|ceviche|chaufa|pan)|como (?:se )?(?:cocina|prepara|cocinar|preparar|preparo|cocino|hago) (?:un|una|el|la) (?:ceviche|torta|pastel|arroz|lomo|pollo|chaufa|pan|postre|comida)|ingredientes para)\b/u,
   // Entretenimiento y redacción creativa
   /\b(peliculas?|serie de netflix|series de netflix|netflix|una cancion|letra de una cancion|un chiste|cuentame un chiste|horoscopo|signo zodiacal|tarot|videojuegos?|tiktok)\b/u,
   /\b(escribe(?:me)?|hazme|redacta(?:me)?|creame|inventa(?:me)?) (?:un|una) (?:poema|cuento|cancion|carta de amor|historia|rap|chiste|novela)\b/u,
@@ -291,7 +291,7 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(jailbreak|prompt injection|inyeccion de prompt|dan mode|bypass)\b/u,
   // Extracción de instrucciones o configuración interna
   /\b(?:muestra|muestrame|revela|revelame|dime|ensename|explicame|imprime|repite|repiteme|cual es|que dice|comparte) (?:tu |el |tus |los )?(?:prompt|system prompt|prompt del sistema|instrucciones internas|reglas internas|configuracion interna|configuracion del sistema)\b/u,
-  /\b(?:tus|las) (?:instrucciones|reglas|directrices) (?:internas|del sistema|de sistema)\b/u,
+  /\b(?:tus (?:instrucciones|reglas|directrices) (?:internas|del sistema|de sistema)|las (?:instrucciones|reglas|directrices) (?:del sistema|de sistema))\b/u,
   /\b(?:que|cual) (?:modelo|version|llm|ia) (?:de (?:ia|lenguaje) )?(?:usas|utilizas|eres|hay detras|esta detras)\b/u,
   /\beres (?:un )?(?:gpt|chatgpt|gemini|claude|modelo de lenguaje|llm)\b/u,
   // Secretos y detalles técnicos

@@ -25,6 +25,7 @@ import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
+import { normalizeDomainQuery } from '../rag/query-normalization';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CHAT_CONTEXT_MESSAGES,
@@ -91,6 +92,20 @@ import {
 const LEAD_IN_WINDOW_CHARS = 400;
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
+
+/** Recupera el tema previo cuando se pide un documento por referencia indirecta. */
+function refersToPreviouslyMentionedDocument(question: string): boolean {
+  const text = question.toLocaleLowerCase('es');
+  // Un número de norma identifica un tema propio; no lo sustituimos por el
+  // documento citado en un turno anterior.
+  if (/\d/u.test(text)) return false;
+  return (
+    /\b(?:descarg\p{L}*|abrir|ver)\b/iu.test(text) &&
+    /\b(?:primero?|segundo?|tercero?|anterior(?:es)?|mencionad[oa]s?|ese|esa|esos|esas|descargarl[oa]s?|descargal[oa]s?)\b/iu.test(
+      text,
+    )
+  );
+}
 
 /** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
 export const RAG_TRUNCATION_NOTE =
@@ -245,7 +260,16 @@ function claimNumbersAppearInSources(
 ): boolean {
   const numbers = withoutCitations(claim).match(/\d+(?:[.,]\d+)*/gu) ?? [];
   return numbers.every((number) =>
-    citedSources.some((source) => source.chunkContent.includes(number)),
+    citedSources.some((source) =>
+      [
+        source.chunkContent,
+        source.articleReference,
+        source.numeralReference,
+        source.resolutionNumber,
+        source.issuanceYear?.toString(),
+        source.documentTitle,
+      ].some((value) => value?.includes(number)),
+    ),
   );
 }
 
@@ -271,9 +295,12 @@ export function evaluateAnswerCitationQualityDetails(
   const excerpts: AnswerCitationQualityEvaluation['excerpts'] = {};
   const claims = answer
     .replace(/\r/gu, '')
+    // N.° y numerales decimales no terminan una oración.
+    .replace(/N\.\s*°/giu, 'N°')
+    .replace(/(?<=\d)\.(?=\d)/gu, '∶')
     .split(/\n{2,}/gu)
     .flatMap((paragraph) => paragraph.match(CLAIM_PATTERN) ?? [])
-    .map((claim) => claim.trim())
+    .map((claim) => claim.replace(/∶/gu, '.').trim())
     .filter(
       (claim) =>
         withoutCitations(claim).replace(/\s+/gu, '').length >=
@@ -291,6 +318,10 @@ export function evaluateAnswerCitationQualityDetails(
     const citedSources = citationIndexes
       .map((index) => sources[index - 1])
       .filter((source): source is RetrievedChunk => Boolean(source));
+    if (/\]\s*\[/u.test(claim)) {
+      signals.add('citation_insufficient');
+      excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
+    }
     if (
       citedSources.length !== citationIndexes.length ||
       !citedSources.some((source) => sourceSupportsClaim(claim, source)) ||
@@ -735,12 +766,33 @@ export class ChatService {
     const priorUserQuestions = conversationContext
       .filter((message) => message.role === 'user')
       .map((message) => message.content);
+    const documentFollowUp =
+      continuesConversation && refersToPreviouslyMentionedDocument(question);
+    const lastDocumentAnswer = documentFollowUp
+      ? [...conversationContext]
+          .reverse()
+          .find(
+            (message) =>
+              message.role === 'assistant' &&
+              /\b(?:documento|fuente|norma|resoluci[oó]n|anexo)\b/iu.test(
+                message.content,
+              ),
+          )
+      : null;
+    const retrievalContext = lastDocumentAnswer
+      ? [
+          ...priorUserQuestions,
+          `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
+        ]
+      : priorUserQuestions;
     const retrieval = await this.ragService.retrieve(
       question,
       selectedModuleId,
-      priorUserQuestions,
+      retrievalContext,
       {
-        forceContext: conversationContext.at(-1)?.role === 'clarification',
+        forceContext:
+          Boolean(lastDocumentAnswer) ||
+          conversationContext.at(-1)?.role === 'clarification',
       },
     );
 
@@ -806,7 +858,9 @@ export class ChatService {
       // el alcance. Se guarda igual como pendiente: puede ser una consulta del
       // ámbito con un término que el léxico no conoce ("DS 004-2013-ED").
       const unrelated =
-        !input.conversationId && !hasEducationalSignal(question);
+        !input.conversationId &&
+        !selectedModuleId &&
+        !hasEducationalSignal(question);
       if (!unrelated) {
         // Consulta del ámbito sin respaldo: orientación general del asesor
         // (sin citas ni normas inventadas) y el hueco queda registrado para la
@@ -895,7 +949,7 @@ export class ChatService {
     // Una cita agrupada («[1, 2]») se reescribe como citas individuales
     // («[1][2]») sin cortar una cita a medias: retiene el corchete abierto
     // hasta que cierra.
-    const citator = new CitationGroupNormalizer();
+    const citator = new CitationGroupNormalizer(retrieval.sources.length);
     // Ventana inicial: hasta ver una cita [n] (o suficiente texto) no se
     // muestra nada. Así una negativa breve sin citas («Las fuentes no contienen
     // …», con o sin la marca) se cierra como «sin evidencia» antes de exhibir
@@ -974,9 +1028,12 @@ export class ChatService {
       declined ||
       (whole.trim() !== '' && !cites(whole))
     ) {
-      yield* this.completeWithoutEvidence({
+      yield* this.advisoryReply({
+        abortSignal: input.abortSignal,
+        conversationContext,
         conversationId: turn.conversationId,
         faqMemory,
+        question: input.question,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -1057,19 +1114,6 @@ export class ChatService {
     };
   }
 
-  /** Temas que cubren hoy los documentos; nunca impide responder. */
-  private async catalogCoverage(): Promise<string | null> {
-    if (!this.catalogService) return null;
-    try {
-      return await this.catalogService.coverageSummary();
-    } catch (error) {
-      this.logger.warn(
-        `Cobertura del catálogo no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
-      );
-      return null;
-    }
-  }
-
   /**
    * Orientación general del modo asesor: cuando el RAG no encontró sustento y
    * la consulta sí es del ámbito, se responde con una orientación breve SIN
@@ -1110,7 +1154,10 @@ export class ChatService {
       detectedModuleId: null,
       detectedSubmoduleId: null,
       qualitySignals: ['support_insufficient'],
-      replyRole: 'assistant',
+      // La RPC exige fuentes para el rol assistant. La orientación generada
+      // carece de citas: se persiste como respuesta sin evidencia y se conserva
+      // la señal administrativa de falta de cobertura.
+      replyRole: 'no_evidence',
       retrievalScope: input.retrievalScope,
       sources: [],
       topRelevanceScore: input.topRelevanceScore,
@@ -1118,7 +1165,7 @@ export class ChatService {
       userId: input.userId,
       userMessageId: input.userMessageId,
     });
-    yield { data: { text: message }, type: 'token' };
+    yield { data: { message }, type: 'no_evidence' };
     yield {
       data: {
         conversationId: input.conversationId,
@@ -1149,7 +1196,12 @@ export class ChatService {
         if (body.length < MAX_RAG_ADVISORY_CHARS) body += token;
       }
       const trimmed = body.trim();
-      if (!trimmed || trimmed.includes(RAG_ADVISORY_OUT_OF_SCOPE_MARKER)) {
+      if (
+        !trimmed ||
+        trimmed.includes(RAG_ADVISORY_OUT_OF_SCOPE_MARKER) ||
+        /\[{1,2}\s*sin[\s_-]*sustento\s*\]{1,2}/iu.test(trimmed) ||
+        /\[\d+\]|\b\d+(?:[.,-]\d+)*\b/u.test(trimmed)
+      ) {
         return null;
       }
       return trimmed;
@@ -1172,8 +1224,7 @@ export class ChatService {
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
     const base = input.message ?? noEvidenceMessage(input.retrievalScope);
-    const coverage = await this.catalogCoverage();
-    const message = coverage ? `${base}\n\n${coverage}` : base;
+    const message = base;
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: input.conversationId,
@@ -1328,10 +1379,13 @@ export class ChatService {
           ]),
         };
       }
-      return correctDomainTypos(question, this.vocabularyCache.value);
+      return normalizeDomainQuery(
+        correctDomainTypos(question, this.vocabularyCache.value),
+      );
     } catch {
-      // Sin vocabulario se entiende la pregunta tal como vino.
-      return question;
+      // Sin vocabulario se entiende la pregunta tal como vino, salvo las
+      // abreviaturas y errores frecuentes del ámbito.
+      return normalizeDomainQuery(question);
     }
   }
 

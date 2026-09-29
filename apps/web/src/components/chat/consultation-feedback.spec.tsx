@@ -120,11 +120,12 @@ describe("ConsultationFeedback", () => {
     expect(showToast).toHaveBeenCalledWith("Gracias por tu sugerencia. Ya la registramos.");
   });
 
-  it("en el chat espera unas consultas antes de invitar a reportar", () => {
+  it("permite reportar la primera respuesta y espera para mostrar sugerencias", () => {
     const { rerender } = render(
       <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={1} />,
     );
-    expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reportar" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Sugerencia" })).toBeNull();
 
     rerender(
       <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={3} />,
@@ -132,6 +133,7 @@ describe("ConsultationFeedback", () => {
     expect(
       screen.getByRole("region", { name: "Reportes y sugerencias" }),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sugerencia" })).toBeEnabled();
   });
 
   it("al cerrarla se oculta 30 minutos en el dispositivo y luego vuelve", async () => {
@@ -145,14 +147,16 @@ describe("ConsultationFeedback", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Cerrar este aviso por 30 minutos" }),
       );
-      expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Reportar" })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: "Sugerencia" })).toBeNull();
       unmount();
 
       // Sigue oculta al volver a la página dentro del plazo.
       render(
         <ConsultationFeedback answerMessageId={answerMessageId} userMessageCount={5} />,
       );
-      expect(screen.queryByRole("region", { name: "Reportes y sugerencias" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Reportar" })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: "Sugerencia" })).toBeNull();
 
       await act(async () => {
         vi.advanceTimersByTime(30 * 60 * 1000 + 1);

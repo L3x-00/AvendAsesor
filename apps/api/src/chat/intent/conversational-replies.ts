@@ -78,6 +78,6 @@ export function buildConversationalReply(
     case 'system_limit':
       return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
     case 'unrelated_no_evidence':
-      return `Aún no encuentro información sobre esto en los documentos oficiales cargados, y prefiero no adelantarte una respuesta sin respaldo. Para casos así, puedes verificar directamente en el portal de tu UGEL, tu DRE o el MINEDU. Me especializo en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más —por ejemplo, el trámite o tu situación laboral— y la busco con gusto.`;
+      return `Me especializo en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más sobre el trámite o tu situación laboral y te ayudo con gusto.`;
   }
 }

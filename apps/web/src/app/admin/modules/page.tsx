@@ -7,7 +7,7 @@ import {
 } from "@/lib/admin-api/module-hierarchy";
 
 export default async function ModulesPage() {
-  const { client } = await createAuthorizedAdminApiContext({
+  const { access, client } = await createAuthorizedAdminApiContext({
     requireModulesAccess: true,
   });
   const modules = await client.listModuleSummaries("all");
@@ -26,6 +26,7 @@ export default async function ModulesPage() {
           </ol>
         </nav>
         <ModulesExplorer
+          canCreate={access.role === "superadmin"}
           context={{ kind: "root" }}
           modules={rootModuleViews(modules)}
           parents={parentOptions(modules)}

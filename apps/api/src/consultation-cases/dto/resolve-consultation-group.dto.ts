@@ -9,6 +9,17 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import type { ConsultationPeriod } from '../consultation-cases.gateway';
+
+const periods: ConsultationPeriod[] = [
+  'today',
+  'week',
+  'month',
+  'last_6h',
+  'last_24h',
+  'last_7d',
+  'last_30d',
+];
 
 /** Cierra de una vez los casos de un grupo de consultas sin sustento. */
 export class ResolveConsultationGroupDto {
@@ -28,6 +39,6 @@ export class ResolveConsultationGroupDto {
 
   /** Periodo en que se armó el grupo (el mismo de la pantalla). */
   @IsOptional()
-  @IsIn(['today', 'week', 'month'])
-  period?: 'month' | 'today' | 'week';
+  @IsIn(periods)
+  period?: ConsultationPeriod;
 }

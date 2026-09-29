@@ -36,6 +36,19 @@ const reportReasonLabels = {
   other: "Otro",
 } as const;
 
+const issueLabels = {
+  support_insufficient: "Falta documentación o cobertura sobre este tema",
+  support_partial: "La documentación solo cubre parte de la pregunta",
+  stale_document: "Se pudo usar un documento no vigente",
+  citation_insufficient: "La cita no respalda suficientemente la respuesta",
+  possible_contradiction: "Las fuentes podrían contradecirse",
+  low_confidence: "La respuesta necesita verificación",
+  technical_error: "Ocurrió un error técnico",
+  ambiguous_request: "La consulta necesita más contexto",
+  teacher_report: "El docente reportó la respuesta",
+  teacher_suggestion: "Sugerencia del docente",
+} as const;
+
 const eventLabels: Record<string, string> = {
   attachment_accessed: "Adjunto abierto o descargado",
   attachment_decided: "Decisión sobre adjunto",
@@ -150,14 +163,6 @@ export default async function ConsultationCasePage({
     caseData.status === "pending" || caseData.status === "in_review";
   const showMissingDocument =
     access.modulesAccess && caseIsOpen && SUPPORT_ISSUES.has(caseData.issueType);
-  const missingDocumentModuleId =
-    caseData.detectedSubmoduleId ??
-    caseData.detectedModuleId ??
-    caseData.requestedModuleId;
-  const missingDocumentModuleLabel =
-    caseData.detectedSubmoduleName ??
-    caseData.detectedModuleName ??
-    caseData.requestedModuleName;
 
   return (
     <AdminPage
@@ -205,6 +210,21 @@ export default async function ConsultationCasePage({
                   "No hay una consulta asociada a esta sugerencia."}
               </p>
             </section>
+            {detail.conversationQuestions.length > 0 ? (
+              <section className={styles.detailBlock}>
+                <h3>Preguntas del docente hasta este caso (hasta 100)</h3>
+                <ol>
+                  {detail.conversationQuestions.map((question) => (
+                    <li key={question.id}>
+                      <p className={styles.caseText}>{question.content}</p>
+                      <time dateTime={question.createdAt}>
+                        {formatDate(question.createdAt)}
+                      </time>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
             <section className={styles.detailBlock}>
               <h3>Respuesta original</h3>
               <p className={styles.caseText}>
@@ -232,9 +252,10 @@ export default async function ConsultationCasePage({
             <section className={styles.detailBlock}>
               <h3>Motivo y comentario</h3>
               <p className={styles.caseText}>
+                {issueLabels[caseData.issueType]}
                 {caseData.reportReason
-                  ? reportReasonLabels[caseData.reportReason]
-                  : "Control automático o sugerencia"}
+                  ? `\n${reportReasonLabels[caseData.reportReason]}`
+                  : ""}
                 {caseData.reporterComment
                   ? `\n${caseData.reporterComment}`
                   : ""}
@@ -261,24 +282,14 @@ export default async function ConsultationCasePage({
             <p className={styles.description}>
               {missingDocumentGuidance(caseData.issueType)}
             </p>
-            {missingDocumentModuleId ? (
-              <CaseDocumentUpload
-                apiBaseUrl={getAdminApiUrl()}
-                caseId={caseId}
-                moduleId={missingDocumentModuleId}
-                moduleLabel={missingDocumentModuleLabel ?? "el tema del caso"}
-                suggestedTitle={
-                  (caseData.questionSnapshot ?? "").trim().slice(0, 200) ||
-                  "Documento de sustento"
-                }
-              />
-            ) : (
-              <p className={styles.meta}>
-                Este caso no tiene un módulo identificado. Carga el documento
-                desde <Link href="/admin/modules">Módulos</Link> y luego
-                vincúlalo en «Documentos vinculados».
-              </p>
-            )}
+            <CaseDocumentUpload
+              apiBaseUrl={getAdminApiUrl()}
+              caseId={caseId}
+              initialModuleId={caseData.detectedModuleId ?? caseData.requestedModuleId}
+              initialSubmoduleId={caseData.detectedSubmoduleId}
+              roots={roots}
+              submodules={submodules}
+            />
           </section>
         ) : null}
 
@@ -388,19 +399,10 @@ export default async function ConsultationCasePage({
                 Documentos relacionados
               </h2>
               <p>
-                Vincula un documento existente. Para cargar uno nuevo, usa
-                siempre el flujo Módulos → Módulo → Submódulo → Agregar
-                documento.
+                Vincula un documento existente o carga uno nuevo arriba en
+                «Qué falta para resolver».
               </p>
             </div>
-            {access.modulesAccess ? (
-              <Link
-                className="avend-button avend-button--secondary"
-                href="/admin/modules"
-              >
-                Agregar nuevo documento en Módulos
-              </Link>
-            ) : null}
           </div>
           {detail.linkedDocuments.length ? (
             <ul className={styles.documentList}>

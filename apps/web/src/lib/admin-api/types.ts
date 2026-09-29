@@ -37,6 +37,7 @@ export const managedModuleSchema = z.object({
 export type ManagedModule = z.infer<typeof managedModuleSchema>;
 
 export const managedModuleSummarySchema = managedModuleSchema.extend({
+  canManage: z.boolean().optional(),
   documentCount: z.number().int().nonnegative(),
   submoduleCount: z.number().int().nonnegative(),
 });

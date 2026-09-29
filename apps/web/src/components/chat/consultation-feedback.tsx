@@ -221,7 +221,7 @@ export function ConsultationFeedback({
     return () => window.clearTimeout(timer);
   }, [gated, snoozedUntil]);
 
-  const visible =
+  const showInvitation =
     !gated ||
     ((userMessageCount ?? 0) >= FEEDBACK_REVEAL_AFTER &&
       (snoozedUntil === 0 || elapsedSnooze === snoozedUntil));
@@ -367,21 +367,22 @@ export function ConsultationFeedback({
     }
   }
 
-  // Oculta, la tarjeta no ocupa lugar; un diálogo ya abierto sigue vivo.
-  if (!visible && !dialog) return null;
+  // La banderita de reporte queda disponible desde la primera respuesta.
+  // El aviso y la sugerencia sí pueden esperar o posponerse.
+  if (!answerMessageId && !showInvitation && !dialog) return null;
 
   return (
     <section
       aria-label="Reportes y sugerencias"
       className={`${styles.feedback}${gated ? ` ${styles.feedbackGated}` : ""}`}
     >
-      <div className={styles.copy}>
+      {showInvitation ? <div className={styles.copy}>
         <h2>¿La respuesta necesita revisión?</h2>
         <p>
           Reporta la última respuesta o comparte una sugerencia. Tu sugerencia
           no se incorpora automáticamente a las respuestas.
         </p>
-      </div>
+      </div> : null}
       <div className={styles.actions}>
         <button
           className="avend-button avend-button--secondary"
@@ -399,16 +400,16 @@ export function ConsultationFeedback({
           </svg>
           Reportar
         </button>
-        <button
+        {showInvitation ? <button
           className="avend-button avend-button--secondary"
           disabled={disabled || isSubmitting}
           onClick={(event) => open("suggestion", event.currentTarget)}
           type="button"
         >
           Sugerencia
-        </button>
+        </button> : null}
       </div>
-      {gated ? (
+      {gated && showInvitation ? (
         <button
           aria-label="Cerrar este aviso por 30 minutos"
           className={styles.dismiss}

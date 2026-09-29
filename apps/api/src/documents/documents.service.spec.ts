@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -110,6 +111,7 @@ function createFile(): Express.Multer.File {
 function createGateway(): jest.Mocked<DocumentsGateway> {
   return {
     addVersion: jest.fn(),
+    canManageModule: jest.fn(),
     create: jest.fn(),
     createDownloadUrl: jest.fn(),
     findById: jest.fn(),
@@ -147,6 +149,10 @@ describe('DocumentsService', () => {
   beforeEach(() => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     documentsGateway = createGateway();
+    documentsGateway.canManageModule.mockResolvedValue(true);
+    documentsGateway.listModuleIds.mockResolvedValue(
+      createDocumentDto.moduleIds,
+    );
     documentsGateway.listAuditEvents.mockResolvedValue([]);
     pdfInspectionService = {
       inspect: jest.fn().mockResolvedValue({
@@ -172,6 +178,64 @@ describe('DocumentsService', () => {
       documentsGateway,
       pdfInspectionService as never,
     );
+  });
+
+  it('denies an administrator without a grant before uploading a document', async () => {
+    documentsGateway.canManageModule.mockResolvedValue(false);
+
+    await expect(
+      service.create(createDocumentDto, createFile(), authorization),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(pdfInspectionService.inspect).not.toHaveBeenCalled();
+    expect(documentsGateway.uploadPdf).not.toHaveBeenCalled();
+    expect(documentsGateway.create).not.toHaveBeenCalled();
+  });
+
+  it('denies mutations when any associated module lacks a grant', async () => {
+    const anotherModuleId = '2f19aee1-28b4-4229-960c-9ec91aac87ec';
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.listModuleIds.mockResolvedValue([
+      createDocumentDto.moduleIds[0],
+      anotherModuleId,
+    ]);
+    documentsGateway.canManageModule.mockImplementation((_actorId, moduleId) =>
+      Promise.resolve(moduleId !== anotherModuleId),
+    );
+
+    await expect(
+      service.logicalDelete(
+        documentRecord.id,
+        { reason: 'Prueba' },
+        authorization,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentsGateway.logicalDelete).not.toHaveBeenCalled();
+  });
+
+  it('denies detail and signed download to an administrator without a grant', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.canManageModule.mockResolvedValue(false);
+
+    await expect(
+      service.findOne(documentRecord.id, authorization),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.createDownloadUrl(documentRecord.id, {}, authorization),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(documentsGateway.createDownloadUrl).not.toHaveBeenCalled();
+    expect(documentsGateway.recordDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('lets a superadministrator manage documents across modules', async () => {
+    documentsGateway.create.mockResolvedValue(documentRecord);
+
+    await expect(
+      service.create(createDocumentDto, createFile(), {
+        ...authorization,
+        role: 'superadmin',
+      }),
+    ).resolves.toEqual(documentRecord);
+    expect(documentsGateway.canManageModule).not.toHaveBeenCalled();
   });
 
   it('validates, stores and persists a new PDF document without overwriting paths', async () => {
@@ -334,7 +398,9 @@ describe('DocumentsService', () => {
       opens: 12,
     });
 
-    await expect(service.findOne(documentRecord.id)).resolves.toEqual({
+    await expect(
+      service.findOne(documentRecord.id, authorization),
+    ).resolves.toEqual({
       ...documentRecord,
       auditEvents: [],
       createdByName: 'Administrador de prueba',
@@ -618,15 +684,19 @@ describe('DocumentsService', () => {
     });
 
     await expect(
-      service.listLibrary({
-        moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
-        offset: 25,
-        q: 'licencia docente',
-        sort: 'title',
-      }),
+      service.listLibrary(
+        {
+          moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+          offset: 25,
+          q: 'licencia docente',
+          sort: 'title',
+        },
+        authorization,
+      ),
     ).resolves.toMatchObject({ limit: 25, offset: 25 });
 
     expect(documentsGateway.listLibrary).toHaveBeenCalledWith({
+      actorId: authorization.userId,
       createdBy: undefined,
       createdFrom: undefined,
       createdTo: undefined,
@@ -652,11 +722,14 @@ describe('DocumentsService', () => {
       total: 0,
     });
 
-    await service.listLibrary({
-      createdBy: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
-      createdFrom: '2026-01-01',
-      createdTo: '2026-12-31',
-    });
+    await service.listLibrary(
+      {
+        createdBy: '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+        createdFrom: '2026-01-01',
+        createdTo: '2026-12-31',
+      },
+      authorization,
+    );
 
     expect(documentsGateway.listLibrary).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -670,10 +743,13 @@ describe('DocumentsService', () => {
   it('rejects an inverted upload-date range instead of returning an empty library', () => {
     // La validación es síncrona: rechaza antes de construir la promesa.
     expect(() =>
-      service.listLibrary({
-        createdFrom: '2026-12-31',
-        createdTo: '2026-01-01',
-      }),
+      service.listLibrary(
+        {
+          createdFrom: '2026-12-31',
+          createdTo: '2026-01-01',
+        },
+        authorization,
+      ),
     ).toThrow(BadRequestException);
 
     expect(documentsGateway.listLibrary).not.toHaveBeenCalled();
@@ -874,7 +950,9 @@ describe('DocumentsService', () => {
     documentsGateway.findById.mockResolvedValue(documentRecord);
     documentsGateway.list.mockResolvedValue([documentRecord]);
 
-    await expect(service.list({})).resolves.toEqual([documentRecord]);
+    await expect(service.list({}, authorization)).resolves.toEqual([
+      documentRecord,
+    ]);
     await service.linkModule(
       documentRecord.id,
       { moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1' },
@@ -892,6 +970,7 @@ describe('DocumentsService', () => {
     );
 
     expect(documentsGateway.list).toHaveBeenCalledWith({
+      actorId: authorization.userId,
       limit: 25,
       offset: 0,
       status: 'all',

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ChatSources, citationRanks, citedSourceRanks } from "./chat-sources";
+import { ChatSources, citationRanks, citedSourceRanks, sourceCitationLabel } from "./chat-sources";
 
 describe("citas del modelo", () => {
+  it("shows the normative abbreviation in the citation label", () => {
+    expect(sourceCitationLabel({ rank: 1, documentType: "RESOLUCION_MINISTERIAL" } as Parameters<typeof sourceCitationLabel>[0])).toBe("[1] RM");
+    expect(sourceCitationLabel({ rank: 2, documentType: "MEMORANDUM" } as Parameters<typeof sourceCitationLabel>[0])).toBe("[2] M");
+  });
   it("reads single, double and grouped citations", () => {
     expect(
       citedSourceRanks("Plazo [1]. Requisitos [[2]]. Sanción [1, 3]."),

@@ -56,6 +56,7 @@ export interface ModulesGateway {
 }
 
 export interface ManagedModuleSummary extends ManagedModule {
+  canManage?: boolean;
   documentCount: number;
   submoduleCount: number;
 }

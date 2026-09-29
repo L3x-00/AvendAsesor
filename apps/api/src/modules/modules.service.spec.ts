@@ -150,7 +150,7 @@ describe('ModulesService', () => {
   it('lists modules with an explicit default status', async () => {
     gateway.list.mockResolvedValue([createModule()]);
 
-    await expect(service.list({})).resolves.toHaveLength(1);
+    await expect(service.list({}, authorization)).resolves.toHaveLength(1);
 
     expect(gateway.list.mock.calls).toEqual([
       [{ parentModuleId: undefined, status: 'all' }],
@@ -163,15 +163,76 @@ describe('ModulesService', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(createModule({ isDeleted: true }));
 
-    await expect(service.findOne(createModule().id)).resolves.toEqual(
-      createModule(),
+    await expect(
+      service.findOne(createModule().id, authorization),
+    ).resolves.toEqual(createModule());
+    await expect(
+      service.findOne(createModule().id, authorization),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.findOne(createModule().id, authorization),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('filters module lists and summaries by the administrator grants', async () => {
+    const granted = createModule();
+    const denied = createModule({ id: '4d54a9c8-7b1e-4bc2-8d7f-7e0fbce37c33' });
+    const limitedAdmin = { ...authorization, role: 'admin' as const };
+    gateway.list.mockResolvedValue([granted, denied]);
+    gateway.listSummaries.mockResolvedValue([
+      { ...granted, canManage: true, documentCount: 1, submoduleCount: 0 },
+      { ...denied, documentCount: 2, submoduleCount: 0 },
+    ]);
+    gateway.canManageModule.mockImplementation((_actorId, moduleId) =>
+      Promise.resolve(moduleId === granted.id),
     );
-    await expect(service.findOne(createModule().id)).rejects.toBeInstanceOf(
-      NotFoundException,
+
+    await expect(service.list({}, limitedAdmin)).resolves.toEqual([granted]);
+    await expect(service.listSummaries({}, limitedAdmin)).resolves.toEqual([
+      { ...granted, canManage: true, documentCount: 1, submoduleCount: 0 },
+    ]);
+    expect(gateway.canManageModule.mock.calls).toContainEqual([
+      limitedAdmin.userId,
+      denied.id,
+    ]);
+  });
+
+  it('denies direct reading of an ungranted module', async () => {
+    const module = createModule();
+    gateway.findById.mockResolvedValue(module);
+    gateway.canManageModule.mockResolvedValue(false);
+
+    await expect(
+      service.findOne(module.id, { ...authorization, role: 'admin' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.list(
+        { parentModuleId: module.id },
+        { ...authorization, role: 'admin' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(gateway.list.mock.calls).toHaveLength(0);
+  });
+
+  it('keeps an ungranted root only as navigation to an allowed submodule', async () => {
+    const root = createModule();
+    const child = createModule({
+      id: '4d54a9c8-7b1e-4bc2-8d7f-7e0fbce37c33',
+      parentModuleId: root.id,
+    });
+    const limitedAdmin = { ...authorization, role: 'admin' as const };
+    gateway.listSummaries.mockResolvedValue([
+      { ...root, documentCount: 8, submoduleCount: 3 },
+      { ...child, documentCount: 2, submoduleCount: 0 },
+    ]);
+    gateway.canManageModule.mockImplementation((_actorId, moduleId) =>
+      Promise.resolve(moduleId === child.id),
     );
-    await expect(service.findOne(createModule().id)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+
+    await expect(service.listSummaries({}, limitedAdmin)).resolves.toEqual([
+      { ...root, canManage: false, documentCount: 0, submoduleCount: 1 },
+      { ...child, canManage: true, documentCount: 2, submoduleCount: 0 },
+    ]);
   });
 
   it('requires a reason before deactivating a live module', async () => {

@@ -156,11 +156,14 @@ function quickValidity(
   months: number,
 ): { expiresAt: string; label: string; startAt: string } {
   const base = new Date(`${today}T12:00:00.000Z`);
+  const year = base.getUTCFullYear();
+  const month = base.getUTCMonth() + months;
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const target = new Date(
     Date.UTC(
-      base.getUTCFullYear(),
-      base.getUTCMonth() + months,
-      base.getUTCDate(),
+      year,
+      month,
+      Math.min(base.getUTCDate(), lastDayOfTargetMonth),
       12,
     ),
   );
@@ -211,6 +214,7 @@ function UserEditForm({ user }: { user: AdministrativeUser }) {
       <AdminActionForm
         action={updateAdministrativeUserAction}
         className={styles.form}
+        confirmMessage={`¿Confirmas cambiar el rol o estado de ${user.fullName}? Este cambio quedará auditado.`}
         rules={USER_EDIT_RULES}
         submitLabel="Actualizar usuario"
         successMessage="Usuario actualizado con éxito."

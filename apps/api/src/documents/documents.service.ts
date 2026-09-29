@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   Inject,
   Injectable,
@@ -269,7 +270,16 @@ export class DocumentsService {
     dto: AddDocumentVersionDto,
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
-    await this.requireLiveDocument(documentId);
+    const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
+    if (
+      dto.versionRelation === 'complements' &&
+      document.approvalStatus !== 'ready'
+    ) {
+      throw new BadRequestException(
+        'Approve the current version before adding another.',
+      );
+    }
     const { inspectedPdf, processingError } =
       await this.inspectPdfForPersistence(file);
     const content = file?.buffer;
@@ -320,6 +330,7 @@ export class DocumentsService {
     file: Express.Multer.File | undefined,
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
+    await this.assertCanManageModules(dto.moduleIds, authorization);
     const metadata = applyKeywords(
       governedMetadata(metadataOrEmpty(dto.metadata), {
         additionalDetail: dto.additionalDetail,
@@ -403,6 +414,7 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<{ expiresAt: string; url: string; versionId: string }> {
     const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
     const versionId = dto.versionId ?? document.currentVersionId;
 
     if (!versionId) {
@@ -444,8 +456,12 @@ export class DocumentsService {
     };
   }
 
-  async findOne(documentId: string): Promise<ManagedDocumentDetails> {
+  async findOne(
+    documentId: string,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedDocumentDetails> {
     const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
     const [versions, moduleIds, auditEvents, usage] = await Promise.all([
       this.documentsGateway.listVersions(documentId),
       this.documentsGateway.listModuleIds(documentId),
@@ -501,6 +517,8 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<void> {
     await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
+    await this.assertCanManageModules([dto.moduleId], authorization);
     await this.documentsGateway.linkModule(
       documentId,
       dto.moduleId,
@@ -508,15 +526,22 @@ export class DocumentsService {
     );
   }
 
-  list(dto: ListDocumentsQueryDto): Promise<ManagedDocument[]> {
+  list(
+    dto: ListDocumentsQueryDto,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedDocument[]> {
     return this.documentsGateway.list({
+      actorId: authorization.userId,
       limit: dto.limit ?? 25,
       offset: dto.offset ?? 0,
       status: dto.status ?? 'all',
     });
   }
 
-  listLibrary(dto: ListDocumentLibraryQueryDto): Promise<DocumentLibraryPage> {
+  listLibrary(
+    dto: ListDocumentLibraryQueryDto,
+    authorization: AuthorizationContext,
+  ): Promise<DocumentLibraryPage> {
     if (dto.createdFrom && dto.createdTo && dto.createdFrom > dto.createdTo) {
       throw new BadRequestException(
         'The upload date range must start before it ends.',
@@ -524,6 +549,7 @@ export class DocumentsService {
     }
 
     return this.documentsGateway.listLibrary({
+      actorId: authorization.userId,
       createdBy: dto.createdBy,
       createdFrom: dto.createdFrom,
       createdTo: dto.createdTo,
@@ -558,6 +584,7 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<void> {
     await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
     await this.documentsGateway.logicalDelete(
       documentId,
       dto.reason,
@@ -571,6 +598,7 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
 
     if (!dto.isActive && !dto.reason) {
       throw new BadRequestException(
@@ -601,6 +629,7 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
 
     const situation = validateSituationInput(dto);
 
@@ -659,6 +688,7 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<ManagedDocument> {
     await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
     return this.documentsGateway.setTechnicalStatus(
       documentId,
       dto.technicalStatus,
@@ -672,6 +702,8 @@ export class DocumentsService {
     authorization: AuthorizationContext,
   ): Promise<void> {
     await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
+    await this.assertCanManageModules([moduleId], authorization);
     await this.documentsGateway.unlinkModule(
       documentId,
       moduleId,
@@ -689,6 +721,7 @@ export class DocumentsService {
     }
 
     const document = await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
     const documentType = dto.documentType ?? document.documentType;
     const issuingEntity = dto.issuingEntity ?? document.issuingEntity;
 
@@ -756,6 +789,35 @@ export class DocumentsService {
       ),
       authorization.userId,
     );
+  }
+
+  private async assertCanManageDocument(
+    documentId: string,
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    const moduleIds = await this.documentsGateway.listModuleIds(documentId);
+    await this.assertCanManageModules(moduleIds, authorization);
+  }
+
+  private async assertCanManageModules(
+    moduleIds: string[],
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    if (moduleIds.length === 0) {
+      throw new ForbiddenException('The document has no manageable module.');
+    }
+    if (authorization.role === 'superadmin') return;
+
+    const checks = await Promise.all(
+      [...new Set(moduleIds)].map((moduleId) =>
+        this.documentsGateway.canManageModule(authorization.userId, moduleId),
+      ),
+    );
+    if (checks.some((allowed) => !allowed)) {
+      throw new ForbiddenException(
+        'Your administrator profile cannot manage this document module.',
+      );
+    }
   }
 
   private buildStoragePath(

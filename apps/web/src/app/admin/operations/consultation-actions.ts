@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { AdminActionState } from "@/lib/admin-api/action-state";
 import { ConsultationReportsApiError } from "@/lib/consultation-reports-api/client";
 import { createAuthorizedConsultationReportsApiContext } from "@/lib/consultation-reports-api/authorized-client";
+import { consultationPeriodSchema } from "@/lib/consultation-reports-api/types";
 
 class FormValidationError extends Error {
   constructor(
@@ -199,14 +200,18 @@ export async function resolveUnansweredGroupAction(
     if (!caseIds.length) {
       throw new FormValidationError("El grupo no tiene casos abiertos.");
     }
-    const status =
-      formData.get("status") === "discarded" ? "discarded" : "resolved";
+    const requestedStatus = formData.get("status");
+    if (requestedStatus !== "resolved" && requestedStatus !== "discarded") {
+      throw new FormValidationError("Elige cómo cerrar las consultas.", "status");
+    }
+    const status = requestedStatus;
     const note = requiredText(formData, "note", "La nota");
     const requestedPeriod = formData.get("period");
-    const period =
-      requestedPeriod === "today" || requestedPeriod === "week"
-        ? requestedPeriod
-        : "month";
+    const parsedPeriod = consultationPeriodSchema.safeParse(requestedPeriod);
+    if (!parsedPeriod.success) {
+      throw new FormValidationError("El periodo del grupo ya no es válido.");
+    }
+    const period = parsedPeriod.data;
     const { client } = await createAuthorizedConsultationReportsApiContext();
     const result = await client.resolveGroup({
       caseIds,

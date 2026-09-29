@@ -434,19 +434,19 @@ describe('ChatService + RagService integration', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'token',
+      'no_evidence',
       'done',
     ]);
-    const token = events[1] as { data: { text: string } };
-    expect(token.data.text).toContain(
+    const advisory = events[1] as { data: { message: string } };
+    expect(advisory.data.message).toContain(
       'Orientación general (sin cita de norma):',
     );
-    expect(token.data.text).not.toMatch(/\[\d+\]/u);
+    expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
     expect(answers.inputs).toHaveLength(1);
     expect(answers.inputs[0]?.mode).toBe('advisory');
     expect(history.completions[0]).toMatchObject({
       qualitySignals: ['support_insufficient'],
-      replyRole: 'assistant',
+      replyRole: 'no_evidence',
       sources: [],
       unansweredReason: 'insufficient_evidence',
     });

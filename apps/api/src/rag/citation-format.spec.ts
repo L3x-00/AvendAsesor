@@ -21,6 +21,13 @@ describe('normalizeCitationGroups', () => {
     expect(normalizeCitationGroups('Norma [1-2012].')).toBe('Norma [1-2012].');
     expect(normalizeCitationGroups('Clave [abc].')).toBe('Clave [abc].');
   });
+
+  it('descarta referencias inventadas y duplicadas sin tocar años', () => {
+    expect(normalizeCitationGroups('Plazo [1, 7].', 2)).toBe('Plazo [1].');
+    expect(normalizeCitationGroups('Plazo [3].', 2)).toBe('Plazo .');
+    expect(normalizeCitationGroups('Plazo [2, 2].', 2)).toBe('Plazo [2].');
+    expect(normalizeCitationGroups('Año [2012].', 2)).toBe('Año [2012].');
+  });
 });
 
 describe('CitationGroupNormalizer', () => {
@@ -59,6 +66,15 @@ describe('CitationGroupNormalizer', () => {
 
     expect(normalizer.push('texto [1')).toBe('texto ');
     expect(normalizer.flush()).toBe('[1');
+  });
+
+  it('espera el cierre de una cita doble y descarta el índice inválido', () => {
+    const normalizer = new CitationGroupNormalizer(1);
+    expect(normalizer.push('Texto [')).toBe('Texto ');
+    expect(normalizer.push('[2]')).toBe('');
+    expect(normalizer.push('] y otro [')).toBe(' y otro ');
+    expect(normalizer.push('[1]')).toBe('');
+    expect(normalizer.push('].')).toBe('[1].');
   });
 });
 

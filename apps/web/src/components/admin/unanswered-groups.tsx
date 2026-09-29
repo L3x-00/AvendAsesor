@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { resolveUnansweredGroupAction } from "@/app/admin/operations/consultation-actions";
 import type { UnansweredGroup } from "@/lib/consultation-reports-api/types";
-import { AdminActionForm } from "./admin-action-form";
 import reports from "./consultation-reports.module.css";
 import styles from "./unanswered-groups.module.css";
 
@@ -31,14 +29,6 @@ const hints: Record<UnansweredGroup["kind"], string> = {
     "Falta documentación sobre este tema. Carga el documento y luego marca el grupo como resuelto: cada docente verá en su historial que ya puede volver a preguntar.",
   unknown:
     "No se identificó un tema. Revisa los casos uno por uno o ciérralos si son pruebas o mensajes sin consulta.",
-};
-
-const defaultNotes: Record<UnansweredGroup["kind"], string> = {
-  catalog:
-    "El asistente ya responde este tipo de pregunta con el catálogo de documentos disponibles.",
-  topic:
-    "Se cargó documentación sobre este tema. La consulta ya puede responderse con sustento.",
-  unknown: "Revisado por la administración.",
 };
 
 function casesHref(group: UnansweredGroup, period: string): string {
@@ -114,8 +104,11 @@ export function UnansweredGroups({
             const titleId = `unanswered-group-${group.kind}-${group.moduleId ?? "none"}`;
             // El formulario envía como máximo 50 casos por vez.
             const closable = group.caseIds.length;
-            const defaultStatus =
-              group.kind === "topic" ? "resolved" : "discarded";
+            const closeParams = new URLSearchParams({
+              kind: group.kind,
+              period,
+            });
+            if (group.moduleId) closeParams.set("moduleId", group.moduleId);
             return (
               <li
                 aria-labelledby={titleId}
@@ -140,6 +133,11 @@ export function UnansweredGroups({
                   </ul>
                 ) : null}
                 <p className={styles.hint}>{hints[group.kind]}</p>
+                {group.count > closable ? (
+                  <p className={reports.meta}>
+                    Puedes revisar {closable} de {group.count} consultas en la pantalla de cierre; el resto sigue pendiente.
+                  </p>
+                ) : null}
                 <div className={styles.actions}>
                   {canUpload && group.kind === "topic" && group.moduleId ? (
                     <Link
@@ -155,76 +153,13 @@ export function UnansweredGroups({
                   >
                     Ver casos
                   </Link>
-                </div>
-                <details className={styles.resolve}>
-                  <summary>
-                    Cerrar{" "}
-                    {closable === 1 ? "la consulta" : `${closable} consultas`}
-                  </summary>
-                  <AdminActionForm
-                    action={resolveUnansweredGroupAction}
-                    className={styles.resolveForm}
-                    rules={{
-                      note: [
-                        { kind: "required", label: "La nota" },
-                        { kind: "maxLength", label: "La nota", max: 2000 },
-                      ],
-                    }}
-                    submitLabel={
-                      closable === 1
-                        ? "Cerrar consulta"
-                        : `Cerrar ${closable} consultas`
-                    }
+                  <Link
+                    className="avend-button avend-button--secondary"
+                    href={`/admin/operations/grupos/cerrar?${closeParams.toString()}`}
                   >
-                    {group.count > closable ? (
-                      <p className={reports.meta}>
-                        Se cierran {closable} de {group.count}; el resto queda
-                        abierto para la próxima vez.
-                      </p>
-                    ) : null}
-                    {group.caseIds.map((caseId) => (
-                      <input
-                        key={caseId}
-                        name="caseId"
-                        type="hidden"
-                        value={caseId}
-                      />
-                    ))}
-                    <input name="period" type="hidden" value={period} />
-                    <label
-                      className={styles.noteLabel}
-                      htmlFor={`${titleId}-status`}
-                    >
-                      Cómo se cierra
-                      <select
-                        defaultValue={defaultStatus}
-                        id={`${titleId}-status`}
-                        name="status"
-                      >
-                        <option value="resolved">
-                          Resuelta: se cargó la documentación (se avisa a cada
-                          docente)
-                        </option>
-                        <option value="discarded">
-                          Descartada: no requiere documento (sin aviso)
-                        </option>
-                      </select>
-                    </label>
-                    <label
-                      className={styles.noteLabel}
-                      htmlFor={`${titleId}-note`}
-                    >
-                      Nota para el historial de cada caso
-                      <textarea
-                        defaultValue={defaultNotes[group.kind]}
-                        id={`${titleId}-note`}
-                        maxLength={2000}
-                        name="note"
-                        rows={3}
-                      />
-                    </label>
-                  </AdminActionForm>
-                </details>
+                    Cerrar {closable === 1 ? "la consulta" : `${closable} consultas`}
+                  </Link>
+                </div>
               </li>
             );
           })}

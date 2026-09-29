@@ -53,21 +53,72 @@ export class ModulesService {
     });
   }
 
-  listSummaries(dto: ListModulesQueryDto) {
-    return this.modulesGateway.listSummaries({
+  async listSummaries(
+    dto: ListModulesQueryDto,
+    authorization: AuthorizationContext,
+  ) {
+    const modules = await this.modulesGateway.listSummaries({
       status: dto.status ?? 'all',
+    });
+    if (authorization.role === 'superadmin') {
+      return modules.map((module) => ({ ...module, canManage: true }));
+    }
+    const allowed = await Promise.all(
+      modules.map((module) =>
+        this.modulesGateway.canManageModule(authorization.userId, module.id),
+      ),
+    );
+    const grantedIds = new Set(
+      modules.filter((_, index) => allowed[index]).map((module) => module.id),
+    );
+    return modules.flatMap((module, index) => {
+      if (allowed[index]) return [{ ...module, canManage: true }];
+      // Una raíz no concedida sigue siendo un contenedor de navegación si
+      // el administrador tiene acceso a uno de sus submódulos.
+      if (
+        module.parentModuleId === null &&
+        modules.some(
+          (child) =>
+            child.parentModuleId === module.id && grantedIds.has(child.id),
+        )
+      ) {
+        return [
+          {
+            ...module,
+            canManage: false,
+            documentCount: 0,
+            submoduleCount: modules.filter(
+              (child) =>
+                child.parentModuleId === module.id && grantedIds.has(child.id),
+            ).length,
+          },
+        ];
+      }
+      return [];
     });
   }
 
-  async findOne(moduleId: string): Promise<ManagedModule> {
-    return this.requireLiveModule(moduleId);
+  async findOne(
+    moduleId: string,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedModule> {
+    const module = await this.requireLiveModule(moduleId);
+    await this.assertCanReadModule(authorization, moduleId);
+    return module;
   }
 
-  list(dto: ListModulesQueryDto): Promise<ManagedModule[]> {
-    return this.modulesGateway.list({
+  async list(
+    dto: ListModulesQueryDto,
+    authorization: AuthorizationContext,
+  ): Promise<ManagedModule[]> {
+    if (dto.parentModuleId) {
+      await this.assertCanReadModule(authorization, dto.parentModuleId);
+    }
+    const modules = await this.modulesGateway.list({
       parentModuleId: dto.parentModuleId,
       status: dto.status ?? 'all',
     });
+    return this.visibleToAdministrator(modules, authorization);
   }
 
   async logicalDelete(
@@ -205,6 +256,36 @@ export class ModulesService {
         'Your administrator profile cannot manage this module.',
       );
     }
+  }
+
+  private async assertCanReadModule(
+    authorization: AuthorizationContext,
+    moduleId: string,
+  ): Promise<void> {
+    if (
+      authorization.role !== 'superadmin' &&
+      !(await this.modulesGateway.canManageModule(
+        authorization.userId,
+        moduleId,
+      ))
+    ) {
+      throw new ForbiddenException(
+        'Your administrator profile cannot access this module.',
+      );
+    }
+  }
+
+  private async visibleToAdministrator<T extends ManagedModule>(
+    modules: T[],
+    authorization: AuthorizationContext,
+  ): Promise<T[]> {
+    if (authorization.role === 'superadmin') return modules;
+    const allowed = await Promise.all(
+      modules.map((module) =>
+        this.modulesGateway.canManageModule(authorization.userId, module.id),
+      ),
+    );
+    return modules.filter((_, index) => allowed[index]);
   }
 
   private async requireLiveModule(moduleId: string): Promise<ManagedModule> {

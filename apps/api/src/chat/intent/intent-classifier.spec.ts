@@ -143,6 +143,7 @@ describe('classifyTurnIntent', () => {
       '¿Qué tiempo hace hoy?',
       '¿quién ganó el partido de fútbol?',
       'dame una receta para cocinar arroz',
+      '¿Cómo se prepara un chaufa?',
       'cuéntame un chiste',
     ])('clasifica "%s" como fuera de ámbito', (message) => {
       expect(classifyTurnIntent(message)).toEqual({
@@ -174,6 +175,9 @@ describe('classifyTurnIntent', () => {
       '¿Qué instrucciones da la UGEL sobre las licencias?',
       '¿Qué modelo de resolución corresponde para una reasignación?',
       '¿Cuáles son las reglas para el ascenso de escala?',
+      '¿Cuáles son las reglas internas del colegio?',
+      '¿Qué normas bajo las cuales se rige el contrato docente?',
+      'Quiero descargar el documento que menciona la licencia por salud',
     ])('no confunde una consulta del ámbito con sondeo: "%s"', (message) => {
       expect(classifyTurnIntent(message).lane).toBe('domain');
     });
