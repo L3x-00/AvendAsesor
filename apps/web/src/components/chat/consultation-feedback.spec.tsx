@@ -136,6 +136,36 @@ describe("ConsultationFeedback", () => {
     expect(screen.getByRole("button", { name: "Sugerencia" })).toBeEnabled();
   });
 
+  it("permite valorar una respuesta sin ocultar el reporte", async () => {
+    const user = userEvent.setup();
+    const nextAnswerMessageId = "19000000-0000-4000-8000-000000000003";
+    const { rerender } = render(
+      <ConsultationFeedback answerMessageId={answerMessageId} />,
+    );
+
+    const helpful = screen.getByRole("button", { name: "La respuesta fue útil" });
+    const notHelpful = screen.getByRole("button", { name: "La respuesta no fue útil" });
+    expect(helpful).toHaveAttribute("aria-pressed", "false");
+    expect(notHelpful).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(helpful);
+    expect(helpful).toHaveAttribute("aria-pressed", "true");
+    expect(notHelpful).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Reportar" })).toBeEnabled();
+
+    await user.click(notHelpful);
+    expect(helpful).toHaveAttribute("aria-pressed", "false");
+    expect(notHelpful).toHaveAttribute("aria-pressed", "true");
+
+    rerender(<ConsultationFeedback answerMessageId={nextAnswerMessageId} />);
+    expect(
+      screen.getByRole("button", { name: "La respuesta fue útil" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "La respuesta no fue útil" }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("al cerrarla se oculta 30 minutos en el dispositivo y luego vuelve", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-25T10:00:00Z") });
     try {

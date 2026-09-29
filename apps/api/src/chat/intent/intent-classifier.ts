@@ -299,6 +299,8 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(?:contrasena|password|credenciales) (?:de |del |de la )?(?:admin(?:istrador)?|superadmin|sistema|base de datos|plataforma)\b/u,
   /\b(?:variables de entorno|environment variables|esquema de la base|tablas de la base|connection string|cadena de conexion)\b/u,
   /\b(?:supabase|openrouter|openai|render|vercel|github) (?:key|token|secret|credenciales|url interna)\b/u,
+  // El RAG es implementación interna, no un tema educativo para el chat.
+  /\b(?:rag|retrieval augmented generation)\b/u,
 ];
 
 function isSystemProbing(normalized: string): boolean {
@@ -396,13 +398,10 @@ function withoutCourtesy(normalized: string): string {
 }
 
 function isFollowUpShaped(normalized: string): boolean {
-  const words = normalized
-    .replace(/[^a-z0-9 ]+/gu, ' ')
-    .trim()
-    .split(/\s+/u);
-  return (
-    /^(?:y|e|pero|entonces|o sea)\b/u.test(words.join(' ')) || words.length <= 8
-  );
+  const plain = normalized.replace(/[^a-z0-9 ]+/gu, ' ').trim();
+  // Un seguimiento debe mostrar que retoma lo anterior. La longitud por sí
+  // sola no lo demuestra: «cómo preparo arroz chaufa» también es breve.
+  return /^(?:y|e|pero|entonces|o sea)\b/u.test(plain);
 }
 
 /**
