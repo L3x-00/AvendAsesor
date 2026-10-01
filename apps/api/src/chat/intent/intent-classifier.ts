@@ -303,7 +303,8 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(?:rag|retrieval augmented generation)\b/u,
   // Proveedor o modelo de IA de la plataforma.
   /\bproveedor(?:a)? de (?:la )?(?:ia|inteligencia artificial|modelos?)\b/u,
-  /\b(?:quien|cual) es (?:tu|el) proveedor\b/u,
+  // Solo «tu proveedor»: «¿cuál es el proveedor de Qali Warma?» es del ámbito.
+  /\b(?:quien|cual) es tu proveedor\b/u,
 ];
 
 /**
@@ -314,7 +315,7 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
 const IMPERSONATION =
   /\bsoy (?:el |la )?(?:admin|administrador(?:a)?|superadmin(?:istrador(?:a)?)?|desarrollador(?:a)?|programador(?:a)?|creador(?:a)?|dueno|duena) (?:del|de la|de este|de esta) (?:sistema|sisteam|plataforma|chat|asistente|aplicacion|app|pagina)\b/u;
 const SENSITIVE_REQUEST =
-  /\b(?:clave|contrasena|password|credenciales?|token|api|proveedor|configuracion|prompt|instrucciones)\b/u;
+  /\b(?:proveedor|credenciales?|token|api key|prompt|configuracion (?:interna|del sistema)|(?:clave|contrasena|password) (?:del|de la) (?:sistema|plataforma|chat|asistente|ia)|(?:pasame|dame|dime|comparteme|enviame|revelame) (?:la|tu|el|las|los) (?:clave|contrasena|password|credenciales?))\b/u;
 
 function isSystemProbing(normalized: string): boolean {
   return (

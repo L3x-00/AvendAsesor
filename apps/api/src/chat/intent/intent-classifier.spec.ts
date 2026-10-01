@@ -196,6 +196,9 @@ describe('classifyTurnIntent', () => {
       // Presentarse como administrador no es sondeo si no pide nada interno.
       'soy el administrador del colegio, ¿cómo registro una licencia por salud?',
       'olvidé mi clave de acceso al sistema de evaluación docente, ¿qué hago?',
+      '¿Cuál es el proveedor de Qali Warma de mi colegio?',
+      'soy la administradora de la plataforma SIAGIE, ¿cómo restablezco la contraseña de un docente?',
+      'soy el administrador del sistema de matrícula, ¿qué instrucciones dio la UGEL?',
     ])('no confunde una consulta del ámbito con sondeo: "%s"', (message) => {
       expect(classifyTurnIntent(message).lane).toBe('domain');
     });

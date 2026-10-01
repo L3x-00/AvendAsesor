@@ -13,6 +13,7 @@ export type DocumentIngestionFailureCause =
   | 'timeout'
   | 'too_large'
   | 'unknown'
+  | 'unreadable_file'
   | 'unsupported_format';
 
 export function ingestionFailureCause(
@@ -20,7 +21,10 @@ export function ingestionFailureCause(
   message: string | null,
 ): DocumentIngestionFailureCause {
   if (code === 'LEASE_EXPIRED') return 'timeout';
+  // Marcado al cargar: el PDF no se pudo abrir (dañado o con contraseña).
+  if (code === 'UNREADABLE_PDF') return 'unreadable_file';
   const detail = message ?? '';
+  if (detail.includes('INGESTION_TIMEOUT')) return 'timeout';
   if (detail.includes('INGESTION_EMPTY_TEXT')) return 'no_text';
   if (detail.includes('INGESTION_UNSUPPORTED_FORMAT')) {
     return 'unsupported_format';

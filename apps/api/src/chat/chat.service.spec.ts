@@ -192,6 +192,43 @@ describe('ChatService', () => {
     );
   });
 
+  it.each([
+    [
+      'una marca al final se descarta y el texto pasa los filtros de orientación',
+      'Suele corresponder presentar la solicitud ante tu UGEL. [[FUERA_DE_AMBITO]]',
+      /^Suele corresponder presentar la solicitud ante tu UGEL\.\n\nSugerencias:/u,
+    ],
+    [
+      'un texto forzado tras la marca con cifras cae a la plantilla',
+      '[[FUERA_DE_AMBITO]] Claro: tu plazo es de 5 días y la multa de 300 soles.',
+      /^¡Qué buena pregunta!/u,
+    ],
+    [
+      'una variante de la marca con tilde también se reconoce',
+      '[[FUERA_DE_ÁMBITO]] Qué rico suena eso, pero mi objetivo es orientarte en temas educativos.',
+      /^Qué rico suena eso/u,
+    ],
+  ])('%s', async (_label, generated, expected) => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield generated;
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Qué opinas del arroz chaufa con harto sillao?',
+    });
+
+    const reply = events.find((event) => event.type === 'no_evidence');
+    expect(reply?.data.message).toMatch(expected);
+    expect(reply?.data.message).not.toMatch(/FUERA_DE/u);
+  });
+
   it('un pedido ajeno detectado por el clasificador recibe la respuesta amable sin turno', async () => {
     answerGateway.generate.mockReturnValue(
       (async function* () {

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Logger } from '@nestjs/common';
-import { IngestionService } from './ingestion.service';
+import { IngestionService, MAX_JOB_DURATION_MS } from './ingestion.service';
 import type {
   ClaimedIngestionJob,
   IngestionGateway,
@@ -313,6 +313,65 @@ describe('IngestionService', () => {
       const renewals = gateway.refreshLease.mock.calls.length;
       await jest.advanceTimersByTimeAsync(500_000);
       expect(gateway.refreshLease).toHaveBeenCalledTimes(renewals);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('fails a hung job after the overall deadline instead of renewing forever', async () => {
+    jest.useFakeTimers();
+    try {
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      gateway.refreshLease.mockResolvedValue(undefined);
+      // Una extracción que nunca termina (OCR o proveedor colgado).
+      pdf.extract.mockReturnValue(new Promise(() => undefined));
+
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1_000);
+
+      await expect(processing).resolves.toBe(false);
+      expect(gateway.fail).toHaveBeenCalledWith(
+        job,
+        'INGESTION_FAILED',
+        'INGESTION_TIMEOUT',
+        true,
+      );
+      const renewals = gateway.refreshLease.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(600_000);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(renewals);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('logs a failed lease renewal without an unhandled rejection', async () => {
+    jest.useFakeTimers();
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      let finishExtraction: (
+        pages: { pageNumber: number; text: string }[],
+      ) => void = () => undefined;
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      gateway.refreshLease.mockRejectedValue(new Error('lease lost'));
+      pdf.extract.mockReturnValue(
+        new Promise((resolve) => {
+          finishExtraction = resolve;
+        }),
+      );
+      chunking.chunk.mockReturnValue([]);
+
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(110_000);
+      expect(warn).toHaveBeenCalledWith(
+        'Could not refresh the lease of job job-id.',
+      );
+
+      finishExtraction([]);
+      await expect(processing).resolves.toBe(false);
     } finally {
       jest.useRealTimers();
     }

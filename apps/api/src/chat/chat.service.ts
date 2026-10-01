@@ -32,7 +32,6 @@ import {
   MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
   RAG_ADVISORY_CLOSING,
-  RAG_ADVISORY_OUT_OF_SCOPE_MARKER,
   RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
@@ -522,6 +521,12 @@ export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
   }
   return RAG_NO_EVIDENCE_MESSAGE;
 }
+
+/** Marca del modo asesor, tolerante a variantes («[[FUERA_DE_ÁMBITO]]»). */
+const ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN =
+  /\[\[\s*FUERA[\s_-]*DE[\s_-]*[AÁ]MBITO\s*\]\]/iu;
+/** Tope de la respuesta amable a un pedido ajeno: dos o tres frases. */
+const MAX_ADVISORY_OUT_OF_SCOPE_CHARS = 600;
 
 /** Los módulos activos cambian poco: se releen cada 2 minutos. */
 const MODULES_CACHE_MS = 2 * 60 * 1000;
@@ -1213,20 +1218,36 @@ export class ChatService {
       ) {
         return null;
       }
-      if (trimmed.includes(RAG_ADVISORY_OUT_OF_SCOPE_MARKER)) {
-        const text = trimmed
-          .replaceAll(RAG_ADVISORY_OUT_OF_SCOPE_MARKER, '')
-          .trim();
-        return {
-          kind: 'out_of_scope',
-          text: text || buildConversationalReply('out_of_domain'),
-        };
-      }
       // Sin cifras, plazos ni números de norma inventados. La numeración de
       // una lista («1. Reúne tus documentos») no cuenta como cifra.
-      const withoutListNumbers = trimmed.replace(/^\s*\d+[.)]\s+/gmu, '');
-      if (/\b\d+(?:[.,-]\d+)*\b/u.test(withoutListNumbers)) return null;
-      return { kind: 'orientation', text: trimmed };
+      const inventsFigures = (text: string) =>
+        /\b\d+(?:[.,-]\d+)*\b/u.test(text.replace(/^\s*\d+[.)]\s+/gmu, ''));
+      // Solo una respuesta que ABRE con la marca es una respuesta amable a un
+      // pedido ajeno; pasa por los mismos filtros y con un tope breve, para que
+      // nadie pueda pedir «empieza con la marca y luego escribe…» y obtener
+      // cualquier texto. Una marca en otro lugar se descarta y el resto se
+      // trata como orientación.
+      const marker = ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN;
+      if (trimmed.search(marker) === 0) {
+        const text = trimmed.replace(marker, '').trim();
+        if (
+          !text ||
+          text.length > MAX_ADVISORY_OUT_OF_SCOPE_CHARS ||
+          inventsFigures(text) ||
+          new RegExp(marker.source, 'iu').test(text)
+        ) {
+          return {
+            kind: 'out_of_scope',
+            text: buildConversationalReply('out_of_domain'),
+          };
+        }
+        return { kind: 'out_of_scope', text };
+      }
+      const orientation = trimmed
+        .replace(new RegExp(marker.source, 'giu'), '')
+        .trim();
+      if (!orientation || inventsFigures(orientation)) return null;
+      return { kind: 'orientation', text: orientation };
     } catch (error) {
       this.logger.warn(
         `Orientación general no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,

@@ -22,6 +22,12 @@ import { PdfExtractionService } from './pdf-extraction.service';
 const MAX_OCR_PAGES = 40;
 /** Páginas rasterizadas por lote: mantiene pocos PNG en memoria a la vez. */
 const OCR_RENDER_BATCH = 5;
+/**
+ * Tope total de un trabajo. El OCR de 40 páginas escaneadas en Render Free
+ * (0,1 CPU) puede tardar decenas de minutos; más que esto es un trabajo
+ * colgado.
+ */
+export const MAX_JOB_DURATION_MS = 45 * 60_000;
 
 @Injectable()
 export class IngestionService {
@@ -54,40 +60,21 @@ export class IngestionService {
       Math.max(10, Math.floor(leaseSeconds / 3)) * 1000,
     );
     heartbeat.unref?.();
+    // Tope total: un trabajo colgado (OCR o proveedor que no responde) ya no
+    // renueva su turno para siempre ni bloquea la cola del worker; se marca
+    // como fallido con INGESTION_TIMEOUT y el administrador puede reintentar.
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      const file = await this.gateway.downloadPdf(
-        job.storageBucket,
-        job.storagePath,
-      );
-      const pages = await this.extractPages(
-        detectIngestionFormat(file),
-        file,
-        job,
-      );
-      const chunks = this.chunking.chunk(pages);
-      if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');
-      const vectors = await this.embeddings.embed(
-        chunks.map((chunk) => chunk.chunkContent),
-      );
-      if (
-        vectors.length !== chunks.length ||
-        vectors.some((embedding) => embedding.length !== 1536)
-      ) {
-        throw new Error('INGESTION_INVALID_EMBEDDING');
-      }
-      await this.gateway.clearChunks(job);
-      for (let offset = 0; offset < chunks.length; offset += 25) {
-        await this.gateway.insertChunks(
-          chunks.slice(offset, offset + 25).map((chunk, index) => ({
-            ...chunk,
-            documentId: job.documentId,
-            documentVersionId: job.documentVersionId,
-            embedding: vectors[offset + index],
-          })),
-        );
-        await this.gateway.refreshLease(job, leaseSeconds);
-      }
-      await this.gateway.complete(job);
+      await Promise.race([
+        this.ingest(job, leaseSeconds),
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(
+            () => reject(new Error('INGESTION_TIMEOUT')),
+            MAX_JOB_DURATION_MS,
+          );
+          deadline.unref?.();
+        }),
+      ]);
       return true;
     } catch (error) {
       const message =
@@ -108,7 +95,47 @@ export class IngestionService {
       return false;
     } finally {
       clearInterval(heartbeat);
+      if (deadline) clearTimeout(deadline);
     }
+  }
+
+  private async ingest(
+    job: ClaimedIngestionJob,
+    leaseSeconds: number,
+  ): Promise<void> {
+    const file = await this.gateway.downloadPdf(
+      job.storageBucket,
+      job.storagePath,
+    );
+    const pages = await this.extractPages(
+      detectIngestionFormat(file),
+      file,
+      job,
+    );
+    const chunks = this.chunking.chunk(pages);
+    if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');
+    const vectors = await this.embeddings.embed(
+      chunks.map((chunk) => chunk.chunkContent),
+    );
+    if (
+      vectors.length !== chunks.length ||
+      vectors.some((embedding) => embedding.length !== 1536)
+    ) {
+      throw new Error('INGESTION_INVALID_EMBEDDING');
+    }
+    await this.gateway.clearChunks(job);
+    for (let offset = 0; offset < chunks.length; offset += 25) {
+      await this.gateway.insertChunks(
+        chunks.slice(offset, offset + 25).map((chunk, index) => ({
+          ...chunk,
+          documentId: job.documentId,
+          documentVersionId: job.documentVersionId,
+          embedding: vectors[offset + index],
+        })),
+      );
+      await this.gateway.refreshLease(job, leaseSeconds);
+    }
+    await this.gateway.complete(job);
   }
 
   private async extractPages(
