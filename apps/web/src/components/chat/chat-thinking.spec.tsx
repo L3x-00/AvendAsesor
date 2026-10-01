@@ -9,7 +9,7 @@ describe("ChatThinking", () => {
     vi.useFakeTimers();
     render(<ChatThinking />);
 
-    expect(screen.getByText("Leyendo tu consulta")).toBeInTheDocument();
+    expect(screen.getByText("Pensando")).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(2_500);

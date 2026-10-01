@@ -197,6 +197,41 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows how long a saved answer took, links official portals in its suggestions and hides the retired label", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              content:
+                "Orientación general (sin cita de norma):\n\nPara postular como profesor, el MINEDU convoca concursos.\n\nSugerencias: verifica esta orientación en el portal oficial del MINEDU y consulta con tu UGEL o DRE antes de decidir.",
+              createdAt: "2026-08-24T12:00:09.000Z",
+              id: messageId,
+              inReplyToMessageId: questionMessageId,
+              role: "no_evidence" as const,
+              sources: [],
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.getByText("Pensado por 9 segundos")).toBeInTheDocument();
+    expect(screen.queryByText(/sin cita de norma/)).not.toBeInTheDocument();
+    // Solo el bloque de sugerencias enlaza: la mención del cuerpo queda en texto.
+    const minedu = screen.getAllByRole("link", { name: /^MINEDU/ });
+    expect(minedu).toHaveLength(1);
+    expect(minedu[0]).toHaveAttribute("href", "https://www.gob.pe/minedu");
+    expect(screen.getByRole("link", { name: /^UGEL/ })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    expect(screen.getByRole("link", { name: /^DRE/ })).toBeInTheDocument();
+  });
+
   it("renders paragraphs, emphasis and lists with semantic structure", () => {
     const { container } = render(
       <ChatPanel
@@ -1012,6 +1047,8 @@ describe("ChatPanel", () => {
     expect(
       screen.getByText("Se necesita una aclaración para continuar."),
     ).toBeVisible();
+    // La respuesta en vivo dice cuánto tardó (mínimo 1 segundo).
+    expect(screen.getByText("Pensado por 1 segundo")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "Consultar Licencias" }),

@@ -11,10 +11,10 @@ import { AssistantAvatar } from "./chat-message-parts";
  * frío del servidor puede demorar la primera respuesta.
  */
 const PHASES: { after: number; label: string }[] = [
-  { after: 0, label: "Leyendo tu consulta" },
+  { after: 0, label: "Pensando" },
   { after: 2_500, label: "Buscando en los documentos" },
   { after: 7_000, label: "Preparando la respuesta" },
-  { after: 20_000, label: "Sigue trabajando, un momento más" },
+  { after: 20_000, label: "Sigue pensando, un momento más" },
 ];
 
 export function ChatThinking() {
