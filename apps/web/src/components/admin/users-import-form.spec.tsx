@@ -19,12 +19,14 @@ vi.mock("@/lib/supabase/client", () => ({
   createBrowserSupabaseClient: () => ({ auth: { getSession } }),
 }));
 
+const onSuccess = vi.fn();
+
 function openForm() {
-  render(<UsersImportForm apiBaseUrl="http://localhost:3001" />);
-  // El panel vive dentro de un <details>: se abre para que las aserciones
-  // reflejen lo que el administrador ve de verdad.
-  const panel = screen.getByText("Importar Excel").closest("details");
-  if (panel) panel.open = true;
+  // El panel que lo abre y lo cierra vive en UsersManager; aquí se prueba el
+  // formulario solo.
+  render(
+    <UsersImportForm apiBaseUrl="http://localhost:3001" onSuccess={onSuccess} />,
+  );
   return {
     file: screen.getByLabelText("Archivo Excel") as HTMLInputElement,
     submit: screen.getByRole("button", { name: "Importar usuarios" }),
@@ -205,6 +207,38 @@ describe("UsersImportForm", () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith("Se registró 1 usuario. Revisa las filas pendientes."));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(file.files?.[0]?.name).toBe("usuarios.xlsx");
+    // Con filas pendientes el panel no se cierra: el informe debe seguir a la vista.
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
+  it("avisa para cerrar el panel solo cuando entraron todas las filas", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ considered: 2, errors: [], imported: 2, truncated: false }),
+      ),
+    );
+    const { file, submit } = openForm();
+    await attach(file);
+
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(showToast).toHaveBeenCalledWith("Importación completada con éxito.");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("no avisa de éxito si el archivo se truncó aunque no haya filas con error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ considered: 300, errors: [], imported: 300, truncated: true }),
+      ),
+    );
+    const { file, submit } = openForm();
+    await attach(file);
+
+    fireEvent.click(submit);
+
+    expect(await screen.findByText(/más filas de las permitidas/)).toBeVisible();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
 });

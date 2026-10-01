@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { FieldError } from "@/components/ui/form-field";
@@ -34,6 +34,11 @@ interface ImportReport {
 
 interface UsersImportFormProps {
   apiBaseUrl: string;
+  /**
+   * Se llama cuando TODAS las filas entraron. Con filas pendientes no se
+   * llama: el informe fila por fila tiene que seguir a la vista.
+   */
+  onSuccess?: () => void;
 }
 
 function importErrorMessage(status: number): string {
@@ -51,8 +56,12 @@ function importErrorMessage(status: number): string {
 /**
  * Uploads the roster straight to the API. It does not travel through a Server
  * Action because those cap the body far below a real spreadsheet.
+ *
+ * Solo pinta el formulario: el panel que lo abre y lo cierra vive en la barra
+ * de acciones de UsersManager, para que abrirlo no mueva los otros botones.
  */
-export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
+export function UsersImportForm({ apiBaseUrl, onSuccess }: UsersImportFormProps) {
+  const fileId = useId();
   const pendingRef = useRef(false);
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -114,6 +123,7 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
         );
         if (!hasPendingRows) form.reset();
         router.refresh();
+        if (!hasPendingRows) onSuccess?.();
       }
     } catch {
       setMessage("No se pudo completar la importación. Inténtalo de nuevo.");
@@ -124,93 +134,90 @@ export function UsersImportForm({ apiBaseUrl }: UsersImportFormProps) {
   }
 
   return (
-    <details className={`${styles.create} ${styles.createSecondary}`}>
-      <summary className={styles.createSummary}>Importar Excel</summary>
-      <ValidatedForm
-        aria-busy={pending}
-        className={styles.form}
-        onValidSubmit={handleSubmit}
-        rules={IMPORT_RULES}
-        serverErrors={serverErrors}
+    <ValidatedForm
+      aria-busy={pending}
+      className={styles.form}
+      onValidSubmit={handleSubmit}
+      rules={IMPORT_RULES}
+      serverErrors={serverErrors}
+    >
+      <p className={styles.formHint}>
+        La primera fila debe tener las columnas <strong>Nombre y
+        apellidos</strong> y <strong>Correo</strong>. Puedes añadir{" "}
+        <strong>Celular</strong>, <strong>Inicio</strong> y{" "}
+        <strong>Fin</strong>. Se registran las filas válidas y se te informa
+        fila por fila de las que no.
+      </p>
+      <label className={styles.fieldLabel} htmlFor={`${fileId}-file`}>
+        Archivo Excel
+      </label>
+      <p className={styles.formHint} id={`${fileId}-hint`}>
+        Formato .xlsx; máximo 2 MB.
+      </p>
+      <input
+        aria-describedby={`${fileId}-hint`}
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className={styles.input}
+        id={`${fileId}-file`}
+        name="file"
+        type="file"
+      />
+      <FieldError name="file" />
+      <button
+        aria-disabled={pending}
+        className={styles.searchButton}
+        type="submit"
       >
-        <p className={styles.formHint}>
-          La primera fila debe tener las columnas <strong>Nombre y
-          apellidos</strong> y <strong>Correo</strong>. Puedes añadir{" "}
-          <strong>Celular</strong>, <strong>Inicio</strong> y{" "}
-          <strong>Fin</strong>. Se registran las filas válidas y se te informa
-          fila por fila de las que no.
+        {pending ? "Importando…" : "Importar usuarios"}
+      </button>
+
+      {pending ? (
+        <p className={styles.formHint} role="status">
+          Importando usuarios. Espera mientras se revisan las filas del archivo.
         </p>
-        <label className={styles.fieldLabel} htmlFor="users-import-file">
-          Archivo Excel
-        </label>
-        <p className={styles.formHint} id="users-import-file-hint">
-          Formato .xlsx; máximo 2 MB.
+      ) : null}
+
+      {message ? (
+        <p className="avend-feedback avend-feedback--error" role="alert">
+          {message}
         </p>
-        <input
-          aria-describedby="users-import-file-hint"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className={styles.input}
-          id="users-import-file"
-          name="file"
-          type="file"
-        />
-        <FieldError name="file" />
-        <button
-          aria-disabled={pending}
-          className={styles.searchButton}
-          type="submit"
-        >
-          {pending ? "Importando…" : "Importar usuarios"}
-        </button>
+      ) : null}
 
-        {pending ? (
-          <p className={styles.formHint} role="status">
-            Importando usuarios. Espera mientras se revisan las filas del archivo.
-          </p>
-        ) : null}
-
-        {message ? (
-          <p className="avend-feedback avend-feedback--error" role="alert">
-            {message}
-          </p>
-        ) : null}
-
-        {report ? (
-          <div aria-live="polite" className={styles.importReport}>
-            {report.imported === 0 ? (
-              <p className="avend-feedback avend-feedback--error">
-                No se registró ningún usuario. Revisa las filas indicadas y corrige el archivo antes de volver a importarlo.
-              </p>
-            ) : null}
-            <p className={styles.importSummary}>
-              Se registraron <strong>{report.imported}</strong> de{" "}
-              <strong>{report.considered}</strong> filas.
+      {report ? (
+        <div aria-live="polite" className={styles.importReport}>
+          {report.imported === 0 ? (
+            <p className="avend-feedback avend-feedback--error">
+              No se registró ningún usuario. Revisa las filas indicadas y corrige el archivo antes de volver a importarlo.
             </p>
-            {report.truncated ? (
-              <p className={styles.importError}>
-                El archivo tenía más filas de las permitidas en una importación:
-                divide la lista y vuelve a subir el resto.
+          ) : null}
+          <p className={styles.importSummary}>
+            Se registraron <strong>{report.imported}</strong> de{" "}
+            <strong>{report.considered}</strong> filas.
+          </p>
+          {report.truncated ? (
+            <p className={styles.importError}>
+              El archivo tenía más filas de las permitidas en una importación:
+              divide la lista y vuelve a subir el resto.
+            </p>
+          ) : null}
+          {report.errors.length > 0 ? (
+            <>
+              <p className={styles.importSummary}>
+                Filas no registradas ({report.errors.length}):
               </p>
-            ) : null}
-            {report.errors.length > 0 ? (
-              <>
-                <p className={styles.importSummary}>
-                  Filas no registradas ({report.errors.length}):
-                </p>
-                <ul className={styles.importErrors}>
-                  {report.errors.map((rowError) => (
-                    <li key={`${rowError.rowNumber}-${rowError.email ?? ""}`}>
-                      Fila {rowError.rowNumber}
-                      {rowError.email ? ` (${rowError.email})` : ""}:{" "}
-                      {rowError.message}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </ValidatedForm>
-    </details>
+              <ul className={styles.importErrors}>
+                {report.errors.map((rowError) => (
+                  <li key={`${rowError.rowNumber}-${rowError.email ?? ""}`}>
+                    Fila {rowError.rowNumber}
+                    {rowError.email ? ` (${rowError.email})` : ""}:{" "}
+                    {rowError.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </ValidatedForm>
   );
 }
