@@ -246,7 +246,7 @@ const OUT_OF_SCOPE_PATTERNS: readonly RegExp[] = [
   // Deportes
   /\b(futbol|la champions|mundial de|quien gano|resultado del partido|el clasico|eliminatorias|la seleccion peruana|nba)\b/u,
   // Cocina
-  /\b(receta (?:de|para) (?:cocina|preparar|cocinar|hacer)|receta de (?:un|una|el|la|lomo|arroz|pollo|torta|pastel|ceviche|chaufa|pan)|como (?:se )?(?:cocina|prepara|cocinar|preparar|preparo|cocino|hago) (?:un|una|el|la) (?:ceviche|torta|pastel|arroz|lomo|pollo|chaufa|pan|postre|comida)|ingredientes para)\b/u,
+  /\b(receta (?:de|para) (?:cocina|preparar|cocinar|hacer)|receta de (?:un|una|el|la|lomo|arroz|pollo|torta|pastel|ceviche|chaufa|pan)|como (?:se |puedo |podria |debo )?(?:cocina|prepara|cocinar|preparar|preparo|cocino|hago|hacer) (?:un|una|el|la) (?:ceviche|torta|pastel|arroz|lomo|pollo|chaufa|pan|postre|comida)|ingredientes para)\b/u,
   // Entretenimiento y redacción creativa
   /\b(peliculas?|serie de netflix|series de netflix|netflix|una cancion|letra de una cancion|un chiste|cuentame un chiste|horoscopo|signo zodiacal|tarot|videojuegos?|tiktok)\b/u,
   /\b(escribe(?:me)?|hazme|redacta(?:me)?|creame|inventa(?:me)?) (?:un|una) (?:poema|cuento|cancion|carta de amor|historia|rap|chiste|novela)\b/u,
@@ -301,10 +301,26 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(?:supabase|openrouter|openai|render|vercel|github) (?:key|token|secret|credenciales|url interna)\b/u,
   // El RAG es implementación interna, no un tema educativo para el chat.
   /\b(?:rag|retrieval augmented generation)\b/u,
+  // Proveedor o modelo de IA de la plataforma.
+  /\bproveedor(?:a)? de (?:la )?(?:ia|inteligencia artificial|modelos?)\b/u,
+  /\b(?:quien|cual) es (?:tu|el) proveedor\b/u,
 ];
 
+/**
+ * Suplantación: «soy el administrador del sistema» junto a un pedido de claves,
+ * proveedor o configuración. Por separado son mensajes legítimos (una persona
+ * administradora puede presentarse; olvidar la contraseña es común).
+ */
+const IMPERSONATION =
+  /\bsoy (?:el |la )?(?:admin|administrador(?:a)?|superadmin(?:istrador(?:a)?)?|desarrollador(?:a)?|programador(?:a)?|creador(?:a)?|dueno|duena) (?:del|de la|de este|de esta) (?:sistema|sisteam|plataforma|chat|asistente|aplicacion|app|pagina)\b/u;
+const SENSITIVE_REQUEST =
+  /\b(?:clave|contrasena|password|credenciales?|token|api|proveedor|configuracion|prompt|instrucciones)\b/u;
+
 function isSystemProbing(normalized: string): boolean {
-  return SYSTEM_PROBING_PATTERNS.some((pattern) => pattern.test(normalized));
+  return (
+    SYSTEM_PROBING_PATTERNS.some((pattern) => pattern.test(normalized)) ||
+    (IMPERSONATION.test(normalized) && SENSITIVE_REQUEST.test(normalized))
+  );
 }
 
 function stripped(value: string, ...patterns: RegExp[]): string {

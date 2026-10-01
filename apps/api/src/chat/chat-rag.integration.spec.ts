@@ -13,7 +13,6 @@ import type {
   ChatTurnStart,
 } from './chat-history.gateway';
 import { ChatService, type ChatStreamEvent } from './chat.service';
-import { buildConversationalReply } from './intent/conversational-replies';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -236,7 +235,12 @@ class RecordingAnswerGateway implements AnswerGateway {
     await Promise.resolve();
     this.inputs.push(input);
     if (input.mode === 'advisory') {
-      yield 'Orientación general para resolver el trámite.';
+      // El modelo real abre con la marca un pedido ajeno al ámbito.
+      if (input.question.includes('sembrar papa')) {
+        yield '[[FUERA_DE_AMBITO]] Qué interesante lo de la papa, pero mi objetivo es orientarte en temas educativos.';
+        return;
+      }
+      yield 'Suele corresponder presentar la solicitud ante tu UGEL.';
       return;
     }
     yield `Orientación sustentada en ${input.sources[0]?.documentTitle}. [1]`;
@@ -410,21 +414,26 @@ describe('ChatService + RagService integration', () => {
     expect(answers.inputs).toHaveLength(0);
   });
 
-  it('sin señal educativa registra el pendiente sin invocar al proveedor', async () => {
+  it('sin señal educativa responde con amabilidad lo que pidió y lo registra', async () => {
     const events = await collect(service, {
       question: '¿Cuál es la mejor época para sembrar papa?',
     });
 
     expect(events).toContainEqual({
-      data: { message: buildConversationalReply('unrelated_no_evidence') },
+      data: {
+        message:
+          'Qué interesante lo de la papa, pero mi objetivo es orientarte en temas educativos.',
+      },
       type: 'no_evidence',
     });
     expect(history.completions[0]).toMatchObject({
+      qualitySignals: [],
       replyRole: 'no_evidence',
       sources: [],
       unansweredReason: 'insufficient_evidence',
     });
-    expect(answers.inputs).toHaveLength(0);
+    expect(answers.inputs).toHaveLength(1);
+    expect(answers.inputs[0]?.mode).toBe('advisory');
   });
 
   it('sin sustento en el corpus ofrece orientación general y registra el hueco', async () => {
@@ -438,9 +447,11 @@ describe('ChatService + RagService integration', () => {
       'done',
     ]);
     const advisory = events[1] as { data: { message: string } };
-    expect(advisory.data.message).toContain(
-      'Orientación general (sin cita de norma):',
+    expect(advisory.data.message).toMatch(
+      /^Suele corresponder presentar la solicitud ante tu UGEL\./u,
     );
+    expect(advisory.data.message).not.toContain('sin cita de norma');
+    expect(advisory.data.message).toContain('Sugerencias:');
     expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
     expect(answers.inputs).toHaveLength(1);
     expect(answers.inputs[0]?.mode).toBe('advisory');

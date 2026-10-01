@@ -115,7 +115,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('sin señal educativa registra el pendiente sin llamar al proveedor', async () => {
+  it('sin señal educativa y sin proveedor responde con la plantilla del alcance', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -149,7 +149,9 @@ describe('ChatService', () => {
         type: 'done',
       },
     ]);
-    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'advisory', sources: [] }),
+    );
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         replyRole: 'no_evidence',
@@ -157,6 +159,79 @@ describe('ChatService', () => {
         unansweredReason: 'insufficient_evidence',
       }),
     );
+  });
+
+  it('un pedido ajeno recibe una respuesta amable que lo menciona, sin la marca', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield '[[FUERA_DE_AMBITO]] Me parece divertido que quieras preparar un ';
+        yield 'arroz chaufa, pero mi objetivo es orientarte en temas del ámbito educativo.';
+      })(),
+    );
+
+    // El clasificador no lo reconoce como ajeno: lo decide el asesor.
+    const events = await collect(service, {
+      question: '¿Qué opinas del arroz chaufa con harto sillao?',
+    });
+
+    const reply = events.find((event) => event.type === 'no_evidence');
+    expect(reply?.data.message).toBe(
+      'Me parece divertido que quieras preparar un arroz chaufa, pero mi objetivo es orientarte en temas del ámbito educativo.',
+    );
+    expect(events.at(-1)).toMatchObject({
+      data: { provider: 'openai' },
+      type: 'done',
+    });
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ qualitySignals: [], replyRole: 'no_evidence' }),
+    );
+  });
+
+  it('un pedido ajeno detectado por el clasificador recibe la respuesta amable sin turno', async () => {
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield '[[FUERA_DE_AMBITO]] ¡Qué rico suena un arroz chaufa! Pero mi objetivo es orientarte en temas educativos.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cómo puedo preparar un arroz chaufa?',
+    });
+
+    expect(events).toEqual([
+      {
+        data: {
+          message:
+            '¡Qué rico suena un arroz chaufa! Pero mi objetivo es orientarte en temas educativos.',
+        },
+        type: 'conversational',
+      },
+    ]);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+  });
+
+  it('si el proveedor falla, un pedido ajeno recibe la plantilla amable', async () => {
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('provider down');
+    });
+
+    const events = await collect(service, {
+      question: '¿Cómo puedo preparar un arroz chaufa?',
+    });
+
+    expect(events).toEqual([
+      {
+        data: { message: buildConversationalReply('out_of_domain') },
+        type: 'conversational',
+      },
+    ]);
   });
 
   it('sin sustento y consulta del ámbito ofrece orientación general sin citas', async () => {
@@ -179,8 +254,9 @@ describe('ChatService', () => {
       'done',
     ]);
     const advisory = events[1] as { data: { message: string } };
-    expect(advisory.data.message).toContain(
-      'Orientación general (sin cita de norma):',
+    expect(advisory.data.message).not.toContain('Orientación general');
+    expect(advisory.data.message).toMatch(
+      /^Suele corresponder presentar la solicitud/u,
     );
     expect(advisory.data.message).toContain('Sugerencias:');
     expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
@@ -232,7 +308,7 @@ describe('ChatService', () => {
 
     const events = await collect(service);
     const reply = events.find((event) => event.type === 'no_evidence');
-    expect(reply?.data.message).toContain('No pude completar');
+    expect(reply?.data.message).toContain('no encontré información suficiente');
     expect(reply?.data.message).not.toContain('artículo 49');
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ replyRole: 'no_evidence', sources: [] }),
