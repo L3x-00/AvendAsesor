@@ -42,6 +42,18 @@ export class IngestionService {
       this.config.get<number>('RAG_INGESTION_LEASE_SECONDS') ?? 300;
     const job = await this.gateway.claimNext(leaseSeconds);
     if (!job) return false;
+    // La extracción y el OCR de un PDF escaneado pueden tardar más que el
+    // turno: antes solo se renovaba al insertar fragmentos, así que el turno
+    // vencía a mitad del OCR y el trabajo acababa en LEASE_EXPIRED.
+    const heartbeat = setInterval(
+      () => {
+        this.gateway.refreshLease(job, leaseSeconds).catch(() => {
+          this.logger.warn(`Could not refresh the lease of job ${job.jobId}.`);
+        });
+      },
+      Math.max(10, Math.floor(leaseSeconds / 3)) * 1000,
+    );
+    heartbeat.unref?.();
     try {
       const file = await this.gateway.downloadPdf(
         job.storageBucket,
@@ -94,6 +106,8 @@ export class IngestionService {
       }
       this.logger.error(`Document ingestion failed for job ${job.jobId}.`);
       return false;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 

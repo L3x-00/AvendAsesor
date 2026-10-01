@@ -584,6 +584,13 @@ export interface SupabaseDatabase {
         };
         Returns: SupabaseDatabase['public']['Tables']['documents']['Row'];
       };
+      retry_failed_document_ingestion: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+        };
+        Returns: undefined;
+      };
       set_document_technical_status: {
         Args: {
           p_actor_id: string;

@@ -126,6 +126,8 @@ function createGateway(): jest.Mocked<DocumentsGateway> {
     listSuggestions: jest.fn(),
     listUploaders: jest.fn(),
     listVersions: jest.fn(),
+    listIngestionFailures: jest.fn().mockResolvedValue([]),
+    retryIngestion: jest.fn(),
     logicalDelete: jest.fn(),
     removePdf: jest.fn(),
     recordDownloadUrl: jest.fn(),
@@ -424,9 +426,58 @@ describe('DocumentsService', () => {
           uploadedByName: 'Administrador de prueba',
           versionNumber: versionRecord.versionNumber,
           versionRelation: versionRecord.versionRelation,
+          ingestionFailureCause: null,
         },
       ],
     });
+  });
+
+  it('explains why a failed version could not be processed', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.listVersions.mockResolvedValue([
+      { ...versionRecord, ingestionStatus: 'failed' },
+    ]);
+    documentsGateway.listModuleIds.mockResolvedValue([
+      '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+    ]);
+    documentsGateway.listAuditEvents.mockResolvedValue([]);
+    documentsGateway.listActorNames.mockResolvedValue({});
+    documentsGateway.getUsageCounters.mockResolvedValue({
+      downloads: 0,
+      lastDownloadAt: null,
+      opens: 0,
+    });
+    documentsGateway.listIngestionFailures.mockResolvedValue([
+      {
+        code: 'LEASE_EXPIRED',
+        message: 'The ingestion worker lease expired before completion.',
+        versionId: versionRecord.id,
+      },
+    ]);
+
+    const details = await service.findOne(documentRecord.id, authorization);
+
+    expect(details.versions[0]?.ingestionFailureCause).toBe('timeout');
+    expect(JSON.stringify(details)).not.toContain('lease expired');
+  });
+
+  it('queues a failed document again only after checking access', async () => {
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    documentsGateway.listModuleIds.mockResolvedValue([
+      '8d4b660b-9e94-4d34-a3d2-2548a83587e1',
+    ]);
+
+    await service.retryIngestion(documentRecord.id, authorization);
+
+    expect(documentsGateway.retryIngestion).toHaveBeenCalledWith(
+      documentRecord.id,
+      authorization.userId,
+    );
+
+    documentsGateway.findById.mockResolvedValue(null);
+    await expect(
+      service.retryIngestion(documentRecord.id, authorization),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('generates a short-lived URL only for a version belonging to a live document', async () => {

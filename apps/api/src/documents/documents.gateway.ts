@@ -125,6 +125,12 @@ export interface DocumentsGateway {
   listLibrary(options: DocumentLibraryQuery): Promise<DocumentLibraryPage>;
   listModuleIds(documentId: string): Promise<string[]>;
   listVersions(documentId: string): Promise<StoredDocumentVersion[]>;
+  /** Último error de indexación de cada versión fallida del documento. */
+  listIngestionFailures(
+    documentId: string,
+  ): Promise<
+    { code: string | null; message: string | null; versionId: string }[]
+  >;
   listSuggestions(): Promise<{
     additionalDetails: string[];
     specificDependencies: string[];
@@ -167,6 +173,8 @@ export interface DocumentsGateway {
     technicalStatus: DocumentApprovalStatus,
     actorId: string,
   ): Promise<ManagedDocument>;
+  /** Vuelve a encolar la versión vigente si su procesamiento falló. */
+  retryIngestion(documentId: string, actorId: string): Promise<void>;
   unlinkModule(
     documentId: string,
     moduleId: string,

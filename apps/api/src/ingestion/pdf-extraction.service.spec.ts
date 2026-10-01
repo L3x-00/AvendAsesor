@@ -50,7 +50,7 @@ describe('PdfExtractionService', () => {
       ]),
     );
     expect(mockGetScreenshot).toHaveBeenCalledWith(
-      expect.objectContaining({ partial: [2, 4], scale: 2 }),
+      expect.objectContaining({ desiredWidth: 1240, partial: [2, 4] }),
     );
 
     mockGetText.mockRejectedValueOnce(new Error('invalid PDF'));

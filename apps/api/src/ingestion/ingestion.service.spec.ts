@@ -277,6 +277,47 @@ describe('IngestionService', () => {
     );
   });
 
+  it('renews its lease while a slow extraction or OCR is still running', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishExtraction: (
+        pages: { pageNumber: number; text: string }[],
+      ) => void = () => undefined;
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      gateway.refreshLease.mockResolvedValue(undefined);
+      pdf.extract.mockReturnValue(
+        new Promise((resolve) => {
+          finishExtraction = resolve;
+        }),
+      );
+      chunking.chunk.mockReturnValue([chunk]);
+      embeddings.embed.mockResolvedValue([vector()]);
+
+      const processing = service.processNext();
+      // Turno de 300 s: se renueva cada 100 s mientras dura la extracción.
+      await jest.advanceTimersByTimeAsync(250_000);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(2);
+
+      finishExtraction([
+        {
+          pageNumber: 1,
+          text: 'Texto suficiente para superar el umbral de OCR local. '.repeat(
+            2,
+          ),
+        },
+      ]);
+      await expect(processing).resolves.toBe(true);
+
+      // Terminado el trabajo, la renovación periódica se detiene.
+      const renewals = gateway.refreshLease.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(500_000);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(renewals);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('batches persistence and renews its lease while ingesting a long document', async () => {
     const chunks = Array.from({ length: 26 }, (_, chunkIndex) => ({
       ...chunk,
