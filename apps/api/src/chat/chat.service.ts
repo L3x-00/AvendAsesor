@@ -32,8 +32,6 @@ import {
   MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
   RAG_ADVISORY_CLOSING,
-  RAG_ADVISORY_LEAD_IN,
-  RAG_ADVISORY_OUT_OF_SCOPE_MARKER,
   RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
@@ -524,6 +522,12 @@ export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
   return RAG_NO_EVIDENCE_MESSAGE;
 }
 
+/** Marca del modo asesor, tolerante a variantes («[[FUERA_DE_ÁMBITO]]»). */
+const ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN =
+  /\[\[\s*FUERA[\s_-]*DE[\s_-]*[AÁ]MBITO\s*\]\]/iu;
+/** Tope de la respuesta amable a un pedido ajeno: dos o tres frases. */
+const MAX_ADVISORY_OUT_OF_SCOPE_CHARS = 600;
+
 /** Los módulos activos cambian poco: se releen cada 2 minutos. */
 const MODULES_CACHE_MS = 2 * 60 * 1000;
 
@@ -690,6 +694,7 @@ export class ChatService {
         intent.subtype,
         input.authorization.role,
         input.abortSignal,
+        question,
       );
       // «Otra consulta» a secas dentro de una conversación: la siguiente
       // pregunta debe empezar una conversación nueva, sin el tema anterior.
@@ -853,35 +858,26 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
-      // Primera consulta sin sustento ni señal del ámbito ("¿qué es la
-      // fotosíntesis?"): además de decir que no hay sustento, se orienta sobre
-      // el alcance. Se guarda igual como pendiente: puede ser una consulta del
-      // ámbito con un término que el léxico no conoce ("DS 004-2013-ED").
+      // Sin sustento: el asesor decide. Una consulta del ámbito recibe una
+      // orientación general (sin citas ni normas inventadas) y el hueco queda
+      // registrado para la administración. Un pedido ajeno («¿cómo preparo un
+      // arroz chaufa?») o que busca información interna recibe una respuesta
+      // amable que lo menciona y reorienta. Si el proveedor falla, se responde
+      // con una plantilla: la del alcance si el mensaje no trae ninguna señal
+      // del ámbito, o el aviso de «sin evidencia».
       const unrelated =
         !input.conversationId &&
         !selectedModuleId &&
         !hasEducationalSignal(question);
-      if (!unrelated) {
-        // Consulta del ámbito sin respaldo: orientación general del asesor
-        // (sin citas ni normas inventadas) y el hueco queda registrado para la
-        // administración. Si el proveedor falla, cae al mensaje amable actual.
-        yield* this.advisoryReply({
-          abortSignal: input.abortSignal,
-          conversationContext,
-          conversationId: turn.conversationId,
-          faqMemory,
-          question: input.question,
-          retrievalScope,
-          topRelevanceScore: retrieval.topRelevanceScore,
-          userId: input.authorization.userId,
-          userMessageId: turn.userMessageId,
-        });
-        return;
-      }
-      yield* this.completeWithoutEvidence({
+      yield* this.advisoryReply({
+        abortSignal: input.abortSignal,
+        conversationContext,
         conversationId: turn.conversationId,
+        fallbackMessage: unrelated
+          ? buildConversationalReply('unrelated_no_evidence')
+          : undefined,
         faqMemory,
-        message: buildConversationalReply('unrelated_no_evidence'),
+        question: input.question,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -1115,15 +1111,20 @@ export class ChatService {
   }
 
   /**
-   * Orientación general del modo asesor: cuando el RAG no encontró sustento y
-   * la consulta sí es del ámbito, se responde con una orientación breve SIN
-   * citas (nada de normas, artículos ni plazos inventados) y aviso de
-   * verificación oficial. El hueco queda registrado para administración.
+   * Respuesta del modo asesor cuando el RAG no encontró sustento:
+   * - consulta del ámbito: orientación breve SIN citas (nada de normas,
+   *   artículos ni plazos inventados) y cierre de verificación oficial;
+   * - pedido ajeno o de información interna: respuesta amable que lo menciona
+   *   y reorienta, sin cierre.
+   * Ya no abre con «Orientación general (sin cita de norma):», que restaba
+   * confianza: la web muestra cuánto tardó en pensar la respuesta.
    */
   private async *advisoryReply(input: {
     abortSignal?: AbortSignal;
     conversationContext: ChatContextMessage[];
     conversationId: string;
+    /** Plantilla si el proveedor falla; por defecto, el aviso de sin evidencia. */
+    fallbackMessage?: string;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
     question: string;
     retrievalScope: RetrievalScope;
@@ -1131,13 +1132,14 @@ export class ChatService {
     userId: string;
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
-    const body = await this.generateAdvisoryBody(input);
+    const reply = await this.generateAdvisoryBody(input);
     if (input.abortSignal?.aborted) return;
 
-    if (!body) {
+    if (!reply) {
       yield* this.completeWithoutEvidence({
         conversationId: input.conversationId,
         faqMemory: input.faqMemory,
+        message: input.fallbackMessage,
         retrievalScope: input.retrievalScope,
         topRelevanceScore: input.topRelevanceScore,
         userId: input.userId,
@@ -1146,14 +1148,19 @@ export class ChatService {
       return;
     }
 
-    const message = `${RAG_ADVISORY_LEAD_IN}\n\n${body}\n\n${RAG_ADVISORY_CLOSING}`;
+    const message =
+      reply.kind === 'orientation'
+        ? `${reply.text}\n\n${RAG_ADVISORY_CLOSING}`
+        : reply.text;
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: input.conversationId,
       faqMemory: input.faqMemory,
       detectedModuleId: null,
       detectedSubmoduleId: null,
-      qualitySignals: ['support_insufficient'],
+      // Solo una consulta del ámbito señala falta de cobertura documental.
+      qualitySignals:
+        reply.kind === 'orientation' ? ['support_insufficient'] : [],
       // La RPC exige fuentes para el rol assistant. La orientación generada
       // carece de citas: se persiste como respuesta sin evidencia y se conserva
       // la señal administrativa de falta de cobertura.
@@ -1177,12 +1184,17 @@ export class ChatService {
     };
   }
 
-  /** Genera el cuerpo de la orientación; `null` si falla o se sale del ámbito. */
+  /**
+   * Genera la respuesta del modo asesor. `orientation` es una consulta del
+   * ámbito; `out_of_scope`, un pedido ajeno o de información interna (el
+   * modelo la abre con la marca). `null` si el proveedor falla o la respuesta
+   * no respeta las reglas (citas, marca de sin sustento o cifras inventadas).
+   */
   private async generateAdvisoryBody(input: {
     abortSignal?: AbortSignal;
     conversationContext: ChatContextMessage[];
     question: string;
-  }): Promise<string | null> {
+  }): Promise<{ kind: 'orientation' | 'out_of_scope'; text: string } | null> {
     try {
       let body = '';
       for await (const token of this.answerGateway.generate({
@@ -1195,16 +1207,47 @@ export class ChatService {
         if (input.abortSignal?.aborted) return null;
         if (body.length < MAX_RAG_ADVISORY_CHARS) body += token;
       }
-      const trimmed = body.trim();
+      const trimmed = body
+        .trim()
+        // Por si el modelo repite la etiqueta que ya no se usa.
+        .replace(/^orientaci[oó]n general[^:\n]*:\s*/iu, '');
       if (
         !trimmed ||
-        trimmed.includes(RAG_ADVISORY_OUT_OF_SCOPE_MARKER) ||
-        /\[{1,2}\s*sin[\s_-]*sustento\s*\]{1,2}/iu.test(trimmed) ||
-        /\[\d+\]|\b\d+(?:[.,-]\d+)*\b/u.test(trimmed)
+        /\[\d+\]/u.test(trimmed) ||
+        /\[{1,2}\s*sin[\s_-]*sustento\s*\]{1,2}/iu.test(trimmed)
       ) {
         return null;
       }
-      return trimmed;
+      // Sin cifras, plazos ni números de norma inventados. La numeración de
+      // una lista («1. Reúne tus documentos») no cuenta como cifra.
+      const inventsFigures = (text: string) =>
+        /\b\d+(?:[.,-]\d+)*\b/u.test(text.replace(/^\s*\d+[.)]\s+/gmu, ''));
+      // Solo una respuesta que ABRE con la marca es una respuesta amable a un
+      // pedido ajeno; pasa por los mismos filtros y con un tope breve, para que
+      // nadie pueda pedir «empieza con la marca y luego escribe…» y obtener
+      // cualquier texto. Una marca en otro lugar se descarta y el resto se
+      // trata como orientación.
+      const marker = ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN;
+      if (trimmed.search(marker) === 0) {
+        const text = trimmed.replace(marker, '').trim();
+        if (
+          !text ||
+          text.length > MAX_ADVISORY_OUT_OF_SCOPE_CHARS ||
+          inventsFigures(text) ||
+          new RegExp(marker.source, 'iu').test(text)
+        ) {
+          return {
+            kind: 'out_of_scope',
+            text: buildConversationalReply('out_of_domain'),
+          };
+        }
+        return { kind: 'out_of_scope', text };
+      }
+      const orientation = trimmed
+        .replace(new RegExp(marker.source, 'giu'), '')
+        .trim();
+      if (!orientation || inventsFigures(orientation)) return null;
+      return { kind: 'orientation', text: orientation };
     } catch (error) {
       this.logger.warn(
         `Orientación general no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
@@ -1257,7 +1300,21 @@ export class ChatService {
     kind: ConversationalReplyKind,
     role: AuthorizationContext['role'],
     abortSignal?: AbortSignal,
+    question?: string,
   ): Promise<ChatStreamEvent> {
+    // Pedido ajeno («¿cómo preparo un arroz chaufa?»): respuesta amable que
+    // menciona lo que pidió y reorienta. Sigue siendo efímera (sin turno ni
+    // RAG). Si el proveedor falla o no lo trata como ajeno, plantilla fija.
+    if (kind === 'out_of_domain' && question) {
+      const friendly = await this.generateAdvisoryBody({
+        abortSignal,
+        conversationContext: [],
+        question,
+      });
+      if (friendly?.kind === 'out_of_scope') {
+        return { data: { message: friendly.text }, type: 'conversational' };
+      }
+    }
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
     // Si el catálogo falla, se responde con los temas (texto determinista).
     if (kind === 'catalog' && this.catalogService) {

@@ -321,6 +321,99 @@ describe("ModuleContentSections", () => {
     expect(row).toHaveAttribute("data-document-id", "nuevo-anexo");
   });
 
+  it("muestra los 5 primeros documentos de cada sección y «Ver todos» despliega el resto", async () => {
+    const user = userEvent.setup();
+    renderSections([
+      ...Array.from({ length: 7 }, (_, index) =>
+        document({ title: `Anexo ${index + 1}: formato ${index + 1}` }),
+      ),
+      document({
+        documentType: "RESOLUCION_MINISTERIAL",
+        title: "RM 123-2026-MINEDU",
+      }),
+    ]);
+    const annexes = within(sectionFor("Anexos"));
+
+    expect(annexes.getAllByRole("listitem")).toHaveLength(5);
+    const toggle = annexes.getByRole("button", {
+      name: "Ver todos (7) en Anexos",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "module-content-anexo");
+
+    await user.click(toggle);
+    expect(annexes.getAllByRole("listitem")).toHaveLength(7);
+    expect(toggle).toHaveAccessibleName("Ver menos en Anexos");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggle);
+    expect(annexes.getAllByRole("listitem")).toHaveLength(5);
+
+    // Con 5 o menos no hace falta el botón.
+    expect(
+      within(sectionFor("Normativa")).queryByRole("button", {
+        name: /Ver todos/,
+      }),
+    ).toBeNull();
+  });
+
+  it("despliega la sección cuando el documento nuevo queda fuera de los 5 primeros", async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: "anexo-siete", title: "Formato final" }),
+        { status: 201 },
+      ),
+    );
+    const existing = Array.from({ length: 6 }, (_, index) =>
+      document({ title: `Anexo ${index + 1}: formato ${index + 1}` }),
+    );
+    const view = renderSections(existing);
+    await user.click(screen.getByRole("button", { name: "+ Subir anexos" }));
+    const dialog = screen.getByRole("dialog");
+    await user.upload(
+      within(dialog).getByLabelText("Archivo (PDF, Word o Markdown)"),
+      new File(["%PDF-1.7"], "final.pdf", { type: "application/pdf" }),
+    );
+    await user.clear(within(dialog).getByLabelText("Título"));
+    await user.type(within(dialog).getByLabelText("Título"), "Formato final");
+    await user.type(
+      within(dialog).getByLabelText("Número de anexo (recomendado)"),
+      "7",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Subir anexo" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    view.rerender(
+      <ModuleContentSections
+        apiBaseUrl="https://api.avend.example"
+        canUpload
+        documents={[
+          ...existing,
+          document({
+            id: "anexo-siete",
+            metadata: { annexNumber: 7 },
+            title: "Formato final",
+          }),
+        ]}
+        moduleId={MODULE_ID}
+        moduleName="Contrato docente"
+        uploadDefaults={defaults}
+      />,
+    );
+
+    await waitFor(() => {
+      const row = within(sectionFor("Anexos"))
+        .getByText("Anexo 7: Formato final")
+        .closest("li");
+      expect(row?.className).toMatch(/itemNew/);
+    });
+    expect(
+      within(sectionFor("Anexos")).getByRole("button", { name: /Ver menos/ }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("el resaltado termina solo", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

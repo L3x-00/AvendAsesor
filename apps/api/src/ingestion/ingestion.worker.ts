@@ -31,9 +31,27 @@ export class IngestionWorker implements OnModuleInit {
     );
   }
 
+  /**
+   * `@Interval` no espera a la promesa anterior: sin esta guarda, cada 5 s
+   * arrancaba otro trabajo en paralelo (con su OCR) y, en Render Free, el
+   * proceso se quedaba sin memoria. Los trabajos perdían su turno y terminaban
+   * en Error con LEASE_EXPIRED (seis documentos en producción, 2026-09-29/30).
+   */
+  private running = false;
+
   @Interval(5000)
   async poll(): Promise<void> {
-    if (this.config.get<boolean>('RAG_INGESTION_WORKER_ENABLED'))
+    if (!this.config.get<boolean>('RAG_INGESTION_WORKER_ENABLED')) return;
+    if (this.running) return;
+    this.running = true;
+    try {
       await this.ingestion.processNext();
+    } catch (error) {
+      this.logger.error(
+        `Ingestion polling failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    } finally {
+      this.running = false;
+    }
   }
 }

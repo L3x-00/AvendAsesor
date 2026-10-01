@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DocumentIngestionFailureCause } from '../ingestion-failure';
 import type {
   ArchiveReasonCode,
   DocumentApprovalStatus,
@@ -68,6 +69,11 @@ export interface ManagedDocument {
 export interface ManagedDocumentVersion {
   fileSizeBytes: number;
   id: string;
+  /**
+   * Solo en la ficha y solo si la versión falló: qué impidió procesarla, para
+   * ofrecer al administrador una salida (reintentar o subir otra versión).
+   */
+  ingestionFailureCause?: DocumentIngestionFailureCause | null;
   ingestionStatus: DocumentIngestionStatus;
   ingestionUpdatedAt: string;
   /** Año del documento para esta versión; puede no estar registrado. */

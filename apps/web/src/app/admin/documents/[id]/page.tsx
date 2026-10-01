@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import {
   deleteDocumentAction,
   linkDocumentModuleAction,
-  setDocumentTechnicalStatusAction,
   unlinkDocumentModuleAction,
   updateDocumentAction,
 } from "@/app/admin/actions";
@@ -14,10 +13,12 @@ import { DocumentAuditHistory } from "@/components/admin/document-audit-history"
 import { DocumentEditButton } from "@/components/admin/document-edit-button";
 import { DocumentEditCancelButton } from "@/components/admin/document-edit-cancel-button";
 import { DocumentEditSection } from "@/components/admin/document-edit-section";
+import { DocumentIngestionRecovery } from "@/components/admin/document-ingestion-recovery";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
 import { DocumentSituationActions } from "@/components/admin/document-situation-actions";
 import { DocumentSituationSummary } from "@/components/admin/document-situation-summary";
+import { DocumentTechnicalStatusForm } from "@/components/admin/document-technical-status-form";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import { AdminApiError } from "@/lib/admin-api/client";
 import { getAdminApiUrl } from "@/lib/admin-api/config";
@@ -689,48 +690,18 @@ export default async function DocumentDetailPage({
             <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
               <h2 className="text-xl font-bold">Estado técnico</h2>
               {status === "error" ? (
-                <p className="mt-3 rounded-lg border border-red-300 bg-red-50 p-4 text-base text-red-900">
-                  Error asignado automáticamente por una falla de lectura,
-                  procesamiento o indexación. No puede seleccionarse
-                  manualmente.
-                </p>
+                <DocumentIngestionRecovery
+                  canRetry={currentVersion?.ingestionStatus === "failed"}
+                  cause={currentVersion?.ingestionFailureCause}
+                  documentId={document.id}
+                />
               ) : (
-                <AdminActionForm
-                  action={setDocumentTechnicalStatusAction}
-                  className="mt-4 space-y-3"
-                  submitLabel="Guardar estado técnico"
-                >
-                  <input name="documentId" type="hidden" value={document.id} />
-                  <label className="block" htmlFor="technical-status">
-                    <span className="text-base font-semibold">Estado</span>
-                    <select
-                      className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                      defaultValue={document.approvalStatus}
-                      id="technical-status"
-                      name="technicalStatus"
-                    >
-                      <option value="pending_approval">
-                        Pendiente de aprobación
-                      </option>
-                      <option
-                        disabled={currentVersion?.ingestionStatus !== "indexed"}
-                        value="ready"
-                      >
-                        Listo
-                      </option>
-                      <option disabled value="error">
-                        Error (solo automático)
-                      </option>
-                    </select>
-                  </label>
-                  {currentVersion?.ingestionStatus !== "indexed" ? (
-                    <p className="text-base text-avend-text-muted">
-                      Para aprobarla como Listo, la versión debe estar indexada.
-                      Si el procesamiento automático no está activo o aún no
-                      termina, permanecerá en Pendiente.
-                    </p>
-                  ) : null}
-                </AdminActionForm>
+                <DocumentTechnicalStatusForm
+                  approvalStatus={document.approvalStatus}
+                  approvedVersionId={document.approvedVersionId}
+                  currentIngestionStatus={currentVersion?.ingestionStatus}
+                  documentId={document.id}
+                />
               )}
             </section>
 

@@ -74,10 +74,10 @@ export function buildConversationalReply(
     case 'capabilities':
       return `Soy AVEND ASESOR. ${SCOPE_SENTENCE}${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} ¿Qué necesitas consultar?`;
     case 'out_of_domain':
-      return `Me encantaría ayudarte con eso, pero mi especialidad es el ámbito educativo peruano. ${SCOPE_SENTENCE} ¿Hay algo de eso en lo que pueda orientarte hoy?`;
+      return `¡Qué buena pregunta! Me encantaría ayudarte con eso, pero mi objetivo es orientarte en temas del ámbito educativo peruano. ${SCOPE_SENTENCE} ¿Hay algo de eso en lo que pueda ayudarte hoy?`;
     case 'system_limit':
-      return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
+      return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si olvidaste tu contraseña, pide al superadministrador de AVEND ASESOR un enlace para restablecerla. Y si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
     case 'unrelated_no_evidence':
-      return `Me especializo en el ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más sobre el trámite o tu situación laboral y te ayudo con gusto.`;
+      return `Me parece interesante tu consulta, pero mi objetivo es orientarte en temas del ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más sobre el trámite o tu situación laboral y te ayudo con gusto.`;
   }
 }

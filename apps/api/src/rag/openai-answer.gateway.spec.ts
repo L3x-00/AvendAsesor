@@ -202,7 +202,10 @@ describe('OpenAiAnswerGateway', () => {
     );
     const userMessage = messages?.find((message) => message.role === 'user');
 
-    expect(systemMessage?.content).toContain('ORIENTACIÓN GENERAL');
+    expect(systemMessage?.content).toContain('orientación general');
+    expect(systemMessage?.content).toContain('[[FUERA_DE_AMBITO]]');
+    expect(systemMessage?.content).toContain('arroz chaufa');
+    expect(systemMessage?.content).toContain('sin títulos ni etiquetas');
     expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
     expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
   });

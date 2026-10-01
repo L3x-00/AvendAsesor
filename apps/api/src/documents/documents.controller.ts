@@ -172,6 +172,15 @@ export class DocumentsController {
     return this.documentsService.setSituation(documentId, dto, authorization);
   }
 
+  @Post(':id/ingestion/retry')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async retryIngestion(
+    @Param('id', new ParseUUIDPipe()) documentId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ): Promise<void> {
+    await this.documentsService.retryIngestion(documentId, authorization);
+  }
+
   @Patch(':id/technical-status')
   setTechnicalStatus(
     @Param('id', new ParseUUIDPipe()) documentId: string,

@@ -95,6 +95,9 @@ export function ModulePermissionsManager({
                     className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
                     defaultValue={String(!permission.canAccess)}
                     id={`${prefix}-${permission.userId}-access`}
+                    // Vuelve a montarse con el acceso guardado: un <select> ya
+                    // montado no actualiza su valor por defecto tras guardar.
+                    key={String(permission.canAccess)}
                     name="canAccess"
                   >
                     <option value="true">Habilitar</option>

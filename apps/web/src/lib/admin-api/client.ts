@@ -172,6 +172,13 @@ export class AdminApiClient {
     });
   }
 
+  /** Vuelve a encolar el procesamiento de un documento en estado Error. */
+  async retryDocumentIngestion(documentId: string): Promise<void> {
+    await this.send(`/admin/documents/${documentId}/ingestion/retry`, {
+      method: "POST",
+    });
+  }
+
   async listDocuments(status: "active" | "all" | "inactive" = "all") {
     const query = new URLSearchParams({ limit: "100", offset: "0", status });
 

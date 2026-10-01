@@ -7,6 +7,7 @@ import {
   createModuleAction,
   createDownloadUrlAction,
   deleteModuleAction,
+  retryDocumentIngestionAction,
   reviewUnansweredQuestionAction,
   setDocumentSituationAction,
   createAdministrativeUserAction,
@@ -36,6 +37,7 @@ const client = {
   createModule: vi.fn(),
   deleteModule: vi.fn(),
   getDownloadUrl: vi.fn(),
+  retryDocumentIngestion: vi.fn(),
   reviewUnansweredQuestion: vi.fn(),
   setDocumentSituation: vi.fn(),
   setModuleStatus: vi.fn(),
@@ -561,5 +563,39 @@ describe("admin server actions", () => {
       status: "error",
     });
     expect(client.updateAdministrativeUserAccessWindow).not.toHaveBeenCalled();
+  });
+
+  it("queues a failed document again and refreshes its views", async () => {
+    const formData = new FormData();
+    formData.set("documentId", "d60530ac-6fba-46bd-bac7-940c0655db54");
+    client.retryDocumentIngestion.mockResolvedValue(undefined);
+
+    await expect(
+      retryDocumentIngestionAction(initialState, formData),
+    ).resolves.toMatchObject({ status: "success" });
+    expect(client.retryDocumentIngestion).toHaveBeenCalledWith(
+      "d60530ac-6fba-46bd-bac7-940c0655db54",
+    );
+    expect(revalidatePath).toHaveBeenCalledWith(
+      "/admin/documents/d60530ac-6fba-46bd-bac7-940c0655db54",
+    );
+  });
+
+  it("asks to refresh when the document is no longer in Error", async () => {
+    const formData = new FormData();
+    formData.set("documentId", "d60530ac-6fba-46bd-bac7-940c0655db54");
+    client.retryDocumentIngestion.mockRejectedValue(new AdminApiError(409));
+
+    await expect(
+      retryDocumentIngestionAction(initialState, formData),
+    ).resolves.toEqual({
+      message:
+        "Este documento ya no está en Error: actualiza la página para ver su estado actual.",
+      status: "error",
+    });
+    // La vista se actualiza para mostrar el estado real.
+    expect(revalidatePath).toHaveBeenCalledWith(
+      "/admin/documents/d60530ac-6fba-46bd-bac7-940c0655db54",
+    );
   });
 });

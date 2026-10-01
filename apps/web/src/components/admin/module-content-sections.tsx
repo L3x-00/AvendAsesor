@@ -139,6 +139,77 @@ interface Highlight {
   scrolled: boolean;
 }
 
+/** Documentos visibles por sección antes de «Ver todos» (evita un scroll largo). */
+export const SECTION_PREVIEW_COUNT = 5;
+
+/**
+ * Lista de una sección: los primeros documentos y, si hay más, «Ver todos».
+ * Si el documento recién cargado queda fuera de los primeros, la sección se
+ * despliega sola para que se vea parpadear en su sitio.
+ */
+function SectionDocuments({
+  code,
+  documents,
+  highlightedId,
+  listId,
+  revealId,
+  title,
+}: {
+  code: ContentSectionCode | "OTROS";
+  documents: DocumentLibraryItem[];
+  highlightedId: string | null;
+  listId: string;
+  /** Documento recién cargado: si queda oculto, la sección se despliega. */
+  revealId: string | null;
+  title: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
+  const revealIndex = revealId
+    ? documents.findIndex((document) => document.id === revealId)
+    : -1;
+  if (
+    revealId &&
+    revealId !== autoExpandedFor &&
+    revealIndex >= SECTION_PREVIEW_COUNT
+  ) {
+    setAutoExpandedFor(revealId);
+    setExpanded(true);
+  }
+
+  const hasMore = documents.length > SECTION_PREVIEW_COUNT;
+  const visible =
+    expanded || !hasMore ? documents : documents.slice(0, SECTION_PREVIEW_COUNT);
+
+  return (
+    <>
+      <ul className="mt-2 space-y-2" id={listId}>
+        {visible.map((document) => (
+          <DocumentLine
+            code={code}
+            document={document}
+            highlighted={highlightedId === document.id}
+            key={document.id}
+          />
+        ))}
+      </ul>
+      {hasMore ? (
+        <button
+          aria-controls={listId}
+          aria-expanded={expanded}
+          className="avend-button avend-button--secondary mt-3"
+          onClick={() => setExpanded((current) => !current)}
+          type="button"
+        >
+          {expanded ? "Ver menos" : `Ver todos (${documents.length})`}
+          {" "}
+          <span className="avend-visually-hidden">{`en ${title}`}</span>
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 function scrollBehavior(): ScrollBehavior {
   return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     ? "auto"
@@ -200,6 +271,12 @@ export function ModuleContentSections({
     documents.filter((document) => documentContentSection(document) === null),
   );
 
+  // La fila parpadea cuando la vista ya llegó a ella.
+  const highlightedId =
+    highlight?.documentId && highlight.scrolled ? highlight.documentId : null;
+  // Para desplegar una sección antes de llegar a la fila basta con saber cuál
+  // es el documento nuevo; el desplazamiento ocurre después.
+  const pendingDocumentId = highlight?.documentId ?? null;
   const highlightedDocumentPresent = Boolean(
     highlight?.documentId &&
       documents.some((document) => document.id === highlight.documentId),
@@ -316,19 +393,14 @@ export function ModuleContentSections({
                   Sin {title.toLowerCase()} todavía.
                 </p>
               ) : (
-                <ul className="mt-2 space-y-2">
-                  {section.items.map((document) => (
-                    <DocumentLine
-                      code={section.code}
-                      document={document}
-                      highlighted={
-                        highlight?.documentId === document.id &&
-                        highlight.scrolled
-                      }
-                      key={document.id}
-                    />
-                  ))}
-                </ul>
+                <SectionDocuments
+                  code={section.code}
+                  documents={section.items}
+                  highlightedId={highlightedId}
+                  listId={`module-content-${section.code.toLowerCase()}`}
+                  revealId={pendingDocumentId}
+                  title={title}
+                />
               )}
             </article>
           );
@@ -341,18 +413,14 @@ export function ModuleContentSections({
             <p className="mt-1 text-base text-avend-text-muted">
               Otros tipos cargados en este tema.
             </p>
-            <ul className="mt-2 space-y-2">
-              {others.map((document) => (
-                <DocumentLine
-                  code="OTROS"
-                  document={document}
-                  highlighted={
-                    highlight?.documentId === document.id && highlight.scrolled
-                  }
-                  key={document.id}
-                />
-              ))}
-            </ul>
+            <SectionDocuments
+              code="OTROS"
+              documents={others}
+              highlightedId={highlightedId}
+              listId="module-content-otros"
+              revealId={pendingDocumentId}
+              title="Otros documentos"
+            />
           </article>
         ) : null}
       </div>

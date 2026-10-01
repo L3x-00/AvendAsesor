@@ -1,5 +1,5 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
-  'No pude completar una orientación fiable en este momento. Cuéntame un poco más sobre el trámite o la situación y vuelvo a intentarlo. También puedes consultar el portal oficial del MINEDU o comunicarte con tu UGEL o DRE.';
+  'Por ahora no encontré información suficiente para orientarte bien sobre esto. ¿Me cuentas un poco más sobre el trámite o tu situación? También puedes revisar el portal oficial del MINEDU o consultar con tu UGEL o DRE.';
 
 /** Primera consulta sin tema: se pide el trámite antes de buscar (puntos 5 y 12). */
 export const RAG_TOPIC_CLARIFICATION_MESSAGE =
@@ -15,12 +15,17 @@ export const MAX_RAG_ANSWER_TOKENS = 1_500;
 /** Orientación general (modo asesor): breve y acotada. */
 export const MAX_RAG_ADVISORY_TOKENS = 600;
 export const MAX_RAG_ADVISORY_CHARS = 4_000;
-/** Etiqueta visible de una respuesta de orientación general. */
-export const RAG_ADVISORY_LEAD_IN = 'Orientación general (sin cita de norma):';
-/** Cierre determinista: verificación oficial y registro para administración. */
+/**
+ * Cierre determinista de la orientación general: verificación oficial. La
+ * respuesta ya no abre con «Orientación general (sin cita de norma):», que
+ * restaba confianza (PO, 2026-10-01); la web enlaza MINEDU, UGEL y DRE.
+ */
 export const RAG_ADVISORY_CLOSING =
-  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU o con tu UGEL o DRE antes de decidir.';
-/** El modelo la emite si el pedido se sale del ámbito educativo. */
+  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU y consulta con tu UGEL o DRE antes de decidir.';
+/**
+ * El modelo abre con esta marca una respuesta amable a un pedido ajeno al
+ * ámbito o que busca información interna; el texto que sigue se muestra.
+ */
 export const RAG_ADVISORY_OUT_OF_SCOPE_MARKER = '[[FUERA_DE_AMBITO]]';
 export const MAX_EVIDENCE_CHARS_PER_CHUNK = 6_000;
 export const MAX_CHAT_CONTEXT_CHARS = 10_000;

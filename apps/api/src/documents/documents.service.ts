@@ -39,6 +39,7 @@ import type {
   DocumentsGateway,
   DocumentUploader,
 } from './documents.gateway';
+import { ingestionFailureCause } from './ingestion-failure';
 import {
   PdfInspectionService,
   UnreadablePdfException,
@@ -462,12 +463,17 @@ export class DocumentsService {
   ): Promise<ManagedDocumentDetails> {
     const document = await this.requireLiveDocument(documentId);
     await this.assertCanManageDocument(documentId, authorization);
-    const [versions, moduleIds, auditEvents, usage] = await Promise.all([
-      this.documentsGateway.listVersions(documentId),
-      this.documentsGateway.listModuleIds(documentId),
-      this.documentsGateway.listAuditEvents(documentId),
-      this.documentsGateway.getUsageCounters(documentId),
-    ]);
+    const [versions, moduleIds, auditEvents, usage, failures] =
+      await Promise.all([
+        this.documentsGateway.listVersions(documentId),
+        this.documentsGateway.listModuleIds(documentId),
+        this.documentsGateway.listAuditEvents(documentId),
+        this.documentsGateway.getUsageCounters(documentId),
+        this.documentsGateway.listIngestionFailures(documentId),
+      ]);
+    const failureByVersion = new Map(
+      failures.map((failure) => [failure.versionId, failure]),
+    );
     const actorIds = [
       document.createdBy,
       ...versions.map((version) => version.uploadedBy),
@@ -497,18 +503,48 @@ export class DocumentsService {
         : null,
       moduleIds,
       usage,
-      versions: versions.map((version) =>
-        toManagedDocumentVersion(
-          version,
-          // El nombre guardado con la versión manda: sobrevive al borrado del
-          // perfil. El join solo cubre las versiones anteriores al respaldo.
-          version.uploadedByName ??
-            (version.uploadedBy
-              ? (actorNames[version.uploadedBy] ?? null)
-              : null),
-        ),
-      ),
+      versions: versions.map((version) => {
+        const failure =
+          version.ingestionStatus === 'failed'
+            ? failureByVersion.get(version.id)
+            : undefined;
+        return {
+          ...toManagedDocumentVersion(
+            version,
+            // El nombre guardado con la versión manda: sobrevive al borrado
+            // del perfil. El join solo cubre las versiones anteriores al
+            // respaldo.
+            version.uploadedByName ??
+              (version.uploadedBy
+                ? (actorNames[version.uploadedBy] ?? null)
+                : null),
+          ),
+          ingestionFailureCause:
+            version.ingestionStatus === 'failed'
+              ? ingestionFailureCause(
+                  failure?.code ?? null,
+                  failure?.message ?? null,
+                )
+              : null,
+        };
+      }),
     };
+  }
+
+  /**
+   * «Volver a procesar» desde la ficha: la versión vigente en Error vuelve a la
+   * cola del worker. El resultado se ve después en el estado técnico.
+   */
+  async retryIngestion(
+    documentId: string,
+    authorization: AuthorizationContext,
+  ): Promise<void> {
+    await this.requireLiveDocument(documentId);
+    await this.assertCanManageDocument(documentId, authorization);
+    await this.documentsGateway.retryIngestion(
+      documentId,
+      authorization.userId,
+    );
   }
 
   async linkModule(

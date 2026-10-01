@@ -364,6 +364,28 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
     return (data ?? []).map((row) => this.parseVersion(row));
   }
 
+  async listIngestionFailures(
+    documentId: string,
+  ): Promise<
+    { code: string | null; message: string | null; versionId: string }[]
+  > {
+    const { data, error } = await this.requireClient()
+      .from('document_ingestion_jobs')
+      .select('document_version_id,last_error_code,last_error_message')
+      .eq('document_id', documentId)
+      .eq('status', 'failed');
+
+    if (error) {
+      databaseError(error);
+    }
+
+    return (data ?? []).map((row) => ({
+      code: row.last_error_code,
+      message: row.last_error_message,
+      versionId: row.document_version_id,
+    }));
+  }
+
   async listSuggestions(): Promise<{
     additionalDetails: string[];
     specificDependencies: string[];
@@ -563,6 +585,22 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
 
     if (error) databaseError(error);
     return this.parseDocument(data);
+  }
+
+  async retryIngestion(documentId: string, actorId: string): Promise<void> {
+    const { error } = await this.requireClient().rpc(
+      'retry_failed_document_ingestion',
+      { p_actor_id: actorId, p_document_id: documentId },
+    );
+
+    if (error?.code === '22023') {
+      // La versión vigente ya no está en Error (otro administrador la reintentó
+      // o subió una versión nueva): se informa como conflicto de estado.
+      throw new ConflictException(
+        'Only a failed document version can be processed again.',
+      );
+    }
+    if (error) databaseError(error);
   }
 
   async unlinkModule(

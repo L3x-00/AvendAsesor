@@ -17,6 +17,22 @@ describe("describeAuditEvent", () => {
     });
   });
 
+  it("traduce el pedido de volver a procesar sin exponer el código técnico", () => {
+    const described = describeAuditEvent({
+      action: "metadata_updated",
+      details: {
+        event: "ingestion_retry_requested",
+        previousErrorCode: "LEASE_EXPIRED",
+      },
+    });
+
+    expect(described).toEqual({
+      details: ["El documento volvió a la cola de lectura e indexación."],
+      routine: false,
+      title: "Se pidió volver a procesar el documento",
+    });
+  });
+
   it("traduce el cambio de estado técnico", () => {
     expect(
       describeAuditEvent({

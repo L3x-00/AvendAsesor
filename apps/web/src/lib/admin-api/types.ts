@@ -118,6 +118,21 @@ export type ManagedDocument = z.infer<typeof managedDocumentSchema>;
 export const managedDocumentVersionSchema = z.object({
   fileSizeBytes: z.number().int().positive(),
   id: z.string().uuid(),
+  /** Solo en la ficha y solo si la versión falló: qué impidió procesarla. */
+  ingestionFailureCause: z
+    .enum([
+      "ai_service",
+      "no_text",
+      "timeout",
+      "too_large",
+      "unknown",
+      "unreadable_file",
+      "unsupported_format",
+    ])
+    .nullable()
+    .optional()
+    // Una causa nueva del API no debe romper la ficha: se muestra como genérica.
+    .catch("unknown"),
   ingestionStatus: z.enum(["failed", "indexed", "pending", "processing"]),
   ingestionUpdatedAt: timestampSchema,
   /** Ausente en respuestas anteriores al despliegue de versiones con año. */

@@ -28,6 +28,12 @@ import {
   SuggestedQuestions,
 } from "./chat-message-parts";
 import { ChatThinking, ChatWriting } from "./chat-thinking";
+import {
+  linkifyOfficialEntities,
+  startsSuggestions,
+  ThoughtDuration,
+  withoutLegacyLeadIn,
+} from "./official-links";
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
@@ -57,6 +63,8 @@ interface RenderedMessage {
   suggestions?: string[];
   /** Consulta guardada que no recibió respuesta (fallo técnico o corte). */
   unanswered?: boolean;
+  /** Segundos que tardó el asistente en responder («Pensado por …»). */
+  thoughtSeconds?: number;
 }
 
 /** Tras este tiempo sin respuesta se avisa que el servicio puede estar activándose. */
@@ -97,21 +105,57 @@ export function canPrepareOrientation(
   );
 }
 
+/** Marca de inicio de un turno (fuera del render: lo llama el envío). */
+function turnStartedAt(): number {
+  return Date.now();
+}
+
+/** Segundos enteros transcurridos, con un mínimo de 1. */
+function secondsSince(startedAt: number): number {
+  return Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+}
+
+/**
+ * «Pensado por …» de una respuesta guardada: tiempo entre la pregunta y la
+ * respuesta. Se omite si las fechas no son coherentes.
+ */
+function thoughtSecondsFor(
+  message: ChatConversationDetail["messages"][number],
+  createdAtById: Map<string, string>,
+): number | undefined {
+  if (message.role === "user" || !message.inReplyToMessageId) return undefined;
+  const askedAt = createdAtById.get(message.inReplyToMessageId);
+  if (!askedAt) return undefined;
+  const seconds = (Date.parse(message.createdAt) - Date.parse(askedAt)) / 1000;
+  return Number.isFinite(seconds) && seconds > 0 && seconds < 600
+    ? seconds
+    : undefined;
+}
+
 function initialMessages(
   conversation: ChatConversationDetail | undefined,
 ): RenderedMessage[] {
   const messages = conversation?.messages ?? [];
+  const createdAtById = new Map(
+    messages.map((message) => [message.id, message.createdAt]),
+  );
   const answeredIds = new Set(
     messages.map((message) => message.inReplyToMessageId).filter(Boolean),
   );
   const now = Date.now();
   return messages.map((message, index) => ({
-    content: message.content,
+    // Las orientaciones guardadas antes del 2026-10-01 abrían con una etiqueta
+    // que restaba confianza; se oculta al mostrarlas.
+    content:
+      message.role === "no_evidence"
+        ? withoutLegacyLeadIn(message.content)
+        : message.content,
     conversationId: conversation?.conversation.id,
     id: message.id,
     inReplyToMessageId: message.inReplyToMessageId,
     role: message.role,
     sources: message.sources,
+    thoughtSeconds: thoughtSecondsFor(message, createdAtById),
     // La última pregunta puede estar respondiéndose todavía (p. ej. al retomar
     // desde el Historial mientras se genera): se marca si hubo mensajes
     // después o si pasó más tiempo del que tarda una respuesta.
@@ -259,9 +303,21 @@ function linkCitations(
 /** Resalta frases clave con **negrita** sin inyectar HTML (guía §6). El resto
  * del cuerpo se mantiene en texto normal (negro); el azul se reserva para
  * acentos, enlaces y estados. */
-function renderInline(text: string, citations?: CitationContext): ReactNode[] {
+function renderInline(
+  text: string,
+  citations?: CitationContext,
+  linkOfficialSites = false,
+): ReactNode[] {
   return text.split("**").map((segment, index) => {
-    const parts = linkCitations(segment, citations, `c${index}`);
+    const cited = linkCitations(segment, citations, `c${index}`);
+    // En las sugerencias, MINEDU, UGEL, SUNEDU… enlazan a su portal oficial.
+    const parts = linkOfficialSites
+      ? cited.flatMap((part, partIndex) =>
+          typeof part === "string"
+            ? linkifyOfficialEntities(part, `o${index}-${partIndex}`)
+            : [part],
+        )
+      : cited;
     if (index % 2 === 1) return <strong key={index}>{parts}</strong>;
     return parts.length === 1 && typeof parts[0] === "string" ? (
       parts[0]
@@ -280,18 +336,20 @@ const persistedMessageIdPattern =
 function renderRichContent(
   content: string,
   citations?: CitationContext,
+  officialLinks = false,
 ): ReactNode[] {
   const blocks: ReactNode[] = [];
   let paragraphLines: string[] = [];
   let listItems: string[] = [];
   let listOrdered = false;
+  let inSuggestions = false;
 
   function flushParagraph() {
     if (paragraphLines.length === 0) return;
     const paragraph = paragraphLines.join(" ");
     blocks.push(
       <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
-        {renderInline(paragraph, citations)}
+        {renderInline(paragraph, citations, inSuggestions)}
       </p>,
     );
     paragraphLines = [];
@@ -303,7 +361,9 @@ function renderRichContent(
     blocks.push(
       <List className="avend-chat-list" key={`list-${blocks.length}`}>
         {listItems.map((item, index) => (
-          <li key={`${index}-${item}`}>{renderInline(item, citations)}</li>
+          <li key={`${index}-${item}`}>
+            {renderInline(item, citations, inSuggestions)}
+          </li>
         ))}
       </List>,
     );
@@ -312,6 +372,11 @@ function renderRichContent(
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
+    if (officialLinks && !inSuggestions && startsSuggestions(line)) {
+      flushParagraph();
+      flushList();
+      inSuggestions = true;
+    }
     if (!line) {
       flushParagraph();
       flushList();
@@ -870,6 +935,9 @@ export function ChatPanel({
     pendingNewTopicRef.current = false;
     const abortController = new AbortController();
     const localQuestionId = nextLocalId("local-question");
+    // «Pensado por …»: desde el envío hasta la respuesta completa.
+    const startedAt = turnStartedAt();
+    const thoughtSeconds = () => secondsSince(startedAt);
     // Estado del turno en curso: se completa a medida que llegan los eventos.
     turnRef.current = { sources: [], userMessageId: null };
     const turn = turnRef.current;
@@ -1082,6 +1150,7 @@ export function ChatPanel({
                   : "/chat",
               );
             }
+            const conversationalSeconds = thoughtSeconds();
             setMessages((current) => [
               ...current,
               {
@@ -1091,6 +1160,7 @@ export function ChatPanel({
                 role: "assistant",
                 sources: [],
                 suggestions: result.data.suggestions,
+                thoughtSeconds: conversationalSeconds,
               },
             ]);
             completionStatus = "Listo.";
@@ -1138,10 +1208,14 @@ export function ChatPanel({
               discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
+            // «Pensado por …» mide hasta la respuesta completa, igual que al
+            // reabrir la conversación desde el Historial.
+            const answeredSeconds = thoughtSeconds();
             replacePendingResponseMessage((message) => ({
               ...message,
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
+              thoughtSeconds: answeredSeconds,
             }));
             setStatus(completionStatus);
             completed = true;
@@ -1318,10 +1392,15 @@ export function ChatPanel({
                     Tu consulta
                   </p>
                 ) : (
-                  <p className="avend-chat-message-label">
-                    <AssistantAvatar />
-                    AVEND ASESOR
-                  </p>
+                  <>
+                    <p className="avend-chat-message-label">
+                      <AssistantAvatar />
+                      AVEND ASESOR
+                    </p>
+                    {message.thoughtSeconds ? (
+                      <ThoughtDuration seconds={message.thoughtSeconds} />
+                    ) : null}
+                  </>
                 )}
                 <div className="avend-chat-message-content">
                   {renderRichContent(
@@ -1331,6 +1410,7 @@ export function ChatPanel({
                       message.id !== "streaming"
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
+                    message.role !== "user",
                   )}
                   {message.id === "streaming" && isStreaming ? (
                     <ChatWriting />

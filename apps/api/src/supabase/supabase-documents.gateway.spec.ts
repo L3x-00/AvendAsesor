@@ -855,6 +855,63 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     }
   });
 
+  it('queues a failed document again and maps a non-failed state to 409', async () => {
+    const queued = createClient({ rpcData: null });
+    await expect(
+      new SupabaseDocumentsGatewayAdapter(queued.client).retryIngestion(
+        documentRow.id,
+        documentRow.created_by,
+      ),
+    ).resolves.toBeUndefined();
+    expect(queued.rpc).toHaveBeenCalledWith('retry_failed_document_ingestion', {
+      p_actor_id: documentRow.created_by,
+      p_document_id: documentRow.id,
+    });
+
+    const notFailed = createClient({ rpcError: { code: '22023' } });
+    await expect(
+      new SupabaseDocumentsGatewayAdapter(notFailed.client).retryIngestion(
+        documentRow.id,
+        documentRow.created_by,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    const missing = createClient({ rpcError: { code: 'P0002' } });
+    await expect(
+      new SupabaseDocumentsGatewayAdapter(missing.client).retryIngestion(
+        documentRow.id,
+        documentRow.created_by,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lists the last ingestion error of each failed version', async () => {
+    const { builder, client, from } = createClient({
+      data: [
+        {
+          document_version_id: 'version-id',
+          last_error_code: 'LEASE_EXPIRED',
+          last_error_message: 'The ingestion worker lease expired.',
+        },
+      ],
+    });
+
+    await expect(
+      new SupabaseDocumentsGatewayAdapter(client).listIngestionFailures(
+        documentRow.id,
+      ),
+    ).resolves.toEqual([
+      {
+        code: 'LEASE_EXPIRED',
+        message: 'The ingestion worker lease expired.',
+        versionId: 'version-id',
+      },
+    ]);
+    expect(from).toHaveBeenCalledWith('document_ingestion_jobs');
+    expect(builder.eq).toHaveBeenCalledWith('document_id', documentRow.id);
+    expect(builder.eq).toHaveBeenCalledWith('status', 'failed');
+  });
+
   it('distinguishes duplicate immutable files from a missing signed URL', async () => {
     const { client, storageBucket } = createClient({
       storageError: { message: 'The resource already exists' },
