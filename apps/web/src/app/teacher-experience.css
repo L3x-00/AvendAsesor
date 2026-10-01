@@ -371,12 +371,93 @@
   justify-content: space-between;
 }
 
-.avend-profile-header > div {
+.avend-profile-header-copy {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
+/* El párrafo ya no es hijo directo de .avend-content-header (va dentro del
+   bloque de texto), así que recupera aquí su estilo de entradilla. */
+.avend-profile-header .avend-profile-lead {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin: 0.875rem 0 0;
+  max-width: 48rem;
+}
+
+/* «Cerrar sesión» queda en la esquina superior derecha en todos los anchos:
+   ancho automático, nunca a lo ancho de la pantalla. */
+.avend-profile-sign-out-form {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .avend-profile-sign-out {
+  min-height: 2.75rem;
   white-space: nowrap;
+  width: auto;
+}
+
+.avend-profile-sign-out[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.8;
+}
+
+/* Avisos de Mi perfil: resultado del cambio de correo y fallo de lectura. */
+.avend-profile-notice {
+  align-items: flex-start;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  margin-top: 1.25rem;
+  padding: 1rem 1.125rem;
+}
+
+.avend-profile-notice > div {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.avend-profile-notice p {
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.avend-profile-notice .avend-profile-notice-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.avend-profile-notice--info {
+  background: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 22%);
+  color: var(--avend-navy);
+}
+
+.avend-profile-notice--success {
+  background: var(--avend-success-soft-surface);
+  border-color: var(--avend-success-soft-border);
+  color: var(--avend-success);
+}
+
+.avend-profile-notice--error {
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger-soft-border);
+  color: var(--avend-danger);
+}
+
+.avend-profile-notice-close {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+}
+
+.avend-profile-load-error {
+  margin-top: 1rem;
 }
 
 .avend-profile-card {
@@ -402,7 +483,60 @@
   border: 1px solid var(--avend-border);
   border-radius: 1rem;
   box-shadow: var(--avend-shadow-surface);
+  /* La fila Departamento/Ciudad se reparte según el ancho real de la
+     tarjeta, no el de la ventana (con barra lateral la tarjeta es estrecha). */
+  container-type: inline-size;
   padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.avend-profile-edit-card .avend-field-hint {
+  font-size: 1rem;
+}
+
+.avend-profile-readonly-value {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  color: var(--avend-text);
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.avend-profile-email-steps {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-top: 1rem;
+}
+
+.avend-profile-email-steps p {
+  margin: 0;
+}
+
+.avend-profile-email-steps ul {
+  display: grid;
+  gap: 0.375rem;
+  list-style: disc;
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.avend-profile-current-email {
+  color: var(--avend-text);
+  overflow-wrap: anywhere;
+}
+
+.avend-profile-pending-email {
+  background: var(--avend-soft-blue);
+  border: 1px solid rgb(22 119 255 / 22%);
+  border-radius: 0.75rem;
+  color: var(--avend-navy);
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 1rem 0 0;
+  overflow-wrap: anywhere;
+  padding: 0.75rem 0.875rem;
 }
 
 .avend-profile-edit-card h2 {
@@ -474,12 +608,20 @@
   margin: 2rem 0 0;
 }
 
+/* Tantas columnas como quepan con al menos 18rem cada una: con la barra
+   lateral o con zoom no se estrujan en tres columnas de ~90 px. */
 .avend-profile-shortcuts {
   display: grid;
   gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
+}
+
+/* Cada tarjeta ocupa toda la altura de su fila: alturas iguales. */
+.avend-profile-shortcuts li {
+  display: grid;
 }
 
 .avend-profile-shortcuts a {
@@ -491,16 +633,18 @@
   display: grid;
   gap: 0.875rem;
   grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  height: 100%;
   min-height: 5rem;
   padding: 1rem 1.125rem;
   text-decoration: none;
   transition:
+    background-color 160ms var(--avend-ease-interaction),
     border-color 160ms var(--avend-ease-interaction),
     box-shadow 160ms var(--avend-ease-interaction),
     transform 160ms var(--avend-ease-interaction);
 }
 
-.avend-profile-shortcut-icon {
+.avend-profile-shortcuts .avend-profile-shortcut-icon {
   background-color: var(--avend-soft-blue);
   border-radius: 0.75rem;
   color: var(--avend-accent-strong);
@@ -525,20 +669,29 @@
   min-width: 0;
 }
 
-.avend-profile-shortcut-arrow {
+/* Misma especificidad que el icono: el acento no lo anula la regla de la
+   descripción. */
+.avend-profile-shortcuts .avend-profile-shortcut-arrow {
   color: var(--avend-accent-strong);
   font-size: 1.35rem;
   font-weight: 700;
+  line-height: 1;
 }
 
 .avend-profile-shortcuts strong {
   color: var(--avend-navy);
   font-size: 1.0625rem;
+  overflow-wrap: normal;
 }
 
-.avend-profile-shortcuts span {
+/* Solo la descripción va atenuada. Las palabras no se parten a la mitad
+   (el contenedor hereda overflow-wrap: anywhere); si hace falta, guion. */
+.avend-profile-shortcuts .avend-profile-shortcut-description {
   color: var(--avend-text-muted);
   font-size: 1rem;
+  hyphens: auto;
+  line-height: 1.45;
+  overflow-wrap: normal;
 }
 
 .avend-profile-shortcuts a:hover {
@@ -546,9 +699,22 @@
   box-shadow: var(--avend-shadow-card);
 }
 
+/* Respuesta táctil visible también en pantallas sin hover. */
+.avend-profile-shortcuts a:active {
+  background-color: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 45%);
+}
+
 .avend-profile-shortcuts a:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
+}
+
+@container (min-width: 30rem) {
+  .avend-profile-form-row {
+    align-items: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (min-width: 48rem) {
@@ -561,12 +727,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .avend-profile-shortcuts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .avend-profile-edit-grid,
-  .avend-profile-form-row {
+  .avend-profile-edit-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -587,15 +748,17 @@
   }
 }
 
+/* En móvil el botón sigue arriba a la derecha, con ancho automático y al
+   menos 44 px de alto; el texto del encabezado ocupa el resto de la fila. */
 @media (max-width: 35rem) {
   .avend-profile-header {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 0.75rem;
   }
 
-  .avend-profile-header form,
   .avend-profile-sign-out {
-    width: 100%;
+    padding-inline: 0.875rem;
   }
 }
 

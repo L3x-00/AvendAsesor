@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EMAIL_CHANGE_RETURN_PATH,
   getAllowedAuthCallbackPath,
   getApplicationUrl,
   getAuthRedirectUrl,
+  getEmailChangePublicResultPath,
+  getEmailChangeResultPath,
   getSafeInternalPath,
   hasTrustedRequestOrigin,
+  parseEmailChangeOutcome,
 } from './site-url';
 
 describe('authentication redirect URLs', () => {
@@ -65,6 +69,20 @@ describe('authentication redirect URLs', () => {
     );
     expect(getAllowedAuthCallbackPath('/profile')).toBe('/profile');
     expect(getAllowedAuthCallbackPath('/admin')).toBe('/auth/code-error');
+  });
+
+  it('builds and reads the email-change notice of Mi perfil', () => {
+    expect(getAllowedAuthCallbackPath(EMAIL_CHANGE_RETURN_PATH)).toBe('/profile');
+    expect(getEmailChangeResultPath('pendiente')).toBe('/profile?correo=pendiente');
+    expect(getEmailChangePublicResultPath('revisar')).toBe(
+      '/auth/callback/correo?resultado=revisar',
+    );
+    expect(parseEmailChangeOutcome('actualizado')).toBe('actualizado');
+    expect(parseEmailChangeOutcome('revisar')).toBe('revisar');
+    expect(parseEmailChangeOutcome('error')).toBe('error');
+    expect(parseEmailChangeOutcome('otro')).toBeNull();
+    expect(parseEmailChangeOutcome(['actualizado'])).toBeNull();
+    expect(parseEmailChangeOutcome(undefined)).toBeNull();
   });
 
   it('accepts mutations only from the configured origin', () => {
