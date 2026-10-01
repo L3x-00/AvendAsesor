@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useTransition } from "react";
 
 interface RouteErrorProps {
-  /** Vuelve a pedir y renderizar el segmento (`retry` del límite de Next 16). */
+  /**
+   * `retry` del límite de error de Next 16.3: en una transición llama a
+   * `router.refresh()` (vuelve a pedir los datos al servidor) y reinicia el
+   * límite (node_modules/next/dist/client/components/error-boundary.js). No
+   * usar `reset`, que solo vuelve a renderizar con los datos que fallaron.
+   */
   retry: () => void;
   /**
    * "section": dentro del marco docente (la barra lateral sigue disponible).
@@ -13,15 +18,18 @@ interface RouteErrorProps {
   variant?: "page" | "section";
 }
 
+// El texto NO afirma que «nada cambió»: este aviso solo sabe que no se pudo
+// mostrar la pantalla, no si una acción recién hecha llegó a aplicarse.
+// «Intentar de nuevo» vuelve a pedir los datos y muestra el estado real.
 const COPY = {
   page: {
     reassurance:
-      "Puede ser una falla momentánea de conexión o que el servicio esté iniciando. No se perdió ni se modificó información.",
+      "Puede ser una falla momentánea de conexión o que el servicio esté iniciando. Tu información sigue guardada; al intentar de nuevo verás cómo quedó.",
     secondary: { href: "/", label: "Ir al inicio" },
   },
   section: {
     reassurance:
-      "Puede ser una falla momentánea de conexión o que el servicio esté iniciando. Tus conversaciones y tu cuenta están a salvo: no se perdió ni se modificó nada.",
+      "Puede ser una falla momentánea de conexión o que el servicio esté iniciando. Tus conversaciones y tu cuenta siguen guardadas. Si acababas de hacer un cambio, al intentar de nuevo verás si se aplicó.",
     secondary: { href: "/chat", label: "Ir al chat" },
   },
 } as const;

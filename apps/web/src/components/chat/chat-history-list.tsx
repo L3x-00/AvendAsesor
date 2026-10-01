@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  unstable_isUnrecognizedActionError,
+  useRouter,
+} from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { flushSync } from "react-dom";
 import {
   deleteConversationAction,
-  initialHistoryActionState,
-  type HistoryActionState,
+  type DeleteConversationResult,
 } from "@/app/(teacher)/history/actions";
-import { useToast } from "@/components/ui/toast";
+import { SuccessDialog } from "@/components/ui/success-dialog";
 import type { ChatConversation } from "@/lib/chat-api/types";
+import styles from "./chat-history-list.module.css";
 
 /**
  * Las fechas se muestran SIEMPRE en hora de Perú. Sin zona fija, el servidor
@@ -86,37 +90,64 @@ export function readableConversationTitle(title: string | null): string {
     : capitalized;
 }
 
+const HISTORY_PATH = "/history";
+/** El `h1` de la página (con `tabIndex=-1`): destino del foco de respaldo. */
+const HISTORY_TITLE_ID = "history-title";
+/** Tras retirar una tarjeta, la lista ignora clics un instante (doble clic). */
+const SETTLE_MS = 450;
+
+export const REMOVED_TITLE = "Historial quitado correctamente";
+export const REMOVAL_UNCONFIRMED_MESSAGE =
+  "No pudimos confirmar si la consulta se quitó. Revisamos tu historial: si desaparece de la lista, ya se quitó; si sigue aquí, inténtalo de nuevo.";
+export const REMOVAL_OUTDATED_MESSAGE =
+  "La plataforma se actualizó mientras tenías esta página abierta. Recarga la página para poder quitar esta consulta.";
+
+function historyItemId(conversationId: string): string {
+  return `history-item-${conversationId}`;
+}
+
+interface RemovalError {
+  message: string;
+  /** La página quedó desactualizada frente a una nueva versión publicada. */
+  needsReload: boolean;
+}
+
+interface RemovalNotice {
+  alreadyRemoved: boolean;
+  conversationId: string;
+  /** Se quitó desde «Ver consultas anteriores» y se vuelve al inicio. */
+  returnedToStart: boolean;
+  title: string;
+}
+
+interface LoadedPage {
+  conversations: ChatConversation[];
+  nextCursor: string | null;
+  updates: Array<{ conversationId: string; resolvedAt: string }>;
+}
+
+function removalDescription(notice: RemovalNotice): string {
+  const what = notice.alreadyRemoved
+    ? `«${notice.title}» ya se había quitado antes, quizá desde otro dispositivo.`
+    : `«${notice.title}» ya no aparece en tu historial.`;
+  return notice.returnedToStart
+    ? `${what} Te mostramos el inicio de tu historial.`
+    : what;
+}
+
 /**
- * Quitar una consulta pide confirmación en el mismo lugar (sin ventanas
- * emergentes): el primer toque muestra la pregunta y las dos salidas.
+ * Quitar una consulta pide confirmación en el mismo lugar: el primer toque
+ * muestra la pregunta y las dos salidas. La retirada la hace la lista.
  */
-function ConversationDeleteForm({
-  conversationId,
+function ConversationRemoveControl({
+  error,
+  onConfirm,
   title,
 }: {
-  conversationId: string;
+  error: RemovalError | undefined;
+  onConfirm: () => void;
   title: string;
 }) {
-  const { showToast } = useToast();
-  const router = useRouter();
-  const [state, formAction, isPending] = useActionState(
-    async (previous: HistoryActionState, formData: FormData) => {
-      const result = await deleteConversationAction(previous, formData);
-      // Al quitarla, esta tarjeta desaparece junto con la respuesta: el aviso
-      // se lanza aquí (el toast vive en la raíz), no desde un efecto de un
-      // componente que ya no estará montado.
-      if (result.status === "success" && result.message) {
-        showToast(result.message);
-        // Volvemos a la primera página antes de refrescar. Si la conversación
-        // se quitó desde una página con cursor, ese cursor puede dejar de ser
-        // válido después del borrado y no debe llevar al límite de error.
-        router.replace("/history", { scroll: false });
-        router.refresh();
-      }
-      return result;
-    },
-    initialHistoryActionState,
-  );
   const [confirming, setConfirming] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
@@ -132,23 +163,24 @@ function ConversationDeleteForm({
   }
 
   return (
-    <form action={formAction} className="avend-history-delete-form">
-      <input name="conversationId" type="hidden" value={conversationId} />
+    <div className="avend-history-delete-form">
       {confirming ? (
-        <div className="avend-history-confirm" role="group" aria-label={`Quitar «${title}»`}>
+        <div
+          aria-label={`Quitar «${title}»`}
+          className="avend-history-confirm"
+          role="group"
+        >
           <p>¿Quitar esta consulta de tu historial? Ya no podrás retomarla.</p>
           <div className="avend-history-confirm-actions">
             <button
-              aria-busy={isPending}
               className="avend-button avend-button--danger"
-              disabled={isPending}
-              type="submit"
+              onClick={onConfirm}
+              type="button"
             >
-              {isPending ? "Quitando…" : "Sí, quitar"}
+              Sí, quitar
             </button>
             <button
               className="avend-button avend-button--secondary"
-              disabled={isPending}
               onClick={cancel}
               ref={cancelRef}
               type="button"
@@ -170,26 +202,38 @@ function ConversationDeleteForm({
           Quitar del historial
         </button>
       )}
-      {state.status === "error" && state.message ? (
-        <p
-          aria-live="polite"
-          className="avend-feedback avend-feedback--error"
-          role="alert"
-        >
-          {state.message}
+      {error ? (
+        <p className="avend-feedback avend-feedback--error" role="alert">
+          {error.message}
         </p>
       ) : null}
-    </form>
+      {error?.needsReload ? (
+        <button
+          className="avend-button avend-button--secondary"
+          onClick={() => window.location.reload()}
+          type="button"
+        >
+          Recargar la página
+        </button>
+      ) : null}
+    </div>
   );
 }
 
 export function ChatHistoryList({
   conversations,
+  loadFailed = false,
   nextCursor,
   now: nowMs,
   updates = [],
 }: {
   conversations: ChatConversation[];
+  /**
+   * El servidor no pudo pedir la lista (falla momentánea del API). En lugar
+   * del límite de error se muestra un aviso en línea con «Actualizar» y, si
+   * ya se había mostrado una lista, se conserva.
+   */
+  loadFailed?: boolean;
   nextCursor: string | null;
   /**
    * Conversaciones con una consulta que quedó sin sustento y que la
@@ -202,50 +246,49 @@ export function ChatHistoryList({
    */
   now?: number;
 }) {
-  if (conversations.length === 0) {
-    return (
-      <div className="avend-history-empty">
-        <span aria-hidden="true" className="avend-history-empty-icon">
-          <svg fill="none" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="8.5" />
-            <path d="M12 7v5l3.5 2" />
-          </svg>
-        </span>
-        <h2>Aún no tienes consultas guardadas</h2>
-        <p>
-          Cuando realices una consulta, aparecerá aquí para que puedas
-          retomarla cuando quieras.
-        </p>
-        <Link className="avend-button avend-button--primary" href="/chat">
-          Hacer una consulta
-        </Link>
-      </div>
-    );
+  const router = useRouter();
+  const [isRefreshing, startRefresh] = useTransition();
+  const activeRef = useRef(false);
+  const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [errors, setErrors] = useState<Readonly<Record<string, RemovalError>>>(
+    {},
+  );
+  const [notice, setNotice] = useState<RemovalNotice | null>(null);
+  const [settling, setSettling] = useState(false);
+  // Última lista que llegó bien. Si una recarga posterior falla (por ejemplo
+  // la que sigue a un borrado), se sigue mostrando en vez de vaciar la vista.
+  const [lastLoaded, setLastLoaded] = useState<LoadedPage | null>(
+    loadFailed ? null : { conversations, nextCursor, updates },
+  );
+  if (!loadFailed && lastLoaded?.conversations !== conversations) {
+    setLastLoaded({ conversations, nextCursor, updates });
   }
 
-  const now = nowMs === undefined ? new Date() : new Date(nowMs);
-  // Solo mientras la persona no haya vuelto a preguntar en esa conversación.
-  const updated = new Set(
-    updates
-      .filter((update) => {
-        const conversation = conversations.find(
-          (item) => item.id === update.conversationId,
-        );
-        return (
-          conversation !== undefined &&
-          Date.parse(conversation.updatedAt) <= Date.parse(update.resolvedAt)
-        );
-      })
-      .map((update) => update.conversationId),
+  useEffect(() => {
+    // Falso al salir de Historial (desmontada u oculta por el router): una
+    // respuesta tardía no debe navegar ni abrir avisos en otra sección.
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+    };
+  }, []);
+
+  const closeNotice = useCallback(() => setNotice(null), []);
+
+  const shown: LoadedPage | null = loadFailed
+    ? lastLoaded
+    : { conversations, nextCursor, updates };
+  const visible = (shown?.conversations ?? []).filter(
+    (conversation) => !removedIds.has(conversation.id),
   );
-  const updatedVisible = conversations.filter((conversation) =>
-    updated.has(conversation.id),
-  ).length;
+
   // El historial se agrupa por tema: módulo raíz (con su submódulo a la vista)
   // y «Consultas generales» para los chats libres. Como llegan ordenadas por
   // actividad, los grupos aparecen con el tema usado más recientemente primero.
   const groups = new Map<string, { items: ChatConversation[]; label: string }>();
-  for (const conversation of conversations) {
+  for (const conversation of visible) {
     const key =
       conversation.selectedModuleParentId ??
       conversation.selectedModuleId ??
@@ -261,81 +304,289 @@ export function ChatHistoryList({
       groups.set(key, { items: [conversation], label });
     }
   }
+  // Orden en pantalla (por grupos), para saber qué tarjeta queda al lado.
+  const displayOrder = [...groups.values()].flatMap((group) =>
+    group.items.map((item) => item.id),
+  );
+
+  function isActiveOnHistory(): boolean {
+    return activeRef.current && window.location.pathname === HISTORY_PATH;
+  }
+
+  async function removeConversation(conversationId: string, title: string) {
+    const position = displayOrder.indexOf(conversationId);
+    const neighbour =
+      displayOrder[position + 1] ?? displayOrder[position - 1] ?? null;
+
+    // Retirada inmediata: la tarjeta sale de la lista antes de que responda
+    // el servidor. El foco pasa a la tarjeta vecina (o al título) para que
+    // quien usa teclado o lector de pantalla no pierda su lugar.
+    flushSync(() => {
+      setRemovedIds((current) => new Set(current).add(conversationId));
+      setErrors((current) => {
+        if (!(conversationId in current)) return current;
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+      setSettling(true);
+    });
+    globalThis.setTimeout(() => setSettling(false), SETTLE_MS);
+    document
+      .getElementById(
+        neighbour ? historyItemId(neighbour) : HISTORY_TITLE_ID,
+      )
+      ?.focus();
+
+    let result: DeleteConversationResult;
+    try {
+      result = await deleteConversationAction(conversationId);
+    } catch (error) {
+      // El transporte de la Server Action puede fallar en el cliente (red
+      // cortada, respuesta que no es del servidor, acción de una versión
+      // anterior). Sin esta captura el error subía al límite de la sección.
+      result = {
+        message: unstable_isUnrecognizedActionError(error)
+          ? REMOVAL_OUTDATED_MESSAGE
+          : REMOVAL_UNCONFIRMED_MESSAGE,
+        status: "error",
+      };
+    }
+
+    if (result.status === "error") {
+      const needsReload = result.message === REMOVAL_OUTDATED_MESSAGE;
+      // La conversación vuelve a la lista, con el motivo a la vista.
+      flushSync(() => {
+        setRemovedIds((current) => {
+          const next = new Set(current);
+          next.delete(conversationId);
+          return next;
+        });
+        setErrors((current) => ({
+          ...current,
+          [conversationId]: { message: result.message, needsReload },
+        }));
+      });
+      if (!isActiveOnHistory()) return;
+      document.getElementById(historyItemId(conversationId))?.focus();
+      // Reconciliar con lo que de verdad quedó en el servidor: si el borrado
+      // sí llegó a aplicarse, la recarga la retira.
+      if (!needsReload) router.refresh();
+      return;
+    }
+
+    if (!isActiveOnHistory()) return;
+    const onEarlierPage = new URLSearchParams(window.location.search).has(
+      "cursor",
+    );
+    setNotice({
+      alreadyRemoved: result.status === "already-removed",
+      conversationId,
+      returnedToStart: onEarlierPage,
+      title,
+    });
+    // Una sola operación del router. Desde «Ver consultas anteriores» se
+    // vuelve a /history limpio por decisión del PO (no porque el cursor quede
+    // inválido: la paginación tolera que su fila ya no exista); la navegación
+    // ya trae datos frescos. En /history basta con recargar la ruta.
+    if (onEarlierPage) {
+      router.replace(HISTORY_PATH);
+    } else {
+      router.refresh();
+    }
+  }
+
+  const dialog = notice ? (
+    <SuccessDialog
+      description={removalDescription(notice)}
+      key={notice.conversationId}
+      onClose={closeNotice}
+      returnFocusId={notice.returnedToStart ? HISTORY_TITLE_ID : undefined}
+      title={REMOVED_TITLE}
+    />
+  ) : null;
+
+  const refreshButton = (
+    <button
+      aria-busy={isRefreshing}
+      className="avend-button avend-button--secondary"
+      disabled={isRefreshing}
+      onClick={() => startRefresh(() => router.refresh())}
+      type="button"
+    >
+      {isRefreshing ? "Actualizando…" : "Actualizar"}
+    </button>
+  );
+
+  if (!shown) {
+    return (
+      <>
+        <div className={styles.loadNotice} role="status">
+          <p>
+            No pudimos mostrar tu historial en este momento. Tus consultas
+            siguen guardadas; vuelve a intentarlo en unos segundos.
+          </p>
+          {refreshButton}
+        </div>
+        {dialog}
+      </>
+    );
+  }
+
+  if (visible.length === 0 && !shown.nextCursor) {
+    return (
+      <>
+        {loadFailed ? null : (
+          <div className="avend-history-empty">
+            <span aria-hidden="true" className="avend-history-empty-icon">
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M12 7v5l3.5 2" />
+              </svg>
+            </span>
+            <h2>Aún no tienes consultas guardadas</h2>
+            <p>
+              Cuando realices una consulta, aparecerá aquí para que puedas
+              retomarla cuando quieras.
+            </p>
+            <Link className="avend-button avend-button--primary" href="/chat">
+              Hacer una consulta
+            </Link>
+          </div>
+        )}
+        {loadFailed ? (
+          <div className={styles.loadNotice} role="status">
+            <p>
+              No pudimos actualizar la lista en este momento. Vuelve a
+              intentarlo en unos segundos.
+            </p>
+            {refreshButton}
+          </div>
+        ) : null}
+        {dialog}
+      </>
+    );
+  }
+
+  const now = nowMs === undefined ? new Date() : new Date(nowMs);
+  // Solo mientras la persona no haya vuelto a preguntar en esa conversación.
+  const updated = new Set(
+    shown.updates
+      .filter((update) => {
+        const conversation = visible.find(
+          (item) => item.id === update.conversationId,
+        );
+        return (
+          conversation !== undefined &&
+          Date.parse(conversation.updatedAt) <= Date.parse(update.resolvedAt)
+        );
+      })
+      .map((update) => update.conversationId),
+  );
+  const updatedVisible = visible.filter((conversation) =>
+    updated.has(conversation.id),
+  ).length;
 
   return (
-    <div className="avend-history-results">
-      {updatedVisible > 0 ? (
-        <p className="avend-history-update-notice" role="status">
-          <strong>Hay novedades.</strong>{" "}
-          {updatedVisible === 1
-            ? "Se incorporó documentación sobre una consulta que antes no tenía respuesta. Ábrela y vuelve a preguntar."
-            : `Se incorporó documentación sobre ${updatedVisible} consultas que antes no tenían respuesta. Ábrelas y vuelve a preguntar.`}
-        </p>
-      ) : null}
-      {[...groups].map(([key, group]) => (
-        <section aria-labelledby={`history-topic-${key}`} key={key}>
-          <h2
-            className="avend-history-group-title"
-            id={`history-topic-${key}`}
-          >
-            {group.label}
-          </h2>
-          <ul className="avend-history-list">
-            {group.items.map((conversation) => {
-              const title = readableConversationTitle(
-                conversation.lastQuestion ?? conversation.title,
-              );
-              return (
-                <li className="avend-history-item" key={conversation.id}>
-                  <div>
-                    <h3 title={conversation.title ?? undefined}>{title}</h3>
-                    {conversation.selectedModuleParentId &&
-                    conversation.selectedModuleName ? (
+    <>
+      <div
+        className={
+          settling
+            ? `avend-history-results ${styles.settling}`
+            : "avend-history-results"
+        }
+      >
+        {loadFailed ? (
+          <div className={styles.loadNotice} role="status">
+            <p>
+              No pudimos actualizar la lista en este momento. Lo que ves puede
+              no estar al día.
+            </p>
+            {refreshButton}
+          </div>
+        ) : null}
+        {updatedVisible > 0 ? (
+          <p className="avend-history-update-notice" role="status">
+            <strong>Hay novedades.</strong>{" "}
+            {updatedVisible === 1
+              ? "Se incorporó documentación sobre una consulta que antes no tenía respuesta. Ábrela y vuelve a preguntar."
+              : `Se incorporó documentación sobre ${updatedVisible} consultas que antes no tenían respuesta. Ábrelas y vuelve a preguntar.`}
+          </p>
+        ) : null}
+        {[...groups].map(([key, group]) => (
+          <section aria-labelledby={`history-topic-${key}`} key={key}>
+            <h2
+              className="avend-history-group-title"
+              id={`history-topic-${key}`}
+            >
+              {group.label}
+            </h2>
+            <ul className="avend-history-list">
+              {group.items.map((conversation) => {
+                const title = readableConversationTitle(
+                  conversation.lastQuestion ?? conversation.title,
+                );
+                return (
+                  <li
+                    className="avend-history-item"
+                    id={historyItemId(conversation.id)}
+                    key={conversation.id}
+                    tabIndex={-1}
+                  >
+                    <div>
+                      <h3 title={conversation.title ?? undefined}>{title}</h3>
+                      {conversation.selectedModuleParentId &&
+                      conversation.selectedModuleName ? (
+                        <p>
+                          <span className="avend-visually-hidden">
+                            Submódulo:{" "}
+                          </span>
+                          Submódulo: {conversation.selectedModuleName}
+                        </p>
+                      ) : null}
+                      {updated.has(conversation.id) ? (
+                        <span className="avend-history-update-badge">
+                          Nueva información disponible
+                        </span>
+                      ) : null}
                       <p>
                         <span className="avend-visually-hidden">
-                          Submódulo:{" "}
+                          Última actualización:{" "}
                         </span>
-                        Submódulo: {conversation.selectedModuleName}
+                        {formatHistoryDate(conversation.updatedAt, now)}
                       </p>
-                    ) : null}
-                    {updated.has(conversation.id) ? (
-                      <span className="avend-history-update-badge">
-                        Nueva información disponible
-                      </span>
-                    ) : null}
-                    <p>
-                      <span className="avend-visually-hidden">
-                        Última actualización:{" "}
-                      </span>
-                      {formatHistoryDate(conversation.updatedAt, now)}
-                    </p>
-                  </div>
-                  <div className="avend-history-actions">
-                    <Link
-                      className="avend-button avend-button--primary"
-                      href={`/chat/${conversation.id}`}
-                    >
-                      Retomar consulta
-                    </Link>
-                    <ConversationDeleteForm
-                      conversationId={conversation.id}
-                      title={title}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
-      {nextCursor ? (
-        <Link
-          className="avend-button avend-button--secondary"
-          href={`/history?${new URLSearchParams({ cursor: nextCursor }).toString()}`}
-        >
-          Ver consultas anteriores
-        </Link>
-      ) : null}
-    </div>
+                    </div>
+                    <div className="avend-history-actions">
+                      <Link
+                        className="avend-button avend-button--primary"
+                        href={`/chat/${conversation.id}`}
+                      >
+                        Retomar consulta
+                      </Link>
+                      <ConversationRemoveControl
+                        error={errors[conversation.id]}
+                        onConfirm={() =>
+                          void removeConversation(conversation.id, title)
+                        }
+                        title={title}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+        {shown.nextCursor ? (
+          <Link
+            className="avend-button avend-button--secondary"
+            href={`/history?${new URLSearchParams({ cursor: shown.nextCursor }).toString()}`}
+          >
+            Ver consultas anteriores
+          </Link>
+        ) : null}
+      </div>
+      {dialog}
+    </>
   );
 }

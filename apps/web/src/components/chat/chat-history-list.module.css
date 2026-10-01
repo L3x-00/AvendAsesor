@@ -1,0 +1,28 @@
+/* Aviso en línea cuando la lista no se pudo pedir al servicio. Sereno (azul
+   suave, no rojo): la información sigue guardada y basta con actualizar. */
+.loadNotice {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border: 1px solid rgb(22 119 255 / 22%);
+  border-radius: 0.875rem;
+  color: var(--avend-navy);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1rem;
+  gap: 0.75rem;
+  justify-content: space-between;
+  line-height: 1.55;
+  margin: 1.5rem 0 1rem;
+  padding: 0.875rem 1rem;
+}
+
+.loadNotice p {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+/* Justo después de retirar una tarjeta, la siguiente sube a ocupar su lugar.
+   Un doble clic en «Sí, quitar» no debe caer sobre la tarjeta que llegó. */
+.settling {
+  pointer-events: none;
+}
