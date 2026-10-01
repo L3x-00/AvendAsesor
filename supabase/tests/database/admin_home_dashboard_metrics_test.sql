@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(39);
 
 -- This suite validates its own deterministic module fixture. Product taxonomy
 -- seeds are covered separately by admin_module_permissions_test.sql.
@@ -602,7 +602,7 @@ select is(
     )
   ),
   7,
-  'The dashboard returns exactly seven canonical module summaries'
+  'The dashboard returns one summary per non-deleted root module'
 );
 select is(
   (
@@ -613,8 +613,8 @@ select is(
     cross join lateral jsonb_array_elements(dashboard.module_summaries)
       with ordinality as summary(value, ordinality)
   ),
-  'Contratación y desplazamientos | Evaluación docente | Situaciones administrativas | Auxiliar de educación | Ley y reglamento | Cargos y plazas | Remuneraciones',
-  'Legacy production identifiers are exposed with exact canonical labels and order'
+  'Contrato y desplazamiento | Evaluacion docente | Situaciones administrativas | Auxiliar de educacion | Ley y reglamento | Cargos y plazas | Remuneraciones',
+  'Module cards use the real module names in the Modules section order'
 );
 select is(
   (
@@ -626,7 +626,18 @@ select is(
       with ordinality as summary(value, ordinality)
   ),
   '00000000-0000-0000-0000-00000000e101 | 00000000-0000-0000-0000-00000000e102 | 00000000-0000-0000-0000-00000000e103 | 00000000-0000-0000-0000-00000000e104 | 00000000-0000-0000-0000-00000000e105 | 00000000-0000-0000-0000-00000000e106 | 00000000-0000-0000-0000-00000000e107',
-  'Every canonical card resolves to a distinct real root module id'
+  'Every card resolves to a distinct real root module id'
+);
+select ok(
+  (
+    select
+      (module_summaries -> 0 ->> 'isActive')::boolean
+      and not (module_summaries -> 6 ->> 'isActive')::boolean
+    from public.get_admin_home_dashboard_metrics(
+      '00000000-0000-0000-0000-00000000d001'
+    )
+  ),
+  'Module cards expose whether the root module is active'
 );
 select is(
   (
@@ -683,18 +694,66 @@ select is(
   'The aggregate RPC returns exactly one dashboard row'
 );
 
-delete from public.modules
-where id = '00000000-0000-0000-0000-00000000e107';
+-- Caso real de producción (2026-10-01): un módulo se recreó con otro nombre y
+-- otro código, y otro se eliminó. Inicio debe seguir cargando.
+update public.modules
+set name = 'Situaciones Administrativas', code = 'SITUACIONES_ADMINISTRATIVAS'
+where id = '00000000-0000-0000-0000-00000000e103';
 
-select throws_ok(
+update public.modules
+set
+  is_active = false,
+  deactivated_at = now(),
+  deactivated_by = '00000000-0000-0000-0000-00000000d001',
+  deactivation_reason = 'Módulo inactivo antes de su eliminación.',
+  is_deleted = true,
+  deleted_at = now(),
+  deleted_by = '00000000-0000-0000-0000-00000000d001',
+  deletion_reason = 'Módulo eliminado para validar el resumen de Inicio.'
+where id = '00000000-0000-0000-0000-00000000e106';
+
+insert into public.modules (id, name, code, sort_order)
+values (
+  '00000000-0000-0000-0000-00000000e108',
+  'Módulo nuevo del panel', 'MODULO_NUEVO_PANEL', 80
+);
+
+select lives_ok(
   $$
     select * from public.get_admin_home_dashboard_metrics(
       '00000000-0000-0000-0000-00000000d001'
     )
   $$,
-  'P0002',
-  'The seven canonical AVEND ASESOR modules are not configured',
-  'The dashboard fails closed instead of returning a non-navigable module card'
+  'Renaming, deleting or creating root modules never breaks the dashboard'
+);
+select is(
+  (
+    select string_agg(summary.value ->> 'name', ' | ' order by summary.ordinality)
+    from public.get_admin_home_dashboard_metrics(
+      '00000000-0000-0000-0000-00000000d001'
+    ) as dashboard
+    cross join lateral jsonb_array_elements(dashboard.module_summaries)
+      with ordinality as summary(value, ordinality)
+  ),
+  'Contrato y desplazamiento | Evaluacion docente | Situaciones Administrativas | Auxiliar de educacion | Ley y reglamento | Remuneraciones | Módulo nuevo del panel',
+  'Cards follow renamed and new modules and omit deleted ones'
+);
+
+-- document_modules.module_id es ON DELETE RESTRICT: se sueltan los vínculos
+-- del fixture antes de vaciar los módulos (todo se revierte al final).
+delete from public.document_modules;
+delete from public.modules where parent_module_id is not null;
+delete from public.modules;
+
+select is(
+  (
+    select module_summaries
+    from public.get_admin_home_dashboard_metrics(
+      '00000000-0000-0000-0000-00000000d001'
+    )
+  ),
+  '[]'::jsonb,
+  'Without root modules the dashboard returns an empty list instead of failing'
 );
 
 select * from finish();

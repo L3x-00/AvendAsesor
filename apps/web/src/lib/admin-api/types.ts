@@ -291,20 +291,16 @@ export const operationalMetricsSchema = z.object({
 
 export type OperationalMetrics = z.infer<typeof operationalMetricsSchema>;
 
-export const adminHomeModuleNames = [
-  "Contratación y desplazamientos",
-  "Evaluación docente",
-  "Situaciones administrativas",
-  "Auxiliar de educación",
-  "Ley y reglamento",
-  "Cargos y plazas",
-  "Remuneraciones",
-] as const;
-
+/**
+ * Tarjeta de un módulo raíz en Inicio. Los módulos salen de la base de datos
+ * (el superadministrador los crea y renombra), así que no se fija su nombre ni
+ * su número: una lista fija dejaba Inicio sin cargar al renombrar uno.
+ */
 export const adminHomeModuleSummarySchema = z.object({
   documentCount: z.number().int().nonnegative(),
   id: z.uuid(),
-  name: z.enum(adminHomeModuleNames),
+  isActive: z.boolean(),
+  name: z.string().trim().min(1),
   submoduleCount: z.number().int().nonnegative(),
 });
 
@@ -317,22 +313,12 @@ export const adminHomeDashboardSchema = z
     expiredUsers: z.number().int().nonnegative(),
     expiringSoonUsers: z.number().int().nonnegative(),
     expiryWindowDays: z.literal(7),
-    moduleSummaries: z.array(adminHomeModuleSummarySchema).length(7),
+    moduleSummaries: z.array(adminHomeModuleSummarySchema).max(200),
     totalDocuments: z.number().int().nonnegative(),
     totalQueries: z.number().int().nonnegative(),
     totalUsers: z.number().int().nonnegative(),
   })
   .superRefine((dashboard, context) => {
-    dashboard.moduleSummaries.forEach((module, index) => {
-      if (module.name !== adminHomeModuleNames[index]) {
-        context.addIssue({
-          code: "custom",
-          message: "Administrative home modules are not in canonical order.",
-          path: ["moduleSummaries", index, "name"],
-        });
-      }
-    });
-
     if (dashboard.activeUsers > dashboard.totalUsers) {
       context.addIssue({
         code: "custom",
