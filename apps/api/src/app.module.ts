@@ -1,6 +1,5 @@
 import { ConfigModule } from '@nestjs/config';
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdministrationModule } from './administration/administration.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,6 +17,7 @@ import { ChatModule } from './chat/chat.module';
 import { OperationsModule } from './operations/operations.module';
 import { UserAdministrationModule } from './user-administration/user-administration.module';
 import { ConsultationCasesModule } from './consultation-cases/consultation-cases.module';
+import { ThrottlingModule } from './throttling/throttling.module';
 
 @Module({
   imports: [
@@ -26,12 +26,7 @@ import { ConsultationCasesModule } from './consultation-cases/consultation-cases
       isGlobal: true,
       validate: validateEnvironment,
     }),
-    ThrottlerModule.forRoot([
-      {
-        limit: 30,
-        ttl: 60_000,
-      },
-    ]),
+    ThrottlingModule,
     ScheduleModule.forRoot(),
     AdministrationModule,
     AuthModule,

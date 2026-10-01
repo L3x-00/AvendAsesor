@@ -30,6 +30,25 @@ describe('document DTO transformations', () => {
     });
   });
 
+  it('accepts the contextual upload metadata (annex number and content section)', async () => {
+    const dto = plainToInstance(CreateDocumentUploadDto, {
+      documentType: 'OTRO',
+      documentTypeOther: 'Decreto de Urgencia',
+      issuanceYear: '2026',
+      issuingEntity: 'MINEDU',
+      metadata: '{"annexNumber":3,"contentSection":"NORMATIVA"}',
+      moduleIds: '["30dd8519-3b3a-4e64-a7dc-2b82578eab95"]',
+      specificDependency: 'DIGEDD',
+      title: 'DU 012-2026',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.metadata).toEqual({
+      annexNumber: 3,
+      contentSection: 'NORMATIVA',
+    });
+  });
+
   it('rejects malformed JSON and normalizes optional update text', async () => {
     const malformed = plainToInstance(CreateDocumentUploadDto, {
       documentType: 'LEY',

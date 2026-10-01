@@ -37,50 +37,27 @@ describe("DocumentUploadPanel", () => {
     ).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("abre y preselecciona el tipo al llegar por un enlace de sección", () => {
-    const view = render(<DocumentUploadPanel {...baseProps} />);
+  it("plegado saca sus campos del orden de tabulación", () => {
+    render(<DocumentUploadPanel {...baseProps} />);
 
-    expect(
-      screen.getByRole("button", { name: /agregar documento/i }),
-    ).toHaveAttribute("aria-expanded", "false");
-
-    view.rerender(
-      <DocumentUploadPanel
-        {...baseProps}
-        defaultDocumentType="ANEXO"
-        defaultOpen
-        key="document-upload-open-ANEXO"
-      />,
+    const toggle = screen.getByRole("button", { name: /agregar documento/i });
+    const content = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
     );
+    expect(content).toHaveAttribute("inert");
 
-    expect(
-      screen.getByRole("button", { name: /subir en anexos/i }),
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Anexo")).toBeVisible();
-    expect(document.querySelector('input[name="documentType"]')).toHaveValue(
-      "ANEXO",
-    );
-    expect(screen.queryByLabelText(/tipo documental/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Datos opcionales")).toBeVisible();
+    fireEvent.click(toggle);
+    expect(content).not.toHaveAttribute("inert");
   });
 
-  it("limita normativa a tipos que permanecen en esa sección", () => {
-    render(
-      <DocumentUploadPanel
-        {...baseProps}
-        defaultDocumentType="NORMATIVA"
-        defaultOpen
-      />,
-    );
+  it("es el formulario completo: tipo libre, situación, palabras clave y límites", () => {
+    render(<DocumentUploadPanel {...baseProps} defaultOpen />);
 
-    const type = screen.getByLabelText(/tipo documental/i);
-    expect(type).toHaveValue("");
-    expect(screen.getByRole("option", { name: "Ley" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Resolución Ministerial" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Anexo" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Cronograma" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/tipo documental/i)).toHaveValue("");
+    expect(screen.getByRole("option", { name: "Anexo" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Situación")).toBeInTheDocument();
+    expect(screen.getByLabelText("Palabras clave (opcional)")).toBeInTheDocument();
+    expect(screen.getByText(/hasta 300 páginas/)).toBeVisible();
   });
 
   it("expands the form when the toggle is clicked", () => {

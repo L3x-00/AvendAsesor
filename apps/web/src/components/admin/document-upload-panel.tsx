@@ -5,27 +5,10 @@ import type { DocumentSuggestions } from "@/lib/admin-api/types";
 import { DocumentMetadataFields } from "./document-metadata-fields";
 import { FieldError } from "@/components/ui/form-field";
 import { DocumentPdfUploadForm } from "./document-pdf-upload-form";
-import {
-  DOCUMENT_TYPE_OPTIONS,
-  NORMATIVE_DOCUMENT_TYPE_VALUES,
-  documentTypeLabel,
-} from "@/lib/admin-api/document-taxonomy";
-
-const CONTEXT_LABELS: Record<string, string> = {
-  ANEXO: "Anexos",
-  CRONOGRAMA: "Cronograma",
-  NORMATIVA: "Normativa",
-  PREGUNTAS_FRECUENTES: "Preguntas frecuentes",
-};
-const NORMATIVE_DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPE_OPTIONS.filter((option) =>
-  NORMATIVE_DOCUMENT_TYPE_VALUES.has(option.value),
-);
 
 interface DocumentUploadPanelProps {
   /** Abre el formulario al llegar desde «Cargar documento en este tema». */
   defaultOpen?: boolean;
-  /** Tipo documental preseleccionado (p. ej., al subir un anexo). */
-  defaultDocumentType?: string;
   apiBaseUrl: string;
   moduleId: string;
   moduleName: string;
@@ -33,9 +16,12 @@ interface DocumentUploadPanelProps {
   suggestions: DocumentSuggestions;
 }
 
+/**
+ * Formulario completo «+ Agregar documento» (todos los datos, incluida la
+ * situación). La carga resumida por sección vive en «Contenido del tema».
+ */
 export function DocumentUploadPanel({
   apiBaseUrl,
-  defaultDocumentType,
   moduleId,
   defaultOpen = false,
   moduleName,
@@ -45,12 +31,6 @@ export function DocumentUploadPanel({
   const prefix = `module-document-${moduleId}`;
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const contentId = `${prefix}-content`;
-  const isContextual = Boolean(defaultDocumentType);
-  const isNormative = defaultDocumentType === "NORMATIVA";
-  const contextualLabel = defaultDocumentType
-    ? (CONTEXT_LABELS[defaultDocumentType] ??
-      documentTypeLabel(defaultDocumentType))
-    : undefined;
 
   return (
     <section
@@ -65,11 +45,7 @@ export function DocumentUploadPanel({
           onClick={() => setIsOpen((prev) => !prev)}
           type="button"
         >
-          <span>
-            {contextualLabel
-              ? `+ Subir en ${contextualLabel}`
-              : "+ Agregar documento"}
-          </span>
+          <span>+ Agregar documento</span>
           <svg
             aria-hidden="true"
             className={`ml-2 h-4 w-4 transition-transform duration-300 ease-in-out ${
@@ -86,19 +62,20 @@ export function DocumentUploadPanel({
           </svg>
         </button>
         <p className="mt-3 text-base leading-7 text-avend-text-muted">
-          El documento quedará asociado a <strong>{moduleName}</strong>
-          {contextualLabel ? (
-            <> dentro de <strong>{contextualLabel}</strong></>
-          ) : null}
-          . Admite PDF, Word (.docx o .doc) y Markdown (.md) de hasta 50 MiB.
+          El documento quedará asociado a <strong>{moduleName}</strong>. Admite
+          PDF, Word (.docx o .doc) y Markdown (.md) de hasta 50 MiB; los PDF,
+          hasta 300 páginas. El formulario conserva tus datos ante un error.
         </p>
       </div>
 
+      {/* Plegado, el contenido no se ve y tampoco debe recibir el foco:
+          `inert` lo saca del orden de tabulación y de los lectores. */}
       <div
         className={`grid transition-all duration-300 ease-in-out ${
           isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         }`}
         id={contentId}
+        inert={!isOpen}
       >
         <div className="overflow-hidden">
           <div className="px-5 pb-5">
@@ -138,34 +115,12 @@ export function DocumentUploadPanel({
                 />
               </label>
               <DocumentMetadataFields
-                key={defaultDocumentType ?? "without-preselected-document-type"}
-                compact={isContextual}
-                documentTypeOptions={
-                  isNormative ? NORMATIVE_DOCUMENT_TYPE_OPTIONS : undefined
-                }
-                includeSituation={!isContextual}
-                initial={
-                  defaultDocumentType && !isNormative
-                    ? { documentType: defaultDocumentType }
-                    : undefined
-                }
-                lockDocumentType={isContextual && !isNormative}
+                includeSituation
                 replacementCandidates={replacementCandidates}
                 required
                 suggestions={suggestions}
               />
-              {isContextual ? (
-                <details className="lg:col-span-2 rounded-md border border-avend-border p-3">
-                  <summary className="cursor-pointer text-base font-semibold text-avend-accent-strong">
-                    Datos opcionales
-                  </summary>
-                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                    <OptionalDocumentFields prefix={prefix} />
-                  </div>
-                </details>
-              ) : (
-                <OptionalDocumentFields prefix={prefix} />
-              )}
+              <OptionalDocumentFields prefix={prefix} />
             </DocumentPdfUploadForm>
           </div>
         </div>
@@ -214,11 +169,11 @@ function OptionalDocumentFields({ prefix }: { prefix: string }) {
           placeholder='{"keywords":["licencia","salud"]}'
         />
         <span
-          className="mt-1 block text-sm text-avend-text-muted"
+          className="mt-1 block text-base text-avend-text-muted"
           id={`${prefix}-metadata-help`}
         >
-          Usa la clave keywords con una lista de palabras. Debe ser un objeto
-          JSON válido.
+          Opción avanzada. Para palabras clave sencillas usa el campo «Palabras
+          clave». Aquí debe ir un objeto JSON válido.
         </span>
       </label>
     </>

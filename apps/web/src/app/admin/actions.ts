@@ -266,31 +266,81 @@ async function withApi(
   }
 }
 
+/**
+ * El API responde 409 tanto por un código repetido como por una regla de
+ * jerarquía de la base de datos (padre inactivo con un submódulo activo, o
+ * padre con documentos propios). El mensaje genérico «Actualiza la página» no
+ * ayuda en ninguno de los dos casos: se explica qué revisar.
+ */
+function createModuleConflict(isSubmodule: boolean): AdminActionState {
+  return isSubmodule
+    ? {
+        message:
+          "No se pudo crear el submódulo. Revisa que el código no lo use otro módulo, que el módulo padre esté activo (o crea el submódulo como inactivo) y que el módulo padre no tenga documentos propios.",
+        status: "error",
+      }
+    : {
+        fieldErrors: {
+          code: "Ya existe un módulo con este código. Usa otro código.",
+        },
+        status: "error",
+      };
+}
+
 export async function createModuleAction(
   _previousState: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  return withApi(
+  // Desde la raíz, un submódulo se muestra en la página de su padre.
+  const navigateToParent = optionalText(formData, "afterCreate") === "parent";
+  const result = await withApi(
     async (client) => {
       const payload = modulePayload(formData);
       payload.code = requiredText(formData, "code", "El código");
       payload.name = requiredText(formData, "name", "El nombre");
-      const created = await client.createModule(payload);
-      updateTag("chat-modules");
-      revalidatePath("/admin/modules", "layout");
-      revalidatePath("/admin/documents", "layout");
+      try {
+        const created = await client.createModule(payload);
+        updateTag("chat-modules");
+        revalidatePath("/admin/modules", "layout");
+        revalidatePath("/admin/documents", "layout");
 
-      return {
-        entityId: created.id,
-        message: "Módulo creado.",
-        ...(created.parentModuleId
-          ? { parentEntityId: created.parentModuleId }
-          : {}),
-        status: "success",
-      };
+        return {
+          entityId: created.id,
+          message: created.parentModuleId
+            ? "Submódulo creado."
+            : "Módulo creado.",
+          ...(created.parentModuleId
+            ? { parentEntityId: created.parentModuleId }
+            : {}),
+          status: "success",
+        };
+      } catch (error) {
+        if (error instanceof AdminApiError && error.status === 409) {
+          return createModuleConflict(Boolean(payload.parentModuleId));
+        }
+        throw error;
+      }
     },
     { requireModulesAccess: true },
   );
+
+  // Un submódulo creado desde la raíz se muestra en la página de su padre. Se
+  // redirige desde la propia acción para que el servidor renderice SOLO el
+  // destino: navegar después desde el cliente volvía a pintar la raíz
+  // revalidada y además la del padre, y gastaba el doble de lecturas del API.
+  // El redirect va fuera de `withApi` porque `redirect()` lanza NEXT_REDIRECT.
+  if (
+    navigateToParent &&
+    result.status === "success" &&
+    result.entityId &&
+    result.parentEntityId
+  ) {
+    redirect(
+      `/admin/modules/${encodeURIComponent(result.parentEntityId)}?creado=${encodeURIComponent(result.entityId)}`,
+    );
+  }
+
+  return result;
 }
 
 export async function updateModuleAction(

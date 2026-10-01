@@ -10,6 +10,7 @@ import {
   UGEL_DEPENDENCIES,
   documentYears,
   documentTypeLabel,
+  issuingEntityLabel,
   type ArchiveReasonCode,
 } from "@/lib/admin-api/document-taxonomy";
 import type {
@@ -40,9 +41,17 @@ interface DocumentMetadataFieldsProps {
   includeSituation?: boolean;
   initial?: DocumentMetadataInitialValues;
   lockDocumentType?: boolean;
+  /** Etiqueta y ejemplo del campo que aparece al elegir «Otro». */
+  otherTypeLabel?: string;
+  otherTypePlaceholder?: string;
   replacementCandidates?: ReplacementCandidate[];
   required?: boolean;
   suggestions?: DocumentSuggestions;
+  /**
+   * Muestra año, entidad y dependencia ya completos como un resumen con
+   * «Cambiar», en vez de tres campos que el usuario tendría que revisar.
+   */
+  summarizePrefilled?: boolean;
 }
 
 const emptySuggestions: DocumentSuggestions = {
@@ -74,18 +83,46 @@ function initialYearMode(initial?: DocumentMetadataInitialValues): string {
   return year < 2014 ? "before-2014" : String(year);
 }
 
+/** Nombre de la «Otra institución» que llega prellenado, si lo hay. */
+function prefilledEntityOther(initial?: DocumentMetadataInitialValues): string {
+  if (initialEntity(initial) !== "OTRA_INSTITUCION") return "";
+  const explicit = initial?.issuingEntityOther?.trim();
+  if (explicit) return explicit;
+  return initial?.issuingEntity === "OTRA_INSTITUCION"
+    ? ""
+    : (initial?.issuingEntity?.trim() ?? "");
+}
+
+/** Año, entidad y dependencia llegan completos y se pueden resumir. */
+function hasCompletePrefill(initial?: DocumentMetadataInitialValues): boolean {
+  if (!initial?.issuanceYear || !initialEntity(initial)) return false;
+  if (!initial.specificDependency?.trim()) return false;
+  return (
+    initialEntity(initial) !== "OTRA_INSTITUCION" ||
+    prefilledEntityOther(initial).length > 0
+  );
+}
+
 export function DocumentMetadataFields({
   compact = false,
   documentTypeOptions = DOCUMENT_TYPE_OPTIONS,
   includeSituation = false,
   initial,
   lockDocumentType = false,
+  otherTypeLabel = "Especificar tipo",
+  otherTypePlaceholder,
   replacementCandidates = [],
   required = false,
   suggestions = emptySuggestions,
+  summarizePrefilled = false,
 }: DocumentMetadataFieldsProps) {
   const prefix = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const yearSelectRef = useRef<HTMLSelectElement>(null);
+  const focusYearOnEdit = useRef(false);
+  const canSummarize = summarizePrefilled && hasCompletePrefill(initial);
+  const [editingPrefilled, setEditingPrefilled] = useState(false);
+  const showPrefilledSummary = canSummarize && !editingPrefilled;
   const [documentType, setDocumentType] = useState(() => initialType(initial));
   const [entity, setEntity] = useState(() => initialEntity(initial));
   const [specificDependency, setSpecificDependency] = useState(
@@ -127,6 +164,7 @@ export function DocumentMetadataFields({
     setYearMode(initialYearMode(initial));
     setSituation(initial?.situation ?? "current");
     setArchiveReason("NOT_APPLICABLE");
+    setEditingPrefilled(false);
   }
 
   useEffect(() => {
@@ -135,6 +173,13 @@ export function DocumentMetadataFields({
     form.addEventListener("reset", resetControlledFields);
     return () => form.removeEventListener("reset", resetControlledFields);
   });
+
+  // Al pulsar «Cambiar», el foco pasa al primer dato que se puede corregir.
+  useEffect(() => {
+    if (!editingPrefilled || !focusYearOnEdit.current) return;
+    focusYearOnEdit.current = false;
+    yearSelectRef.current?.focus();
+  }, [editingPrefilled]);
 
   // El asterisco de obligatorio se pinta desde CSS (`::after`), así no forma
   // parte del textContent de la etiqueta ni rompe getByLabelText.
@@ -150,7 +195,7 @@ export function DocumentMetadataFields({
     >
       {lockDocumentType && documentType ? (
         <div className="block rounded-md border border-avend-border bg-avend-surface-muted px-3 py-2">
-          <span className="block text-sm font-semibold text-avend-text-muted">
+          <span className="block text-base font-semibold text-avend-text-muted">
             Tipo documental
           </span>
           <strong className="text-base text-avend-text">
@@ -184,7 +229,7 @@ export function DocumentMetadataFields({
       {documentType === "OTRO" ? (
         <label className="block" htmlFor={`${prefix}-type-other`}>
           <span className="text-base font-semibold avend-field-label--required">
-            Especificar tipo
+            {otherTypeLabel}
           </span>
           <input
             className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
@@ -198,12 +243,31 @@ export function DocumentMetadataFields({
             maxLength={120}
             minLength={2}
             name="documentTypeOther"
+            placeholder={otherTypePlaceholder}
             required
           />
         </label>
       ) : null}
 
-      <div className="block lg:col-span-2">
+      {showPrefilledSummary ? (
+        <PrefilledSummary
+          dependency={specificDependency}
+          entity={entity}
+          entityOther={prefilledEntityOther(initial)}
+          onChange={() => {
+            focusYearOnEdit.current = true;
+            setEditingPrefilled(true);
+          }}
+          prefix={prefix}
+          year={
+            yearMode === "before-2014"
+              ? String(initial?.issuanceYear ?? "")
+              : yearMode
+          }
+        />
+      ) : (
+        <>
+      <div className={compact ? "block" : "block lg:col-span-2"}>
         <div
           className={`grid gap-4 transition-all duration-300 ease-in-out ${
             yearMode === "before-2014" ? "grid-cols-2" : "grid-cols-1"
@@ -216,6 +280,7 @@ export function DocumentMetadataFields({
               id={`${prefix}-year-mode`}
               name="issuanceYearMode"
               onChange={(event) => setYearMode(event.target.value)}
+              ref={yearSelectRef}
               required={required}
               value={yearMode}
             >
@@ -355,6 +420,8 @@ export function DocumentMetadataFields({
           ) : null}
         </div>
       ) : null}
+        </>
+      )}
 
       {compact ? null : (
         <div className="block">
@@ -463,6 +530,64 @@ export function DocumentMetadataFields({
           ) : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Año, entidad emisora y dependencia tomados del tema, en una sola línea. Los
+ * valores viajan en campos ocultos con los mismos nombres que los controles
+ * completos, así el envío no cambia; «Cambiar» abre esos controles.
+ */
+function PrefilledSummary({
+  dependency,
+  entity,
+  entityOther,
+  onChange,
+  prefix,
+  year,
+}: {
+  dependency: string;
+  entity: string;
+  entityOther: string;
+  onChange: () => void;
+  prefix: string;
+  year: string;
+}) {
+  const entityText =
+    entity === "OTRA_INSTITUCION" ? entityOther : issuingEntityLabel(entity);
+  const summaryId = `${prefix}-prefilled-summary`;
+  return (
+    <div
+      className="block rounded-md border border-avend-border bg-avend-surface-muted px-3 py-2 lg:col-span-2"
+      data-testid="prefilled-summary"
+    >
+      <span className="block text-base font-semibold text-avend-text-muted">
+        Año, entidad emisora y dependencia
+      </span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className="text-base text-avend-text" id={summaryId}>
+          {year} · {entityText} · {dependency}
+        </strong>
+        <button
+          aria-describedby={summaryId}
+          className="avend-button avend-button--secondary"
+          onClick={onChange}
+          type="button"
+        >
+          Cambiar
+        </button>
+      </div>
+      <span className="mt-1 block text-base text-avend-text-muted">
+        Se tomaron de los documentos de este tema. Cámbialos si este documento
+        es de otro año o de otra entidad.
+      </span>
+      <input name="issuanceYear" type="hidden" value={year} />
+      <input name="issuingEntity" type="hidden" value={entity} />
+      {entity === "OTRA_INSTITUCION" ? (
+        <input name="issuingEntityOther" type="hidden" value={entityOther} />
+      ) : null}
+      <input name="specificDependency" type="hidden" value={dependency} />
     </div>
   );
 }

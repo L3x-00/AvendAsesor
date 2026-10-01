@@ -1,0 +1,112 @@
+/* Ventana emergente de confirmación: centrada, con un check verde que se dibuja
+   una vez. Se usa cuando la persona debe VER que la acción terminó bien (el
+   aviso pequeño de la esquina pasaba desapercibido). */
+
+.overlay {
+  background: rgb(13 27 61 / 55%);
+  display: grid;
+  inset: 0;
+  padding: 1rem;
+  place-items: center;
+  position: fixed;
+  z-index: 70;
+}
+
+.dialog {
+  animation: success-dialog-pop 240ms ease-out;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 28%);
+  max-width: 26rem;
+  padding: 2rem 1.75rem 1.75rem;
+  text-align: center;
+  width: 100%;
+}
+
+.check {
+  display: block;
+  height: 5.5rem;
+  margin: 0 auto 0.75rem;
+  width: 5.5rem;
+}
+
+.check circle,
+.check path {
+  fill: none;
+  stroke: var(--avend-success);
+}
+
+.check circle {
+  animation: success-dialog-draw 520ms ease-out forwards;
+  stroke-dasharray: 164;
+  stroke-dashoffset: 164;
+  stroke-width: 3;
+}
+
+.check path {
+  animation: success-dialog-draw 300ms 360ms ease-out forwards;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.title {
+  color: var(--avend-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.description {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.accept {
+  margin-top: 1.25rem;
+  min-height: 2.75rem;
+  min-width: 9rem;
+}
+
+@keyframes success-dialog-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes success-dialog-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (max-width: 32rem) {
+  .accept {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog,
+  .check circle,
+  .check path {
+    animation: none;
+  }
+
+  .check circle,
+  .check path {
+    stroke-dashoffset: 0;
+  }
+}

@@ -114,6 +114,103 @@ describe("admin server actions", () => {
       vi.mocked(updateTag).mock.invocationCallOrder[0],
     );
     expect(state.status).toBe("success");
+    expect(state.message).toBe("Módulo creado.");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("returns the created submodule and its parent so the view can highlight it", async () => {
+    client.createModule.mockResolvedValue({ id: "s2", parentModuleId: "m1" });
+    const formData = new FormData();
+    formData.set("code", "SUB_NUEVO");
+    formData.set("name", "Submódulo nuevo");
+    formData.set("parentModuleId", "m1");
+
+    const state = await createModuleAction(initialState, formData);
+
+    expect(client.createModule).toHaveBeenCalledWith(
+      expect.objectContaining({ parentModuleId: "m1" }),
+    );
+    expect(state).toEqual({
+      entityId: "s2",
+      message: "Submódulo creado.",
+      parentEntityId: "m1",
+      status: "success",
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("redirects to the parent (single render) when a submodule is created from the root", async () => {
+    client.createModule.mockResolvedValue({ id: "s2", parentModuleId: "m1" });
+    const formData = new FormData();
+    formData.set("afterCreate", "parent");
+    formData.set("code", "SUB_NUEVO");
+    formData.set("name", "Submódulo nuevo");
+    formData.set("parentModuleId", "m1");
+
+    await expect(createModuleAction(initialState, formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/admin/modules/m1?creado=s2",
+    );
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/modules", "layout");
+    expect(vi.mocked(revalidatePath).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(redirect).mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does not redirect from the root when a main module is created", async () => {
+    client.createModule.mockResolvedValue({ id: "m9", parentModuleId: null });
+    const formData = new FormData();
+    formData.set("afterCreate", "parent");
+    formData.set("code", "NUEVO");
+    formData.set("name", "Módulo nuevo");
+    formData.set("parentModuleId", "__root__");
+
+    const state = await createModuleAction(initialState, formData);
+
+    expect(state).toEqual({ entityId: "m9", message: "Módulo creado.", status: "success" });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect when the submodule could not be created", async () => {
+    client.createModule.mockRejectedValue(new AdminApiError(503));
+    const formData = new FormData();
+    formData.set("afterCreate", "parent");
+    formData.set("code", "SUB_NUEVO");
+    formData.set("name", "Submódulo nuevo");
+    formData.set("parentModuleId", "m1");
+
+    const state = await createModuleAction(initialState, formData);
+
+    expect(state.status).toBe("error");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("explains a rejected submodule instead of asking to refresh the page", async () => {
+    client.createModule.mockRejectedValue(new AdminApiError(409));
+    const formData = new FormData();
+    formData.set("code", "SUB_NUEVO");
+    formData.set("name", "Submódulo nuevo");
+    formData.set("parentModuleId", "m1");
+
+    const state = await createModuleAction(initialState, formData);
+
+    expect(state.status).toBe("error");
+    expect(state.message).toMatch(/módulo padre esté activo/);
+    expect(state.message).toMatch(/documentos propios/);
+    expect(state.message).not.toMatch(/Actualiza la página/);
+  });
+
+  it("attributes a duplicated code of a main module to the code field", async () => {
+    client.createModule.mockRejectedValue(new AdminApiError(409));
+    const formData = new FormData();
+    formData.set("code", "EVAL");
+    formData.set("name", "Evaluación");
+
+    const state = await createModuleAction(initialState, formData);
+
+    expect(state).toEqual({
+      fieldErrors: { code: "Ya existe un módulo con este código. Usa otro código." },
+      status: "error",
+    });
   });
 
   it("requires a reason before deactivating a module", async () => {

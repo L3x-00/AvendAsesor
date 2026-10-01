@@ -1,42 +1,38 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Component, type ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DeleteConversationResult } from "@/app/(teacher)/history/actions";
 import {
   ChatHistoryList,
   formatHistoryDate,
   historyGroupOf,
   readableConversationTitle,
+  REMOVAL_OUTDATED_MESSAGE,
+  REMOVAL_UNCONFIRMED_MESSAGE,
+  REMOVED_TITLE,
 } from "./chat-history-list";
 
-const showToast = vi.fn();
-const { refresh, replace } = vi.hoisted(() => ({
+const { refresh, replace, outdatedErrors } = vi.hoisted(() => ({
+  outdatedErrors: new WeakSet<object>(),
   refresh: vi.fn(),
   replace: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
+  unstable_isUnrecognizedActionError: (error: unknown) =>
+    typeof error === "object" && error !== null && outdatedErrors.has(error),
   useRouter: () => ({ refresh, replace }),
 }));
 
-vi.mock("@/components/ui/toast", () => ({
-  useToast: () => ({ showToast }),
-}));
-
 const { deleteConversationAction } = vi.hoisted(() => ({
-  deleteConversationAction: vi.fn(
-    async (): Promise<{
-      message: string;
-      status: "error" | "success";
-    }> => ({
-      message: "Historial quitado correctamente.",
-      status: "success",
-    }),
-  ),
+  deleteConversationAction: vi.fn<
+    (conversationId: unknown) => Promise<DeleteConversationResult>
+  >(async () => ({ status: "removed" })),
 }));
 
 vi.mock("@/app/(teacher)/history/actions", () => ({
   deleteConversationAction,
-  initialHistoryActionState: { message: null, status: "idle" },
 }));
 
 const conversation = {
@@ -46,10 +42,57 @@ const conversation = {
   title: "Licencias por salud",
   updatedAt: "2026-08-24T12:10:00.000Z",
 };
+const second = {
+  ...conversation,
+  id: "9d9d9d9d-9999-4999-8999-999999999999",
+  title: "Permiso por capacitación",
+};
+
+/** Límite de error mínimo: si algo lo alcanza, la prueba lo ve. */
+class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <p>No pudimos cargar esta sección</p>
+    ) : (
+      this.props.children
+    );
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, reject, resolve };
+}
+
+async function confirmRemoval(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string,
+) {
+  const card = screen.getByRole("heading", { name: title }).closest("li");
+  if (!card) throw new Error(`No se encontró la tarjeta «${title}».`);
+  await user.click(
+    within(card).getByRole("button", { name: "Quitar del historial" }),
+  );
+  await user.click(within(card).getByRole("button", { name: "Sí, quitar" }));
+}
 
 describe("ChatHistoryList", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, "", "/history");
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
   });
 
   it("communicates an explicit empty state instead of inventing history", () => {
@@ -98,43 +141,193 @@ describe("ChatHistoryList", () => {
     );
   });
 
-  it("confirma el borrado, avisa y vuelve a la primera página del historial", async () => {
+  it("pide confirmación antes de quitar y el foco va a la salida segura", async () => {
     const user = userEvent.setup();
-    render(
-      <ChatHistoryList
-        conversations={[conversation]}
-        nextCursor="eyJpZCI6Im5leHQifQ"
-      />,
-    );
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
 
     expect(
       screen.getByRole("link", { name: "Retomar consulta" }),
     ).toHaveAttribute("href", `/chat/${conversation.id}`);
-    expect(
-      screen.getByRole("link", { name: "Ver consultas anteriores" }),
-    ).toHaveAttribute("href", "/history?cursor=eyJpZCI6Im5leHQifQ");
     await user.click(
       screen.getByRole("button", { name: "Quitar del historial" }),
     );
-    // Primero pregunta: nada se quita con un solo toque.
+    // Nada se quita con un solo toque.
     expect(deleteConversationAction).not.toHaveBeenCalled();
-    // El foco va a la salida segura, no a la acción destructiva.
     expect(screen.getByRole("button", { name: "Cancelar" })).toHaveFocus();
-    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
+  });
 
-    expect(deleteConversationAction).toHaveBeenCalled();
-    await vi.waitFor(() =>
-      expect(showToast).toHaveBeenCalledWith(
-        "Historial quitado correctamente.",
-      ),
+  it("quita la consulta al instante, muestra la ventana emergente y queda en /history", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<DeleteConversationResult>();
+    deleteConversationAction.mockReturnValueOnce(pending.promise);
+    render(
+      <Boundary>
+        <h1 id="history-title" tabIndex={-1}>
+          Historial de consultas
+        </h1>
+        <ChatHistoryList
+          conversations={[conversation, second]}
+          nextCursor={null}
+        />
+      </Boundary>,
     );
-    expect(replace).toHaveBeenCalledWith("/history", { scroll: false });
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    // Retirada inmediata: sin esperar al servidor.
+    expect(deleteConversationAction).toHaveBeenCalledWith(conversation.id);
+    expect(
+      screen.queryByRole("heading", { name: "Licencias por salud" }),
+    ).toBeNull();
+    // El foco no se pierde: pasa a la consulta vecina.
+    expect(
+      screen.getByRole("heading", { name: "Permiso por capacitación" })
+        .closest("li"),
+    ).toHaveFocus();
+
+    pending.resolve({ status: "removed" });
+
+    const dialog = await screen.findByRole("dialog", { name: REMOVED_TITLE });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAccessibleDescription(
+      "«Licencias por salud» ya no aparece en tu historial.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Aceptar" })).toHaveFocus();
+    // Una sola operación del router y nunca la pantalla de error.
     expect(refresh).toHaveBeenCalledOnce();
+    expect(replace).not.toHaveBeenCalled();
+    expect(window.location.pathname + window.location.search).toBe("/history");
+    expect(screen.queryByText("No pudimos cargar esta sección")).toBeNull();
+
+    await user.click(within(dialog).getByRole("button", { name: "Aceptar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Licencias por salud" }),
+    ).toBeNull();
+  });
+
+  it("desde «Ver consultas anteriores» vuelve a /history limpio, sin cursor", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/history?cursor=eyJpZCI6Im5leHQifQ");
+    render(
+      <ChatHistoryList
+        conversations={[conversation]}
+        nextCursor="eyJpZCI6Im90cm8ifQ"
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Ver consultas anteriores" }),
+    ).toHaveAttribute("href", "/history?cursor=eyJpZCI6Im90cm8ifQ");
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    const dialog = await screen.findByRole("dialog", { name: REMOVED_TITLE });
+    expect(dialog).toHaveAccessibleDescription(/Te mostramos el inicio de tu historial/);
+    expect(replace).toHaveBeenCalledExactlyOnceWith("/history");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("si ya se había quitado en otro dispositivo, lo trata como hecho y no pide recargar", async () => {
+    const user = userEvent.setup();
+    deleteConversationAction.mockResolvedValueOnce({ status: "already-removed" });
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    const dialog = await screen.findByRole("dialog", { name: REMOVED_TITLE });
+    expect(dialog).toHaveAccessibleDescription(/ya se había quitado antes/);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("si el borrado falla, la consulta vuelve con el motivo y se reconcilia con el servidor", async () => {
+    const user = userEvent.setup();
+    deleteConversationAction.mockResolvedValueOnce({
+      message: "No tienes permiso para quitar esta consulta.",
+      status: "error",
+    });
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No tienes permiso para quitar esta consulta.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Licencias por salud" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("un fallo de red al llamar la acción no llega al límite de error", async () => {
+    const user = userEvent.setup();
+    deleteConversationAction.mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    );
+    render(
+      <Boundary>
+        <ChatHistoryList conversations={[conversation]} nextCursor={null} />
+      </Boundary>,
+    );
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REMOVAL_UNCONFIRMED_MESSAGE,
+    );
+    expect(screen.queryByText("No pudimos cargar esta sección")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Licencias por salud" }),
+    ).toBeVisible();
+    // Si el borrado sí llegó a aplicarse, la recarga lo retira.
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("si la plataforma se actualizó, pide recargar la página en lugar de reintentar a ciegas", async () => {
+    const user = userEvent.setup();
+    const outdated = new Error("Server Action not found");
+    outdatedErrors.add(outdated);
+    deleteConversationAction.mockRejectedValueOnce(outdated);
+    render(
+      <Boundary>
+        <ChatHistoryList conversations={[conversation]} nextCursor={null} />
+      </Boundary>,
+    );
+
+    await confirmRemoval(user, "Licencias por salud");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      REMOVAL_OUTDATED_MESSAGE,
+    );
+    expect(
+      screen.getByRole("button", { name: "Recargar la página" }),
+    ).toBeVisible();
+    expect(screen.queryByText("No pudimos cargar esta sección")).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("si la persona ya salió de Historial, la respuesta no la devuelve ni abre avisos", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<DeleteConversationResult>();
+    deleteConversationAction.mockReturnValueOnce(pending.promise);
+    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+
+    await confirmRemoval(user, "Licencias por salud");
+    window.history.pushState(null, "", "/chat");
+    pending.resolve({ status: "removed" });
+    await pending.promise;
+    await Promise.resolve();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("cancelar la confirmación no quita nada y devuelve el foco", async () => {
     const user = userEvent.setup();
-    deleteConversationAction.mockClear();
     render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
 
     await user.click(screen.getByRole("button", { name: "Quitar del historial" }));
@@ -148,23 +341,41 @@ describe("ChatHistoryList", () => {
     );
   });
 
-  it("mantiene el error visible sin navegar ni anunciar un éxito", async () => {
+  it("si la lista no se pudo pedir, muestra un aviso en línea con «Actualizar»", async () => {
     const user = userEvent.setup();
-    deleteConversationAction.mockResolvedValueOnce({
-      message: "No fue posible actualizar tu historial. Inténtalo nuevamente.",
-      status: "error",
-    });
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
-
-    await user.click(screen.getByRole("button", { name: "Quitar del historial" }));
-    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "No fue posible actualizar tu historial. Inténtalo nuevamente.",
+    render(
+      <ChatHistoryList conversations={[]} loadFailed nextCursor={null} />,
     );
-    expect(showToast).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No pudimos mostrar tu historial en este momento",
+    );
+    // No es el estado vacío: la persona no debe creer que perdió su historial.
+    expect(screen.queryByText(/Aún no tienes consultas guardadas/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("si una recarga posterior falla, conserva la lista que ya mostraba", () => {
+    const { rerender } = render(
+      <ChatHistoryList
+        conversations={[conversation, second]}
+        nextCursor={null}
+      />,
+    );
+
+    rerender(
+      <ChatHistoryList conversations={[]} loadFailed nextCursor={null} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Licencias por salud" }),
+    ).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Lo que ves puede no estar al día",
+    );
+    expect(screen.getByRole("button", { name: "Actualizar" })).toBeVisible();
   });
 
   it("agrupa por módulo y submódulo, y deja los chats libres en Consultas generales", () => {

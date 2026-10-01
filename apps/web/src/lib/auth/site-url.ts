@@ -58,6 +58,52 @@ export function getAllowedAuthCallbackPath(candidate: string | null): string {
   return allowedAuthCallbackPaths.has(safePath) ? safePath : '/auth/code-error';
 }
 
+/**
+ * Destino de los enlaces del cambio de correo. Solo ese flujo vuelve a Mi
+ * perfil, así que el callback lo reconoce por este `next`.
+ */
+export const EMAIL_CHANGE_RETURN_PATH = '/profile';
+
+/**
+ * Resultado del cambio de correo que Mi perfil explica con un aviso:
+ * - `actualizado`: el enlace final se canjeó en este navegador.
+ * - `pendiente`: se aceptó el primero de los dos enlaces (doble confirmación).
+ * - `revisar`: el canje falló (otro dispositivo, sesión cerrada); el cambio
+ *   pudo completarse igual, porque Auth lo aplica al verificar el enlace.
+ * - `error`: Auth rechazó el enlace (vencido, ya usado o no válido).
+ */
+export const emailChangeOutcomes = [
+  'actualizado',
+  'pendiente',
+  'revisar',
+  'error',
+] as const;
+
+export type EmailChangeOutcome = (typeof emailChangeOutcomes)[number];
+
+export function getEmailChangeResultPath(outcome: EmailChangeOutcome): string {
+  return `${EMAIL_CHANGE_RETURN_PATH}?correo=${outcome}`;
+}
+
+/**
+ * Página pública con el resultado del cambio de correo. Mi perfil exige
+ * sesión, y el inicio de sesión no conoce el aviso: quien abre el enlace en
+ * otro dispositivo o con la sesión cerrada (justo el caso `revisar`) llega
+ * aquí para que el resultado no se pierda.
+ */
+export const EMAIL_CHANGE_PUBLIC_RESULT_PATH = '/auth/callback/correo';
+
+export function getEmailChangePublicResultPath(outcome: EmailChangeOutcome): string {
+  return `${EMAIL_CHANGE_PUBLIC_RESULT_PATH}?resultado=${outcome}`;
+}
+
+export function parseEmailChangeOutcome(value: unknown): EmailChangeOutcome | null {
+  return typeof value === 'string' &&
+    (emailChangeOutcomes as readonly string[]).includes(value)
+    ? (value as EmailChangeOutcome)
+    : null;
+}
+
 export function hasTrustedRequestOrigin(origin: string | null): boolean {
   return origin === getApplicationUrl().origin;
 }

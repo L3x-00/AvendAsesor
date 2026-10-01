@@ -1,22 +1,29 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AccountBadge } from "@/components/teacher/account-badge";
 import { ProfileForms } from "@/components/teacher/profile-forms";
 import { formatUserRole } from "@/lib/admin-api/labels";
+import { resolveSignInPath } from "@/lib/auth/session-redirect";
+import { parseEmailChangeOutcome } from "@/lib/auth/site-url";
 import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { EmailChangeNotice } from "./email-change-notice";
+import { ProfileLoadError } from "./profile-load-error";
+import { ProfileSignOutButton } from "./profile-sign-out-button";
 
+/** Mismos rótulos que la barra lateral, para no nombrar dos veces lo mismo. */
 const SHORTCUTS = [
   {
     description: "Empieza una consulta desde cero.",
     href: "/chat",
     icon: "chat",
-    label: "Nueva consulta",
+    label: "Nuevo chat",
   },
   {
     description: "Retoma una conversación anterior.",
     href: "/history",
     icon: "history",
-    label: "Mi historial",
+    label: "Historial",
   },
   {
     description: "Repasa cómo sacarle provecho al asistente.",
@@ -42,35 +49,79 @@ function ProfileShortcutIcon({ icon }: { icon: (typeof SHORTCUTS)[number]["icon"
   );
 }
 
-export default async function ProfilePage() {
+interface ContactData {
+  city: string | null;
+  department: string | null;
+  phone: string | null;
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+/**
+ * Lee los datos de contacto del propio perfil. Devuelve null si la lectura
+ * falla: la página no debe pintar el formulario vacío como si no existieran.
+ */
+async function readContactData(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+): Promise<ContactData | null> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("phone, department, city")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error || !data || typeof data !== "object") return null;
+    const row = data as Record<string, unknown>;
+    return {
+      city: optionalString(row.city),
+      department: optionalString(row.department),
+      phone: optionalString(row.phone),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   // El marco lo aporta el layout del grupo. Esta ruta revalida su acceso y,
   // de paso, obtiene el nombre y el rol que muestra sin pedir nada más al API.
   const { fullName, role } = await resolveAuthorizedChatContext();
+  const params = (await searchParams) ?? {};
+  const emailOutcome = parseEmailChangeOutcome(params.correo);
+
   const supabase = await createServerSupabaseClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
-  const { data: profile } = user
-    ? await supabase
-        .from("profiles")
-        .select("phone, department, city")
-        .eq("id", user.id)
-        .maybeSingle()
-    : { data: null };
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const user = userData?.user;
+  if (userError || !user) redirect(await resolveSignInPath());
+
+  const contact = await readContactData(supabase, user.id);
+  const email = user.email ?? "";
+  const pendingEmail =
+    typeof user.new_email === "string" && user.new_email && user.new_email !== email
+      ? user.new_email
+      : null;
 
   return (
     <section aria-labelledby="profile-title" className="avend-content-page">
       <header className="avend-content-header avend-profile-header">
-        <div>
+        <div className="avend-profile-header-copy">
           <p className="avend-eyebrow">Cuenta protegida</p>
           <h1 id="profile-title">Mi perfil</h1>
-          <p>Administra tus datos y accede rápidamente a tus herramientas.</p>
+          <p className="avend-profile-lead">
+            Administra tus datos y accede rápidamente a tus herramientas.
+          </p>
         </div>
-        <form action="/auth/sign-out" method="post">
-          <button className="avend-button avend-button--secondary avend-profile-sign-out" type="submit">
-            Cerrar sesión
-          </button>
-        </form>
+        <ProfileSignOutButton />
       </header>
+
+      <EmailChangeNotice email={email} outcome={emailOutcome} />
 
       <div className="avend-profile-card">
         <AccountBadge fullName={fullName} role={role} size="large" />
@@ -89,13 +140,19 @@ export default async function ProfilePage() {
         </dl>
       </div>
 
-      <ProfileForms
-        city={typeof profile?.city === "string" ? profile.city : null}
-        department={typeof profile?.department === "string" ? profile.department : null}
-        email={user?.email ?? ""}
-        fullName={fullName}
-        phone={typeof profile?.phone === "string" ? profile.phone : null}
-      />
+      {contact ? (
+        <ProfileForms
+          city={contact.city}
+          department={contact.department}
+          email={email}
+          fullName={fullName}
+          pendingEmail={pendingEmail}
+          phone={contact.phone}
+          role={role}
+        />
+      ) : (
+        <ProfileLoadError />
+      )}
 
       <h2 className="avend-profile-subtitle">Accesos rápidos</h2>
       <ul className="avend-profile-shortcuts">
@@ -105,7 +162,7 @@ export default async function ProfilePage() {
               <ProfileShortcutIcon icon={shortcut.icon} />
               <span className="avend-profile-shortcut-copy">
                 <strong>{shortcut.label}</strong>
-                <span>{shortcut.description}</span>
+                <span className="avend-profile-shortcut-description">{shortcut.description}</span>
               </span>
               <span aria-hidden="true" className="avend-profile-shortcut-arrow">→</span>
             </Link>

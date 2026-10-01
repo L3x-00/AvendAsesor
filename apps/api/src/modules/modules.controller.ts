@@ -32,8 +32,17 @@ import type { ManagedModule } from './domain/module';
 import type { ManagedModuleSummary } from './modules.gateway';
 import { ModulesService } from './modules.service';
 
+/**
+ * Module screens (Módulos, Usuarios, document and case details) read summaries
+ * on every navigation, so reads get a per-user quota of 60 per minute.
+ */
+export const MODULES_READ_THROTTLE = {
+  default: { limit: 60, ttl: 60_000 },
+} as const;
+
 @Controller('admin/modules')
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard, FeaturesGuard)
+// Mutations keep the class quota; reads use MODULES_READ_THROTTLE.
 @Throttle({ default: { limit: 10, ttl: 60_000 } })
 @RequireRoles('admin', 'superadmin')
 @RequireFeatures('modules')
@@ -50,6 +59,7 @@ export class ModulesController {
   }
 
   @Get()
+  @Throttle(MODULES_READ_THROTTLE)
   list(
     @Query() dto: ListModulesQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -58,6 +68,7 @@ export class ModulesController {
   }
 
   @Get('summary')
+  @Throttle(MODULES_READ_THROTTLE)
   listSummaries(
     @Query() dto: ListModulesQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -66,6 +77,7 @@ export class ModulesController {
   }
 
   @Get(':id')
+  @Throttle(MODULES_READ_THROTTLE)
   findOne(
     @Param('id', new ParseUUIDPipe()) moduleId: string,
     @CurrentAuthorization() authorization: AuthorizationContext,

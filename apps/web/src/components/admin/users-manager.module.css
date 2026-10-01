@@ -423,11 +423,23 @@
   }
 }
 
-/* Alta de usuarios y administradores, sobre el listado. */
-.createBar {
+/*
+ * Barra de acciones de Usuarios, sobre el listado. Los botones solo abren o
+ * cierran: el formulario va en un panel DEBAJO de la barra, fuera de ella.
+ * Ningún botón crece (flex: none) y el estado abierto solo cambia fondo, color
+ * de borde y sombra interior, así que abrir un alta no mueve ni cambia de
+ * tamaño los demás botones.
+ */
+.actionArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.actionBar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
   border: 1px solid var(--avend-border);
@@ -435,52 +447,178 @@
   background: var(--avend-surface-muted);
 }
 
-.create {
-  flex: 0 1 auto;
-  min-width: max-content;
-  padding: 0 0.85rem;
-  border: 1px solid var(--avend-border);
-  border-radius: 0.5rem;
-  background: var(--avend-surface);
-}
-
-.create[open] {
-  flex: 1 1 32rem;
-  min-width: min(100%, 18rem);
-  padding-bottom: 1rem;
-}
-
-.createPrimary {
-  border-color: var(--avend-accent);
-}
-
-.createSecondary {
-  color: var(--avend-text-muted);
-}
-
-.createSummary {
-  cursor: pointer;
-  display: flex;
+.primaryAction,
+.secondaryAction {
+  display: inline-flex;
+  flex: none;
   min-height: 2.75rem;
   align-items: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font: inherit;
   font-size: 1rem;
-  font-weight: 600;
-  color: inherit;
+  line-height: 1.25;
+  text-align: left;
+  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 
-.createPrimary .createSummary {
+.primaryAction {
+  padding: 0 0.85rem;
+  border-color: var(--avend-accent);
+  background: var(--avend-surface);
   font-weight: 700;
   color: var(--avend-accent-strong);
 }
 
-.createSummary:hover {
+/*
+ * Importar y Exportar van juntos al final de la barra y saltan de línea juntos.
+ * Son discretos por tamaño y por no tener caja, no por un gris que se lea como
+ * «deshabilitado»: el texto azul y el icono dicen que son acciones.
+ */
+.secondaryActions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.secondaryAction {
+  padding: 0 0.6rem;
+  background: transparent;
+  font-weight: 600;
   color: var(--avend-accent-strong);
 }
 
-.createSummary:focus-visible {
+.primaryAction:hover,
+.secondaryAction:hover {
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-soft-blue);
+}
+
+/* Presionado: se ve también en pantallas táctiles, sin depender del hover. */
+.primaryAction:active,
+.secondaryAction:active {
+  background: var(--avend-soft-blue);
+  box-shadow: inset 0 2px 4px rgb(13 27 61 / 18%);
+}
+
+/* Abierto: fondo y línea inferior; el tamaño es el mismo que cerrado. */
+.primaryAction[aria-expanded="true"],
+.secondaryAction[aria-expanded="true"] {
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-soft-blue);
+  box-shadow: inset 0 -3px 0 var(--avend-accent-strong);
+}
+
+.primaryAction:focus-visible,
+.secondaryAction:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
+}
+
+.actionIcon,
+.actionChevron {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.actionChevron {
+  transition: transform 150ms ease-out;
+}
+
+[aria-expanded="true"] > .actionChevron {
+  transform: rotate(180deg);
+}
+
+.actionPanel {
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--avend-border);
+  border-top: 3px solid var(--avend-accent-strong);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+  scroll-margin-top: 5rem;
+}
+
+.actionPanel[hidden] {
+  display: none;
+}
+
+/* El panel recibe el foco al abrirse; el anillo solo se ve con teclado. */
+.actionPanel:focus {
+  outline: none;
+}
+
+.actionPanel:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.actionPanelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--avend-border);
+}
+
+.actionPanelTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.actionPanelClose {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--avend-control-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+  cursor: pointer;
+}
+
+.actionPanelClose:hover {
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-surface-muted);
+}
+
+.actionPanelClose:active {
+  background: var(--avend-surface-muted);
+  box-shadow: inset 0 2px 4px rgb(13 27 61 / 18%);
+}
+
+.actionPanelClose:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.actionPanelFooter {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--avend-border);
 }
 
 .importReport {
@@ -512,47 +650,49 @@
   color: var(--avend-danger);
 }
 
-.exportLink {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  padding: 0 1rem;
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  background: transparent;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--avend-text-muted);
-  text-decoration: none;
-}
-
-.exportLink:hover {
-  border-color: var(--avend-border);
-  background: var(--avend-surface);
-  color: var(--avend-accent-strong);
-}
-
-.exportLink:focus-visible {
-  outline: 3px solid var(--avend-focus);
-  outline-offset: 2px;
-}
-
+/*
+ * Celular: las dos altas a ancho completo (etiqueta a la izquierda, flecha a la
+ * derecha) y Importar/Exportar juntos en una fila de dos columnas, alineados
+ * igual. Las etiquetas pueden partirse para no salirse de su caja con zoom.
+ */
 @media (max-width: 40rem) {
-  .createBar {
+  .actionBar {
     align-items: stretch;
   }
 
-  .create,
-  .exportLink {
-    width: 100%;
-  }
-
-  .create {
+  .primaryAction {
+    flex: 1 1 100%;
+    justify-content: space-between;
     min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
-  .exportLink {
-    justify-content: center;
+  .secondaryActions {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-left: 0;
+  }
+
+  .secondaryAction {
+    justify-content: flex-start;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .actionPanel {
+    padding: 0.85rem 1rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction,
+  .secondaryAction,
+  .actionChevron {
+    transition: none;
   }
 }
 

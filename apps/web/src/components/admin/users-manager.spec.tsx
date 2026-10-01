@@ -1,5 +1,15 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAdministrativeUserAction } from "@/app/admin/actions";
+import type { AdminActionState } from "@/lib/admin-api/action-state";
 import type {
   AdministrativeUser,
   AdministrativeUserCounts,
@@ -221,8 +231,12 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const actions = screen.getByRole("group", { name: "Acciones de usuarios" });
-    expect(within(actions).getByText("+ Agregar usuario")).toBeVisible();
-    expect(within(actions).getByText("+ Agregar administrador")).toBeVisible();
+    expect(
+      within(actions).getByRole("button", { name: "Agregar usuario" }),
+    ).toHaveTextContent("+ Agregar usuario");
+    expect(
+      within(actions).getByRole("button", { name: "Agregar administrador" }),
+    ).toHaveTextContent("+ Agregar administrador");
 
     const emails = screen.getAllByLabelText("Correo electrónico");
     expect(emails[0]).toHaveAttribute("name", "email");
@@ -239,26 +253,6 @@ describe("UsersManager", () => {
     // El rol viaja oculto: distingue el alta de administrador de la de docente.
     expect(screen.getByDisplayValue("docente")).toHaveAttribute("name", "role");
     expect(screen.getByDisplayValue("admin")).toHaveAttribute("name", "role");
-  });
-
-  it("expands each creation option independently", () => {
-    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
-
-    const userPanel = screen.getByText("+ Agregar usuario").closest("details");
-    const adminPanel = screen
-      .getByText("+ Agregar administrador")
-      .closest("details");
-    const importPanel = screen.getByText("Importar Excel").closest("details");
-
-    expect(userPanel).not.toHaveAttribute("open");
-    expect(adminPanel).not.toHaveAttribute("open");
-    expect(importPanel).not.toHaveAttribute("open");
-
-    fireEvent.click(screen.getByText("+ Agregar usuario"));
-
-    expect(userPanel).toHaveAttribute("open");
-    expect(adminPanel).not.toHaveAttribute("open");
-    expect(importPanel).not.toHaveAttribute("open");
   });
 
   it("shows the contact details and who registered each user", () => {
@@ -288,7 +282,7 @@ describe("UsersManager", () => {
       />,
     );
 
-    expect(screen.getByText("Importar Excel")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Importar Excel" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Exportar Excel" })).toHaveAttribute(
       "href",
       "/api/admin/users/export?group=staff&search=Ana&accessState=expirado",
@@ -424,5 +418,278 @@ describe("UsersManager", () => {
     expect(within(pedro).getByText("Estado de la cuenta")).toBeVisible();
     expect(within(pedro).getAllByText("Pausada").length).toBeGreaterThan(0);
     expect(within(pedro).getByText("Creado por")).toBeVisible();
+  });
+});
+
+describe("UsersManager — barra de acciones", () => {
+  beforeEach(() => {
+    vi.mocked(createAdministrativeUserAction).mockReset();
+    vi.mocked(createAdministrativeUserAction).mockResolvedValue({
+      status: "idle",
+    });
+  });
+
+  function renderManager() {
+    render(
+      <UsersManager
+        apiBaseUrl={API}
+        counts={counts}
+        page={page}
+        query={query}
+        today={TODAY}
+      />,
+    );
+    const bar = screen.getByRole("group", { name: "Acciones de usuarios" });
+    return {
+      admin: within(bar).getByRole("button", { name: "Agregar administrador" }),
+      bar,
+      docente: within(bar).getByRole("button", { name: "Agregar usuario" }),
+      exportLink: within(bar).getByRole("link", { name: "Exportar Excel" }),
+      importButton: within(bar).getByRole("button", { name: "Importar Excel" }),
+    };
+  }
+
+  /** Paneles de formulario visibles ahora mismo (los ocultos no cuentan). */
+  function visiblePanels() {
+    return screen.queryAllByRole("region");
+  }
+
+  it("carga con cuatro acciones y ningún formulario desplegado", () => {
+    const { admin, bar, docente, exportLink, importButton } = renderManager();
+
+    for (const trigger of [docente, admin, importButton]) {
+      expect(trigger).toHaveAttribute("type", "button");
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      // aria-controls apunta a un panel que existe, aunque esté oculto.
+      const controlled = document.getElementById(
+        trigger.getAttribute("aria-controls") ?? "",
+      );
+      expect(controlled).not.toBeNull();
+      expect(controlled).not.toBeVisible();
+    }
+    expect(within(bar).getAllByRole("button")).toHaveLength(3);
+    expect(exportLink).toHaveAttribute("href", "/api/admin/users/export");
+    expect(visiblePanels()).toHaveLength(0);
+  });
+
+  it("mantiene un solo panel abierto a la vez", () => {
+    const { admin, docente, importButton } = renderManager();
+
+    fireEvent.click(docente);
+    expect(visiblePanels()).toHaveLength(1);
+    expect(
+      screen.getByRole("region", { name: "Agregar usuario docente" }),
+    ).toBeVisible();
+    expect(docente).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(admin);
+    expect(visiblePanels()).toHaveLength(1);
+    expect(
+      screen.getByRole("region", { name: "Agregar administrador" }),
+    ).toBeVisible();
+    expect(docente).toHaveAttribute("aria-expanded", "false");
+    expect(admin).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(importButton);
+    expect(visiblePanels()).toHaveLength(1);
+    expect(
+      screen.getByRole("region", { name: "Importar usuarios desde Excel" }),
+    ).toBeVisible();
+    expect(admin).toHaveAttribute("aria-expanded", "false");
+    expect(importButton).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("abrir un formulario no mueve ni cambia los botones de la barra", () => {
+    const { admin, bar, docente, importButton } = renderManager();
+    const controls = () => [...bar.querySelectorAll("button, a")];
+    const before = controls();
+    const classesBefore = before.map((control) => control.className);
+
+    for (const trigger of [docente, admin, importButton]) {
+      fireEvent.click(trigger);
+      const panel = screen.getByRole("region");
+
+      // Mismos botones, mismo orden, mismas clases: solo cambia aria-expanded.
+      expect(controls()).toEqual(before);
+      expect(controls().map((control) => control.className)).toEqual(
+        classesBefore,
+      );
+      // El formulario se pinta DEBAJO de la barra, nunca dentro de ella.
+      expect(bar.contains(panel)).toBe(false);
+      expect(
+        bar.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(within(bar).queryByRole("textbox")).toBeNull();
+    }
+  });
+
+  it("al abrir lleva el foco al panel y «Cerrar» lo devuelve al botón", () => {
+    const { docente } = renderManager();
+
+    fireEvent.click(docente);
+    const panel = screen.getByRole("region", {
+      name: "Agregar usuario docente",
+    });
+    expect(panel).toHaveFocus();
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Cerrar" }));
+
+    expect(visiblePanels()).toHaveLength(0);
+    expect(docente).toHaveAttribute("aria-expanded", "false");
+    expect(docente).toHaveFocus();
+  });
+
+  it("también se cierra con «Cerrar formulario» al pie del panel", () => {
+    const { importButton } = renderManager();
+
+    fireEvent.click(importButton);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cerrar formulario" }),
+    );
+
+    expect(visiblePanels()).toHaveLength(0);
+    expect(importButton).toHaveFocus();
+  });
+
+  it("Escape cierra el panel aunque el foco esté en un campo", async () => {
+    const user = userEvent.setup();
+    const { admin } = renderManager();
+
+    await user.click(admin);
+    const panel = screen.getByRole("region", { name: "Agregar administrador" });
+    await user.click(within(panel).getByLabelText("Nombre y apellidos"));
+    await user.keyboard("{Escape}");
+
+    expect(visiblePanels()).toHaveLength(0);
+    expect(admin).toHaveAttribute("aria-expanded", "false");
+    expect(admin).toHaveFocus();
+  });
+
+  it("pulsar otra vez el botón abierto repliega su formulario", () => {
+    const { docente } = renderManager();
+
+    fireEvent.click(docente);
+    fireEvent.click(docente);
+
+    expect(visiblePanels()).toHaveLength(0);
+    expect(docente).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("conserva lo escrito al cambiar de formulario y volver", () => {
+    const { admin, docente } = renderManager();
+
+    fireEvent.click(docente);
+    const name = within(
+      screen.getByRole("region", { name: "Agregar usuario docente" }),
+    ).getByLabelText("Nombre y apellidos");
+    fireEvent.change(name, { target: { value: "Rosa Borrador" } });
+    fireEvent.click(admin);
+    fireEvent.click(docente);
+
+    expect(name).toHaveValue("Rosa Borrador");
+  });
+
+  it("tras un alta confirmada cierra el panel y el formulario vuelve vacío", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createAdministrativeUserAction).mockResolvedValueOnce({
+      message: "Usuario registrado. Recibirá un correo para crear su contraseña.",
+      status: "success",
+    });
+    const { docente } = renderManager();
+
+    await user.click(docente);
+    let panel = screen.getByRole("region", { name: "Agregar usuario docente" });
+    await user.type(
+      within(panel).getByLabelText("Nombre y apellidos"),
+      "Rosa Nueva",
+    );
+    await user.type(
+      within(panel).getByLabelText("Correo electrónico"),
+      "rosa@example.test",
+    );
+    await user.click(
+      within(panel).getByRole("button", { name: "Registrar usuario" }),
+    );
+
+    await waitFor(() => expect(visiblePanels()).toHaveLength(0));
+    expect(createAdministrativeUserAction).toHaveBeenCalledTimes(1);
+    expect(docente).toHaveAttribute("aria-expanded", "false");
+    expect(docente).toHaveFocus();
+
+    // Al volver a abrirlo no queda el aviso del registro anterior.
+    await user.click(docente);
+    panel = screen.getByRole("region", { name: "Agregar usuario docente" });
+    expect(within(panel).getByLabelText("Nombre y apellidos")).toHaveValue("");
+    expect(within(panel).queryByText(/Usuario registrado/)).toBeNull();
+  });
+
+  it("si el alta falla, el panel sigue abierto con el aviso", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createAdministrativeUserAction).mockResolvedValueOnce({
+      message: "No se pudo registrar al usuario. Inténtalo de nuevo.",
+      status: "error",
+    });
+    const { docente } = renderManager();
+
+    await user.click(docente);
+    const panel = screen.getByRole("region", {
+      name: "Agregar usuario docente",
+    });
+    await user.type(
+      within(panel).getByLabelText("Nombre y apellidos"),
+      "Rosa Nueva",
+    );
+    await user.type(
+      within(panel).getByLabelText("Correo electrónico"),
+      "rosa@example.test",
+    );
+    await user.click(
+      within(panel).getByRole("button", { name: "Registrar usuario" }),
+    );
+
+    expect(await within(panel).findByRole("alert")).toHaveTextContent(
+      "No se pudo registrar",
+    );
+    expect(panel).toBeVisible();
+    expect(docente).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("un alta que termina con otro formulario abierto no cierra ese otro", async () => {
+    const user = userEvent.setup();
+    let finish: ((state: AdminActionState) => void) | undefined;
+    vi.mocked(createAdministrativeUserAction).mockImplementationOnce(
+      () =>
+        new Promise<AdminActionState>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { admin, docente } = renderManager();
+
+    await user.click(docente);
+    const docentePanel = screen.getByRole("region", {
+      name: "Agregar usuario docente",
+    });
+    await user.type(
+      within(docentePanel).getByLabelText("Nombre y apellidos"),
+      "Rosa Nueva",
+    );
+    await user.type(
+      within(docentePanel).getByLabelText("Correo electrónico"),
+      "rosa@example.test",
+    );
+    await user.click(
+      within(docentePanel).getByRole("button", { name: "Registrar usuario" }),
+    );
+    await waitFor(() => expect(finish).toBeDefined());
+
+    await user.click(admin);
+    await act(async () => {
+      finish?.({ message: "Usuario registrado.", status: "success" });
+    });
+
+    expect(
+      screen.getByRole("region", { name: "Agregar administrador" }),
+    ).toBeVisible();
+    expect(admin).toHaveAttribute("aria-expanded", "true");
   });
 });

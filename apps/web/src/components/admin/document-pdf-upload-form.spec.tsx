@@ -520,4 +520,134 @@ describe("DocumentPdfUploadForm", () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
+  function renderWithMetadata() {
+    render(
+      <DocumentPdfUploadForm
+        apiBaseUrl="https://api.avend.example"
+        endpoint="/admin/documents"
+        submitLabel="Cargar PDF"
+        successMessage="Documento PDF creado."
+      >
+        <label htmlFor="meta-file">
+          Archivo
+          <input id="meta-file" name="file" type="file" />
+        </label>
+        <label htmlFor="meta-title">
+          Título
+          <input id="meta-title" name="title" />
+        </label>
+        <input name="specificDependency" type="hidden" value="DIGEDD" />
+        <label htmlFor="meta-json">
+          Palabras clave JSON
+          <textarea id="meta-json" name="metadata" />
+        </label>
+      </DocumentPdfUploadForm>,
+    );
+  }
+
+  it("no envía un JSON inválido y lo marca en su campo", async () => {
+    const user = userEvent.setup();
+    renderWithMetadata();
+    await user.upload(
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
+    );
+    await user.type(screen.getByLabelText("Título"), "Norma");
+    await user.type(screen.getByLabelText("Palabras clave JSON"), "ascenso, evaluación");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
+
+    const metadata = screen.getByLabelText("Palabras clave JSON");
+    await waitFor(() => expect(metadata).toHaveFocus());
+    expect(metadata).toHaveAttribute("aria-invalid", "true");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("marca en su campo un rechazo del API sobre un dato visible", async () => {
+    const user = userEvent.setup();
+    mocks.getSession.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ message: ["title must be longer than or equal to 2 characters"] }), { status: 400 }),
+    );
+    renderWithMetadata();
+    await user.upload(
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
+    );
+    await user.type(screen.getByLabelText("Título"), "No");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
+
+    expect(await screen.findByText("Escribe un título de 2 a 500 caracteres.")).toBeVisible();
+    expect(screen.getByLabelText("Título")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("si el dato rechazado no se ve, explica el rechazo sin prometer campos en rojo", async () => {
+    const user = userEvent.setup();
+    mocks.getSession.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ message: ["specificDependency must be longer than or equal to 2 characters"] }), { status: 400 }),
+    );
+    renderWithMetadata();
+    await user.upload(
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "norma.pdf", { type: "application/pdf" }),
+    );
+    await user.type(screen.getByLabelText("Título"), "Norma");
+    await user.click(screen.getByRole("button", { name: "Cargar PDF" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("rechazó algunos datos");
+    expect(alert).not.toHaveTextContent("marcados en rojo");
+  });
+
+  it("ajusta los datos antes de enviar y entrega el documento creado sin ventana de éxito", async () => {
+    const user = userEvent.setup();
+    const onCompleted = vi.fn();
+    const onPendingChange = vi.fn();
+    mocks.getSession.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ id: "doc-9", title: "Anexo 9" }), { status: 201 }),
+    );
+    render(
+      <DocumentPdfUploadForm
+        apiBaseUrl="https://api.avend.example"
+        endpoint="/admin/documents"
+        onCompleted={onCompleted}
+        onPendingChange={onPendingChange}
+        prepareFormData={(formData) => {
+          formData.delete("annexNumber");
+          formData.set("metadata", JSON.stringify({ annexNumber: 9 }));
+        }}
+        showSuccessDialog={false}
+        submitLabel="Subir anexo"
+        successMessage="Documento cargado en Anexos."
+      >
+        <label htmlFor="ctx-file">
+          Archivo
+          <input id="ctx-file" name="file" type="file" />
+        </label>
+        <label htmlFor="ctx-title">
+          Título
+          <input id="ctx-title" name="title" />
+        </label>
+        <input name="annexNumber" type="hidden" value="9" />
+      </DocumentPdfUploadForm>,
+    );
+    await user.upload(
+      screen.getByLabelText("Archivo"),
+      new File(["%PDF-1.7"], "anexo.pdf", { type: "application/pdf" }),
+    );
+    await user.type(screen.getByLabelText("Título"), "Anexo 9");
+    await user.click(screen.getByRole("button", { name: "Subir anexo" }));
+
+    await waitFor(() =>
+      expect(onCompleted).toHaveBeenCalledWith({ id: "doc-9", title: "Anexo 9" }),
+    );
+    const payload = vi.mocked(fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(payload.has("annexNumber")).toBe(false);
+    expect(payload.get("metadata")).toBe('{"annexNumber":9}');
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onPendingChange).toHaveBeenNthCalledWith(1, true);
+    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+  });
 });

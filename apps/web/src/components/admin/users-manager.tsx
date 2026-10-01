@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useId, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   createAdministrativeUserAction,
   sendPasswordResetAction,
@@ -499,18 +508,21 @@ function SuspendUserForm({ user }: { user: AdministrativeUser }) {
 /**
  * Registration form. The email is the login and the person sets their own
  * password from the invitation, so no password is ever typed here.
+ *
+ * Solo pinta el formulario: el panel que lo contiene lo abre y lo cierra la
+ * barra de acciones de UsersManager.
  */
 function CreateUserForm({
   modules = [],
+  onSuccess,
   role,
   submitLabel,
-  title,
   today,
 }: {
   modules?: Array<{ id: string; name: string; parentModuleId: string | null }>;
+  onSuccess: () => void;
   role: "admin" | "docente";
   submitLabel: string;
-  title: string;
   today: string;
 }) {
   const fieldId = useId();
@@ -528,118 +540,393 @@ function CreateUserForm({
   }
 
   return (
-    <details className={`${styles.create} ${styles.createPrimary}`}>
-      <summary className={styles.createSummary}>{title}</summary>
-      <AdminActionForm
-        action={createAdministrativeUserAction}
-        className={styles.form}
-        rules={CREATE_USER_RULES}
-        submitLabel={submitLabel}
-        successMessage="Registro exitoso. El usuario recibirá un correo para crear su contraseña."
-      >
-        <input name="role" type="hidden" value={role} />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
-          Nombre y apellidos
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-name`}
-          maxLength={160}
-          minLength={2}
-          name="fullName"
-          required
-          type="text"
-        />
-        <FieldError name="fullName" />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-email`}>
-          Correo electrónico
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-email`}
-          maxLength={254}
-          name="email"
-          required
-          type="email"
-        />
-        <FieldError name="email" />
-        <p className={styles.formHint}>
-          El correo es el usuario con el que iniciará sesión. Recibirá un
-          mensaje para crear su propia contraseña.
-        </p>
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-phone`}>
-          Celular (opcional)
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-phone`}
-          maxLength={20}
-          name="phone"
-          type="tel"
-        />
-        <FieldError name="phone" />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
-          Inicio de vigencia (opcional)
-        </label>
-        <div className={styles.validityRow}>
-          <span className={styles.fieldLabel}>Vigencia rápida (opcional)</span>
-          <QuickValidityButtons onApply={applyQuickValidity} />
-          {validitySummary ? (
-            <p aria-live="polite" className={styles.formHint}>
-              {validitySummary}
-            </p>
-          ) : null}
-        </div>
-        <input
-          className={styles.input}
-          id={`${fieldId}-start`}
-          name="accessStartAt"
-          onChange={(event) => setStartAt(event.target.value)}
-          type="date"
-          value={startAt}
-        />
-        <FieldError name="accessStartAt" />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
-          Fin de vigencia (opcional)
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-expires`}
-          min={today}
-          name="accessExpiresAt"
-          onChange={(event) => setExpiresAt(event.target.value)}
-          type="date"
-          value={expiresAt}
-        />
-        <FieldError name="accessExpiresAt" />
-        <p className={styles.formHint}>
-          Si dejas las fechas vacías, el acceso queda sin vencimiento.
-        </p>
-        {role === "admin" && modules.length ? (
-          <fieldset className={styles.validityRow}>
-            <legend className={styles.fieldLabel}>
-              Módulos con acceso (opcional; puedes ajustarlos después)
-            </legend>
-            <div className={styles.moduleGrid}>
-              {modules.map((module) => (
-                <label className={styles.moduleOption} key={module.id}>
-                  <input name="moduleId" type="checkbox" value={module.id} />
-                  {module.parentModuleId ? `↳ ${module.name}` : module.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+    <AdminActionForm
+      action={createAdministrativeUserAction}
+      className={styles.form}
+      onSuccess={onSuccess}
+      rules={CREATE_USER_RULES}
+      submitLabel={submitLabel}
+      successMessage="Registro exitoso. El usuario recibirá un correo para crear su contraseña."
+    >
+      <input name="role" type="hidden" value={role} />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
+        Nombre y apellidos
+      </label>
+      <input
+        className={styles.input}
+        id={`${fieldId}-name`}
+        maxLength={160}
+        minLength={2}
+        name="fullName"
+        required
+        type="text"
+      />
+      <FieldError name="fullName" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-email`}>
+        Correo electrónico
+      </label>
+      <input
+        className={styles.input}
+        id={`${fieldId}-email`}
+        maxLength={254}
+        name="email"
+        required
+        type="email"
+      />
+      <FieldError name="email" />
+      <p className={styles.formHint}>
+        El correo es el usuario con el que iniciará sesión. Recibirá un
+        mensaje para crear su propia contraseña.
+      </p>
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-phone`}>
+        Celular (opcional)
+      </label>
+      <input
+        className={styles.input}
+        id={`${fieldId}-phone`}
+        maxLength={20}
+        name="phone"
+        type="tel"
+      />
+      <FieldError name="phone" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
+        Inicio de vigencia (opcional)
+      </label>
+      <div className={styles.validityRow}>
+        <span className={styles.fieldLabel}>Vigencia rápida (opcional)</span>
+        <QuickValidityButtons onApply={applyQuickValidity} />
+        {validitySummary ? (
+          <p aria-live="polite" className={styles.formHint}>
+            {validitySummary}
+          </p>
         ) : null}
-      </AdminActionForm>
-    </details>
+      </div>
+      <input
+        className={styles.input}
+        id={`${fieldId}-start`}
+        name="accessStartAt"
+        onChange={(event) => setStartAt(event.target.value)}
+        type="date"
+        value={startAt}
+      />
+      <FieldError name="accessStartAt" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
+        Fin de vigencia (opcional)
+      </label>
+      <input
+        className={styles.input}
+        id={`${fieldId}-expires`}
+        min={today}
+        name="accessExpiresAt"
+        onChange={(event) => setExpiresAt(event.target.value)}
+        type="date"
+        value={expiresAt}
+      />
+      <FieldError name="accessExpiresAt" />
+      <p className={styles.formHint}>
+        Si dejas las fechas vacías, el acceso queda sin vencimiento.
+      </p>
+      {role === "admin" && modules.length ? (
+        <fieldset className={styles.validityRow}>
+          <legend className={styles.fieldLabel}>
+            Módulos con acceso (opcional; puedes ajustarlos después)
+          </legend>
+          <div className={styles.moduleGrid}>
+            {modules.map((module) => (
+              <label className={styles.moduleOption} key={module.id}>
+                <input name="moduleId" type="checkbox" value={module.id} />
+                {module.parentModuleId ? `↳ ${module.name}` : module.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+    </AdminActionForm>
+  );
+}
+
+type UserActionPanel = "admin" | "docente" | "import";
+
+const ACTION_PANEL_TITLES: Record<UserActionPanel, string> = {
+  admin: "Agregar administrador",
+  docente: "Agregar usuario docente",
+  import: "Importar usuarios desde Excel",
+};
+
+/** Flecha de despliegue: gira al abrir, sin cambiar el tamaño del botón. */
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.actionChevron}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/** Icono de subir (importar) o bajar (exportar) junto a la etiqueta. */
+function TransferIcon({ direction }: { direction: "down" | "up" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.actionIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+      {direction === "up" ? (
+        <path d="M12 15V4m-4.5 4.5L12 4l4.5 4.5" />
+      ) : (
+        <path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5" />
+      )}
+    </svg>
   );
 }
 
 /**
- * Server-filtered and paginated administrative user directory. The browser
- * receives only the requested page; the API remains the authority for data,
- * role changes, account state and access windows.
+ * Barra de acciones de Usuarios: dos altas (primarias) y la importación y
+ * exportación de Excel (secundarias, discretas).
+ *
+ * Los botones solo abren o cierran; el formulario se pinta en un panel de
+ * ancho completo DEBAJO de la barra, fuera de ella, para que abrir un alta no
+ * mueva ni cambie de tamaño los otros botones. Hay un solo panel abierto a la
+ * vez. Los paneles cerrados siguen montados (ocultos) para que un borrador o un
+ * envío en curso no se pierdan al cambiar de panel; tras un alta confirmada
+ * por el servidor el panel se cierra y su formulario se vuelve a montar vacío.
  */
+function UserActions({
+  apiBaseUrl,
+  exportHref,
+  modules,
+  today,
+}: {
+  apiBaseUrl: string;
+  exportHref: string;
+  modules: Array<{ id: string; name: string; parentModuleId: string | null }>;
+  today: string;
+}) {
+  const baseId = useId();
+  const [openPanel, setOpenPanel] = useState<UserActionPanel | null>(null);
+  const [formVersion, setFormVersion] = useState<
+    Record<UserActionPanel, number>
+  >({ admin: 0, docente: 0, import: 0 });
+  const pendingFocus = useRef<{
+    panel: UserActionPanel;
+    target: "panel" | "trigger";
+  } | null>(null);
+
+  // El foco se mueve después de pintar: al abrir va al panel (el lector de
+  // pantalla anuncia su título y Tab entra en el primer campo); al cerrar
+  // vuelve al botón de la barra que lo abrió.
+  useEffect(() => {
+    const request = pendingFocus.current;
+    if (!request) return;
+    pendingFocus.current = null;
+
+    if (request.target === "trigger") {
+      document.getElementById(`${baseId}-${request.panel}-trigger`)?.focus();
+      return;
+    }
+
+    const panel = document.getElementById(`${baseId}-${request.panel}-panel`);
+    if (!panel) return;
+    panel.focus({ preventScroll: true });
+    // En el celular el panel puede quedar por debajo de la pantalla.
+    const top = panel.getBoundingClientRect().top;
+    if (top < 0 || top > window.innerHeight - 64) {
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      panel.scrollIntoView?.({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+  }, [baseId, openPanel]);
+
+  const closePanel = useCallback(() => {
+    if (openPanel === null) return;
+    pendingFocus.current = { panel: openPanel, target: "trigger" };
+    setOpenPanel(null);
+  }, [openPanel]);
+
+  function togglePanel(panel: UserActionPanel) {
+    if (openPanel === panel) {
+      closePanel();
+      return;
+    }
+    pendingFocus.current = { panel, target: "panel" };
+    setOpenPanel(panel);
+  }
+
+  /**
+   * Alta confirmada por el servidor: el formulario se vuelve a montar vacío
+   * (sin el aviso de éxito anterior) y, si su panel sigue abierto, se cierra.
+   * Si mientras tanto se abrió otro panel, ese no se toca.
+   */
+  const finishPanel = useCallback(
+    (panel: UserActionPanel) => {
+      setFormVersion((current) => ({ ...current, [panel]: current[panel] + 1 }));
+      if (openPanel !== panel) return;
+      pendingFocus.current = { panel, target: "trigger" };
+      setOpenPanel(null);
+    },
+    [openPanel],
+  );
+
+  const onSuccessFor = useMemo(
+    () => ({
+      admin: () => finishPanel("admin"),
+      docente: () => finishPanel("docente"),
+      import: () => finishPanel("import"),
+    }),
+    [finishPanel],
+  );
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Escape" || openPanel === null || event.defaultPrevented) {
+      return;
+    }
+    event.preventDefault();
+    closePanel();
+  }
+
+  const panelId = (panel: UserActionPanel) => `${baseId}-${panel}-panel`;
+  const titleId = (panel: UserActionPanel) => `${baseId}-${panel}-title`;
+  const triggerId = (panel: UserActionPanel) => `${baseId}-${panel}-trigger`;
+
+  const panelContent: Record<UserActionPanel, ReactNode> = {
+    admin: (
+      <CreateUserForm
+        key={formVersion.admin}
+        modules={modules}
+        onSuccess={onSuccessFor.admin}
+        role="admin"
+        submitLabel="Registrar administrador"
+        today={today}
+      />
+    ),
+    docente: (
+      <CreateUserForm
+        key={formVersion.docente}
+        onSuccess={onSuccessFor.docente}
+        role="docente"
+        submitLabel="Registrar usuario"
+        today={today}
+      />
+    ),
+    import: (
+      <UsersImportForm
+        apiBaseUrl={apiBaseUrl}
+        key={formVersion.import}
+        onSuccess={onSuccessFor.import}
+      />
+    ),
+  };
+
+  return (
+    <div className={styles.actionArea} onKeyDown={handleKeyDown}>
+      <div
+        aria-label="Acciones de usuarios"
+        className={styles.actionBar}
+        role="group"
+      >
+        <button
+          aria-controls={panelId("docente")}
+          aria-expanded={openPanel === "docente"}
+          className={styles.primaryAction}
+          id={triggerId("docente")}
+          onClick={() => togglePanel("docente")}
+          type="button"
+        >
+          <span>
+            <span aria-hidden="true">+ </span>Agregar usuario
+          </span>
+          <ChevronIcon />
+        </button>
+        <button
+          aria-controls={panelId("admin")}
+          aria-expanded={openPanel === "admin"}
+          className={styles.primaryAction}
+          id={triggerId("admin")}
+          onClick={() => togglePanel("admin")}
+          type="button"
+        >
+          <span>
+            <span aria-hidden="true">+ </span>Agregar administrador
+          </span>
+          <ChevronIcon />
+        </button>
+        <div className={styles.secondaryActions}>
+          <button
+            aria-controls={panelId("import")}
+            aria-expanded={openPanel === "import"}
+            className={styles.secondaryAction}
+            id={triggerId("import")}
+            onClick={() => togglePanel("import")}
+            type="button"
+          >
+            <TransferIcon direction="up" />
+            <span>Importar Excel</span>
+            <ChevronIcon />
+          </button>
+          <a className={styles.secondaryAction} href={exportHref}>
+            <TransferIcon direction="down" />
+            <span>Exportar Excel</span>
+          </a>
+        </div>
+      </div>
+
+      {(["docente", "admin", "import"] as const).map((panel) => (
+        <section
+          aria-labelledby={titleId(panel)}
+          className={styles.actionPanel}
+          hidden={openPanel !== panel}
+          id={panelId(panel)}
+          key={panel}
+          tabIndex={-1}
+        >
+          <div className={styles.actionPanelHeader}>
+            <h2 className={styles.actionPanelTitle} id={titleId(panel)}>
+              {ACTION_PANEL_TITLES[panel]}
+            </h2>
+            <button
+              className={styles.actionPanelClose}
+              onClick={closePanel}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className={styles.actionIcon}
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+              Cerrar
+            </button>
+          </div>
+          {panelContent[panel]}
+          {/* En el celular el formulario es largo: también se puede cerrar
+              desde abajo sin volver a subir. */}
+          <div className={styles.actionPanelFooter}>
+            <button
+              className={styles.actionPanelClose}
+              onClick={closePanel}
+              type="button"
+            >
+              Cerrar formulario
+            </button>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /** Export link that carries the filters currently on screen. */
 function userExportHref(query: ParsedUserDirectoryQuery): string {
   const params = new URLSearchParams();
@@ -653,6 +940,11 @@ function userExportHref(query: ParsedUserDirectoryQuery): string {
     : "/api/admin/users/export";
 }
 
+/**
+ * Server-filtered and paginated administrative user directory. The browser
+ * receives only the requested page; the API remains the authority for data,
+ * role changes, account state and access windows.
+ */
 export function UsersManager({
   apiBaseUrl,
   counts,
@@ -675,29 +967,12 @@ export function UsersManager({
         auditado.
       </p>
 
-      <div
-        aria-label="Acciones de usuarios"
-        className={styles.createBar}
-        role="group"
-      >
-        <CreateUserForm
-          role="docente"
-          submitLabel="Registrar usuario"
-          title="+ Agregar usuario"
-          today={today}
-        />
-        <CreateUserForm
-          modules={modules}
-          role="admin"
-          submitLabel="Registrar administrador"
-          title="+ Agregar administrador"
-          today={today}
-        />
-        <UsersImportForm apiBaseUrl={apiBaseUrl} />
-        <a className={styles.exportLink} href={userExportHref(query)}>
-          Exportar Excel
-        </a>
-      </div>
+      <UserActions
+        apiBaseUrl={apiBaseUrl}
+        exportHref={userExportHref(query)}
+        modules={modules}
+        today={today}
+      />
 
       <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
         {GROUPS.map((item) => (
