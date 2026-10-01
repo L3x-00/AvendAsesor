@@ -1,21 +1,15 @@
 export const ADMIN_HOME_EXPIRY_WINDOW_DAYS = 7;
 
-export const ADMIN_HOME_MODULE_NAMES = [
-  'Contratación y desplazamientos',
-  'Evaluación docente',
-  'Situaciones administrativas',
-  'Auxiliar de educación',
-  'Ley y reglamento',
-  'Cargos y plazas',
-  'Remuneraciones',
-] as const;
-
-export type AdminHomeModuleName = (typeof ADMIN_HOME_MODULE_NAMES)[number];
-
+/**
+ * Tarjeta de un módulo raíz en Inicio. Sale de los módulos reales (no de una
+ * lista fija): el superadministrador los crea, renombra y elimina desde el
+ * panel, y una lista fija dejaba Inicio sin cargar en cuanto uno cambiaba.
+ */
 export interface AdminHomeModuleSummary {
   documentCount: number;
   id: string;
-  name: AdminHomeModuleName;
+  isActive: boolean;
+  name: string;
   submoduleCount: number;
 }
 
