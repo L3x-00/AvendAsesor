@@ -1,64 +1,39 @@
+"use client";
+
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
+import { getDocumentTechnicalStatusContent } from "@/lib/admin-api/labels";
 import {
-  NORMATIVE_DOCUMENT_TYPE_VALUES,
-  documentTypeLabel,
-} from "@/lib/admin-api/document-taxonomy";
-import type { DocumentLibraryItem } from "@/lib/admin-api/types";
+  annexNumber,
+  CONTENT_SECTION_CODES,
+  CONTENT_SECTION_HINTS,
+  CONTENT_SECTION_TITLES,
+  currentLimaYear,
+  documentContentSection,
+  titleStartsWithAnnexNumber,
+  type ContentSectionCode,
+  type ContextualUploadDefaults,
+} from "@/lib/admin-api/module-content";
+import type {
+  DocumentLibraryItem,
+  DocumentSuggestions,
+} from "@/lib/admin-api/types";
+import {
+  ContextualUploadDialog,
+  type ContextualUploadResult,
+} from "./contextual-upload-dialog";
+import styles from "./contextual-upload-dialog.module.css";
 
-interface ContentSection {
-  code: string;
-  hint: string;
-  matches: (document: DocumentLibraryItem) => boolean;
-  title: string;
-}
+/** Duración del parpadeo del documento nuevo (3 ciclos de 900 ms). */
+const HIGHLIGHT_MS = 2800;
+/** Si el documento no aparece tras la recarga, el resaltado se abandona. */
+const HIGHLIGHT_GIVE_UP_MS = 10_000;
 
-const SECTIONS: ContentSection[] = [
-  {
-    code: "NORMATIVA",
-    hint: "Leyes, resoluciones, decretos y directivas.",
-    matches: (document) =>
-      NORMATIVE_DOCUMENT_TYPE_VALUES.has(document.documentType),
-    title: "Normativa",
-  },
-  {
-    code: "CRONOGRAMA",
-    hint: "Fechas y etapas de los procesos.",
-    matches: (document) => document.documentType === "CRONOGRAMA",
-    title: "Cronograma",
-  },
-  {
-    code: "ANEXO",
-    hint: "Formatos y anexos numerados.",
-    matches: (document) => document.documentType === "ANEXO",
-    title: "Anexos",
-  },
-  {
-    code: "PREGUNTAS_FRECUENTES",
-    hint: "Respuestas a las dudas más repetidas.",
-    matches: (document) => document.documentType === "PREGUNTAS_FRECUENTES",
-    title: "Preguntas frecuentes",
-  },
-];
-
-/**
- * Número de anexo: se lee de `metadata.annexNumber` y, si no existe, del
- * propio título («Anexo N° 5», «Anexo 5»). Así el listado siempre sale en
- * orden numérico aunque el administrador no rellene ningún campo extra.
- */
-export function annexNumber(document: {
-  metadata: Record<string, unknown>;
-  title: string;
-}): number | null {
-  const value = document.metadata.annexNumber;
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-  if (typeof value === "string" && /^\d{1,6}$/u.test(value.trim())) {
-    return Number(value.trim());
-  }
-  const match = /anexo\s*(?:n[°º.]?\s*)?(\d{1,6})/iu.exec(document.title);
-  return match ? Number(match[1]) : null;
-}
+const emptySuggestions: DocumentSuggestions = {
+  additionalDetails: [],
+  specificDependencies: [],
+};
 
 function situationText(document: DocumentLibraryItem): string {
   if (document.situation === "current") return "Vigente";
@@ -67,7 +42,7 @@ function situationText(document: DocumentLibraryItem): string {
 }
 
 function sortedItems(
-  code: string,
+  code: ContentSectionCode | "OTROS",
   items: DocumentLibraryItem[],
 ): DocumentLibraryItem[] {
   if (code === "ANEXO") {
@@ -86,23 +61,29 @@ function sortedItems(
   );
 }
 
+function typeText(document: DocumentLibraryItem): string {
+  return document.documentType === "OTRO" && document.documentTypeOther?.trim()
+    ? document.documentTypeOther.trim()
+    : documentTypeLabel(document.documentType);
+}
+
+const quickActionClass =
+  "inline-flex min-h-11 items-center rounded-md px-2 font-semibold text-avend-accent-strong underline";
+
 function DocumentQuickActions({ document }: { document: DocumentLibraryItem }) {
   return (
-    <p className="mt-2 flex flex-wrap gap-4 text-sm">
-      <Link
-        className="font-semibold underline"
-        href={`/admin/documents/${document.id}`}
-      >
+    <p className="mt-1 flex flex-wrap gap-x-2 text-base">
+      <Link className={quickActionClass} href={`/admin/documents/${document.id}`}>
         Ver y editar
       </Link>
       <Link
-        className="font-semibold underline"
+        className={quickActionClass}
         href={`/admin/documents/${document.id}#new-version`}
       >
         Nueva versión
       </Link>
       <Link
-        className="font-semibold underline"
+        className={quickActionClass}
         href={`/admin/documents/${document.id}#document-lifecycle`}
       >
         Archivar o desactivar
@@ -114,110 +95,250 @@ function DocumentQuickActions({ document }: { document: DocumentLibraryItem }) {
 function DocumentLine({
   code,
   document,
+  highlighted,
 }: {
-  code: string;
+  code: ContentSectionCode | "OTROS";
   document: DocumentLibraryItem;
+  highlighted: boolean;
 }) {
   const number = code === "ANEXO" ? annexNumber(document) : null;
+  const showNumber = number !== null && !titleStartsWithAnnexNumber(document.title);
   return (
-    <li className="rounded-md bg-avend-surface-muted p-3">
+    <li
+      className={`rounded-md bg-avend-surface-muted p-3${
+        highlighted ? ` ${styles.itemNew}` : ""
+      }`}
+      data-document-id={document.id}
+    >
       <p className="text-base font-semibold">
-        {number ? `Anexo ${number}: ` : ""}
+        {showNumber ? `Anexo ${number}: ` : ""}
         {document.title}
       </p>
-      <p className="text-sm text-avend-text-muted">
-        {documentTypeLabel(document.documentType)}
+      <p className="text-base text-avend-text-muted">
+        {typeText(document)}
         {document.issuanceYear ? ` · ${document.issuanceYear}` : ""} ·{" "}
         {situationText(document)}
       </p>
+      {document.technicalStatus !== "ready" ? (
+        <p className="mt-1 text-base font-semibold text-amber-900">
+          {getDocumentTechnicalStatusContent(document.technicalStatus).label}
+          {document.technicalStatus === "pending_approval"
+            ? ": el asistente aún no lo usa. Apruébalo desde «Ver y editar»."
+            : ": revisa el documento desde «Ver y editar»."}
+        </p>
+      ) : null}
       <DocumentQuickActions document={document} />
     </li>
   );
 }
 
+interface Highlight {
+  documentId?: string;
+  section: ContentSectionCode;
+  /** Ya se desplazó la vista hasta el documento (o la sección). */
+  scrolled: boolean;
+}
+
+function scrollBehavior(): ScrollBehavior {
+  return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+}
+
+export interface ModuleContentSectionsProps {
+  apiBaseUrl?: string;
+  canUpload: boolean;
+  /** `false` si el tema tiene más documentos de los que se muestran. */
+  complete?: boolean;
+  documents: DocumentLibraryItem[];
+  /** Abre la ventana de carga al llegar con `?cargar=1&tipo=…`. */
+  initialUploadSection?: ContentSectionCode;
+  moduleId: string;
+  moduleName?: string;
+  suggestions?: DocumentSuggestions;
+  /** Motivo visible cuando no se puede subir (p. ej., módulo inactivo). */
+  uploadBlockedReason?: string;
+  uploadDefaults?: ContextualUploadDefaults;
+}
+
 /**
  * Contenido del tema ordenado por secciones estándar (normativa, cronograma,
  * anexos numerados y preguntas frecuentes) con acciones directas por
- * documento y un botón para subir cada tipo sin buscar el formulario.
+ * documento. «+ Subir …» abre una ventana con el formulario resumido, sin
+ * recargar la página; al terminar, lleva la vista a la sección y hace parpadear
+ * el documento nuevo.
  */
 export function ModuleContentSections({
+  apiBaseUrl = "",
   canUpload,
+  complete = true,
   documents,
+  initialUploadSection,
   moduleId,
-}: {
-  canUpload: boolean;
-  documents: DocumentLibraryItem[];
-  moduleId: string;
-}) {
-  const sections = SECTIONS.map((section) => ({
-    ...section,
+  moduleName = "",
+  suggestions = emptySuggestions,
+  uploadBlockedReason,
+  uploadDefaults,
+}: ModuleContentSectionsProps) {
+  const [uploadSection, setUploadSection] = useState<ContentSectionCode | null>(
+    canUpload ? (initialUploadSection ?? null) : null,
+  );
+  const [highlight, setHighlight] = useState<Highlight | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const containerRef = useRef<HTMLElement>(null);
+  const closeUpload = useCallback(() => setUploadSection(null), []);
+
+  const sections = CONTENT_SECTION_CODES.map((code) => ({
+    code,
     items: sortedItems(
-      section.code,
-      documents.filter((document) => section.matches(document)),
+      code,
+      documents.filter((document) => documentContentSection(document) === code),
     ),
   }));
   const others = sortedItems(
     "OTROS",
-    documents.filter(
-      (document) => !SECTIONS.some((section) => section.matches(document)),
-    ),
+    documents.filter((document) => documentContentSection(document) === null),
+  );
+
+  const highlightedDocumentPresent = Boolean(
+    highlight?.documentId &&
+      documents.some((document) => document.id === highlight.documentId),
+  );
+
+  // Tras la carga: primero se lleva la vista a la sección; cuando la recarga
+  // trae el documento, a su fila, que parpadea y luego vuelve a la normalidad.
+  useEffect(() => {
+    if (!highlight || highlight.scrolled) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const row = highlight.documentId
+      ? container.querySelector<HTMLElement>(
+          `[data-document-id="${highlight.documentId}"]`,
+        )
+      : null;
+    const target =
+      row ??
+      container.querySelector<HTMLElement>(
+        `[data-section="${highlight.section}"]`,
+      );
+    target?.scrollIntoView?.({ behavior: scrollBehavior(), block: "center" });
+    if (row || !highlight.documentId) {
+      setHighlight({ ...highlight, scrolled: true });
+    }
+  }, [highlight, highlightedDocumentPresent]);
+
+  useEffect(() => {
+    if (!highlight) return;
+    const done =
+      highlight.scrolled &&
+      (highlightedDocumentPresent || !highlight.documentId);
+    const timer = globalThis.setTimeout(
+      () => setHighlight(null),
+      done ? HIGHLIGHT_MS : HIGHLIGHT_GIVE_UP_MS,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [highlight, highlightedDocumentPresent]);
+
+  const handleUploaded = useCallback(
+    ({ created, section }: ContextualUploadResult) => {
+      setUploadSection(null);
+      setHighlight({ documentId: created?.id, scrolled: false, section });
+      const name = created?.title ? `«${created.title}»` : "El documento";
+      setAnnouncement(
+        `${name} se cargó en ${CONTENT_SECTION_TITLES[section]}.`,
+      );
+    },
+    [],
   );
 
   return (
     <section
       aria-labelledby="module-content-title"
       className="rounded-xl border border-avend-border bg-avend-surface p-5"
+      ref={containerRef}
     >
       <h2 className="text-xl font-bold" id="module-content-title">
         Contenido del tema
       </h2>
       <p className="mt-1 text-base leading-7 text-avend-text-muted">
-        Normativa, cronograma, anexos y preguntas frecuentes ordenados para
-        encontrarlos rápido. Los anexos se ordenan por su número.
+        Todos los documentos de este tema, ordenados en normativa, cronograma,
+        anexos y preguntas frecuentes. Los anexos se ordenan por su número.
+      </p>
+      {!complete ? (
+        <p className="mt-2 text-base text-avend-text-muted">
+          Este tema tiene muchos documentos: aquí se muestran los primeros. Usa
+          «Documentos cargados» para buscar el resto.
+        </p>
+      ) : null}
+      {!canUpload && uploadBlockedReason ? (
+        <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
+          {uploadBlockedReason}
+        </p>
+      ) : null}
+      <p aria-live="polite" className="sr-only" role="status">
+        {announcement}
       </p>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {sections.map((section) => (
-          <article
-            className="rounded-lg border border-avend-border p-4"
-            key={section.code}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-bold">
-                {section.title} ({section.items.length})
-              </h3>
-              {canUpload ? (
-                <Link
-                  className="font-semibold underline"
-                  href={`/admin/modules/${moduleId}?cargar=1&tipo=${section.code}#cargar-documento`}
-                >
-                  + Subir {section.title.toLowerCase()}
-                </Link>
-              ) : null}
-            </div>
-            <p className="mt-1 text-sm text-avend-text-muted">{section.hint}</p>
-            {section.items.length === 0 ? (
-              <p className="mt-2 text-base text-avend-text-muted">
-                Sin {section.title.toLowerCase()} todavía.
+        {sections.map((section) => {
+          const title = CONTENT_SECTION_TITLES[section.code];
+          const sectionHighlighted =
+            highlight?.section === section.code &&
+            highlight.scrolled &&
+            !highlightedDocumentPresent;
+          return (
+            <article
+              className={`rounded-lg border border-avend-border p-4${
+                sectionHighlighted ? ` ${styles.sectionNew}` : ""
+              }`}
+              data-section={section.code}
+              key={section.code}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-bold">
+                  {title} ({section.items.length})
+                </h3>
+                {canUpload ? (
+                  <button
+                    aria-haspopup="dialog"
+                    className="avend-button avend-button--secondary"
+                    onClick={() => setUploadSection(section.code)}
+                    type="button"
+                  >
+                    + Subir {title.toLowerCase()}
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-1 text-base text-avend-text-muted">
+                {CONTENT_SECTION_HINTS[section.code]}
               </p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {section.items.map((document) => (
-                  <DocumentLine
-                    code={section.code}
-                    document={document}
-                    key={document.id}
-                  />
-                ))}
-              </ul>
-            )}
-          </article>
-        ))}
+              {section.items.length === 0 ? (
+                <p className="mt-2 text-base text-avend-text-muted">
+                  Sin {title.toLowerCase()} todavía.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {section.items.map((document) => (
+                    <DocumentLine
+                      code={section.code}
+                      document={document}
+                      highlighted={
+                        highlight?.documentId === document.id &&
+                        highlight.scrolled
+                      }
+                      key={document.id}
+                    />
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
         {others.length ? (
           <article className="rounded-lg border border-avend-border p-4">
             <h3 className="text-base font-bold">
               Otros documentos ({others.length})
             </h3>
-            <p className="mt-1 text-sm text-avend-text-muted">
+            <p className="mt-1 text-base text-avend-text-muted">
               Otros tipos cargados en este tema.
             </p>
             <ul className="mt-2 space-y-2">
@@ -225,6 +346,9 @@ export function ModuleContentSections({
                 <DocumentLine
                   code="OTROS"
                   document={document}
+                  highlighted={
+                    highlight?.documentId === document.id && highlight.scrolled
+                  }
                   key={document.id}
                 />
               ))}
@@ -232,6 +356,18 @@ export function ModuleContentSections({
           </article>
         ) : null}
       </div>
+      {uploadSection ? (
+        <ContextualUploadDialog
+          apiBaseUrl={apiBaseUrl}
+          defaults={uploadDefaults ?? { issuanceYear: currentLimaYear() }}
+          moduleId={moduleId}
+          moduleName={moduleName}
+          onClose={closeUpload}
+          onUploaded={handleUploaded}
+          section={uploadSection}
+          suggestions={suggestions}
+        />
+      ) : null}
     </section>
   );
 }

@@ -152,4 +152,67 @@ describe("DocumentMetadataFields", () => {
       screen.getByRole("combobox", { name: "Dependencia específica" }),
     ).toHaveValue("DIGEDD");
   });
+
+  it("resume año, entidad y dependencia prellenados y los envía en campos ocultos", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <form>
+        <DocumentMetadataFields
+          compact
+          initial={{
+            documentType: "CRONOGRAMA",
+            issuanceYear: 2026,
+            issuingEntity: "OTRA_INSTITUCION",
+            issuingEntityOther: "ESSALUD",
+            specificDependency: "Gerencia Central",
+          }}
+          lockDocumentType
+          required
+          summarizePrefilled
+        />
+        <button type="reset">Cancelar</button>
+      </form>,
+    );
+    const form = container.querySelector("form")!;
+
+    expect(screen.getByText("2026 · ESSALUD · Gerencia Central")).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Entidad emisora" })).toBeNull();
+    expect(Object.fromEntries(new FormData(form))).toMatchObject({
+      documentType: "CRONOGRAMA",
+      issuanceYear: "2026",
+      issuingEntity: "OTRA_INSTITUCION",
+      issuingEntityOther: "ESSALUD",
+      specificDependency: "Gerencia Central",
+    });
+    // La etiqueta del tipo fijo se lee a 16 px.
+    expect(screen.getByText("Tipo documental")).toHaveClass("text-base");
+
+    await user.click(screen.getByRole("button", { name: "Cambiar" }));
+    expect(screen.getByRole("combobox", { name: "Año del documento" })).toHaveFocus();
+    expect(screen.getByRole("combobox", { name: "Entidad emisora" })).toHaveValue(
+      "OTRA_INSTITUCION",
+    );
+    expect(screen.getByLabelText("Nombre de la institución")).toHaveValue("ESSALUD");
+
+    fireEvent.reset(form);
+    expect(await screen.findByText("2026 · ESSALUD · Gerencia Central")).toBeVisible();
+  });
+
+  it("sin datos completos no resume: los campos quedan visibles y obligatorios", () => {
+    render(
+      <form>
+        <DocumentMetadataFields
+          compact
+          initial={{ documentType: "ANEXO", issuanceYear: 2026 }}
+          lockDocumentType
+          required
+          summarizePrefilled
+        />
+      </form>,
+    );
+
+    expect(screen.queryByTestId("prefilled-summary")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Año del documento" })).toHaveValue("2026");
+    expect(screen.getByRole("combobox", { name: "Entidad emisora" })).toBeRequired();
+  });
 });

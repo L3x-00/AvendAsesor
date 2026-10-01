@@ -16,13 +16,20 @@ import {
   parseDocumentLibraryQuery,
   type DocumentLibrarySearchParams,
 } from "@/lib/admin-api/document-library-query";
-import { DOCUMENT_TYPE_OPTIONS } from "@/lib/admin-api/document-taxonomy";
 import {
   childModuleViews,
   findVisibleModule,
   parentOptions,
   toModuleView,
 } from "@/lib/admin-api/module-hierarchy";
+import {
+  contextualUploadDefaults,
+  currentLimaYear,
+  libraryPageCoversModule,
+  listModuleContentDocuments,
+  parseContentSectionParam,
+  type ModuleContentDocuments,
+} from "@/lib/admin-api/module-content";
 import { listReplacementDocumentCandidates } from "@/lib/admin-api/replacement-candidates";
 
 interface ModuleDetailPageProps {
@@ -51,6 +58,16 @@ export default async function ModuleDetailPage({
     : undefined;
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
+  // Contexto del explorador de submódulos: un padre inactivo solo admite
+  // submódulos inactivos, y un módulo con documentos propios no admite
+  // submódulos (la base de datos lo rechazaría).
+  const explorerContext = {
+    hasDirectDocuments: children.length === 0 && current.documentCount > 0,
+    kind: "module" as const,
+    moduleId: current.id,
+    moduleIsActive: current.isActive,
+    moduleName: current.name,
+  };
   if (current.canManage === false) {
     return (
       <AdminPage
@@ -63,7 +80,7 @@ export default async function ModuleDetailPage({
           </Link>
           <ModulesExplorer
             canCreate={false}
-            context={{ kind: "module", moduleId: current.id, moduleName: current.name }}
+            context={explorerContext}
             modules={children}
             parents={parents}
           />
@@ -79,25 +96,39 @@ export default async function ModuleDetailPage({
   const requestedQuery = parseDocumentLibraryQuery(requestedSearch);
   // «Cargar documento en este tema» (desde Consultas y reportes) abre el formulario.
   const openUpload = requestedSearch.cargar === "1";
-  // Las secciones de contenido preseleccionan el tipo (p. ej., Anexo).
-  const requestedType =
-    typeof requestedSearch.tipo === "string" &&
-    (requestedSearch.tipo === "NORMATIVA" ||
-      DOCUMENT_TYPE_OPTIONS.some(
-        (option) => option.value === requestedSearch.tipo,
-      ))
-      ? requestedSearch.tipo
-      : undefined;
+  // Enlaces antiguos de «+ Subir …» (`?cargar=1&tipo=ANEXO`): hoy abren la
+  // ventana de carga de esa sección en «Contenido del tema».
+  const requestedSection = openUpload
+    ? parseContentSectionParam(requestedSearch.tipo)
+    : undefined;
   const scopedQuery = {
     ...requestedQuery,
     moduleId: current.parentModuleId ? undefined : current.id,
     submoduleId: current.parentModuleId ? current.id : undefined,
   };
-  const [library, suggestions, replacementCandidates] = await Promise.all([
-    client.listDocumentLibrary(scopedQuery),
-    client.getDocumentSuggestions(),
-    listReplacementDocumentCandidates(client),
-  ]);
+  const isLeaf = children.length === 0;
+  const activeFilterCount = Math.max(
+    0,
+    countDocumentLibraryFilters(scopedQuery) - 1,
+  );
+  const contentScope = {
+    moduleId: scopedQuery.moduleId,
+    submoduleId: scopedQuery.submoduleId,
+  };
+  // «Contenido del tema» muestra TODOS los documentos del tema, sin los
+  // filtros ni la paginación de «Documentos cargados». Con filtros o fuera de
+  // la primera página se sabe de antemano que hace falta una consulta propia.
+  const needsOwnContentQuery =
+    isLeaf && (activeFilterCount > 0 || scopedQuery.page > 1);
+  const [library, suggestions, replacementCandidates, ownContent] =
+    await Promise.all([
+      client.listDocumentLibrary(scopedQuery),
+      client.getDocumentSuggestions(),
+      listReplacementDocumentCandidates(client),
+      needsOwnContentQuery
+        ? listModuleContentDocuments(client, contentScope)
+        : Promise.resolve(undefined),
+    ]);
   // Una página fuera de rango devuelve 0 filas y total 0, lo que borra la
   // paginación y deja al administrador atrapado en una pantalla vacía que
   // además dice "Aún no hay documentos registrados".
@@ -117,10 +148,25 @@ export default async function ModuleDetailPage({
     }
   }
 
-  const canUpload = current.isActive && children.length === 0;
-  const activeFilterCount = Math.max(
-    0,
-    countDocumentLibraryFilters(scopedQuery) - 1,
+  const canUpload = current.isActive && isLeaf;
+  let moduleContent: ModuleContentDocuments = { complete: true, documents: [] };
+  if (isLeaf) {
+    // Sin filtros, la primera página ya trae todo el tema cuando cabe en ella:
+    // se reutiliza y no se hace otra consulta.
+    moduleContent =
+      ownContent ??
+      (libraryPageCoversModule(library, {
+        activeFilterCount,
+        page: scopedQuery.page,
+      })
+        ? { complete: true, documents: library.items }
+        : await listModuleContentDocuments(client, contentScope));
+  }
+  // Año actual y la entidad y dependencia más frecuentes del tema: la carga
+  // por sección los muestra ya completos, con «Cambiar».
+  const uploadDefaults = contextualUploadDefaults(
+    moduleContent.documents,
+    currentLimaYear(),
   );
 
   return (
@@ -193,11 +239,7 @@ export default async function ModuleDetailPage({
         {current.parentModuleId ? null : (
           <ModulesExplorer
             canCreate
-            context={{
-              kind: "module",
-              moduleId: current.id,
-              moduleName: current.name,
-            }}
+            context={explorerContext}
             initialHighlightId={createdModuleId}
             modules={children}
             parents={parents}
@@ -207,9 +249,10 @@ export default async function ModuleDetailPage({
         {canUpload ? (
           <DocumentUploadPanel
             apiBaseUrl={getAdminApiUrl()}
-            defaultDocumentType={requestedType}
-            defaultOpen={openUpload}
-            key={`document-upload-${openUpload ? "open" : "closed"}-${requestedType ?? "no-type"}`}
+            defaultOpen={openUpload && !requestedSection}
+            key={`document-upload-${
+              openUpload && !requestedSection ? "open" : "closed"
+            }`}
             moduleId={current.id}
             moduleName={current.name}
             replacementCandidates={replacementCandidates}
@@ -217,17 +260,30 @@ export default async function ModuleDetailPage({
           />
         ) : children.length > 0 ? (
           <p className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
-            Selecciona uno de los submódulos para agregar el documento en la
-            ubicación correcta.
+            Los documentos se cargan dentro de cada submódulo. Para subir
+            normativa, cronogramas, anexos o preguntas frecuentes, entra en el
+            submódulo correspondiente de la lista de arriba.
           </p>
         ) : null}
 
-        {children.length === 0 ? (
+        {isLeaf ? (
           <>
             <ModuleContentSections
+              apiBaseUrl={getAdminApiUrl()}
               canUpload={canUpload}
-              documents={library.items}
+              complete={moduleContent.complete}
+              documents={moduleContent.documents}
+              initialUploadSection={requestedSection}
+              key={`module-content-${requestedSection ?? "none"}`}
               moduleId={current.id}
+              moduleName={current.name}
+              suggestions={suggestions}
+              uploadBlockedReason={
+                current.isActive
+                  ? undefined
+                  : "Este módulo está inactivo: actívalo para subir documentos en estas secciones."
+              }
+              uploadDefaults={uploadDefaults}
             />
             <DocumentLibraryView
               activeFilterCount={activeFilterCount}
