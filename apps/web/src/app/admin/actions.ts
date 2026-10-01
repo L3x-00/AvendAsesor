@@ -594,6 +594,43 @@ export async function setDocumentTechnicalStatusAction(
   );
 }
 
+/**
+ * «Volver a procesar» un documento en Error: la versión vigente vuelve a la
+ * cola de lectura e indexación. Si otro administrador ya lo reintentó o subió
+ * una versión nueva, el API responde 409 y se pide actualizar la vista.
+ */
+export async function retryDocumentIngestionAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  return withApi(
+    async (client) => {
+      const documentId = requiredText(formData, "documentId", "El documento");
+      try {
+        await client.retryDocumentIngestion(documentId);
+      } catch (error) {
+        if (error instanceof AdminApiError && error.status === 409) {
+          return {
+            message:
+              "Este documento ya no está en Error: actualiza la página para ver su estado actual.",
+            status: "error",
+          };
+        }
+        throw error;
+      }
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath(`/admin/documents/${documentId}`);
+      revalidatePath("/admin/modules", "layout");
+      return {
+        message:
+          "Listo: el documento volvió a la cola de procesamiento. Su estado se actualizará en unos minutos.",
+        status: "success",
+      };
+    },
+    { requireModulesAccess: true },
+  );
+}
+
 export async function deleteDocumentAction(
   _previousState: AdminActionState,
   formData: FormData,

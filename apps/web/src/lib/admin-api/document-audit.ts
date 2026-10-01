@@ -80,6 +80,14 @@ export function describeAuditEvent(
     };
   }
 
+  if (details.event === "ingestion_retry_requested") {
+    return {
+      details: ["El documento volvió a la cola de lectura e indexación."],
+      routine: false,
+      title: "Se pidió volver a procesar el documento",
+    };
+  }
+
   switch (action) {
     case "created": {
       const situation = text(details.situation);
