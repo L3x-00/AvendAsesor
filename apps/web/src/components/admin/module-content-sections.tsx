@@ -197,16 +197,13 @@ function SectionDocuments({
         <button
           aria-controls={listId}
           aria-expanded={expanded}
-          aria-label={
-            expanded
-              ? `Ver menos documentos de ${title}`
-              : `Ver todos los documentos de ${title} (${documents.length})`
-          }
           className="avend-button avend-button--secondary mt-3"
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
           {expanded ? "Ver menos" : `Ver todos (${documents.length})`}
+          {" "}
+          <span className="avend-visually-hidden">{`en ${title}`}</span>
         </button>
       ) : null}
     </>

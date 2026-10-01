@@ -336,15 +336,14 @@ describe("ModuleContentSections", () => {
 
     expect(annexes.getAllByRole("listitem")).toHaveLength(5);
     const toggle = annexes.getByRole("button", {
-      name: "Ver todos los documentos de Anexos (7)",
+      name: "Ver todos (7) en Anexos",
     });
-    expect(toggle).toHaveTextContent("Ver todos (7)");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAttribute("aria-controls", "module-content-anexo");
 
     await user.click(toggle);
     expect(annexes.getAllByRole("listitem")).toHaveLength(7);
-    expect(toggle).toHaveTextContent("Ver menos");
+    expect(toggle).toHaveAccessibleName("Ver menos en Anexos");
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(toggle);

@@ -610,6 +610,7 @@ export async function retryDocumentIngestionAction(
         await client.retryDocumentIngestion(documentId);
       } catch (error) {
         if (error instanceof AdminApiError && error.status === 409) {
+          revalidatePath(`/admin/documents/${documentId}`);
           return {
             message:
               "Este documento ya no está en Error: actualiza la página para ver su estado actual.",

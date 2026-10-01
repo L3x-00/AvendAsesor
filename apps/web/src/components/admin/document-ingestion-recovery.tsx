@@ -27,6 +27,10 @@ const CAUSES: Record<FailureCause, { text: string; uploadFirst: boolean }> = {
     text: "No se pudo leer o indexar el archivo.",
     uploadFirst: false,
   },
+  unreadable_file: {
+    text: "El archivo está dañado o protegido con contraseña y no se pudo abrir. Sube una versión que se abra normalmente.",
+    uploadFirst: true,
+  },
   unsupported_format: {
     text: "Este formato no se puede leer (por ejemplo, un Word .doc antiguo). Súbelo como PDF o como Word .docx.",
     uploadFirst: true,

@@ -126,10 +126,13 @@ export const managedDocumentVersionSchema = z.object({
       "timeout",
       "too_large",
       "unknown",
+      "unreadable_file",
       "unsupported_format",
     ])
     .nullable()
-    .optional(),
+    .optional()
+    // Una causa nueva del API no debe romper la ficha: se muestra como genérica.
+    .catch("unknown"),
   ingestionStatus: z.enum(["failed", "indexed", "pending", "processing"]),
   ingestionUpdatedAt: timestampSchema,
   /** Ausente en respuestas anteriores al despliegue de versiones con año. */

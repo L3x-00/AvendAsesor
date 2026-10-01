@@ -336,6 +336,7 @@ const persistedMessageIdPattern =
 function renderRichContent(
   content: string,
   citations?: CitationContext,
+  officialLinks = false,
 ): ReactNode[] {
   const blocks: ReactNode[] = [];
   let paragraphLines: string[] = [];
@@ -371,7 +372,7 @@ function renderRichContent(
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
-    if (!inSuggestions && startsSuggestions(line)) {
+    if (officialLinks && !inSuggestions && startsSuggestions(line)) {
       flushParagraph();
       flushList();
       inSuggestions = true;
@@ -934,7 +935,7 @@ export function ChatPanel({
     pendingNewTopicRef.current = false;
     const abortController = new AbortController();
     const localQuestionId = nextLocalId("local-question");
-    // «Pensado por …»: desde el envío hasta que llega la respuesta.
+    // «Pensado por …»: desde el envío hasta la respuesta completa.
     const startedAt = turnStartedAt();
     const thoughtSeconds = () => secondsSince(startedAt);
     // Estado del turno en curso: se completa a medida que llegan los eventos.
@@ -1100,7 +1101,6 @@ export function ChatPanel({
                   inReplyToMessageId: turn.userMessageId,
                   role: "assistant",
                   sources: turn.sources,
-                  thoughtSeconds: thoughtSeconds(),
                 },
               ];
             });
@@ -1125,7 +1125,6 @@ export function ChatPanel({
                 modules: result.data.modules,
                 role: "clarification",
                 sources: turn.sources,
-                thoughtSeconds: thoughtSeconds(),
               },
             ]);
             completionStatus = "Se necesita una aclaración para continuar.";
@@ -1151,6 +1150,7 @@ export function ChatPanel({
                   : "/chat",
               );
             }
+            const conversationalSeconds = thoughtSeconds();
             setMessages((current) => [
               ...current,
               {
@@ -1160,7 +1160,7 @@ export function ChatPanel({
                 role: "assistant",
                 sources: [],
                 suggestions: result.data.suggestions,
-                thoughtSeconds: thoughtSeconds(),
+                thoughtSeconds: conversationalSeconds,
               },
             ]);
             completionStatus = "Listo.";
@@ -1185,7 +1185,6 @@ export function ChatPanel({
                 inReplyToMessageId: turn.userMessageId,
                 role: "no_evidence",
                 sources: [],
-                thoughtSeconds: thoughtSeconds(),
               },
             ]);
             completionStatus = "Respuesta lista.";
@@ -1209,10 +1208,14 @@ export function ChatPanel({
               discardCurrentRequest(FRIENDLY_ERRORS.malformed);
               return;
             }
+            // «Pensado por …» mide hasta la respuesta completa, igual que al
+            // reabrir la conversación desde el Historial.
+            const answeredSeconds = thoughtSeconds();
             replacePendingResponseMessage((message) => ({
               ...message,
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
+              thoughtSeconds: answeredSeconds,
             }));
             setStatus(completionStatus);
             completed = true;
@@ -1407,6 +1410,7 @@ export function ChatPanel({
                       message.id !== "streaming"
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
+                    message.role !== "user",
                   )}
                   {message.id === "streaming" && isStreaming ? (
                     <ChatWriting />

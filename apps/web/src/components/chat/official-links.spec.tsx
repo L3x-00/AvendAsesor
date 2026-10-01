@@ -39,6 +39,24 @@ describe("official links", () => {
     });
   });
 
+  it("does not link an acronym that is part of a norm code", () => {
+    render(
+      <p>
+        {linkifyOfficialEntities(
+          "Sugerencias: revisa la RM N.° 123-2024-MINEDU y el oficio 45-2025-DRE/UGEL; luego consulta en ESSALUD.",
+          "s",
+        )}
+      </p>,
+    );
+
+    expect(screen.queryByRole("link", { name: /^MINEDU/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^DRE/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /^ESSALUD/ })).toHaveAttribute(
+      "href",
+      "https://www.gob.pe/essalud",
+    );
+  });
+
   it("leaves text without official portals untouched", () => {
     expect(linkifyOfficialEntities("Revisa tu boleta de pago.", "s")).toEqual([
       "Revisa tu boleta de pago.",
@@ -48,6 +66,8 @@ describe("official links", () => {
   it("recognizes where the suggestions start", () => {
     expect(startsSuggestions("Sugerencias: verifica…")).toBe(true);
     expect(startsSuggestions("**Sugerencias:**")).toBe(true);
+    expect(startsSuggestions("**Sugerencias**: revisa…")).toBe(true);
+    expect(startsSuggestions("### Sugerencias")).toBe(true);
     expect(startsSuggestions("Las sugerencias del comité")).toBe(false);
   });
 

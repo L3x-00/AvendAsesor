@@ -1,11 +1,14 @@
 import { setDocumentTechnicalStatusAction } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
-import type { ManagedDocumentDetails } from "@/lib/admin-api/types";
+import type {
+  ManagedDocumentDetails,
+  ManagedDocumentVersion,
+} from "@/lib/admin-api/types";
 
 interface DocumentTechnicalStatusFormProps {
   approvalStatus: ManagedDocumentDetails["approvalStatus"];
   approvedVersionId: string | null;
-  currentIngestionStatus: string | undefined;
+  currentIngestionStatus: ManagedDocumentVersion["ingestionStatus"] | undefined;
   documentId: string;
 }
 
@@ -25,6 +28,12 @@ export function DocumentTechnicalStatusForm({
   documentId,
 }: DocumentTechnicalStatusFormProps) {
   const indexed = currentIngestionStatus === "indexed";
+  const queued =
+    currentIngestionStatus === "pending" ||
+    currentIngestionStatus === "processing";
+  // Con una versión nueva aún sin indexar, «Listo» queda deshabilitado: no se
+  // preselecciona, porque una opción deshabilitada no se envía al guardar.
+  const selected = indexed ? approvalStatus : "pending_approval";
 
   return (
     <AdminActionForm
@@ -37,9 +46,9 @@ export function DocumentTechnicalStatusForm({
         <span className="text-base font-semibold">Estado</span>
         <select
           className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-          defaultValue={approvalStatus}
+          defaultValue={selected}
           id="technical-status"
-          key={`${approvalStatus}-${approvedVersionId ?? "sin-aprobar"}`}
+          key={`${selected}-${approvedVersionId ?? "sin-aprobar"}`}
           name="technicalStatus"
         >
           <option value="pending_approval">Pendiente de aprobación</option>
@@ -51,6 +60,18 @@ export function DocumentTechnicalStatusForm({
           </option>
         </select>
       </label>
+      {queued ? (
+        // Tras «Volver a procesar» la ficha pasa a este bloque: el aviso
+        // confirma que el documento quedó en cola aunque el formulario de
+        // reintento ya no esté en pantalla.
+        <p
+          className="rounded-md border border-blue-300 bg-blue-50 p-3 text-base text-blue-900"
+          role="status"
+        >
+          El documento está en la cola de lectura e indexación. Actualiza la
+          página en unos minutos para ver si ya se puede aprobar como Listo.
+        </p>
+      ) : null}
       {!indexed ? (
         <p className="text-base text-avend-text-muted">
           Para aprobarla como Listo, la versión debe estar indexada. Si el

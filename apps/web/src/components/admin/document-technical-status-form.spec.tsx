@@ -1,15 +1,22 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { setDocumentTechnicalStatusAction } from "@/app/admin/actions";
 import { DocumentTechnicalStatusForm } from "./document-technical-status-form";
 
 vi.mock("@/app/admin/actions", () => ({
-  setDocumentTechnicalStatusAction: vi.fn(async () => ({ status: "idle" })),
+  setDocumentTechnicalStatusAction: vi.fn(async () => ({
+    message: "Estado técnico actualizado.",
+    status: "success",
+  })),
 }));
 
 const documentId = "d60530ac-6fba-46bd-bac7-940c0655db54";
+const approvedVersionId = "0f6e4c2b-1c39-4a77-9d1e-3b5f2a7c8d90";
 
 describe("DocumentTechnicalStatusForm", () => {
-  it("shows the saved status after it changes, instead of the stale default", () => {
+  it("keeps showing Listo after saving it, instead of snapping back to Pendiente", async () => {
+    const user = userEvent.setup();
     const { rerender } = render(
       <DocumentTechnicalStatusForm
         approvalStatus="pending_approval"
@@ -18,34 +25,41 @@ describe("DocumentTechnicalStatusForm", () => {
         documentId={documentId}
       />,
     );
-    expect(screen.getByRole("combobox", { name: "Estado" })).toHaveValue(
-      "pending_approval",
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Estado" }),
+      "ready",
     );
+    await user.click(
+      screen.getByRole("button", { name: "Guardar estado técnico" }),
+    );
+    // Éxito confirmado: el formulario se reinicia.
+    expect(
+      await screen.findByText("Estado técnico actualizado."),
+    ).toBeInTheDocument();
+    expect(vi.mocked(setDocumentTechnicalStatusAction)).toHaveBeenCalled();
 
     // La página se vuelve a pintar con el estado ya guardado como Listo.
     rerender(
       <DocumentTechnicalStatusForm
         approvalStatus="ready"
-        approvedVersionId="0f6e4c2b-1c39-4a77-9d1e-3b5f2a7c8d90"
+        approvedVersionId={approvedVersionId}
         currentIngestionStatus="indexed"
         documentId={documentId}
       />,
     );
-    const select = screen.getByRole("combobox", { name: "Estado" });
-    expect(select).toHaveValue("ready");
-
-    // El reinicio del formulario tras guardar conserva el estado nuevo.
-    select.closest("form")?.reset();
-    expect(screen.getByRole("combobox", { name: "Estado" })).toHaveValue(
-      "ready",
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Estado" })).toHaveValue(
+        "ready",
+      ),
     );
   });
 
-  it("only offers Listo for an indexed version and explains why", () => {
+  it("only offers Listo for an indexed version and never preselects it disabled", () => {
     render(
       <DocumentTechnicalStatusForm
-        approvalStatus="pending_approval"
-        approvedVersionId={null}
+        approvalStatus="ready"
+        approvedVersionId={approvedVersionId}
         currentIngestionStatus="processing"
         documentId={documentId}
       />,
@@ -54,8 +68,26 @@ describe("DocumentTechnicalStatusForm", () => {
     expect(
       screen.getByRole("option", { name: "Listo (disponible para consultas)" }),
     ).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Estado" })).toHaveValue(
+      "pending_approval",
+    );
     expect(
       screen.getByText(/la versión debe estar indexada/),
     ).toBeInTheDocument();
+  });
+
+  it("confirms that a document sent back to processing is queued", () => {
+    render(
+      <DocumentTechnicalStatusForm
+        approvalStatus="pending_approval"
+        approvedVersionId={null}
+        currentIngestionStatus="pending"
+        documentId={documentId}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /en la cola de lectura e indexación/,
+    );
   });
 });

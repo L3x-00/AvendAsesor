@@ -38,7 +38,11 @@ const OFFICIAL_LINKS: ReadonlyArray<{
     name: "El Peruano",
     pattern: /\bEl Peruano\b/u,
   },
-  { href: "https://www.gob.pe/essalud", name: "EsSalud", pattern: /\bEsSalud\b/iu },
+  {
+    href: "https://www.gob.pe/essalud",
+    name: "EsSalud",
+    pattern: /\b(?:EsSalud|ESSALUD|Essalud)\b/u,
+  },
   {
     href: "https://www.derrama.org.pe",
     name: "Derrama Magisterial",
@@ -46,14 +50,26 @@ const OFFICIAL_LINKS: ReadonlyArray<{
   },
 ];
 
+/**
+ * Una sigla dentro de un código de norma («RM N.° 123-2024-MINEDU») no es una
+ * mención del portal: no se enlaza si la rodean guiones, barras o puntos.
+ */
+const NOT_IN_CODE_BEFORE = "(?<![-/.\\w])";
+const NOT_IN_CODE_AFTER = "(?![-/]\\w)";
+
 const ANY_OFFICIAL = new RegExp(
-  OFFICIAL_LINKS.map((link) => `(?:${link.pattern.source})`).join("|"),
+  OFFICIAL_LINKS.map(
+    (link) => `${NOT_IN_CODE_BEFORE}(?:${link.pattern.source})${NOT_IN_CODE_AFTER}`,
+  ).join("|"),
   "gu",
 );
 
 /** Bloque de sugerencias: la línea «Sugerencias:» y lo que la sigue. */
 export function startsSuggestions(line: string): boolean {
-  return /^(?:\*\*)?sugerencias?\s*:/iu.test(line.trim());
+  // «Sugerencias:», «**Sugerencias:**», «**Sugerencias**:» o «### Sugerencias».
+  return /^(?:#{1,6}\s+)?(?:\*\*)?sugerencias?(?:\*\*)?\s*(?::|$)/iu.test(
+    line.trim(),
+  );
 }
 
 /** Convierte las menciones de portales oficiales en enlaces seguros. */

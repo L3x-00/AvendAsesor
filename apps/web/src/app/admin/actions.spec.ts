@@ -593,6 +593,9 @@ describe("admin server actions", () => {
         "Este documento ya no está en Error: actualiza la página para ver su estado actual.",
       status: "error",
     });
-    expect(revalidatePath).not.toHaveBeenCalled();
+    // La vista se actualiza para mostrar el estado real.
+    expect(revalidatePath).toHaveBeenCalledWith(
+      "/admin/documents/d60530ac-6fba-46bd-bac7-940c0655db54",
+    );
   });
 });
