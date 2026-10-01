@@ -4,10 +4,11 @@ import type { AdminHomeDashboard } from "@/lib/admin-api/types";
 import { AdminDashboard } from "./admin-dashboard";
 import styles from "./admin-dashboard.module.css";
 
+// Nombres reales: el módulo renombrado en producción el 2026-10-01 incluido.
 const moduleNames = [
   "Contratación y desplazamientos",
   "Evaluación docente",
-  "Situaciones administrativas",
+  "Situaciones Administrativas",
   "Auxiliar de educación",
   "Ley y reglamento",
   "Cargos y plazas",
@@ -25,6 +26,7 @@ const dashboard: AdminHomeDashboard = {
   moduleSummaries: moduleNames.map((name, index) => ({
     documentCount: index + 10,
     id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+    isActive: true,
     name,
     submoduleCount: index + 1,
   })),
@@ -129,7 +131,7 @@ describe("AdminDashboard", () => {
     ).toBeVisible();
   });
 
-  it("renders exactly seven canonical module cards with real counts and routes", () => {
+  it("renders one card per root module with real counts and routes", () => {
     render(<AdminDashboard dashboard={dashboard} />);
     const section = within(sectionNamed("Módulos de AVEND ASESOR"));
     const links = section.getAllByRole("link");
@@ -148,6 +150,33 @@ describe("AdminDashboard", () => {
       expect(within(link).getByText("Submódulos")).toBeVisible();
       expect(within(link).getByText("Documentos")).toBeVisible();
     });
+  });
+
+  it("marks inactive modules and handles any number of modules", () => {
+    const { rerender } = render(
+      <AdminDashboard
+        dashboard={{
+          ...dashboard,
+          moduleSummaries: [
+            ...dashboard.moduleSummaries.slice(0, 2),
+            { ...dashboard.moduleSummaries[2], isActive: false },
+          ],
+        }}
+      />,
+    );
+    const links = within(sectionNamed("Módulos de AVEND ASESOR")).getAllByRole(
+      "link",
+    );
+
+    expect(links).toHaveLength(3);
+    expect(within(links[2]).getByText("Inactivo")).toBeVisible();
+    expect(within(links[0]).queryByText("Inactivo")).not.toBeInTheDocument();
+
+    rerender(<AdminDashboard dashboard={{ ...dashboard, moduleSummaries: [] }} />);
+    expect(screen.getByText(/Aún no hay módulos registrados/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Crear el primer módulo" }),
+    ).toHaveAttribute("href", "/admin/modules");
   });
 
   it("keeps incidents and review work completely outside Inicio", () => {

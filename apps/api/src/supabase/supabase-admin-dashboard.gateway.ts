@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import type { PostgrestError } from '@supabase/supabase-js';
 import {
-  ADMIN_HOME_MODULE_NAMES,
   type AdminDashboardGateway,
   type AdminHomeDashboard,
   type AdminHomeModuleSummary,
@@ -43,27 +42,28 @@ function requireCount(value: unknown): number {
   return value;
 }
 
+/** Tope defensivo: Inicio muestra los módulos raíz, que son pocas decenas. */
+const MAX_MODULE_SUMMARIES = 200;
+
 function mapModuleSummaries(value: Json): AdminHomeModuleSummary[] {
-  if (
-    !Array.isArray(value) ||
-    value.length !== ADMIN_HOME_MODULE_NAMES.length
-  ) {
+  if (!Array.isArray(value) || value.length > MAX_MODULE_SUMMARIES) {
     unavailableResponse();
   }
 
   const seenIds = new Set<string>();
-  return value.map((item, index) => {
+  return value.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       unavailableResponse();
     }
 
-    const id = item.id;
-    const name = item.name;
+    const { id, isActive, name } = item;
     if (
       typeof id !== 'string' ||
       !UUID_PATTERN.test(id) ||
       seenIds.has(id) ||
-      name !== ADMIN_HOME_MODULE_NAMES[index]
+      typeof name !== 'string' ||
+      !name.trim() ||
+      typeof isActive !== 'boolean'
     ) {
       unavailableResponse();
     }
@@ -72,6 +72,7 @@ function mapModuleSummaries(value: Json): AdminHomeModuleSummary[] {
     return {
       documentCount: requireCount(item.documentCount),
       id,
+      isActive,
       name,
       submoduleCount: requireCount(item.submoduleCount),
     };

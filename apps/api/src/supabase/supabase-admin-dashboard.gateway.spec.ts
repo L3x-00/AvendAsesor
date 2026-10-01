@@ -3,7 +3,6 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ADMIN_HOME_MODULE_NAMES } from '../administration/admin-dashboard.gateway';
 import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
 
@@ -11,9 +10,19 @@ function clientWith(rpc: jest.Mock): SupabaseServerClient {
   return { rpc } as unknown as SupabaseServerClient;
 }
 
-const moduleSummaries = ADMIN_HOME_MODULE_NAMES.map((name, index) => ({
+// Nombres reales, incluido el renombrado que dejó Inicio sin cargar el
+// 2026-10-01 («Situaciones Administrativas», con otro código).
+const moduleNames = [
+  'Contratación y desplazamientos',
+  'Situaciones Administrativas',
+  'Remuneraciones',
+  'Módulo nuevo del panel',
+];
+
+const moduleSummaries = moduleNames.map((name, index) => ({
   documentCount: index + 2,
   id: `00000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`,
+  isActive: index !== 3,
   name,
   submoduleCount: index + 1,
 }));
@@ -87,10 +96,12 @@ describe('SupabaseAdminDashboardGatewayAdapter', () => {
 
   it.each([
     [null],
-    [{ ...moduleSummaries[0], name: 'Módulo no canónico' }],
+    [{ ...moduleSummaries[0], name: '  ' }],
+    [{ ...moduleSummaries[0], isActive: 'true' }],
+    [moduleSummaries[0], { ...moduleSummaries[1], id: moduleSummaries[0].id }],
     [
-      ...moduleSummaries.slice(0, 6),
-      { ...moduleSummaries[6], documentCount: -1 },
+      ...moduleSummaries.slice(0, 3),
+      { ...moduleSummaries[3], documentCount: -1 },
     ],
   ])(
     'fails closed for malformed module summaries',
@@ -126,6 +137,38 @@ describe('SupabaseAdminDashboardGatewayAdapter', () => {
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
     },
   );
+
+  it('accepts any number of root modules, including none', async () => {
+    const gateway = new SupabaseAdminDashboardGatewayAdapter(
+      clientWith(
+        jest.fn().mockResolvedValue({
+          data: [
+            {
+              active_modules: 0,
+              active_submodules: 0,
+              active_users: 0,
+              ai_queries_processed: 0,
+              expired_users: 0,
+              expiring_soon_users: 0,
+              expiry_window_days: 7,
+              module_summaries: [],
+              total_documents: 0,
+              total_queries: 0,
+              total_users: 0,
+            },
+          ],
+          error: null,
+        }),
+      ),
+    );
+
+    await expect(
+      gateway.getDashboard({
+        administratorId: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
+        expiringSoonDays: 7,
+      }),
+    ).resolves.toMatchObject({ moduleSummaries: [] });
+  });
 
   it('fails closed for a missing result, an inconsistent window and an unconfigured client', async () => {
     const missing = new SupabaseAdminDashboardGatewayAdapter(

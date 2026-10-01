@@ -183,6 +183,7 @@ const homeDashboard = {
   ].map((name, index) => ({
     documentCount: index + 3,
     id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+    isActive: true,
     name,
     submoduleCount: index + 1,
   })),
