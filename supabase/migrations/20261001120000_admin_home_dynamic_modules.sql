@@ -10,6 +10,11 @@
 --
 -- La firma y las columnas de retorno no cambian; `create or replace` conserva
 -- los privilegios (solo service_role puede ejecutarla).
+--
+-- Despliegue: aplicar junto con el API y la web de este cambio. El API anterior
+-- exige los siete nombres canónicos y el nuevo exige `isActive`, así que entre
+-- la migración y el despliegue Inicio puede responder 503 (en producción ya
+-- fallaba antes de aplicarla).
 create or replace function public.get_admin_home_dashboard_metrics(
   p_administrator_id uuid,
   p_expiring_soon_days integer default 7

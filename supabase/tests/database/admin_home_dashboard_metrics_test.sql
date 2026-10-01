@@ -739,6 +739,9 @@ select is(
   'Cards follow renamed and new modules and omit deleted ones'
 );
 
+-- document_modules.module_id es ON DELETE RESTRICT: se sueltan los vínculos
+-- del fixture antes de vaciar los módulos (todo se revierte al final).
+delete from public.document_modules;
 delete from public.modules where parent_module_id is not null;
 delete from public.modules;
 

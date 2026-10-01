@@ -42,16 +42,20 @@ function requireCount(value: unknown): number {
   return value;
 }
 
-/** Tope defensivo: Inicio muestra los módulos raíz, que son pocas decenas. */
-const MAX_MODULE_SUMMARIES = 200;
+/**
+ * Tope defensivo: Inicio muestra los módulos raíz, que son pocas decenas. Por
+ * encima se recorta la lista en vez de fallar: un número de módulos no debe
+ * volver a dejar Inicio sin cargar.
+ */
+export const MAX_MODULE_SUMMARIES = 200;
 
 function mapModuleSummaries(value: Json): AdminHomeModuleSummary[] {
-  if (!Array.isArray(value) || value.length > MAX_MODULE_SUMMARIES) {
+  if (!Array.isArray(value)) {
     unavailableResponse();
   }
 
   const seenIds = new Set<string>();
-  return value.map((item) => {
+  return value.slice(0, MAX_MODULE_SUMMARIES).map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       unavailableResponse();
     }

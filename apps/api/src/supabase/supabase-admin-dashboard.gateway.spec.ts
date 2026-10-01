@@ -3,7 +3,10 @@ import {
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { SupabaseAdminDashboardGatewayAdapter } from './supabase-admin-dashboard.gateway';
+import {
+  MAX_MODULE_SUMMARIES,
+  SupabaseAdminDashboardGatewayAdapter,
+} from './supabase-admin-dashboard.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
 
 function clientWith(rpc: jest.Mock): SupabaseServerClient {
@@ -98,6 +101,7 @@ describe('SupabaseAdminDashboardGatewayAdapter', () => {
     [null],
     [{ ...moduleSummaries[0], name: '  ' }],
     [{ ...moduleSummaries[0], isActive: 'true' }],
+    [{ ...moduleSummaries[0], isActive: undefined }],
     [moduleSummaries[0], { ...moduleSummaries[1], id: moduleSummaries[0].id }],
     [
       ...moduleSummaries.slice(0, 3),
@@ -138,37 +142,49 @@ describe('SupabaseAdminDashboardGatewayAdapter', () => {
     },
   );
 
-  it('accepts any number of root modules, including none', async () => {
-    const gateway = new SupabaseAdminDashboardGatewayAdapter(
-      clientWith(
-        jest.fn().mockResolvedValue({
-          data: [
-            {
-              active_modules: 0,
-              active_submodules: 0,
-              active_users: 0,
-              ai_queries_processed: 0,
-              expired_users: 0,
-              expiring_soon_users: 0,
-              expiry_window_days: 7,
-              module_summaries: [],
-              total_documents: 0,
-              total_queries: 0,
-              total_users: 0,
-            },
-          ],
-          error: null,
-        }),
-      ),
-    );
+  it.each([
+    ['none', 0, 0],
+    ['above the cap, truncated instead of failing', 205, MAX_MODULE_SUMMARIES],
+  ])(
+    'accepts any number of root modules: %s',
+    async (_label, available, expected) => {
+      const summaries = Array.from({ length: available }, (_, index) => ({
+        documentCount: 0,
+        id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+        isActive: true,
+        name: `Módulo ${index + 1}`,
+        submoduleCount: 0,
+      }));
+      const gateway = new SupabaseAdminDashboardGatewayAdapter(
+        clientWith(
+          jest.fn().mockResolvedValue({
+            data: [
+              {
+                active_modules: available,
+                active_submodules: 0,
+                active_users: 0,
+                ai_queries_processed: 0,
+                expired_users: 0,
+                expiring_soon_users: 0,
+                expiry_window_days: 7,
+                module_summaries: summaries,
+                total_documents: 0,
+                total_queries: 0,
+                total_users: 0,
+              },
+            ],
+            error: null,
+          }),
+        ),
+      );
 
-    await expect(
-      gateway.getDashboard({
+      const dashboard = await gateway.getDashboard({
         administratorId: '80a15a92-9899-4ee2-81e0-30d7c3f7677c',
         expiringSoonDays: 7,
-      }),
-    ).resolves.toMatchObject({ moduleSummaries: [] });
-  });
+      });
+      expect(dashboard.moduleSummaries).toHaveLength(expected);
+    },
+  );
 
   it('fails closed for a missing result, an inconsistent window and an unconfigured client', async () => {
     const missing = new SupabaseAdminDashboardGatewayAdapter(

@@ -188,7 +188,7 @@
 }
 
 .modulesEmpty a {
-  color: var(--avend-accent);
+  color: var(--avend-accent-strong);
   font-weight: 600;
   text-decoration: underline;
 }

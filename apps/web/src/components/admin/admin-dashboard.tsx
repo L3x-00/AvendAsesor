@@ -201,12 +201,7 @@ export function AdminDashboard({ dashboard }: AdminDashboardProps) {
         <h2 className={styles.sectionTitle} id="avend-modules-title">
           Módulos de AVEND ASESOR
         </h2>
-        {dashboard.moduleSummaries.length ? null : (
-          <p className={styles.modulesEmpty}>
-            Aún no hay módulos registrados.{" "}
-            <Link href="/admin/modules">Crear el primer módulo</Link>
-          </p>
-        )}
+        {dashboard.moduleSummaries.length ? (
         <ul className={styles.modulesGrid} role="list">
           {dashboard.moduleSummaries.map((module) => (
             <li key={module.id}>
@@ -233,6 +228,12 @@ export function AdminDashboard({ dashboard }: AdminDashboardProps) {
             </li>
           ))}
         </ul>
+        ) : (
+          <p className={styles.modulesEmpty}>
+            Aún no hay módulos registrados.{" "}
+            <Link href="/admin/modules">Crear el primer módulo</Link>
+          </p>
+        )}
       </section>
     </div>
   );
