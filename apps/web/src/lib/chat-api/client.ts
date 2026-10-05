@@ -85,9 +85,14 @@ export class ChatApiClient {
     );
   }
 
-  getSourceDownloadUrl(sourceId: string): Promise<ChatSourceDownload> {
+  getSourceDownloadUrl(
+    sourceId: string,
+    disposition: "attachment" | "inline" = "inline",
+  ): Promise<ChatSourceDownload> {
+    const query =
+      disposition === "attachment" ? "?disposition=attachment" : "";
     return this.send(
-      `/chat/sources/${sourceId}/download-url`,
+      `/chat/sources/${sourceId}/download-url${query}`,
       chatSourceDownloadSchema,
     );
   }

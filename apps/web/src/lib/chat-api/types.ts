@@ -28,6 +28,8 @@ export const chatSourceSchema = z.object({
   numeralReference: z.string().max(255).nullable(),
   pageEnd: z.number().int().min(1).max(300),
   pageStart: z.number().int().min(1).max(300),
+  /** Total de páginas físicas del archivo; ausente en conversaciones antiguas. */
+  pdfPageCount: z.number().int().min(1).max(300).optional(),
   rank: z.number().int().min(1).max(20),
   relevanceScore: z.number().min(0).max(1),
   relatedModuleName: z.string().max(255).nullable().optional(),

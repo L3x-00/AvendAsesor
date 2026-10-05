@@ -33,6 +33,7 @@ describe("ChatApiClient", () => {
         next: { revalidate: 120, tags: ["chat-modules"] },
       }),
     );
+
   });
 
   it("validates the owned source download contract and never caches signed URLs", async () => {
@@ -52,6 +53,12 @@ describe("ChatApiClient", () => {
     );
     expect(request).toHaveBeenCalledWith(
       `http://localhost:3001/chat/sources/${sourceId}/download-url`,
+      expect.objectContaining({ cache: "no-store", method: "GET" }),
+    );
+
+    await client.getSourceDownloadUrl(sourceId, "attachment");
+    expect(request).toHaveBeenLastCalledWith(
+      `http://localhost:3001/chat/sources/${sourceId}/download-url?disposition=attachment`,
       expect.objectContaining({ cache: "no-store", method: "GET" }),
     );
   });

@@ -119,6 +119,7 @@ export interface ChatSource {
   moduleName: string | null;
   numeralReference: string | null;
   pageEnd: number;
+  pdfPageCount?: number;
   pageStart: number;
   rank: number;
   relevanceScore: number;
@@ -432,6 +433,7 @@ function toCitationBundle(
       moduleName: citationModuleName(source, citationModuleId),
       numeralReference: source.numeralReference,
       pageEnd: source.pageEnd,
+      ...(source.pdfPageCount ? { pdfPageCount: source.pdfPageCount } : {}),
       pageStart: source.pageStart,
       rank: index + 1,
       relevanceScore,
@@ -590,8 +592,10 @@ export class ChatService {
   createSourceDownloadUrl(
     sourceId: string,
     authorization: AuthorizationContext,
+    disposition: 'attachment' | 'inline' = 'inline',
   ): Promise<ChatSourceDownload> {
     return this.historyGateway.createSourceDownloadUrl({
+      disposition,
       sourceId,
       ttlSeconds: 60,
       userId: authorization.userId,

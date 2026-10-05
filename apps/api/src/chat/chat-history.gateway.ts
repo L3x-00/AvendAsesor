@@ -111,6 +111,7 @@ export interface ChatHistoryGateway {
     userId: string;
   }): Promise<ChatConversationContext>;
   createSourceDownloadUrl(input: {
+    disposition: 'attachment' | 'inline';
     sourceId: string;
     ttlSeconds: number;
     userId: string;

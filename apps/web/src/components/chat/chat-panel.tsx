@@ -37,8 +37,10 @@ import {
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
+import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
+  ChatDownloads,
   ChatSources,
   citationRanks,
   citedSourceRanks,
@@ -1271,35 +1273,13 @@ export function ChatPanel({
               consultar de forma general cuando existan documentos procesados.
             </p>
           ) : activeParent && submodules.length > 0 ? (
-            <section
-              aria-label={`Subtemas de ${activeParent.name}`}
-              className="avend-chat-modules avend-chat-submodules"
-            >
-              <p className="avend-chat-submodules-label">
-                Selecciona el tema relacionado si lo deseas (opcional). También
-                puedes escribir directamente tu consulta.
-              </p>
-              {submodules.map((submodule) => (
-                <button
-                  aria-pressed={submodule.id === selectedModuleId}
-                  className="avend-chat-module"
-                  disabled={isStreaming}
-                  key={submodule.id}
-                  onClick={() => changeModuleContext(submodule.id)}
-                  type="button"
-                >
-                  <span aria-hidden="true" className="avend-chat-module-icon">
-                    <svg fill="none" viewBox="0 0 24 24">
-                      <path d="M7 3.75h7L18 7.7v12.55H7z" />
-                      <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
-                    </svg>
-                  </span>
-                  <span className="avend-chat-module-name">
-                    {submodule.name}
-                  </span>
-                </button>
-              ))}
-            </section>
+            <SubmoduleFolder
+              disabled={isStreaming}
+              moduleName={activeParent.name}
+              onSelect={changeModuleContext}
+              selectedModuleId={selectedSubmodule?.id}
+              submodules={submodules}
+            />
           ) : null}
 
           {selectedSubmodule ? (
@@ -1462,6 +1442,9 @@ export function ChatPanel({
                     }}
                     questions={message.suggestions}
                   />
+                ) : null}
+                {message.sources.length && message.id !== "streaming" ? (
+                  <ChatDownloads sources={message.sources} />
                 ) : null}
                 {message.role === "assistant" &&
                 message.id !== "streaming" &&

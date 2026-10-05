@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 describe("ModuleOverviewCard", () => {
-  it("muestra los documentos del tema con su resumen y deja lista una pregunta", async () => {
+  it("pliega el resumen al terminar y permite abrirlo para dejar lista una pregunta", async () => {
     const user = userEvent.setup();
     const fetchMock = respondWith(overview());
     const onAsk = vi.fn();
@@ -54,18 +54,26 @@ describe("ModuleOverviewCard", () => {
     expect(
       screen.getByText("Preparando un resumen de los documentos…"),
     ).toBeVisible();
-    expect(await screen.findByText(longTitle)).toBeVisible();
+    expect(await screen.findByText("Resumen listo · 1 documento")).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/chat/modules/${moduleId}/overview`,
       expect.objectContaining({ headers: { Accept: "application/json" } }),
     );
-    expect(screen.getByText("Resolución Ministerial · 2026")).toBeVisible();
+    expect(screen.getByText(longTitle).closest("[aria-hidden]"))
+      .toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText("Resolución Ministerial · 2026")).toBeInTheDocument();
     expect(
       screen.getByText("Aprueba los padrones para percibir asignaciones."),
-    ).toBeVisible();
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Resumen orientativo generado con IA/),
-    ).toBeVisible();
+    ).toBeInTheDocument();
+
+    const toggle = screen.getByRole("button", { name: "Ver resumen" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(longTitle)).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: /Preguntar sobre este documento/ }),
@@ -94,8 +102,12 @@ describe("ModuleOverviewCard", () => {
     );
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
 
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Ver resumen" }),
+    );
+
     expect(
-      await screen.findByText(
+      screen.getByText(
         "Estos son los documentos disponibles sobre «Remuneraciones»:",
       ),
     ).toBeVisible();
@@ -117,8 +129,12 @@ describe("ModuleOverviewCard", () => {
     respondWith(overview({ total: 12 }));
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
 
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Ver resumen" }),
+    );
+
     expect(
-      await screen.findByText(/Y 11 documentos más en este tema/),
+      screen.getByText(/Y 11 documentos más en este tema/),
     ).toBeVisible();
   });
 

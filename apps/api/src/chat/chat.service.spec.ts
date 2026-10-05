@@ -1408,6 +1408,19 @@ describe('ChatService', () => {
       service.createSourceDownloadUrl(sourceId, authorization),
     ).resolves.toEqual(expect.objectContaining({ sourceId }));
     expect(historyGateway.createSourceDownloadUrl).toHaveBeenCalledWith({
+      disposition: 'inline',
+      sourceId,
+      ttlSeconds: 60,
+      userId: authorization.userId,
+    });
+
+    await service.createSourceDownloadUrl(
+      sourceId,
+      authorization,
+      'attachment',
+    );
+    expect(historyGateway.createSourceDownloadUrl).toHaveBeenLastCalledWith({
+      disposition: 'attachment',
       sourceId,
       ttlSeconds: 60,
       userId: authorization.userId,

@@ -74,6 +74,7 @@ describe('ChatController', () => {
     await expect(
       controller.createSourceDownloadUrl(
         '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+        {},
         authorization,
       ),
     ).resolves.toEqual({
@@ -81,6 +82,11 @@ describe('ChatController', () => {
       sourceId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
       url: 'https://storage.example/signed',
     });
+    expect(service.createSourceDownloadUrl).toHaveBeenCalledWith(
+      '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+      authorization,
+      'inline',
+    );
   });
 
   it('serializes streaming events as SSE without exposing thrown details', async () => {

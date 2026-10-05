@@ -184,10 +184,37 @@ function relevantSources(
   sources: RetrievedChunk[],
   limit: number,
 ): RetrievedChunk[] {
-  return withinScoreMargin(
-    uniqueSources(sources),
+  const eligible = withinScoreMargin(
+    uniqueSources(byScoreDescending(sources)),
     RAG_SOURCE_SCORE_MARGIN,
-  ).slice(0, limit);
+  );
+  const distinctDocuments = new Set(
+    eligible.map((source) => source.documentVersionId),
+  ).size;
+  // Reserva la mayoría de plazas iniciales para versiones distintas. Después
+  // vuelve al orden por relevancia y completa con chunks vecinos del mismo
+  // documento, necesarios para condiciones y excepciones.
+  const diversityTarget = Math.min(
+    distinctDocuments,
+    Math.max(1, Math.ceil(limit * 0.6)),
+  );
+  const selected: RetrievedChunk[] = [];
+  const selectedChunks = new Set<string>();
+  const selectedDocuments = new Set<string>();
+
+  for (const source of eligible) {
+    if (selectedDocuments.has(source.documentVersionId)) continue;
+    selected.push(source);
+    selectedChunks.add(source.chunkId);
+    selectedDocuments.add(source.documentVersionId);
+    if (selectedDocuments.size === diversityTarget) break;
+  }
+  for (const source of eligible) {
+    if (selected.length === limit) break;
+    if (selectedChunks.has(source.chunkId)) continue;
+    selected.push(source);
+  }
+  return selected;
 }
 
 function byScoreDescending(sources: RetrievedChunk[]): RetrievedChunk[] {

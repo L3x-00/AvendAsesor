@@ -1,6 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ChatSources, citationRanks, citedSourceRanks, sourceCitationLabel } from "./chat-sources";
+import {
+  ChatDownloads,
+  ChatSources,
+  citationRanks,
+  citedSourceRanks,
+  sourceCitationLabel,
+} from "./chat-sources";
 
 describe("citas del modelo", () => {
   it("shows the normative abbreviation in the citation label", () => {
@@ -36,6 +42,7 @@ describe("ChatSources", () => {
             moduleName: "Licencias",
             numeralReference: "5.1",
             pageEnd: 33,
+            pdfPageCount: 47,
             pageStart: 33,
             rank: 1,
             relevanceScore: 0.92,
@@ -68,7 +75,8 @@ describe("ChatSources", () => {
       screen.queryByText(/Coincidencia documental/u),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Fuente número:")).toBeInTheDocument();
-    expect(screen.getByText("Página:")).toBeInTheDocument();
+    expect(screen.getByText("Página PDF:")).toBeInTheDocument();
+    expect(screen.getByText("33 de 47")).toBeVisible();
     expect(screen.getByText("Versión:")).toBeInTheDocument();
     expect(
       screen.getByRole("link", {
@@ -83,6 +91,11 @@ describe("ChatSources", () => {
         name: /Abrir fuente \[1\]: Ley de Reforma Magisterial/i,
       }),
     ).toHaveAttribute("target", "_blank");
+    expect(
+      screen.getByRole("link", {
+        name: /Abrir fuente \[1\]: Ley de Reforma Magisterial/i,
+      }),
+    ).toHaveTextContent("Ver documento");
   }, 15_000);
 
   it("preserves ranges and a clear fallback when source metadata is absent", () => {
@@ -109,7 +122,7 @@ describe("ChatSources", () => {
 
     expect(screen.getByText("10–12").closest("td")).toHaveAttribute(
       "data-label",
-      "Páginas",
+      "Páginas PDF",
     );
     expect(
       screen.queryByText(/Coincidencia documental/u),
@@ -121,7 +134,9 @@ describe("ChatSources", () => {
     ).toHaveTextContent("Proceso: No especificado");
     expect(sourceRow).toHaveTextContent("Sección: No especificada");
     expect(sourceRow).toHaveTextContent("Artículo: No especificado");
-    expect(sourceRow).toHaveTextContent("Numeral: No especificado");
+    expect(sourceRow).toHaveTextContent(
+      "Numeral o literal: No especificado",
+    );
   });
 
   it("distinguishes replaced and archived evidence while preserving each source download", () => {
@@ -193,6 +208,51 @@ describe("ChatSources", () => {
       expect.stringMatching(
         /^\/api\/chat\/sources\/source-archived\/download\?pagina=\d+$/u,
       ),
+    );
+  });
+});
+
+describe("ChatDownloads", () => {
+  const base = {
+    articleReference: null,
+    documentSituation: "current" as const,
+    moduleName: "Licencias",
+    numeralReference: null,
+    pageEnd: 2,
+    pageStart: 2,
+    relevanceScore: 0.9,
+    sectionTitle: null,
+    versionNumber: 1,
+  };
+
+  it("muestra descargas explícitas y deduplica fragmentos del mismo documento", () => {
+    render(
+      <ChatDownloads
+        sources={[
+          {
+            ...base,
+            documentTitle: "Anexo de requisitos",
+            id: "11111111-1111-4111-8111-111111111111",
+            rank: 1,
+          },
+          {
+            ...base,
+            documentTitle: "Anexo de requisitos",
+            id: "22222222-2222-4222-8222-222222222222",
+            pageEnd: 3,
+            pageStart: 3,
+            rank: 2,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("Anexo de requisitos")).toHaveLength(1);
+    expect(
+      screen.getByRole("link", { name: "Descargar Anexo de requisitos" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/chat/sources/11111111-1111-4111-8111-111111111111/download?descargar=1",
     );
   });
 });

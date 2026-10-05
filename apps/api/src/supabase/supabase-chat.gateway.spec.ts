@@ -242,6 +242,7 @@ describe('SupabaseChatGatewayAdapter', () => {
     const gateway = new SupabaseChatGatewayAdapter(client);
 
     const result = await gateway.createSourceDownloadUrl({
+      disposition: 'inline',
       sourceId,
       ttlSeconds: 60,
       userId,
@@ -276,7 +277,12 @@ describe('SupabaseChatGatewayAdapter', () => {
     });
     const gateway = new SupabaseChatGatewayAdapter(client);
 
-    await gateway.createSourceDownloadUrl({ sourceId, ttlSeconds: 60, userId });
+    await gateway.createSourceDownloadUrl({
+      disposition: 'inline',
+      sourceId,
+      ttlSeconds: 60,
+      userId,
+    });
 
     expect(createSignedUrl).toHaveBeenCalledWith('documents/version.docx', 60, {
       download: true,
@@ -298,8 +304,39 @@ describe('SupabaseChatGatewayAdapter', () => {
     const gateway = new SupabaseChatGatewayAdapter(client);
 
     await expect(
-      gateway.createSourceDownloadUrl({ sourceId, ttlSeconds: 60, userId }),
+      gateway.createSourceDownloadUrl({
+        disposition: 'inline',
+        sourceId,
+        ttlSeconds: 60,
+        userId,
+      }),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('forces attachment disposition for an explicit PDF download', async () => {
+    const sourceId = '8c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const { client, createSignedUrl } = createClient({
+      rpcData: [
+        {
+          source_id: sourceId,
+          storage_bucket: 'normative-documents',
+          storage_path: 'documents/version.pdf',
+        },
+      ],
+      signedUrl: 'https://storage.example/signed',
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await gateway.createSourceDownloadUrl({
+      disposition: 'attachment',
+      sourceId,
+      ttlSeconds: 60,
+      userId,
+    });
+
+    expect(createSignedUrl).toHaveBeenCalledWith('documents/version.pdf', 60, {
+      download: true,
+    });
   });
 
   it('maps active modules and owned conversation reads to safe application shapes', async () => {

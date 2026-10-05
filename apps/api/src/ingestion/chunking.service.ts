@@ -60,7 +60,21 @@ function isHeading(content: string): boolean {
   );
 }
 const ARTICLE = /art[ií]culo\s+([\w.-]+)/iu;
+const NUMERAL = /(?:^|\s)(\d+(?:\.\d+)+)\.?\s/u;
+const EXPLICIT_LITERAL = /\b(?:literal|inciso)\s+([a-z])\)\s/iu;
+const LIST_LITERAL = /(?:^|\n\n)\s*([a-z])\)\s/iu;
 const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
+
+function subreference(content: string): string | undefined {
+  const numeral = content.match(NUMERAL)?.[1];
+  const literal =
+    content.match(EXPLICIT_LITERAL)?.[1] ?? content.match(LIST_LITERAL)?.[1];
+  return (
+    [numeral, literal ? `Literal ${literal.toLocaleLowerCase('es')})` : null]
+      .filter(Boolean)
+      .join(' · ') || undefined
+  );
+}
 
 interface ChunkUnit {
   content: string;
@@ -168,11 +182,11 @@ export class ChunkingService {
         articleReference: (fresh.match(ARTICLE) ?? content.match(ARTICLE))?.[0],
         chunkContent: content,
         chunkIndex: chunks.length,
-        numeralReference: content.match(/(?:^|\s)(\d+(?:\.\d+)+)\.?\s/)?.[1],
+        numeralReference: subreference(content),
         pageEnd: units.at(-1)!.pageEnd,
         pageStart: units[0].pageStart,
         sectionTitle: content.match(
-          /^(?:cap[ií]tulo|art[ií]culo).{1,240}/im,
+          /^(?:cap[ií]tulo|t[ií]tulo|secci[oó]n|art[ií]culo|anexo|disposici[oó]n(?:es)?).{1,240}/imu,
         )?.[0],
         tokenCount: tokens.length,
       });

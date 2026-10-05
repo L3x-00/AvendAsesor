@@ -385,6 +385,36 @@ describe('RagService', () => {
     ]);
   });
 
+  it('searches a forty-document corpus without a first-thirty cutoff and diversifies evidence', async () => {
+    const corpus = Array.from({ length: 40 }, (_value, index) => ({
+      ...source,
+      chunkContent: `Contenido del documento ${index + 1}.`,
+      chunkId: `chunk-${index + 1}`,
+      documentId: `document-${index + 1}`,
+      documentTitle: `Documento ${index + 1}`,
+      documentVersionId: `version-${index + 1}`,
+      semanticScore: index === 36 ? 0.95 : 0.9 - index / 1_000,
+    }));
+    gateway.search.mockResolvedValue(corpus);
+
+    const result = await service.retrieve(
+      '¿Qué condición establece el documento relevante?',
+      null,
+    );
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    expect(result.sources).toHaveLength(5);
+    expect(
+      result.sources.some((item) => item.documentId === 'document-37'),
+    ).toBe(true);
+    expect(
+      new Set(result.sources.map((item) => item.documentVersionId)).size,
+    ).toBe(5);
+    expect(gateway.search).toHaveBeenCalledWith(
+      expect.objectContaining({ matchCount: 10 }),
+    );
+  });
+
   it('adds global evidence of a sibling subtopic inside the selected module', async () => {
     const reasignacion = {
       ...source,

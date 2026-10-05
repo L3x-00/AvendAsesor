@@ -273,17 +273,17 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
     const expiresAt = new Date(
       Date.now() + input.ttlSeconds * 1_000,
     ).toISOString();
-    // «Ver documento» abre los PDF en el visor del navegador (y en la página
-    // citada, vía #page); forzar la descarga dejaba al usuario buscando un
-    // archivo con nombre UUID. Word y Markdown sí se descargan: el navegador no
-    // los muestra.
+    // «Ver documento» mantiene los PDF en el visor; la bandeja «Documentos
+    // disponibles» pide attachment de forma explícita. Word y Markdown siempre
+    // se descargan porque el navegador no los muestra de forma consistente.
     const isPdf = /\.pdf$/iu.test(source.storage_path);
+    const download = input.disposition === 'attachment' || !isPdf;
     const signed = await client.storage
       .from(source.storage_bucket)
       .createSignedUrl(
         source.storage_path,
         input.ttlSeconds,
-        isPdf ? undefined : { download: true },
+        download ? { download: true } : undefined,
       );
     if (signed.error || !signed.data?.signedUrl) {
       throw new ServiceUnavailableException(

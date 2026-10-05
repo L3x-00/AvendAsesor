@@ -26,6 +26,7 @@ import { ChatService } from './chat.service';
 import { classifyStreamFailure } from './stream-failure';
 import { ListChatConversationsQueryDto } from './dto/list-chat-conversations-query.dto';
 import { StreamChatDto } from './dto/stream-chat.dto';
+import { SourceDownloadQueryDto } from './dto/source-download-query.dto';
 
 @Controller('chat')
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
@@ -77,9 +78,14 @@ export class ChatController {
   @Get('sources/:sourceId/download-url')
   createSourceDownloadUrl(
     @Param('sourceId', new ParseUUIDPipe()) sourceId: string,
+    @Query() query: SourceDownloadQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
   ) {
-    return this.chatService.createSourceDownloadUrl(sourceId, authorization);
+    return this.chatService.createSourceDownloadUrl(
+      sourceId,
+      authorization,
+      query.disposition ?? 'inline',
+    );
   }
 
   @Delete('conversations/:id')

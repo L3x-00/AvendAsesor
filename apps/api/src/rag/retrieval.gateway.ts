@@ -28,6 +28,8 @@ export interface RetrievedChunk {
   moduleNames: string[];
   numeralReference: string | null;
   pageEnd: number;
+  /** Total de páginas físicas del PDF; opcional para dobles antiguos. */
+  pdfPageCount?: number;
   pageStart: number;
   /** Número de resolución u otro identificador de la norma. */
   resolutionNumber?: string | null;

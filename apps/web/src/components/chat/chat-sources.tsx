@@ -12,6 +12,21 @@ interface ChatSourcesProps {
   sources: ChatSource[];
 }
 
+function uniqueDocuments(sources: ChatSource[]): ChatSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = [
+      source.documentTitle,
+      source.documentType ?? "",
+      source.resolutionNumber ?? "",
+      source.versionNumber,
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Ancla estable de la fila n de las referencias de un mensaje. */
 export function sourceAnchorId(messageId: string, rank: number): string {
   return `fuente-${messageId}-${rank}`;
@@ -128,7 +143,7 @@ function SourceTable({
             <th scope="col">#</th>
             <th scope="col">Documento</th>
             <th scope="col">Referencia</th>
-            <th scope="col">Página</th>
+            <th scope="col">Página PDF</th>
             <th scope="col">Versión</th>
             <th scope="col">Acción</th>
           </tr>
@@ -178,21 +193,26 @@ function SourceTable({
                     {source.articleReference ?? "No especificado"}
                   </span>
                   <span className={styles.referenceLine}>
-                    <strong>Numeral:</strong>{" "}
+                    <strong>Numeral o literal:</strong>{" "}
                     {source.numeralReference ?? "No especificado"}
                   </span>
                 </td>
                 <td
                   data-label={
-                    source.pageStart === source.pageEnd ? "Página" : "Páginas"
+                    source.pageStart === source.pageEnd
+                      ? "Página PDF"
+                      : "Páginas PDF"
                   }
                 >
                   <span className={styles.mobileCellLabel}>
                     {source.pageStart === source.pageEnd
-                      ? "Página: "
-                      : "Páginas: "}
+                      ? "Página PDF: "
+                      : "Páginas PDF: "}
                   </span>
                   {pageRange(source)}
+                  {source.pdfPageCount
+                    ? ` de ${source.pdfPageCount}`
+                    : null}
                 </td>
                 <td data-label="Versión">
                   <span className={styles.mobileCellLabel}>Versión: </span>
@@ -205,6 +225,7 @@ function SourceTable({
                     href={downloadPath}
                     rel="noopener noreferrer"
                     target="_blank"
+                    title="Ver documento"
                   >
                     <svg
                       aria-hidden="true"
@@ -215,7 +236,7 @@ function SourceTable({
                       <path d="M14 4h6v6M20 4l-9 9" />
                       <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
                     </svg>
-                    Ver documento
+                    <span className={styles.srOnly}>Ver documento</span>
                   </a>
                 </td>
               </tr>
@@ -224,6 +245,53 @@ function SourceTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Archivos visibles de la respuesta, separados de las citas y sin duplicados. */
+export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
+  const documents = uniqueDocuments(sources);
+  if (!documents.length) return null;
+
+  return (
+    <section
+      aria-label="Documentos disponibles para descargar"
+      className={styles.downloads}
+    >
+      <div className={styles.downloadsHeading}>
+        <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+          <path d="M7 3.75h7L18 7.7v12.55H7z" />
+          <path d="M14 3.75V8h4M12.5 11v5m0 0-2-2m2 2 2-2" />
+        </svg>
+        <div>
+          <h2>Documentos disponibles</h2>
+          <p>Descarga los archivos usados para preparar esta respuesta.</p>
+        </div>
+      </div>
+      <ul className={styles.downloadList}>
+        {documents.map((source) => (
+          <li key={source.id}>
+            <span>
+              <strong>{source.documentTitle}</strong>
+              <small>
+                {normReference(source) ?? `Versión ${source.versionNumber}`}
+              </small>
+            </span>
+            <a
+              aria-label={`Descargar ${source.documentTitle}`}
+              href={`/api/chat/sources/${encodeURIComponent(source.id)}/download?descargar=1`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
+              </svg>
+              Descargar
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

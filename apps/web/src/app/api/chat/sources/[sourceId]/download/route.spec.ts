@@ -24,8 +24,11 @@ vi.mock("@/lib/chat-api/client", () => {
       mocks.accessTokens.push(accessToken);
     }
 
-    getSourceDownloadUrl(sourceId: string) {
-      return mocks.getSourceDownloadUrl(sourceId);
+    getSourceDownloadUrl(
+      sourceId: string,
+      disposition: "attachment" | "inline",
+    ) {
+      return mocks.getSourceDownloadUrl(sourceId, disposition);
     }
   }
 
@@ -87,7 +90,7 @@ describe("chat source download BFF", () => {
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(await response.text()).toBe("");
     expect(mocks.accessTokens).toEqual(["verified-token"]);
-    expect(mocks.getSourceDownloadUrl).toHaveBeenCalledWith(sourceId);
+    expect(mocks.getSourceDownloadUrl).toHaveBeenCalledWith(sourceId, "inline");
   });
 
   it("fails closed for invalid IDs or a mismatched upstream source", async () => {
@@ -161,6 +164,27 @@ describe("chat source download BFF — experiencia del usuario", () => {
     );
 
     expect(response.headers.get("location")).toBe(`${signedUrl}#page=45`);
+  });
+
+  it("requests an attachment and does not append a PDF page fragment", async () => {
+    mocks.getSourceDownloadUrl.mockResolvedValue({
+      expiresAt: "2026-08-27T12:01:00.000Z",
+      sourceId,
+      url: signedUrl,
+    });
+
+    const response = await GET(
+      new Request(
+        `https://avend.example/api/chat/sources/${sourceId}/download?descargar=1&pagina=45`,
+      ),
+      { params: Promise.resolve({ sourceId }) },
+    );
+
+    expect(mocks.getSourceDownloadUrl).toHaveBeenCalledWith(
+      sourceId,
+      "attachment",
+    );
+    expect(response.headers.get("location")).toBe(signedUrl);
   });
 
   it("ignores an invalid page instead of failing", async () => {
