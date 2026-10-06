@@ -54,6 +54,33 @@ describe("ChatApiClient", () => {
       `http://localhost:3001/chat/sources/${sourceId}/download-url`,
       expect.objectContaining({ cache: "no-store", method: "GET" }),
     );
+
+    await client.getSourceDownloadUrl(sourceId, "attachment");
+    expect(request).toHaveBeenLastCalledWith(
+      `http://localhost:3001/chat/sources/${sourceId}/download-url?disposition=attachment`,
+      expect.objectContaining({ cache: "no-store", method: "GET" }),
+    );
+  });
+
+  it("valida la descarga autorizada de una versión del catálogo", async () => {
+    const versionId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
+    const payload = {
+      expiresAt: "2026-10-05T20:01:00.000Z",
+      url: "https://storage.example.test/object/sign/anexo.pdf?token=short",
+      versionId,
+    };
+    const request = vi.fn(
+      async () => new Response(JSON.stringify(payload), { status: 200 }),
+    );
+    const client = new ChatApiClient("verified-token", undefined, request);
+
+    await expect(
+      client.getCatalogDocumentDownloadUrl(versionId),
+    ).resolves.toEqual(payload);
+    expect(request).toHaveBeenCalledWith(
+      `http://localhost:3001/chat/catalog/documents/${versionId}/download-url`,
+      expect.objectContaining({ cache: "no-store", method: "GET" }),
+    );
   });
 
   it("lee el panorama de un tema sin cachearlo en el servidor", async () => {

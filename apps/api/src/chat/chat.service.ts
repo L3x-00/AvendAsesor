@@ -14,6 +14,7 @@ import {
   overviewMessage,
   type ModuleOverview,
 } from './catalog/chat-catalog.service';
+import type { AvailableDocument } from './catalog/chat-catalog.types';
 import {
   buildVocabulary,
   correctDomainTypos,
@@ -66,6 +67,7 @@ import type {
   ChatCitationInput,
   ChatContextMessage,
   ChatConversationSummary,
+  ChatCatalogDocumentDownload,
   ChatHistoryGateway,
   ChatSourceDownload,
   DeletedChatConversation,
@@ -111,14 +113,18 @@ export const RAG_TRUNCATION_NOTE =
 
 export interface ChatSource {
   articleReference: string | null;
+  documentId: string;
   documentSituation: RetrievedChunk['documentSituation'];
   documentTitle: string;
   documentType: string | null;
+  documentVersionId: string;
   id: string;
   issuanceYear: number | null;
+  mimeType: string | null;
   moduleName: string | null;
   numeralReference: string | null;
   pageEnd: number;
+  pdfPageCount?: number;
   pageStart: number;
   rank: number;
   relevanceScore: number;
@@ -127,6 +133,34 @@ export interface ChatSource {
   resolutionNumber: string | null;
   sectionTitle: string | null;
   versionNumber: number;
+}
+
+export interface ChatCatalogDocument {
+  documentId: string;
+  documentType: string;
+  issuanceYear: number | null;
+  mimeType: string;
+  originalFileName: string;
+  pageCount: number;
+  resolutionNumber: string | null;
+  title: string;
+  versionId: string;
+}
+
+function toChatCatalogDocument(
+  document: AvailableDocument,
+): ChatCatalogDocument {
+  return {
+    documentId: document.id,
+    documentType: document.documentType,
+    issuanceYear: document.issuanceYear,
+    mimeType: document.mimeType,
+    originalFileName: document.originalFileName,
+    pageCount: document.pageCount,
+    resolutionNumber: document.resolutionNumber,
+    title: document.title,
+    versionId: document.versionId,
+  };
 }
 
 export type ChatStreamEvent =
@@ -152,6 +186,8 @@ export type ChatStreamEvent =
         startsNewTopic?: boolean;
         /** Preguntas recomendadas (catálogo): la interfaz las ofrece como botones. */
         suggestions?: string[];
+        /** Archivos elegibles del catálogo, independientes del top-k del RAG. */
+        documents?: ChatCatalogDocument[];
       };
       type: 'conversational';
     }
@@ -424,14 +460,18 @@ function toCitationBundle(
     });
     sources.push({
       articleReference: source.articleReference,
+      documentId: source.documentId,
       documentSituation: source.documentSituation,
       documentTitle: source.documentTitle,
       documentType: source.documentType ?? null,
+      documentVersionId: source.documentVersionId,
       id: sourceId,
       issuanceYear: source.issuanceYear ?? null,
+      mimeType: source.mimeType ?? null,
       moduleName: citationModuleName(source, citationModuleId),
       numeralReference: source.numeralReference,
       pageEnd: source.pageEnd,
+      ...(source.pdfPageCount ? { pdfPageCount: source.pdfPageCount } : {}),
       pageStart: source.pageStart,
       rank: index + 1,
       relevanceScore,
@@ -590,9 +630,22 @@ export class ChatService {
   createSourceDownloadUrl(
     sourceId: string,
     authorization: AuthorizationContext,
+    disposition: 'attachment' | 'inline' = 'inline',
   ): Promise<ChatSourceDownload> {
     return this.historyGateway.createSourceDownloadUrl({
+      disposition,
       sourceId,
+      ttlSeconds: 60,
+      userId: authorization.userId,
+    });
+  }
+
+  createCatalogDocumentDownloadUrl(
+    documentVersionId: string,
+    authorization: AuthorizationContext,
+  ): Promise<ChatCatalogDocumentDownload> {
+    return this.historyGateway.createCatalogDocumentDownloadUrl({
+      documentVersionId,
       ttlSeconds: 60,
       userId: authorization.userId,
     });
@@ -695,6 +748,7 @@ export class ChatService {
         input.authorization.role,
         input.abortSignal,
         question,
+        input.selectedModuleId,
       );
       // «Otra consulta» a secas dentro de una conversación: la siguiente
       // pregunta debe empezar una conversación nueva, sin el tema anterior.
@@ -1301,6 +1355,7 @@ export class ChatService {
     role: AuthorizationContext['role'],
     abortSignal?: AbortSignal,
     question?: string,
+    selectedModuleId?: string | null,
   ): Promise<ChatStreamEvent> {
     // Pedido ajeno («¿cómo preparo un arroz chaufa?»): respuesta amable que
     // menciona lo que pidió y reorienta. Sigue siendo efímera (sin turno ni
@@ -1317,12 +1372,19 @@ export class ChatService {
     }
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
     // Si el catálogo falla, se responde con los temas (texto determinista).
-    if (kind === 'catalog' && this.catalogService) {
+    if (
+      (kind === 'catalog' || kind === 'document_catalog') &&
+      this.catalogService
+    ) {
       try {
-        const catalog = await this.catalogService.reply(abortSignal);
+        const catalog = await this.catalogService.reply(abortSignal, {
+          question,
+          selectedModuleId,
+        });
         return {
           data: {
             message: catalog.message,
+            documents: catalog.documents.map(toChatCatalogDocument),
             ...(catalog.suggestions.length
               ? { suggestions: catalog.suggestions }
               : {}),
@@ -1338,7 +1400,8 @@ export class ChatService {
     const topics =
       kind === 'capabilities' ||
       kind === 'ask_announcement' ||
-      kind === 'catalog'
+      kind === 'catalog' ||
+      kind === 'document_catalog'
         ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {

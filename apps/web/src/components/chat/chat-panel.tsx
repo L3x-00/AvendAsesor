@@ -13,6 +13,7 @@ import {
 import type { KeyboardEvent, ReactNode } from "react";
 import type {
   ChatConversationDetail,
+  ChatCatalogDocument,
   ChatHistoryMessage,
   ChatModule,
   ChatSource,
@@ -37,8 +38,11 @@ import {
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
+import { ChatCatalogDownloads } from "./chat-catalog-downloads";
+import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
+  ChatDownloads,
   ChatSources,
   citationRanks,
   citedSourceRanks,
@@ -49,6 +53,7 @@ import {
 type MessageRole = ChatHistoryMessage["role"];
 
 interface RenderedMessage {
+  catalogDocuments?: ChatCatalogDocument[];
   content: string;
   /** Conversación a la que pertenece (la API puede abrir otra por cambio de tema). */
   conversationId?: string;
@@ -1155,6 +1160,7 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
+                catalogDocuments: result.data.documents,
                 id: nextLocalId("conversational"),
                 inReplyToMessageId: null,
                 role: "assistant",
@@ -1271,35 +1277,13 @@ export function ChatPanel({
               consultar de forma general cuando existan documentos procesados.
             </p>
           ) : activeParent && submodules.length > 0 ? (
-            <section
-              aria-label={`Subtemas de ${activeParent.name}`}
-              className="avend-chat-modules avend-chat-submodules"
-            >
-              <p className="avend-chat-submodules-label">
-                Selecciona el tema relacionado si lo deseas (opcional). También
-                puedes escribir directamente tu consulta.
-              </p>
-              {submodules.map((submodule) => (
-                <button
-                  aria-pressed={submodule.id === selectedModuleId}
-                  className="avend-chat-module"
-                  disabled={isStreaming}
-                  key={submodule.id}
-                  onClick={() => changeModuleContext(submodule.id)}
-                  type="button"
-                >
-                  <span aria-hidden="true" className="avend-chat-module-icon">
-                    <svg fill="none" viewBox="0 0 24 24">
-                      <path d="M7 3.75h7L18 7.7v12.55H7z" />
-                      <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
-                    </svg>
-                  </span>
-                  <span className="avend-chat-module-name">
-                    {submodule.name}
-                  </span>
-                </button>
-              ))}
-            </section>
+            <SubmoduleFolder
+              disabled={isStreaming}
+              moduleName={activeParent.name}
+              onSelect={changeModuleContext}
+              selectedModuleId={selectedSubmodule?.id}
+              submodules={submodules}
+            />
           ) : null}
 
           {selectedSubmodule ? (
@@ -1342,8 +1326,8 @@ export function ChatPanel({
             <div className="avend-chat-update-note" role="note">
               <p>
                 <strong>Hay información nueva.</strong> Desde tu consulta se
-                incorporó documentación sobre este tema. Vuelve a preguntar
-                para recibir una respuesta con sustento.
+                incorporó documentación sobre este tema. Vuelve a preguntar para
+                recibir una respuesta con sustento.
               </p>
               {resolvedUpdate.question ? (
                 <button
@@ -1462,6 +1446,12 @@ export function ChatPanel({
                     }}
                     questions={message.suggestions}
                   />
+                ) : null}
+                {message.catalogDocuments?.length ? (
+                  <ChatCatalogDownloads documents={message.catalogDocuments} />
+                ) : null}
+                {message.sources.length && message.id !== "streaming" ? (
+                  <ChatDownloads sources={message.sources} />
                 ) : null}
                 {message.role === "assistant" &&
                 message.id !== "streaming" &&

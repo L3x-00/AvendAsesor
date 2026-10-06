@@ -211,6 +211,10 @@ class InMemoryChatHistoryGateway implements ChatHistoryGateway {
     return Promise.reject(new Error('NOT_USED'));
   }
 
+  createCatalogDocumentDownloadUrl(): Promise<never> {
+    return Promise.reject(new Error('NOT_USED'));
+  }
+
   deleteConversation(): Promise<never> {
     return Promise.reject(new Error('NOT_USED'));
   }

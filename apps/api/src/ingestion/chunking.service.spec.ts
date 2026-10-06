@@ -28,6 +28,22 @@ describe('ChunkingService', () => {
     expect(chunks.some((chunk) => chunk.pageStart === 2)).toBe(true);
   });
 
+  it('captures a numeral and literal as a single precise subreference', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 14,
+        text: 'Sección III. Requisitos\n\n2.1. Condiciones\n\nLiteral a) Haber prestado servicios en el nivel inicial.',
+      },
+    ]);
+
+    expect(chunk).toMatchObject({
+      numeralReference: '2.1 · Literal a)',
+      pageEnd: 14,
+      pageStart: 14,
+    });
+    expect(chunk.sectionTitle).toMatch(/^Sección III/u);
+  });
+
   it('removes null bytes and skips empty page fragments', () => {
     const chunks = service.chunk([
       { pageNumber: 3, text: '\u0000\n\n   Texto válido de la página.\n\n' },

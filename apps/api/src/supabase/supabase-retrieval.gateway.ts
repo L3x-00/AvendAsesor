@@ -17,6 +17,7 @@ interface SituationAwareRetrievalRow {
   document_version_id: string;
   issuance_year: number | null;
   lexical_score: number;
+  mime_type: string;
   module_associations: Array<{
     rootModuleId: string;
     rootModuleName: string;
@@ -27,6 +28,7 @@ interface SituationAwareRetrievalRow {
   module_names: string[];
   numeral_reference: string | null;
   page_end: number;
+  pdf_page_count: number;
   page_start: number;
   resolution_number: string | null;
   section_title: string | null;
@@ -91,11 +93,13 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       documentVersionId: row.document_version_id,
       issuanceYear: row.issuance_year,
       lexicalScore: row.lexical_score,
+      mimeType: row.mime_type,
       moduleAssociations: row.module_associations,
       moduleIds: row.module_ids,
       moduleNames: row.module_names,
       numeralReference: row.numeral_reference,
       pageEnd: row.page_end,
+      pdfPageCount: row.pdf_page_count,
       pageStart: row.page_start,
       resolutionNumber: row.resolution_number,
       sectionTitle: row.section_title,

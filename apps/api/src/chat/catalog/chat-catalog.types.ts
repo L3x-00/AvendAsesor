@@ -9,6 +9,7 @@ export interface AvailableDocument {
   documentType: string;
   id: string;
   issuanceYear: number | null;
+  mimeType: string;
   /**
    * Módulos activos a los que pertenece: los enlazados y sus padres. Sirve
    * para acotar el catálogo al tema abierto en el chat.
@@ -17,6 +18,8 @@ export interface AvailableDocument {
   /** Módulos raíz a los que pertenece (por nombre), sin duplicados. */
   moduleNames: string[];
   resolutionNumber: string | null;
+  originalFileName: string;
+  pageCount: number;
   /** Títulos de sección detectados al indexar; alimentan las sugerencias. */
   sectionTitles: string[];
   title: string;
@@ -54,6 +57,7 @@ export const SUGGESTED_QUESTIONS_GATEWAY = Symbol(
 );
 
 export interface ChatCatalogReply {
+  documents: AvailableDocument[];
   message: string;
   suggestions: string[];
 }

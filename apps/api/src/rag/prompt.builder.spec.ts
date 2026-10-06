@@ -18,6 +18,7 @@ const source = {
   moduleNames: ['Módulo'],
   numeralReference: null,
   pageEnd: 2,
+  pdfPageCount: 17,
   pageStart: 1,
   sectionTitle: 'Licencias',
   semanticScore: 0.9,
@@ -56,6 +57,17 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('Nunca escribas dos citas seguidas');
     expect(prompt).toContain('justo después del punto');
     expect(prompt).not.toContain('Escribe cada cita por separado: [1][2]');
+  });
+
+  it('exige precondiciones y atiende glosarios, siglas y base normativa con evidencia', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('condiciones de aplicabilidad');
+    expect(prompt).toContain('nivel educativo');
+    expect(prompt).toContain('no supongas que se cumple');
+    expect(prompt).toContain('glosario, siglas o acrónimos');
+    expect(prompt).toContain('base normativa');
+    expect(prompt).toContain('página PDF');
   });
 });
 
@@ -107,6 +119,27 @@ describe('buildEvidenceUserPrompt', () => {
     expect(prompt).toContain('Tipo: Resolución Ministerial (RM)');
     expect(prompt).toContain('Número: RM-123-2024-MINEDU');
     expect(prompt).toContain('Año: 2024');
+    expect(prompt).toContain('Páginas físicas del PDF: 1-2 de 17');
+  });
+
+  it('no inventa paginación PDF para Word o Markdown', () => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Qué siglas contiene?',
+      [],
+      [
+        {
+          ...source,
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          pdfPageCount: 1,
+          pageEnd: 1,
+          pageStart: 1,
+        },
+      ],
+    );
+
+    expect(prompt).toContain('Ubicación interna: fragmento sin paginación PDF');
+    expect(prompt).not.toContain('Páginas físicas del PDF: 1-1 de 1');
   });
 
   it('removes controls and neutralizes real source-delimiter injection', () => {

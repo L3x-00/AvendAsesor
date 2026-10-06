@@ -33,6 +33,12 @@ export interface ChatSourceDownload {
   url: string;
 }
 
+export interface ChatCatalogDocumentDownload {
+  expiresAt: string;
+  url: string;
+  versionId: string;
+}
+
 export interface FaqMemoryObservationInput {
   questionFingerprint: string;
 }
@@ -111,10 +117,16 @@ export interface ChatHistoryGateway {
     userId: string;
   }): Promise<ChatConversationContext>;
   createSourceDownloadUrl(input: {
+    disposition: 'attachment' | 'inline';
     sourceId: string;
     ttlSeconds: number;
     userId: string;
   }): Promise<ChatSourceDownload>;
+  createCatalogDocumentDownloadUrl(input: {
+    documentVersionId: string;
+    ttlSeconds: number;
+    userId: string;
+  }): Promise<ChatCatalogDocumentDownload>;
   deleteConversation(input: {
     conversationId: string;
     userId: string;

@@ -255,7 +255,10 @@ describe("ChatPanel", () => {
     expect(
       within(answer as HTMLElement).getByText("Requisitos principales").tagName,
     ).toBe("STRONG");
-    expect(within(answer as HTMLElement).getAllByRole("list")).toHaveLength(2);
+    const answerContent = answer?.querySelector(".avend-chat-message-content");
+    expect(
+      within(answerContent as HTMLElement).getAllByRole("list"),
+    ).toHaveLength(2);
     expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
   });
 
@@ -528,6 +531,10 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("LICENSES")).not.toBeInTheDocument();
 
     await user.click(
+      screen.getByRole("button", { name: "Mostrar temas. 1 tema" }),
+    );
+
+    await user.click(
       screen.getByRole("button", { name: /licencia por salud/i }),
     );
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -612,6 +619,10 @@ describe("ChatPanel", () => {
     );
 
     await user.click(
+      screen.getByRole("button", { name: "Mostrar temas. 1 tema" }),
+    );
+
+    await user.click(
       screen.getByRole("button", { name: /licencia por salud/i }),
     );
     await submitQuestion(user);
@@ -679,9 +690,15 @@ describe("ChatPanel", () => {
     });
     expect(citation).toHaveAttribute("href", `#fuente-${messageId}-1`);
     // Las referencias nacen plegadas; tocar la cita [1] las abre.
-    expect(screen.getByText("Norma de licencias")).not.toBeVisible();
+    const references = screen.getByLabelText("Referencias verificables");
+    expect(references).not.toHaveAttribute("open");
+    expect(
+      screen.getByRole("region", {
+        name: "Documentos disponibles para descargar",
+      }),
+    ).toBeVisible();
     fireEvent.click(citation);
-    expect(screen.getByText("Norma de licencias")).toBeVisible();
+    expect(references).toHaveAttribute("open");
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Preparar ficha de orientación" }),
@@ -727,7 +744,7 @@ describe("ChatPanel", () => {
       screen.getByText(/Escribe una consulta sobre procesos/i),
     ).toBeVisible();
     expect(
-      screen.queryByText(/Selecciona el tema relacionado/i),
+      screen.queryByText(/Elige un tema si ayuda/i),
     ).not.toBeInTheDocument();
   });
 
@@ -737,7 +754,7 @@ describe("ChatPanel", () => {
     );
 
     expect(
-      screen.queryByText(/Selecciona el tema relacionado/i),
+      screen.queryByText(/Elige un tema si ayuda/i),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -746,7 +763,7 @@ describe("ChatPanel", () => {
         modules={[chatModule, childModule]}
       />,
     );
-    expect(screen.getByText(/Selecciona el tema relacionado/i)).toBeVisible();
+    expect(screen.getByText(/Elige un tema si ayuda/i)).toBeInTheDocument();
   });
 
   it("enables source links only after the sourced answer is persisted", async () => {
@@ -1340,6 +1357,8 @@ describe("ChatPanel", () => {
       <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
     );
 
+    await screen.findByRole("button", { name: "Ocultar resumen" });
+
     await user.click(
       await screen.findByRole("button", {
         name: /Preguntar sobre este documento/,
@@ -1358,7 +1377,25 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          'event: conversational\ndata: {"message":"¡Claro! Hoy puedo responderte con este documento.","suggestions":["¿Qué funciones tiene el Coordinador Pedagógico?"]}\n\n',
+          `event: conversational\ndata: ${JSON.stringify({
+            documents: [
+              {
+                documentId: "13333333-3333-4333-8333-333333333333",
+                documentType: "ANEXO",
+                issuanceYear: 2026,
+                mimeType: "application/pdf",
+                originalFileName: "anexo.pdf",
+                pageCount: 2,
+                resolutionNumber: null,
+                title: "Anexo de funciones",
+                versionId: "23333333-3333-4333-8333-333333333333",
+              },
+            ],
+            message: "¡Claro! Hoy puedo responderte con este documento.",
+            suggestions: [
+              "¿Qué funciones tiene el Coordinador Pedagógico?",
+            ],
+          })}\n\n`,
         ]),
       ),
     );
@@ -1377,6 +1414,12 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("textbox", { name: "Escribe tu consulta" }),
     ).toHaveValue("¿Qué funciones tiene el Coordinador Pedagógico?");
+    expect(
+      screen.getByRole("link", { name: "Descargar Anexo de funciones" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/chat/catalog/documents/23333333-3333-4333-8333-333333333333/download",
+    );
   });
 
   it("answers a greeting conversationally without RAG sources", async () => {

@@ -67,6 +67,7 @@ describe('ChatService', () => {
   let historyGateway: {
     beginTurn: jest.Mock;
     completeTurn: jest.Mock;
+    createCatalogDocumentDownloadUrl: jest.Mock;
     createSourceDownloadUrl: jest.Mock;
     deleteConversation: jest.Mock;
     getConversation: jest.Mock;
@@ -91,6 +92,7 @@ describe('ChatService', () => {
         answerMessageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
       }),
       recordTechnicalFailure: jest.fn().mockResolvedValue(undefined),
+      createCatalogDocumentDownloadUrl: jest.fn(),
       createSourceDownloadUrl: jest.fn(),
       deleteConversation: jest.fn(),
       getConversation: jest.fn(),
@@ -455,6 +457,22 @@ describe('ChatService', () => {
   it('answers «¿de qué tienes información?» with the document catalog and suggestions', async () => {
     const catalogService = {
       reply: jest.fn().mockResolvedValue({
+        documents: [
+          {
+            documentType: 'ANEXO',
+            id: '1c8b56af-6d0c-4fef-881e-7c00907540dd',
+            issuanceYear: 2026,
+            mimeType: 'application/pdf',
+            moduleIds: ['cargos'],
+            moduleNames: ['Cargos y plazas'],
+            originalFileName: 'anexo.pdf',
+            pageCount: 2,
+            resolutionNumber: null,
+            sectionTitles: [],
+            title: 'Anexo de cargos',
+            versionId: '2c8b56af-6d0c-4fef-881e-7c00907540dd',
+          },
+        ],
         message: '¡Claro! Hoy puedo responderte con este documento…',
         suggestions: ['¿Qué funciones tiene el Coordinador Pedagógico?'],
       }),
@@ -475,6 +493,19 @@ describe('ChatService', () => {
     expect(events).toEqual([
       {
         data: {
+          documents: [
+            {
+              documentId: '1c8b56af-6d0c-4fef-881e-7c00907540dd',
+              documentType: 'ANEXO',
+              issuanceYear: 2026,
+              mimeType: 'application/pdf',
+              originalFileName: 'anexo.pdf',
+              pageCount: 2,
+              resolutionNumber: null,
+              title: 'Anexo de cargos',
+              versionId: '2c8b56af-6d0c-4fef-881e-7c00907540dd',
+            },
+          ],
           message: '¡Claro! Hoy puedo responderte con este documento…',
           suggestions: ['¿Qué funciones tiene el Coordinador Pedagógico?'],
         },
@@ -483,6 +514,46 @@ describe('ChatService', () => {
     ]);
     expect(ragService.retrieve).not.toHaveBeenCalled();
     expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(catalogService.reply).toHaveBeenCalledWith(undefined, {
+      question: '¿De qué tienes información?',
+      selectedModuleId: null,
+    });
+  });
+
+  it('resuelve archivos por categoría contra el catálogo y no contra el RAG', async () => {
+    const catalogService = {
+      reply: jest.fn().mockResolvedValue({
+        documents: [],
+        message: 'Encontré los anexos disponibles.',
+        suggestions: [],
+      }),
+    };
+    const withCatalog = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      catalogService as never,
+    );
+    const selectedModuleId = '3c8b56af-6d0c-4fef-881e-7c00907540dd';
+
+    const events = await collect(withCatalog, {
+      question: 'Descárgame los anexos',
+      selectedModuleId,
+    });
+
+    expect(events).toEqual([
+      {
+        data: { documents: [], message: 'Encontré los anexos disponibles.' },
+        type: 'conversational',
+      },
+    ]);
+    expect(catalogService.reply).toHaveBeenCalledWith(undefined, {
+      question: 'Descárgame los anexos',
+      selectedModuleId,
+    });
+    expect(ragService.retrieve).not.toHaveBeenCalled();
   });
 
   it('falls back to the topics reply if the catalog cannot be read', async () => {
@@ -1408,7 +1479,40 @@ describe('ChatService', () => {
       service.createSourceDownloadUrl(sourceId, authorization),
     ).resolves.toEqual(expect.objectContaining({ sourceId }));
     expect(historyGateway.createSourceDownloadUrl).toHaveBeenCalledWith({
+      disposition: 'inline',
       sourceId,
+      ttlSeconds: 60,
+      userId: authorization.userId,
+    });
+
+    await service.createSourceDownloadUrl(
+      sourceId,
+      authorization,
+      'attachment',
+    );
+    expect(historyGateway.createSourceDownloadUrl).toHaveBeenLastCalledWith({
+      disposition: 'attachment',
+      sourceId,
+      ttlSeconds: 60,
+      userId: authorization.userId,
+    });
+  });
+
+  it('delega una descarga del catálogo con TTL de sesenta segundos', async () => {
+    const versionId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.createCatalogDocumentDownloadUrl.mockResolvedValue({
+      expiresAt: '2026-10-05T20:01:00.000Z',
+      url: 'https://storage.example/signed',
+      versionId,
+    });
+
+    await expect(
+      service.createCatalogDocumentDownloadUrl(versionId, authorization),
+    ).resolves.toEqual(expect.objectContaining({ versionId }));
+    expect(
+      historyGateway.createCatalogDocumentDownloadUrl,
+    ).toHaveBeenCalledWith({
+      documentVersionId: versionId,
       ttlSeconds: 60,
       userId: authorization.userId,
     });

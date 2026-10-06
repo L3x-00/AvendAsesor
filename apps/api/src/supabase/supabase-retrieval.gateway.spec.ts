@@ -32,6 +32,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           document_version_id: 'version',
           issuance_year: 2024,
           lexical_score: 0.4,
+          mime_type: 'application/pdf',
           module_associations: [
             {
               rootModuleId: 'module',
@@ -44,6 +45,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           module_names: ['Módulo'],
           numeral_reference: null,
           page_end: 2,
+          pdf_page_count: 17,
           page_start: 1,
           resolution_number: 'RM-123-2024-MINEDU',
           section_title: null,
@@ -71,6 +73,8 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
             submoduleName: 'Submódulo',
           },
         ],
+        mimeType: 'application/pdf',
+        pdfPageCount: 17,
         resolutionNumber: 'RM-123-2024-MINEDU',
         semanticScore: 0.9,
       }),

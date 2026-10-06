@@ -32,7 +32,8 @@ export type SocialSubtype =
   | 'farewell'
   | 'ask_announcement'
   | 'capabilities'
-  | 'catalog';
+  | 'catalog'
+  | 'document_catalog';
 
 export type OutOfScopeSubtype = 'out_of_domain' | 'system_limit';
 
@@ -185,6 +186,67 @@ const CAPABILITY_RESIDUE_WORDS = new Set([
  */
 const CATALOG =
   /\b((?:de|sobre) (?:que|cuales) (?:temas |documentos |normas )?(?:tienes|tiene|hay|manejas|cuentas con|dispones de) (?:informacion|documentos|datos|fuentes|normas)|(?:de|sobre) que (?:tienes|tiene|hay) informacion|que (?:informacion|documentos|normas|normativas?|fuentes|leyes|resoluciones|archivos|materiales) (?:tienes|tiene|hay|manejas|conoces|cargaron|estan (?:disponibles|cargad[oa]s)|puedo consultar)|con que (?:documentos|informacion|fuentes|normas) (?:cuentas|trabajas|respondes)|(?:lista|listado|catalogo|relacion) de (?:los |las )?(?:documentos|normas|fuentes)|(?:muestrame|dame|dime|ensename|indicame|mostrar) (?:la lista de |el listado de |los |las )?(?:documentos|normas|fuentes)|que (?:puedo|se puede) (?:consultar(?:te)?|preguntar(?:te)?)|(?:preguntas|consultas) (?:frecuentes|recomendadas|sugeridas|de ejemplo)|que (?:preguntas|consultas) (?:puedo hacer(?:te)?|me recomiendas|me sugieres)|que me (?:recomiendas|sugieres) (?:preguntar|consultar)|(?:dame|dime) (?:algunos |unos )?ejemplos de (?:preguntas|consultas))\b/u;
+
+const DOCUMENT_CATALOG_SUBJECT =
+  /\b(?:anexos?|preguntas frecuentes|faqs?|cronogramas?|glosarios?|siglas?|acronimos?|base normativa|normas? aplicables?)\b/u;
+const DOCUMENT_FILE_NOUN =
+  /\b(?:archivos?|documentos?|fuentes?|materiales?)\b/u;
+const DOCUMENT_CONTENT_INDEX = /\b(?:glosarios?|siglas?|acronimos?)\b/u;
+
+/**
+ * Pedido explícito de archivos de una categoría. No captura consultas de
+ * contenido como «¿qué establece el anexo?» o «¿qué significa la sigla?», que
+ * deben conservar el RAG y sus citas.
+ */
+export function isDocumentCatalogRequest(normalized: string): boolean {
+  const plain = normalized
+    .replace(/[^a-z0-9 ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (
+    !DOCUMENT_CATALOG_SUBJECT.test(plain) ||
+    CONDITIONAL_CLAUSE.test(plain) ||
+    OBLIGATION.test(plain)
+  ) {
+    return false;
+  }
+  if (/\bdescarg\p{L}*\b/iu.test(plain)) return true;
+  // Glosarios, siglas y acrónimos suelen pedir contenido, no archivos. Solo
+  // los desviamos al catálogo cuando el docente nombra explícitamente un
+  // archivo/documento; «¿qué siglas hay?» debe conservar el RAG y sus citas.
+  if (DOCUMENT_CONTENT_INDEX.test(plain) && !DOCUMENT_FILE_NOUN.test(plain)) {
+    return false;
+  }
+  if (
+    /\b(?:glosarios?|siglas?|acronimos?)\s+del?\s+(?:archivo|documento|material|fuente)\b/u.test(
+      plain,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(?:que|cuales|cuantos)\b/u.test(plain) &&
+    /\b(?:hay|tienes|tiene|estan disponibles|puedo descargar)\b/u.test(plain)
+  ) {
+    return true;
+  }
+  if (
+    /\b(?:muestrame|dame|ensename|indicame|lista|listado|catalogo|relacion)\b/u.test(
+      plain,
+    )
+  ) {
+    return (
+      DOCUMENT_FILE_NOUN.test(plain) ||
+      /\b(?:anexos?|preguntas frecuentes|faqs?|cronogramas?|base normativa|normas? aplicables?)\b/u.test(
+        plain,
+      )
+    );
+  }
+  return (
+    DOCUMENT_FILE_NOUN.test(plain) &&
+    /\b(?:disponibles?|cargad[oa]s?|sobre|de)\b/u.test(plain)
+  );
+}
 
 /**
  * Lo único que puede acompañar a una pregunta de catálogo sin volverla
@@ -449,6 +511,10 @@ export function classifyTurnIntent(
   // información interna se declina con un límite amable, sin pasar al RAG.
   if (isSystemProbing(normalized)) {
     return { lane: 'out_of_scope', subtype: 'system_limit' };
+  }
+
+  if (isDocumentCatalogRequest(normalized)) {
+    return { lane: 'social', subtype: 'document_catalog' };
   }
 
   // Antes de la señal fuerte de dominio: «¿qué normas tienes?» nombra "normas"

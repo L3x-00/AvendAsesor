@@ -4,11 +4,13 @@ import { getAdminApiUrl } from "@/lib/admin-api/config";
 import {
   chatConversationDetailSchema,
   chatConversationPageSchema,
+  chatCatalogDocumentDownloadSchema,
   chatModuleSchema,
   chatSourceDownloadSchema,
   chatUpdateSchema,
   moduleOverviewSchema,
   type ChatConversationPage,
+  type ChatCatalogDocumentDownload,
   type ChatConversationDetail,
   type ChatModule,
   type ChatSourceDownload,
@@ -85,10 +87,23 @@ export class ChatApiClient {
     );
   }
 
-  getSourceDownloadUrl(sourceId: string): Promise<ChatSourceDownload> {
+  getSourceDownloadUrl(
+    sourceId: string,
+    disposition: "attachment" | "inline" = "inline",
+  ): Promise<ChatSourceDownload> {
+    const query = disposition === "attachment" ? "?disposition=attachment" : "";
     return this.send(
-      `/chat/sources/${sourceId}/download-url`,
+      `/chat/sources/${sourceId}/download-url${query}`,
       chatSourceDownloadSchema,
+    );
+  }
+
+  getCatalogDocumentDownloadUrl(
+    versionId: string,
+  ): Promise<ChatCatalogDocumentDownload> {
+    return this.send(
+      `/chat/catalog/documents/${versionId}/download-url`,
+      chatCatalogDocumentDownloadSchema,
     );
   }
 

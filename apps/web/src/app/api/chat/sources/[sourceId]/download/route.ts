@@ -59,16 +59,21 @@ export async function GET(
   const page = pageSchema.safeParse(
     new URL(request.url).searchParams.get("pagina") ?? undefined,
   );
+  const shouldDownload =
+    new URL(request.url).searchParams.get("descargar") === "1";
 
   try {
     const source = await new ChatApiClient(
       session.accessToken,
-    ).getSourceDownloadUrl(parsedSourceId.data);
+    ).getSourceDownloadUrl(
+      parsedSourceId.data,
+      shouldDownload ? "attachment" : "inline",
+    );
 
     if (source.sourceId !== parsedSourceId.data) return safeError(502, request);
 
     // El visor de PDF del navegador abre directamente la página citada.
-    const location = page.success
+    const location = page.success && !shouldDownload
       ? `${source.url}#page=${page.data}`
       : source.url;
     const response = NextResponse.redirect(location, 307);

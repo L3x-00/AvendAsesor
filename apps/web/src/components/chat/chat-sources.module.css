@@ -132,12 +132,23 @@
   display: inline-flex;
   font-size: 1rem;
   font-weight: 700;
-  gap: 0.45rem;
-  line-height: 1.35;
+  justify-content: center;
+  line-height: 1;
   min-height: 2.75rem;
-  padding: 0.5rem 0.75rem;
+  min-width: 2.75rem;
+  padding: 0.5rem;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.srOnly {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .sourceLink:hover {
@@ -226,9 +237,158 @@
   }
 
   .sourceLink {
-    justify-content: center;
     white-space: normal;
-    width: 100%;
+  }
+}
+
+.downloads {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+}
+
+.downloadsHeading {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.625rem;
+}
+
+.downloadsHeading > svg {
+  color: var(--avend-accent-strong);
+  flex: 0 0 auto;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.25rem;
+}
+
+.downloadsHeading h2 {
+  color: var(--avend-navy);
+  font-size: 1rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.downloadsHeading p {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.125rem 0 0;
+}
+
+.downloadList {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.downloadList li {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.downloadList li > span {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.downloadList strong,
+.downloadList small {
+  overflow-wrap: anywhere;
+}
+
+.downloadList strong {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.downloadList small {
+  color: var(--avend-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.downloadList a {
+  align-items: center;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.7rem;
+  text-decoration: none;
+}
+
+.downloadList a:hover {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+}
+
+.downloadList a:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.downloadList a svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.125rem;
+}
+
+.showMore {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+}
+
+.showMore:hover {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+}
+
+.showMore:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 35rem) {
+  .downloadList li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .downloadList a {
+    justify-content: center;
   }
 }
 

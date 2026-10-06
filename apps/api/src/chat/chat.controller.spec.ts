@@ -5,6 +5,7 @@ import type { ChatService } from './chat.service';
 
 describe('ChatController', () => {
   const service = {
+    createCatalogDocumentDownloadUrl: jest.fn(),
     createSourceDownloadUrl: jest.fn(),
     deleteConversation: jest.fn(),
     getConversation: jest.fn(),
@@ -41,6 +42,11 @@ describe('ChatController', () => {
       sourceId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
       url: 'https://storage.example/signed',
     });
+    service.createCatalogDocumentDownloadUrl.mockResolvedValue({
+      expiresAt: '2026-10-05T20:01:00.000Z',
+      url: 'https://storage.example/catalog-signed',
+      versionId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
 
     await expect(controller.listModules()).resolves.toEqual([]);
     service.listUpdates.mockResolvedValue([]);
@@ -74,6 +80,7 @@ describe('ChatController', () => {
     await expect(
       controller.createSourceDownloadUrl(
         '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+        {},
         authorization,
       ),
     ).resolves.toEqual({
@@ -81,6 +88,25 @@ describe('ChatController', () => {
       sourceId: '5c8b56af-6d0c-4fef-881e-7c00907540dd',
       url: 'https://storage.example/signed',
     });
+    expect(service.createSourceDownloadUrl).toHaveBeenCalledWith(
+      '5c8b56af-6d0c-4fef-881e-7c00907540dd',
+      authorization,
+      'inline',
+    );
+    await expect(
+      controller.createCatalogDocumentDownloadUrl(
+        '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+        authorization,
+      ),
+    ).resolves.toEqual({
+      expiresAt: '2026-10-05T20:01:00.000Z',
+      url: 'https://storage.example/catalog-signed',
+      versionId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+    expect(service.createCatalogDocumentDownloadUrl).toHaveBeenCalledWith(
+      '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+      authorization,
+    );
   });
 
   it('serializes streaming events as SSE without exposing thrown details', async () => {
