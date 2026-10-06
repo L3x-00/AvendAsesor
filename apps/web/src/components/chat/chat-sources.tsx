@@ -1,3 +1,6 @@
+"use client";
+
+import { useId, useState } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
@@ -132,21 +135,26 @@ function SourceTable({
   sources: ChatSource[];
 }) {
   return (
-    <div
-      aria-label={caption}
-      className={styles.tableViewport}
-      role="region"
-      tabIndex={0}
-    >
+    <div className={styles.tableViewport}>
       <table className={styles.table}>
         <caption className={styles.caption}>{caption}</caption>
+        <colgroup>
+          <col className={styles.rankColumn} />
+          <col className={styles.typeColumn} />
+          <col className={styles.documentColumn} />
+          <col className={styles.referenceColumn} />
+          <col className={styles.pageColumn} />
+          <col className={styles.statusColumn} />
+          <col className={styles.actionColumn} />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">#</th>
+            <th scope="col">Tipo</th>
             <th scope="col">Documento</th>
-            <th scope="col">Referencia</th>
-            <th scope="col">Ubicación</th>
-            <th scope="col">Versión</th>
+            <th scope="col">Sustento</th>
+            <th scope="col">Página</th>
+            <th scope="col">Estado</th>
             <th scope="col">Acción</th>
           </tr>
         </thead>
@@ -169,23 +177,27 @@ function SourceTable({
                   </span>
                   <span className={styles.rank}>{source.rank}</span>
                 </td>
+                <td data-label="Tipo">
+                  <strong className={styles.documentType}>
+                    {source.documentType
+                      ? documentTypeLabel(source.documentType)
+                      : "Documento"}
+                  </strong>
+                  {source.resolutionNumber ? (
+                    <span className={styles.documentMeta}>
+                      {source.resolutionNumber}
+                    </span>
+                  ) : null}
+                </td>
                 <td data-label="Documento">
                   <strong className={styles.documentTitle}>
                     {source.documentTitle}
                   </strong>
-                  {normReference(source) ? (
-                    <span className={styles.documentMeta}>
-                      Norma: {normReference(source)}
-                    </span>
-                  ) : null}
                   <span className={styles.documentMeta}>
                     Proceso: {source.moduleName ?? "No especificado"}
                   </span>
-                  <span className={styles.documentMeta}>
-                    Situación: <strong>{situationLabel(source)}</strong>
-                  </span>
                 </td>
-                <td data-label="Referencia">
+                <td data-label="Sustento">
                   <span className={styles.referenceLine}>
                     <strong>Sección:</strong>{" "}
                     {source.sectionTitle ?? "No especificada"}
@@ -199,7 +211,7 @@ function SourceTable({
                     {source.numeralReference ?? "No especificado"}
                   </span>
                 </td>
-                <td data-label="Ubicación">
+                <td data-label="Página">
                   {hasPdfPagination(source) ? (
                     <>
                       <span className={styles.mobileCellLabel}>
@@ -224,9 +236,13 @@ function SourceTable({
                     <span>Fragmento interno · sin paginación PDF</span>
                   )}
                 </td>
-                <td data-label="Versión">
-                  <span className={styles.mobileCellLabel}>Versión: </span>
-                  {source.versionNumber}
+                <td data-label="Estado">
+                  <strong className={styles.situation}>
+                    {situationLabel(source)}
+                  </strong>
+                  <span className={styles.documentMeta}>
+                    Versión {source.versionNumber}
+                  </span>
                 </td>
                 <td data-label="Acción">
                   <a
@@ -316,6 +332,9 @@ export function ChatSources({
   messageId,
   sources,
 }: ChatSourcesProps) {
+  const contentId = useId();
+  const toggleId = useId();
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const cited = citedRanks?.length
     ? sources.filter((source) => citedRanks.includes(source.rank))
     : [];
@@ -324,29 +343,41 @@ export function ChatSources({
   const others = hasCitations
     ? sources.filter((source) => !citedRanks?.includes(source.rank))
     : [];
+  const documents = uniqueDocuments(sources);
 
   // Plegadas por defecto: la respuesta se lee primero y el sustento se abre
-  // a pedido ("Ver referencias"), como en los asistentes de IA. Una cita [n]
+  // a pedido ("Ver fuentes disponibles"), como en los asistentes de IA. Una cita [n]
   // del texto las abre sola y lleva a su fila.
   return (
-    <details
+    <section
       aria-label="Referencias verificables"
       className={`avend-chat-sources ${styles.disclosure}`}
-      open={defaultOpen || undefined}
+      data-open={isOpen ? "true" : "false"}
+      data-source-disclosure=""
     >
-      <summary className={styles.toggle}>
-        <svg
-          aria-hidden="true"
-          className={styles.toggleIcon}
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path d="M7 3.75h7L18 7.7v12.55H7z" />
-          <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
-        </svg>
-        <span>Ver referencias</span>
-        <span className={styles.count}>
-          {primary.length} {primary.length === 1 ? "fuente" : "fuentes"}
+      <button
+        aria-controls={contentId}
+        aria-expanded={isOpen}
+        className={styles.toggle}
+        data-source-toggle=""
+        id={toggleId}
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        <span aria-hidden="true" className={styles.folderIcon}>
+          <span className={styles.folderBack} />
+          <span className={styles.folderPaper} />
+          <span className={styles.folderFront} />
+        </span>
+        <span className={styles.toggleCopy}>
+          <strong>
+            {isOpen ? "Ocultar fuentes" : "Ver fuentes disponibles"}
+          </strong>
+          <span>
+            {primary.length} {primary.length === 1 ? "referencia" : "referencias"}
+            {" · "}
+            {documents.length} {documents.length === 1 ? "documento" : "documentos"}
+          </span>
         </span>
         <svg
           aria-hidden="true"
@@ -356,37 +387,52 @@ export function ChatSources({
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
-      </summary>
-      <header className={styles.heading}>
-        <div>
-          <h2>Referencias</h2>
-          <p>
-            {hasCitations
-              ? "Documentos citados en la respuesta. Toca un número [n] del texto para ir a su fuente."
-              : "Documentos consultados para esta respuesta."}
-          </p>
-        </div>
-      </header>
+      </button>
 
-      <SourceTable
-        caption="Fuentes documentales, ubicación y descarga"
-        messageId={messageId}
-        sources={primary}
-      />
+      <div
+        aria-hidden={!isOpen}
+        aria-labelledby={toggleId}
+        className={styles.disclosurePanel}
+        data-open={isOpen ? "true" : "false"}
+        id={contentId}
+        inert={!isOpen}
+        role="region"
+      >
+        <div className={styles.disclosurePanelInner}>
+          <header className={styles.heading}>
+            <div>
+              <h2>Referencias</h2>
+              <p>
+                {hasCitations
+                  ? "Documentos citados en la respuesta. Toca un número [n] del texto para ir a su fuente."
+                  : "Documentos consultados para esta respuesta."}
+              </p>
+            </div>
+          </header>
 
-      {others.length ? (
-        <details className={styles.others}>
-          <summary>
-            Otros fragmentos revisados, no citados en la respuesta (
-            {others.length})
-          </summary>
           <SourceTable
-            caption="Fragmentos revisados no citados"
+            caption="Fuentes documentales, ubicación y descarga"
             messageId={messageId}
-            sources={others}
+            sources={primary}
           />
-        </details>
-      ) : null}
-    </details>
+
+          {others.length ? (
+            <details className={styles.others}>
+              <summary>
+                Otros fragmentos revisados, no citados en la respuesta (
+                {others.length})
+              </summary>
+              <SourceTable
+                caption="Fragmentos revisados no citados"
+                messageId={messageId}
+                sources={others}
+              />
+            </details>
+          ) : null}
+
+          <ChatDownloads sources={sources} />
+        </div>
+      </div>
+    </section>
   );
 }

@@ -654,6 +654,19 @@ describe("ChatPanel", () => {
 
   it("renders streamed text and references only after receiving SSE events", async () => {
     const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({ matches: true }),
+    );
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal(
       "fetch",
@@ -691,15 +704,30 @@ describe("ChatPanel", () => {
     expect(citation).toHaveAttribute("href", `#fuente-${messageId}-1`);
     // Las referencias nacen plegadas; tocar la cita [1] las abre.
     const references = screen.getByLabelText("Referencias verificables");
-    expect(references).not.toHaveAttribute("open");
+    const sourceToggle = within(references).getByRole("button", {
+      name: /Ver fuentes disponibles/u,
+    });
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("region", {
+        name: "Documentos disponibles para descargar",
+      }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(citation);
+    expect(sourceToggle).toHaveAttribute("aria-expanded", "true");
+    const citedSource = document.getElementById(`fuente-${messageId}-1`);
+    expect(window.location.hash).toBe(`#fuente-${messageId}-1`);
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "auto",
+      block: "center",
+    });
+    expect(citedSource).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
       screen.getByRole("region", {
         name: "Documentos disponibles para descargar",
       }),
     ).toBeVisible();
-    fireEvent.click(citation);
-    expect(references).toHaveAttribute("open");
-    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Preparar ficha de orientación" }),
     ).toHaveAttribute(
@@ -800,7 +828,11 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
 
     act(() => finishStream());
-    await user.click(await screen.findByText("Ver referencias"));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Ver fuentes disponibles/u,
+      }),
+    );
     expect(
       await screen.findByRole("heading", { name: "Referencias" }),
     ).toBeVisible();

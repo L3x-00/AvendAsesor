@@ -87,10 +87,13 @@ describe("teacher panel visual contracts", () => {
       /@media\s*\(min-width:\s*64rem\)[\s\S]*grid-template-columns:\s*16\.5rem minmax\(0,\s*1fr\)/,
     );
     expect(sourceStyles).toMatch(
-      /\.tableViewport\s*\{[^}]*overflow-x:\s*auto/,
+      /\.tableViewport\s*\{[^}]*overflow:\s*clip/,
     );
     expect(sourceStyles).toMatch(
-      /@media\s*\(max-width:\s*47\.999rem\)[\s\S]*\.table td,[\s\S]*?display:\s*grid/,
+      /\.table\s*\{[^}]*table-layout:\s*fixed/,
+    );
+    expect(sourceStyles).toMatch(
+      /@container\s+sources\s*\(max-width:\s*54rem\)[\s\S]*\.table td,[\s\S]*?display:\s*grid/,
     );
     expect(polishStyles).toMatch(
       /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*animation:\s*none/,

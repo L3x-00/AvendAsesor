@@ -56,10 +56,9 @@ export function SubmoduleFolder({
         type="button"
       >
         <span aria-hidden="true" className="avend-chat-topic-folder-icon">
-          <svg fill="none" viewBox="0 0 24 24">
-            <path d="M3.75 7.25h5l1.7 2h9.8v8.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z" />
-            <path d="M3.75 9.25v-3a2 2 0 0 1 2-2H9l1.7 2h5.55a2 2 0 0 1 2 2v1" />
-          </svg>
+          <span className="avend-chat-topic-folder-back" />
+          <span className="avend-chat-topic-folder-paper" />
+          <span className="avend-chat-topic-folder-front" />
         </span>
         <span className="avend-chat-topic-folder-copy">
           <strong>{isOpen ? "Ocultar temas" : "Mostrar temas"}</strong>
@@ -101,13 +100,14 @@ export function SubmoduleFolder({
             </label>
           ) : null}
           <div className="avend-chat-submodules">
-            {visibleSubmodules.map((submodule) => (
+            {visibleSubmodules.map((submodule, index) => (
               <button
                 aria-pressed={submodule.id === selectedModuleId}
                 className="avend-chat-module"
                 disabled={disabled || !isOpen}
                 key={submodule.id}
                 onClick={() => onSelect(submodule.id)}
+                style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
                 type="button"
               >
                 <span aria-hidden="true" className="avend-chat-module-icon">

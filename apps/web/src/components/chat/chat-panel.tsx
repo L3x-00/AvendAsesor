@@ -42,7 +42,6 @@ import { ChatCatalogDownloads } from "./chat-catalog-downloads";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
-  ChatDownloads,
   ChatSources,
   citationRanks,
   citedSourceRanks,
@@ -243,15 +242,29 @@ interface CitationContext {
 
 /**
  * Las referencias viven plegadas: antes de saltar a la fila de una cita se
- * abren los <details> que la contienen (el ancla sola no los abre en todos
- * los navegadores).
+ * activa su control accesible (el ancla sola no revela paneles colapsados).
  */
-function openEnclosingDetails(targetId: string) {
-  let details = document.getElementById(targetId)?.closest("details");
-  while (details) {
-    details.open = true;
-    details = details.parentElement?.closest("details") ?? null;
-  }
+function revealSource(targetId: string) {
+  const target = document.getElementById(targetId);
+  const disclosure = target?.closest<HTMLElement>("[data-source-disclosure]");
+  const toggle = disclosure?.querySelector<HTMLButtonElement>(
+    "[data-source-toggle]",
+  );
+  if (toggle?.getAttribute("aria-expanded") === "false") toggle.click();
+
+  window.requestAnimationFrame(() => {
+    const revealedTarget = document.getElementById(targetId);
+    if (!revealedTarget) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    window.history.replaceState(null, "", `#${targetId}`);
+    revealedTarget.scrollIntoView?.({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    revealedTarget.focus({ preventScroll: true });
+  });
 }
 
 /**
@@ -274,9 +287,10 @@ function linkCitations(
         className="avend-chat-citation"
         href={`#${sourceAnchorId(citations.messageId, rank)}`}
         key={key}
-        onClick={() =>
-          openEnclosingDetails(sourceAnchorId(citations.messageId, rank))
-        }
+        onClick={(event) => {
+          event.preventDefault();
+          revealSource(sourceAnchorId(citations.messageId, rank));
+        }}
       >
         {sourceCitationLabel(source)}
       </a>
@@ -1449,9 +1463,6 @@ export function ChatPanel({
                 ) : null}
                 {message.catalogDocuments?.length ? (
                   <ChatCatalogDownloads documents={message.catalogDocuments} />
-                ) : null}
-                {message.sources.length && message.id !== "streaming" ? (
-                  <ChatDownloads sources={message.sources} />
                 ) : null}
                 {message.role === "assistant" &&
                 message.id !== "streaming" &&
