@@ -1497,6 +1497,10 @@ ul.avend-chat-list {
   width: 100%;
 }
 
+.avend-chat-page {
+  container: chat-page / inline-size;
+}
+
 .avend-chat-header {
   padding: 0 0 1rem;
 }
@@ -1523,13 +1527,17 @@ ul.avend-chat-list {
   text-align: left;
   transition:
     background-color 160ms ease-out,
-    border-color 160ms ease-out;
+    border-color 160ms ease-out,
+    box-shadow 220ms var(--avend-ease-interaction),
+    transform 220ms var(--avend-ease-interaction);
   width: 100%;
 }
 
 .avend-chat-topic-folder-toggle:not(:disabled):hover {
   background: var(--avend-soft-blue);
   border-color: rgb(22 119 255 / 35%);
+  box-shadow: 0 10px 26px rgb(13 27 61 / 9%);
+  transform: translateY(-1px);
 }
 
 .avend-chat-topic-folder-toggle:focus-visible {
@@ -1543,18 +1551,14 @@ ul.avend-chat-list {
 }
 
 .avend-chat-topic-folder-icon {
-  align-items: center;
-  background: var(--avend-soft-blue);
-  border-radius: 0.625rem;
-  color: var(--avend-accent-strong);
-  display: inline-flex;
+  display: inline-block;
   flex: 0 0 auto;
-  height: 2.5rem;
-  justify-content: center;
-  width: 2.5rem;
+  height: 2.65rem;
+  perspective: 12rem;
+  position: relative;
+  width: 3rem;
 }
 
-.avend-chat-topic-folder-icon svg,
 .avend-chat-topic-folder-chevron {
   fill: none;
   height: 1.25rem;
@@ -1563,6 +1567,61 @@ ul.avend-chat-list {
   stroke-linejoin: round;
   stroke-width: 1.8;
   width: 1.25rem;
+}
+
+.avend-chat-topic-folder-back,
+.avend-chat-topic-folder-paper,
+.avend-chat-topic-folder-front {
+  display: block;
+  position: absolute;
+}
+
+.avend-chat-topic-folder-back {
+  background: var(--avend-accent-strong);
+  border-radius: 0.45rem;
+  inset: 0.45rem 0.1rem 0.2rem;
+}
+
+.avend-chat-topic-folder-back::before {
+  background: inherit;
+  border-radius: 0.45rem 0.45rem 0 0;
+  content: "";
+  height: 0.6rem;
+  left: 0;
+  position: absolute;
+  top: -0.35rem;
+  width: 45%;
+}
+
+.avend-chat-topic-folder-paper {
+  background: #ffffff;
+  border: 1px solid rgb(13 27 61 / 12%);
+  border-radius: 0.3rem;
+  inset: 0.7rem 0.35rem 0.45rem;
+  transform: translateY(0.35rem) scale(0.92);
+  transition: transform 420ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.avend-chat-topic-folder-front {
+  background: linear-gradient(180deg, #4f9bff 0%, #1677ff 100%);
+  border-radius: 0.5rem;
+  bottom: 0.15rem;
+  height: 1.65rem;
+  left: 0;
+  right: 0;
+  transform: rotateX(-12deg);
+  transform-origin: 50% 100%;
+  transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.avend-chat-topic-folder-toggle[aria-expanded="true"]
+  .avend-chat-topic-folder-paper {
+  transform: translateY(-0.25rem) scale(1);
+}
+
+.avend-chat-topic-folder-toggle[aria-expanded="true"]
+  .avend-chat-topic-folder-front {
+  transform: rotateX(-34deg);
 }
 
 .avend-chat-topic-folder-copy {
@@ -1597,9 +1656,9 @@ ul.avend-chat-list {
   grid-template-rows: 0fr;
   opacity: 0;
   transition:
-    grid-template-rows 220ms var(--avend-ease-interaction),
-    opacity 180ms ease-out,
-    visibility 0s linear 220ms;
+    grid-template-rows 360ms var(--avend-ease-interaction),
+    opacity 220ms ease-out,
+    visibility 0s linear 360ms;
   visibility: hidden;
 }
 
@@ -1619,6 +1678,20 @@ ul.avend-chat-list {
 .avend-chat-topic-folder-reveal[data-open="true"]
   .avend-chat-topic-folder-content {
   padding-top: 0.875rem;
+}
+
+.avend-chat-topic-folder-reveal[data-open="true"]
+  .avend-chat-submodules
+  .avend-chat-module {
+  animation: avend-topic-float-in 420ms cubic-bezier(0.34, 1.35, 0.64, 1)
+    both;
+}
+
+@keyframes avend-topic-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) rotate(-1.5deg) scale(0.96);
+  }
 }
 
 .avend-chat-topic-search {
@@ -1956,7 +2029,10 @@ ul.avend-chat-list {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .avend-chat-topic-folder-toggle,
   .avend-chat-topic-folder-chevron,
+  .avend-chat-topic-folder-paper,
+  .avend-chat-topic-folder-front,
   .avend-chat-topic-folder-reveal,
   .avend-chat-overview-reveal,
   .avend-chat-overview-toggle svg {
@@ -1964,8 +2040,15 @@ ul.avend-chat-list {
   }
 
   .avend-chat-overview,
-  .avend-chat-overview-skeleton {
+  .avend-chat-overview-skeleton,
+  .avend-chat-topic-folder-reveal[data-open="true"]
+    .avend-chat-submodules
+    .avend-chat-module {
     animation: none;
+  }
+
+  .avend-chat-topic-folder-toggle:not(:disabled):hover {
+    transform: none;
   }
 }
 

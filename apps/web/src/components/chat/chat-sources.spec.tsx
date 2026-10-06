@@ -64,31 +64,46 @@ describe("ChatSources", () => {
 
     // Plegadas por defecto: primero se lee la respuesta.
     expect(
-      screen.getByRole("heading", { name: "Referencias" }),
-    ).not.toBeVisible();
-    fireEvent.click(screen.getByText("Ver referencias"));
+      screen.queryByRole("heading", { name: "Referencias" }),
+    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", {
+      name: /Ver fuentes disponibles.*1 referencia.*1 documento/u,
+    });
+    const panel = document.getElementById(
+      toggle.getAttribute("aria-controls") as string,
+    );
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panel).toHaveAttribute("inert");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).not.toHaveAttribute("inert");
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    expect(table).toBeVisible();
+    const downloadsHeading = screen.getByRole("heading", {
+      name: "Documentos disponibles",
+    });
     expect(
-      screen.getByRole("table", {
-        name: "Fuentes documentales, ubicación y descarga",
-      }),
-    ).toBeVisible();
+      table.compareDocumentPosition(downloadsHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen.getByRole("columnheader", { name: "Documento" }),
     ).toBeVisible();
-    expect(screen.getByText("1 fuente")).toBeVisible();
-    expect(screen.getByText("Ley de Reforma Magisterial")).toBeVisible();
-    expect(screen.getByText("Vigente")).toBeVisible();
-    expect(screen.getByText("Artículo 5")).toBeVisible();
-    expect(screen.getByText("5.1")).toBeVisible();
+    expect(within(table).getByText("Ley de Reforma Magisterial")).toBeVisible();
+    expect(within(table).getByText("Vigente")).toBeVisible();
+    expect(within(table).getByText("Artículo 5")).toBeVisible();
+    expect(within(table).getByText("5.1")).toBeVisible();
     // El puntaje técnico no se muestra al usuario (se leía como confiabilidad).
     expect(
       screen.queryByText(/Coincidencia documental/u),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Fuente número:")).toBeInTheDocument();
-    expect(screen.getByText("Página PDF:")).toBeInTheDocument();
-    expect(screen.getByText("33 de 47")).toBeVisible();
-    expect(screen.getByText("Versión:")).toBeInTheDocument();
+    expect(within(table).getByText("Fuente número:")).toBeInTheDocument();
+    expect(within(table).getByText("Página PDF:")).toBeInTheDocument();
+    expect(within(table).getByText("33 de 47")).toBeVisible();
+    expect(within(table).getByText("Versión 1")).toBeVisible();
     expect(
       screen.getByRole("link", {
         name: /Abrir fuente \[1\]: Ley de Reforma Magisterial/i,
@@ -131,14 +146,20 @@ describe("ChatSources", () => {
       />,
     );
 
-    expect(screen.getByText("10–12").closest("td")).toHaveAttribute(
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
+    );
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    expect(within(table).getByText("10–12").closest("td")).toHaveAttribute(
       "data-label",
-      "Ubicación",
+      "Página",
     );
     expect(
       screen.queryByText(/Coincidencia documental/u),
     ).not.toBeInTheDocument();
-    const sourceRow = screen.getByText("Reglamento").closest("tr");
+    const sourceRow = within(table).getByText("Reglamento").closest("tr");
     expect(sourceRow).not.toBeNull();
     expect(
       within(sourceRow as HTMLTableRowElement).getByText(/Proceso:/),
@@ -173,7 +194,9 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Ver referencias"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
+    );
     expect(
       screen.getByText("Fragmento interno · sin paginación PDF"),
     ).toBeVisible();
@@ -216,19 +239,20 @@ describe("ChatSources", () => {
       />,
     );
 
-    expect(screen.getByText("2 fuentes")).toBeVisible();
-    const replacedRow = screen
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
+    );
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const replacedRow = within(table)
       .getByText("Norma sustituida de 2018")
       .closest("tr");
-    const archivedRow = screen
+    const archivedRow = within(table)
       .getByText("Antecedente archivado de 2009")
       .closest("tr");
-    expect(replacedRow).toHaveTextContent(
-      "Situación: Reemplazado / sin vigencia · Histórico",
-    );
-    expect(archivedRow).toHaveTextContent(
-      "Situación: Archivado · Antecedente histórico",
-    );
+    expect(replacedRow).toHaveTextContent("Reemplazado / sin vigencia · Histórico");
+    expect(archivedRow).toHaveTextContent("Archivado · Antecedente histórico");
     expect(screen.queryByText("Vigente")).not.toBeInTheDocument();
     expect(
       within(replacedRow as HTMLTableRowElement).getByRole("link", {
@@ -352,8 +376,10 @@ describe("ChatSources — fuentes citadas", () => {
       />,
     );
 
-    expect(screen.getByText("1 fuente")).toBeVisible();
-    fireEvent.click(screen.getByText("Ver referencias"));
+    const toggle = screen.getByRole("button", {
+      name: /Ver fuentes disponibles.*1 referencia.*2 documentos/u,
+    });
+    fireEvent.click(toggle);
     expect(
       screen.getByText(/Documentos citados en la respuesta/u),
     ).toBeVisible();
