@@ -263,6 +263,45 @@ describe('SupabaseChatGatewayAdapter', () => {
     );
   });
 
+  it('autoriza y audita una versión elegible del catálogo antes de firmarla', async () => {
+    const versionId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const now = Date.parse('2026-10-05T20:00:00.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const { client, createSignedUrl, rpc, storageFrom } = createClient({
+      rpcData: [
+        {
+          document_version_id: versionId,
+          mime_type: 'application/pdf',
+          original_file_name: 'anexo-requisitos.pdf',
+          storage_bucket: 'normative-documents',
+          storage_path: 'documents/anexo.pdf',
+        },
+      ],
+      signedUrl: 'https://storage.example/catalog-signed',
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await expect(
+      gateway.createCatalogDocumentDownloadUrl({
+        documentVersionId: versionId,
+        ttlSeconds: 60,
+        userId,
+      }),
+    ).resolves.toEqual({
+      expiresAt: '2026-10-05T20:01:00.000Z',
+      url: 'https://storage.example/catalog-signed',
+      versionId,
+    });
+    expect(rpc).toHaveBeenCalledWith('authorize_chat_catalog_download', {
+      p_document_version_id: versionId,
+      p_user_id: userId,
+    });
+    expect(storageFrom).toHaveBeenCalledWith('normative-documents');
+    expect(createSignedUrl).toHaveBeenCalledWith('documents/anexo.pdf', 60, {
+      download: 'anexo-requisitos.pdf',
+    });
+  });
+
   it('keeps forcing the download for Word or Markdown sources', async () => {
     const sourceId = '8c8b56af-6d0c-4fef-881e-7c00907540dd';
     const { client, createSignedUrl } = createClient({

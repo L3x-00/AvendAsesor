@@ -1,7 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ModuleOverviewCard } from "./module-overview";
+import { AUTO_COLLAPSE_MS, ModuleOverviewCard } from "./module-overview";
 
 const moduleId = "11111111-1111-4111-8111-111111111111";
 const longTitle =
@@ -41,12 +46,13 @@ function respondWith(body: unknown, status = 200) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("ModuleOverviewCard", () => {
-  it("pliega el resumen al terminar y permite abrirlo para dejar lista una pregunta", async () => {
-    const user = userEvent.setup();
+  it("muestra el resumen, lo autopliega con animación y permite reabrirlo", async () => {
+    vi.useFakeTimers();
     const fetchMock = respondWith(overview());
     const onAsk = vi.fn();
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={onAsk} />);
@@ -54,14 +60,22 @@ describe("ModuleOverviewCard", () => {
     expect(
       screen.getByText("Preparando un resumen de los documentos…"),
     ).toBeVisible();
-    expect(await screen.findByText("Resumen listo · 1 documento")).toBeVisible();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Resumen listo · 1 documento")).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/chat/modules/${moduleId}/overview`,
       expect.objectContaining({ headers: { Accept: "application/json" } }),
     );
-    expect(screen.getByText(longTitle).closest("[aria-hidden]"))
-      .toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByText("Resolución Ministerial · 2026")).toBeInTheDocument();
+    expect(
+      screen.getByText(longTitle).closest("[aria-hidden]"),
+    ).toHaveAttribute("aria-hidden", "false");
+    expect(
+      screen.getByText("Resolución Ministerial · 2026"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Aprueba los padrones para percibir asignaciones."),
     ).toBeInTheDocument();
@@ -69,13 +83,19 @@ describe("ModuleOverviewCard", () => {
       screen.getByText(/Resumen orientativo generado con IA/),
     ).toBeInTheDocument();
 
-    const toggle = screen.getByRole("button", { name: "Ver resumen" });
+    let toggle = screen.getByRole("button", { name: "Ocultar resumen" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    act(() => vi.advanceTimersByTime(AUTO_COLLAPSE_MS));
+    toggle = screen.getByRole("button", { name: "Ver resumen" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(toggle);
+    expect(
+      screen.getByText(longTitle).closest("[aria-hidden]"),
+    ).toHaveAttribute("aria-hidden", "true");
+    fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(longTitle)).toBeVisible();
 
-    await user.click(
+    fireEvent.click(
       screen.getByRole("button", { name: /Preguntar sobre este documento/ }),
     );
     expect(onAsk).toHaveBeenCalledWith(
@@ -102,9 +122,7 @@ describe("ModuleOverviewCard", () => {
     );
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Ver resumen" }),
-    );
+    await screen.findByRole("button", { name: "Ocultar resumen" });
 
     expect(
       screen.getByText(
@@ -119,9 +137,7 @@ describe("ModuleOverviewCard", () => {
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
 
     expect(
-      await screen.findByText(
-        /Estoy listo para orientarte con este tema/,
-      ),
+      await screen.findByText(/Estoy listo para orientarte con este tema/),
     ).toBeVisible();
   });
 
@@ -129,13 +145,43 @@ describe("ModuleOverviewCard", () => {
     respondWith(overview({ total: 12 }));
     render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Ver resumen" }),
-    );
+    await screen.findByRole("button", { name: "Ocultar resumen" });
+
+    expect(screen.getByText(/Y 11 documentos más en este tema/)).toBeVisible();
+  });
+
+  it("respeta movimiento reducido y aparece plegado sin temporizador", async () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    respondWith(overview());
+    render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
+
+    const toggle = await screen.findByRole("button", { name: "Ver resumen" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByText(longTitle).closest("[aria-hidden]"),
+    ).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("no autopliega mientras el docente interactúa con el resumen", async () => {
+    vi.useFakeTimers();
+    respondWith(overview());
+    render(<ModuleOverviewCard moduleId={moduleId} onAsk={vi.fn()} />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const ask = screen.getByRole("button", {
+      name: /Preguntar sobre este documento/,
+    });
+    fireEvent.focus(ask);
+    act(() => vi.advanceTimersByTime(AUTO_COLLAPSE_MS));
 
     expect(
-      screen.getByText(/Y 11 documentos más en este tema/),
-    ).toBeVisible();
+      screen.getByRole("button", { name: "Ocultar resumen" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(ask).toBeEnabled();
   });
 
   it("si el panorama no está disponible, no muestra nada", async () => {

@@ -385,7 +385,7 @@ describe('RagService', () => {
     ]);
   });
 
-  it('searches a forty-document corpus without a first-thirty cutoff and diversifies evidence', async () => {
+  it('post-processes a forty-document candidate set and diversifies evidence', async () => {
     const corpus = Array.from({ length: 40 }, (_value, index) => ({
       ...source,
       chunkContent: `Contenido del documento ${index + 1}.`,

@@ -53,6 +53,22 @@ interface ConsultationChatRpcClient {
   ): Promise<{ data: null; error: PostgrestError | null }>;
 }
 
+interface CatalogDocumentDownloadRpcClient {
+  rpc(
+    name: 'authorize_chat_catalog_download',
+    args: { p_document_version_id: string; p_user_id: string },
+  ): Promise<{
+    data: Array<{
+      document_version_id: string;
+      mime_type: string;
+      original_file_name: string;
+      storage_bucket: string;
+      storage_path: string;
+    }> | null;
+    error: PostgrestError | null;
+  }>;
+}
+
 const CHAT_MODULE_COLUMNS =
   'id,name,code,description,parent_module_id,sort_order';
 
@@ -295,6 +311,42 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
       expiresAt,
       sourceId: input.sourceId,
       url: signed.data.signedUrl,
+    };
+  }
+
+  async createCatalogDocumentDownloadUrl(
+    input: Parameters<
+      ChatHistoryGateway['createCatalogDocumentDownloadUrl']
+    >[0],
+  ) {
+    const client = this.requireClient();
+    const { data, error } = await (
+      client as unknown as CatalogDocumentDownloadRpcClient
+    ).rpc('authorize_chat_catalog_download', {
+      p_document_version_id: input.documentVersionId,
+      p_user_id: input.userId,
+    });
+    if (error) databaseError(error);
+
+    const document = requireSingle(
+      data,
+      'The requested catalog document was not found.',
+    );
+    const signed = await client.storage
+      .from(document.storage_bucket)
+      .createSignedUrl(document.storage_path, input.ttlSeconds, {
+        download: document.original_file_name,
+      });
+    if (signed.error || !signed.data?.signedUrl) {
+      throw new ServiceUnavailableException(
+        'The catalog document download is temporarily unavailable.',
+      );
+    }
+
+    return {
+      expiresAt: new Date(Date.now() + input.ttlSeconds * 1_000).toISOString(),
+      url: signed.data.signedUrl,
+      versionId: document.document_version_id,
     };
   }
 

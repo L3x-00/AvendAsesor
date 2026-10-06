@@ -179,9 +179,11 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
         .mockResolvedValue(
           overview({ documents: [], scope: 'empty', total: 0 }),
         ),
-      reply: jest
-        .fn()
-        .mockResolvedValue({ message: 'Catálogo general', suggestions: [] }),
+      reply: jest.fn().mockResolvedValue({
+        documents: [],
+        message: 'Catálogo general',
+        suggestions: [],
+      }),
     });
 
     const [event] = await collect(service, {
@@ -190,7 +192,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
 
     expect(catalogService.reply).toHaveBeenCalled();
     expect(event).toEqual({
-      data: { message: 'Catálogo general' },
+      data: { documents: [], message: 'Catálogo general' },
       type: 'conversational',
     });
   });

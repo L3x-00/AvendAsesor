@@ -10,8 +10,17 @@ import {
 
 describe("citas del modelo", () => {
   it("shows the normative abbreviation in the citation label", () => {
-    expect(sourceCitationLabel({ rank: 1, documentType: "RESOLUCION_MINISTERIAL" } as Parameters<typeof sourceCitationLabel>[0])).toBe("[1] RM");
-    expect(sourceCitationLabel({ rank: 2, documentType: "MEMORANDUM" } as Parameters<typeof sourceCitationLabel>[0])).toBe("[2] M");
+    expect(
+      sourceCitationLabel({
+        rank: 1,
+        documentType: "RESOLUCION_MINISTERIAL",
+      } as Parameters<typeof sourceCitationLabel>[0]),
+    ).toBe("[1] RM");
+    expect(
+      sourceCitationLabel({ rank: 2, documentType: "MEMORANDUM" } as Parameters<
+        typeof sourceCitationLabel
+      >[0]),
+    ).toBe("[2] M");
   });
   it("reads single, double and grouped citations", () => {
     expect(
@@ -54,7 +63,9 @@ describe("ChatSources", () => {
     );
 
     // Plegadas por defecto: primero se lee la respuesta.
-    expect(screen.getByRole("heading", { name: "Referencias" })).not.toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Referencias" }),
+    ).not.toBeVisible();
     fireEvent.click(screen.getByText("Ver referencias"));
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
@@ -122,7 +133,7 @@ describe("ChatSources", () => {
 
     expect(screen.getByText("10–12").closest("td")).toHaveAttribute(
       "data-label",
-      "Páginas PDF",
+      "Ubicación",
     );
     expect(
       screen.queryByText(/Coincidencia documental/u),
@@ -134,9 +145,39 @@ describe("ChatSources", () => {
     ).toHaveTextContent("Proceso: No especificado");
     expect(sourceRow).toHaveTextContent("Sección: No especificada");
     expect(sourceRow).toHaveTextContent("Artículo: No especificado");
-    expect(sourceRow).toHaveTextContent(
-      "Numeral o literal: No especificado",
+    expect(sourceRow).toHaveTextContent("Numeral o literal: No especificado");
+  });
+
+  it("no presenta como página PDF la ubicación sintética de un archivo Word", () => {
+    render(
+      <ChatSources
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Glosario institucional",
+            id: "ac8b56af-6d0c-4fef-881e-7c00907540dd",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            moduleName: "Gestión",
+            numeralReference: null,
+            pageEnd: 1,
+            pageStart: 1,
+            pdfPageCount: 1,
+            rank: 1,
+            relevanceScore: 0.8,
+            sectionTitle: "Siglas",
+            versionNumber: 1,
+          },
+        ]}
+      />,
     );
+
+    fireEvent.click(screen.getByText("Ver referencias"));
+    expect(
+      screen.getByText("Fragmento interno · sin paginación PDF"),
+    ).toBeVisible();
+    expect(screen.queryByText("1 de 1")).not.toBeInTheDocument();
   });
 
   it("distinguishes replaced and archived evidence while preserving each source download", () => {
@@ -231,12 +272,14 @@ describe("ChatDownloads", () => {
         sources={[
           {
             ...base,
+            documentVersionId: "33333333-3333-4333-8333-333333333333",
             documentTitle: "Anexo de requisitos",
             id: "11111111-1111-4111-8111-111111111111",
             rank: 1,
           },
           {
             ...base,
+            documentVersionId: "33333333-3333-4333-8333-333333333333",
             documentTitle: "Anexo de requisitos",
             id: "22222222-2222-4222-8222-222222222222",
             pageEnd: 3,
@@ -254,6 +297,33 @@ describe("ChatDownloads", () => {
       "href",
       "/api/chat/sources/11111111-1111-4111-8111-111111111111/download?descargar=1",
     );
+  });
+
+  it("conserva dos documentos homónimos cuando sus versiones son distintas", () => {
+    render(
+      <ChatDownloads
+        sources={[
+          {
+            ...base,
+            documentTitle: "Anexo de requisitos",
+            documentVersionId: "33333333-3333-4333-8333-333333333331",
+            id: "11111111-1111-4111-8111-111111111111",
+            rank: 1,
+          },
+          {
+            ...base,
+            documentTitle: "Anexo de requisitos",
+            documentVersionId: "33333333-3333-4333-8333-333333333332",
+            id: "22222222-2222-4222-8222-222222222222",
+            rank: 2,
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("link", { name: "Descargar Anexo de requisitos" }),
+    ).toHaveLength(2);
   });
 });
 

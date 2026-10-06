@@ -1598,13 +1598,15 @@ ul.avend-chat-list {
   opacity: 0;
   transition:
     grid-template-rows 220ms var(--avend-ease-interaction),
-    opacity 180ms ease-out;
+    opacity 180ms ease-out,
+    visibility 0s linear 220ms;
   visibility: hidden;
 }
 
 .avend-chat-topic-folder-reveal[data-open="true"] {
   grid-template-rows: 1fr;
   opacity: 1;
+  transition-delay: 0s;
   visibility: visible;
 }
 
@@ -1843,13 +1845,15 @@ ul.avend-chat-list {
   opacity: 0;
   transition:
     grid-template-rows 220ms var(--avend-ease-interaction),
-    opacity 180ms ease-out;
+    opacity 180ms ease-out,
+    visibility 0s linear 220ms;
   visibility: hidden;
 }
 
 .avend-chat-overview-reveal[data-open="true"] {
   grid-template-rows: 1fr;
   opacity: 1;
+  transition-delay: 0s;
   visibility: visible;
 }
 

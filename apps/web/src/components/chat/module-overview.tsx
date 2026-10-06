@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import {
   moduleOverviewSchema,
@@ -13,6 +13,7 @@ type OverviewState =
   | { overview: ModuleOverview; status: "ready" };
 
 const SHORT_TITLE_CHARS = 70;
+export const AUTO_COLLAPSE_MS = 1_800;
 
 function shortTitle(title: string): string {
   const clean = title
@@ -52,6 +53,7 @@ export function ModuleOverviewCard({
   const contentId = useId();
   const [isExpanded, setIsExpanded] = useState(false);
   const [state, setState] = useState<OverviewState>({ status: "loading" });
+  const autoCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,12 +66,40 @@ export function ModuleOverviewCard({
         const parsed = moduleOverviewSchema.safeParse(await response.json());
         if (!parsed.success) throw new Error("overview");
         setState({ overview: parsed.data, status: "ready" });
+        const reduceMotion =
+          window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+          false;
+        if (parsed.data.scope !== "empty" && !reduceMotion) {
+          setIsExpanded(true);
+          autoCollapseTimer.current = setTimeout(() => {
+            setIsExpanded(false);
+            autoCollapseTimer.current = null;
+          }, AUTO_COLLAPSE_MS);
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) setState({ status: "error" });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (autoCollapseTimer.current) {
+        clearTimeout(autoCollapseTimer.current);
+        autoCollapseTimer.current = null;
+      }
+    };
   }, [moduleId]);
+
+  const cancelAutoCollapse = () => {
+    if (autoCollapseTimer.current) {
+      clearTimeout(autoCollapseTimer.current);
+      autoCollapseTimer.current = null;
+    }
+  };
+
+  const toggleSummary = () => {
+    cancelAutoCollapse();
+    setIsExpanded((current) => !current);
+  };
 
   if (state.status === "error") return null;
 
@@ -102,6 +132,8 @@ export function ModuleOverviewCard({
     <section
       aria-label="Documentos de este tema"
       className="avend-chat-overview"
+      onFocusCapture={cancelAutoCollapse}
+      onPointerEnter={cancelAutoCollapse}
     >
       <p className="avend-chat-overview-title">Documentos de este tema</p>
       {overview.scope === "empty" ? (
@@ -112,13 +144,13 @@ export function ModuleOverviewCard({
         </p>
       ) : (
         <>
-          <div className="avend-chat-overview-ready" role="status">
-            <span>{readyLabel}</span>
+          <div className="avend-chat-overview-ready">
+            <span role="status">{readyLabel}</span>
             <button
               aria-controls={contentId}
               aria-expanded={isExpanded}
               className="avend-chat-overview-toggle"
-              onClick={() => setIsExpanded((current) => !current)}
+              onClick={toggleSummary}
               type="button"
             >
               {isExpanded ? "Ocultar resumen" : "Ver resumen"}

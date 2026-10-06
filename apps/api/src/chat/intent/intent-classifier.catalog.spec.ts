@@ -12,7 +12,6 @@ describe('classifyTurnIntent — catálogo («¿de qué tienes información?»)'
     '¿Qué normas tienes?',
     'dame la lista de documentos',
     '¿Qué puedo consultarte?',
-    '¿Qué preguntas frecuentes hay?',
     '¿Qué me recomiendas preguntar?',
     'Dame algunos ejemplos de preguntas',
   ])('«%s» pide el catálogo, sin activar el RAG', (message) => {
@@ -20,6 +19,32 @@ describe('classifyTurnIntent — catálogo («¿de qué tienes información?»)'
       lane: 'social',
       subtype: 'catalog',
     });
+  });
+
+  it.each([
+    '¿Qué anexos hay?',
+    'Descárgame los anexos',
+    'Muéstrame la base normativa',
+    '¿Tienes archivos de preguntas frecuentes?',
+    'Dame los documentos del glosario',
+    '¿Cuáles cronogramas están disponibles?',
+  ])('«%s» pide archivos del catálogo completo', (message) => {
+    expect(classifyTurnIntent(message)).toEqual({
+      lane: 'social',
+      subtype: 'document_catalog',
+    });
+  });
+
+  it.each([
+    '¿Qué establece el anexo 3?',
+    '¿Qué significa la sigla UGEL?',
+    '¿Qué siglas hay?',
+    '¿Qué acrónimos tienes?',
+    '¿Qué hay en el glosario?',
+    'Lista las siglas del documento',
+    '¿Cuál es la base normativa de la licencia?',
+  ])('«%s» pide contenido y conserva el RAG', (message) => {
+    expect(classifyTurnIntent(message).lane).toBe('domain');
   });
 
   it.each([

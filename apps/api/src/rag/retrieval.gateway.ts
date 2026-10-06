@@ -22,6 +22,8 @@ export interface RetrievedChunk {
   /** Año de emisión del documento, si está registrado. */
   issuanceYear?: number | null;
   lexicalScore: number;
+  /** MIME real de la versión; distingue PDF de paginación sintética no-PDF. */
+  mimeType?: string | null;
   /** Present for the consultation-control search; legacy test doubles may omit it. */
   moduleAssociations?: RetrievedModuleAssociation[];
   moduleIds: string[];

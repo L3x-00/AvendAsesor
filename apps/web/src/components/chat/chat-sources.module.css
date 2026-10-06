@@ -358,6 +358,29 @@
   width: 1.125rem;
 }
 
+.showMore {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+}
+
+.showMore:hover {
+  background: var(--avend-soft-blue);
+  border-color: var(--avend-accent);
+}
+
+.showMore:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
 @media (max-width: 35rem) {
   .downloadList li {
     align-items: stretch;

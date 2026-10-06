@@ -13,6 +13,7 @@ import {
 import type { KeyboardEvent, ReactNode } from "react";
 import type {
   ChatConversationDetail,
+  ChatCatalogDocument,
   ChatHistoryMessage,
   ChatModule,
   ChatSource,
@@ -37,6 +38,7 @@ import {
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
+import { ChatCatalogDownloads } from "./chat-catalog-downloads";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
@@ -51,6 +53,7 @@ import {
 type MessageRole = ChatHistoryMessage["role"];
 
 interface RenderedMessage {
+  catalogDocuments?: ChatCatalogDocument[];
   content: string;
   /** Conversación a la que pertenece (la API puede abrir otra por cambio de tema). */
   conversationId?: string;
@@ -1157,6 +1160,7 @@ export function ChatPanel({
               ...current,
               {
                 content: result.data.message,
+                catalogDocuments: result.data.documents,
                 id: nextLocalId("conversational"),
                 inReplyToMessageId: null,
                 role: "assistant",
@@ -1322,8 +1326,8 @@ export function ChatPanel({
             <div className="avend-chat-update-note" role="note">
               <p>
                 <strong>Hay información nueva.</strong> Desde tu consulta se
-                incorporó documentación sobre este tema. Vuelve a preguntar
-                para recibir una respuesta con sustento.
+                incorporó documentación sobre este tema. Vuelve a preguntar para
+                recibir una respuesta con sustento.
               </p>
               {resolvedUpdate.question ? (
                 <button
@@ -1442,6 +1446,9 @@ export function ChatPanel({
                     }}
                     questions={message.suggestions}
                   />
+                ) : null}
+                {message.catalogDocuments?.length ? (
+                  <ChatCatalogDownloads documents={message.catalogDocuments} />
                 ) : null}
                 {message.sources.length && message.id !== "streaming" ? (
                   <ChatDownloads sources={message.sources} />

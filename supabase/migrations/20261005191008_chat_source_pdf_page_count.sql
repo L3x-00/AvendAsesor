@@ -104,6 +104,7 @@ returns table (
   issuance_year smallint,
   document_situation public.document_situation,
   version_number integer,
+  mime_type text,
   pdf_page_count integer,
   page_start integer,
   page_end integer,
@@ -131,6 +132,7 @@ as $$
     cited_document.issuance_year,
     result.document_situation,
     result.version_number,
+    cited_version.mime_type,
     cited_version.page_count,
     result.page_start,
     result.page_end,
@@ -257,6 +259,8 @@ begin
     select jsonb_agg(jsonb_build_object(
       'id', source.id,
       'rank', source.source_rank,
+      'documentId', source.document_id,
+      'documentVersionId', source.document_version_id,
       'documentTitle', source.document_title,
       'documentType', source.document_type,
       'resolutionNumber', source.resolution_number,
@@ -266,6 +270,7 @@ begin
       'relatedModuleName', detected_module.name,
       'relatedSubmoduleName', detected_submodule.name,
       'versionNumber', source.version_number,
+      'mimeType', version.mime_type,
       'pdfPageCount', source.pdf_page_count,
       'pageStart', source.page_start,
       'pageEnd', source.page_end,
@@ -275,6 +280,9 @@ begin
       'relevanceScore', source.relevance_score
     ) order by source.source_rank) as items
     from public.chat_message_sources as source
+    join public.document_versions as version
+      on version.id = source.document_version_id
+      and version.document_id = source.document_id
     where source.message_id = message.id
   ) as sources on true;
 

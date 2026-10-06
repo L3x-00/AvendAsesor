@@ -60,6 +60,17 @@ function joinSpanish(items: string[]): string {
 const MAX_LISTED_DOCUMENTS = 25;
 const MAX_FALLBACK_SUGGESTIONS = 4;
 const SHORT_TITLE_CHARS = 70;
+const NORMATIVE_DOCUMENT_TYPES = new Set([
+  'DECRETO_LEGISLATIVO',
+  'DECRETO_SUPREMO',
+  'DIRECTIVA',
+  'LEY',
+  'NORMA_TECNICA',
+  'REGLAMENTO',
+  'RESOLUCION_DIRECTORAL',
+  'RESOLUCION_MINISTERIAL',
+  'RESOLUCION_VICEMINISTERIAL',
+]);
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   ANEXO: 'Anexo',
@@ -74,6 +85,7 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   MEMORANDUM: 'Memorándum',
   NORMA_TECNICA: 'Norma Técnica',
   OFICIO: 'Oficio',
+  PREGUNTAS_FRECUENTES: 'Preguntas frecuentes',
   REGLAMENTO: 'Reglamento',
   RESOLUCION_DIRECTORAL: 'Resolución Directoral',
   RESOLUCION_MINISTERIAL: 'Resolución Ministerial',
@@ -99,6 +111,53 @@ function documentLine(document: AvailableDocument): string {
   // Sin el punto final del título: quedaría «contratados. (Resolución…)».
   const title = document.title.trim().replace(/[.;:]+$/u, '');
   return `- ${title}${details.length ? ` (${details.join(', ')})` : ''}`;
+}
+
+function normalized(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('es');
+}
+
+/**
+ * Los pedidos de archivos se resuelven contra el catálogo completo elegible,
+ * nunca contra los 5 resultados del RAG. El filtro es deliberadamente
+ * determinista: si no reconoce una categoría, conserva todos los documentos
+ * del tema para no ocultar un archivo por una interpretación incierta.
+ */
+export function requestedCatalogDocuments(
+  documents: AvailableDocument[],
+  question?: string,
+  selectedModuleId?: string | null,
+): AvailableDocument[] {
+  const inScope = selectedModuleId
+    ? documents.filter((document) =>
+        document.moduleIds.includes(selectedModuleId),
+      )
+    : documents;
+  const text = normalized(question ?? '');
+  if (!text) return inScope;
+
+  let predicate: ((document: AvailableDocument) => boolean) | null = null;
+  if (/\banex(?:o|os)\b/u.test(text)) {
+    predicate = (document) => document.documentType === 'ANEXO';
+  } else if (/\b(?:preguntas frecuentes|faq|faqs)\b/u.test(text)) {
+    predicate = (document) => document.documentType === 'PREGUNTAS_FRECUENTES';
+  } else if (/\bcronogramas?\b/u.test(text)) {
+    predicate = (document) => document.documentType === 'CRONOGRAMA';
+  } else if (/\b(?:base normativa|normativa|normas?)\b/u.test(text)) {
+    predicate = (document) =>
+      NORMATIVE_DOCUMENT_TYPES.has(document.documentType) ||
+      /\bnormativ/u.test(normalized(document.title));
+  } else if (/\b(?:glosarios?|siglas?|acronimos?)\b/u.test(text)) {
+    predicate = (document) =>
+      normalized([document.title, ...document.sectionTitles].join(' ')).match(
+        /\b(?:glosari|sigla|acronim)/u,
+      ) !== null;
+  }
+
+  return predicate ? inScope.filter(predicate) : inScope;
 }
 
 /**
@@ -344,19 +403,34 @@ export class ChatCatalogService {
     return summary;
   }
 
-  async reply(abortSignal?: AbortSignal): Promise<ChatCatalogReply> {
-    const documents = await this.catalogGateway.listAvailableDocuments();
+  async reply(
+    abortSignal?: AbortSignal,
+    options: { question?: string; selectedModuleId?: string | null } = {},
+  ): Promise<ChatCatalogReply> {
+    const allDocuments = await this.availableDocuments();
+    const documents = requestedCatalogDocuments(
+      allDocuments,
+      options.question,
+      options.selectedModuleId,
+    );
 
     if (!documents.length) {
       return {
+        documents: [],
         message:
-          'Aún estoy preparándome con los documentos oficiales de este tema. Cuéntame igual tu consulta: buscaré en todos los documentos disponibles y, si no encuentro respaldo, te lo diré con claridad para que puedas verificarlo con tu UGEL, tu DRE o el MINEDU.',
+          allDocuments.length > 0
+            ? 'No encontré archivos disponibles que coincidan con ese pedido en el tema actual. Puedes indicarme el nombre o tipo de documento, o quitar el filtro del tema y volver a intentarlo.'
+            : 'Aún estoy preparándome con los documentos oficiales de este tema. Cuéntame igual tu consulta: buscaré en todos los documentos disponibles y, si no encuentro respaldo, te lo diré con claridad para que puedas verificarlo con tu UGEL, tu DRE o el MINEDU.',
         suggestions: [],
       };
     }
 
     const suggestions = await this.suggestionsFor(documents, abortSignal);
-    return { message: this.buildMessage(documents, suggestions), suggestions };
+    return {
+      documents,
+      message: this.buildMessage(documents, suggestions),
+      suggestions,
+    };
   }
 
   private buildMessage(
@@ -383,8 +457,8 @@ export class ChatCatalogService {
         ? [`Y ${count - MAX_LISTED_DOCUMENTS} documentos más.`]
         : [];
     const closing = suggestions.length
-      ? 'Te dejo algunas preguntas recomendadas para empezar: tócalas para usarlas o escribe la tuya con el mayor detalle posible.'
-      : 'Cuéntame tu consulta con el mayor detalle posible y la busco en estos documentos.';
+      ? 'Te dejo algunas preguntas recomendadas para empezar. Debajo también puedes descargar los archivos disponibles.'
+      : 'Debajo puedes descargar los archivos disponibles o escribir una consulta más precisa sobre su contenido.';
 
     return [intro, ...sections, ...more, closing].join('\n\n');
   }

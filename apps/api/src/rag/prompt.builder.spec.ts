@@ -122,6 +122,26 @@ describe('buildEvidenceUserPrompt', () => {
     expect(prompt).toContain('Páginas físicas del PDF: 1-2 de 17');
   });
 
+  it('no inventa paginación PDF para Word o Markdown', () => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Qué siglas contiene?',
+      [],
+      [
+        {
+          ...source,
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          pdfPageCount: 1,
+          pageEnd: 1,
+          pageStart: 1,
+        },
+      ],
+    );
+
+    expect(prompt).toContain('Ubicación interna: fragmento sin paginación PDF');
+    expect(prompt).not.toContain('Páginas físicas del PDF: 1-1 de 1');
+  });
+
   it('removes controls and neutralizes real source-delimiter injection', () => {
     const prompt = buildEvidenceUserPrompt(
       'Consulta',

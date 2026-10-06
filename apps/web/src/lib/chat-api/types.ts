@@ -19,11 +19,15 @@ export type ChatModule = z.infer<typeof chatModuleSchema>;
 
 export const chatSourceSchema = z.object({
   articleReference: z.string().max(500).nullable(),
+  /** Ausentes solo en conversaciones guardadas antes de este contrato. */
+  documentId: z.string().uuid().optional(),
   documentSituation: z.enum(["current", "replaced", "archived"]),
   documentTitle: z.string().min(1).max(500),
   documentType: z.string().max(64).nullish(),
+  documentVersionId: z.string().uuid().optional(),
   id: z.string().uuid(),
   issuanceYear: z.number().int().nullable().optional(),
+  mimeType: z.string().min(1).max(255).nullable().optional(),
   moduleName: z.string().max(255).nullable(),
   numeralReference: z.string().max(255).nullable(),
   pageEnd: z.number().int().min(1).max(300),
@@ -56,6 +60,30 @@ export const chatSourceDownloadSchema = z
   })
   .strict();
 export type ChatSourceDownload = z.infer<typeof chatSourceDownloadSchema>;
+
+export const chatCatalogDocumentSchema = z.object({
+  documentId: z.string().uuid(),
+  documentType: z.string().min(1).max(64),
+  issuanceYear: z.number().int().nullable(),
+  mimeType: z.string().min(1).max(255),
+  originalFileName: z.string().min(1).max(500),
+  pageCount: z.number().int().min(1).max(300),
+  resolutionNumber: z.string().max(255).nullable(),
+  title: z.string().min(1).max(1_000),
+  versionId: z.string().uuid(),
+});
+export type ChatCatalogDocument = z.infer<typeof chatCatalogDocumentSchema>;
+
+export const chatCatalogDocumentDownloadSchema = z
+  .object({
+    expiresAt: timestampSchema,
+    url: absoluteHttpUrlSchema,
+    versionId: z.string().uuid(),
+  })
+  .strict();
+export type ChatCatalogDocumentDownload = z.infer<
+  typeof chatCatalogDocumentDownloadSchema
+>;
 
 export const chatConversationSchema = z.object({
   createdAt: timestampSchema,
@@ -126,6 +154,7 @@ export const chatStreamPayloadSchemas = {
     userMessageId: z.string().uuid(),
   }),
   conversational: z.object({
+    documents: z.array(chatCatalogDocumentSchema).max(500).optional(),
     message: z.string().min(1).max(20_000),
     startsNewTopic: z.boolean().optional(),
     /** Preguntas recomendadas de la respuesta de catálogo. */

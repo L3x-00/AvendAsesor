@@ -32,6 +32,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
           document_version_id: 'version',
           issuance_year: 2024,
           lexical_score: 0.4,
+          mime_type: 'application/pdf',
           module_associations: [
             {
               rootModuleId: 'module',
@@ -72,6 +73,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
             submoduleName: 'Submódulo',
           },
         ],
+        mimeType: 'application/pdf',
         pdfPageCount: 17,
         resolutionNumber: 'RM-123-2024-MINEDU',
         semanticScore: 0.9,

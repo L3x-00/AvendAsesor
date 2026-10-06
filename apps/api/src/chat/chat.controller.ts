@@ -88,6 +88,19 @@ export class ChatController {
     );
   }
 
+  /** Descarga un archivo elegible del catálogo, sin depender del top-k RAG. */
+  @Get('catalog/documents/:versionId/download-url')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  createCatalogDocumentDownloadUrl(
+    @Param('versionId', new ParseUUIDPipe()) versionId: string,
+    @CurrentAuthorization() authorization: AuthorizationContext,
+  ) {
+    return this.chatService.createCatalogDocumentDownloadUrl(
+      versionId,
+      authorization,
+    );
+  }
+
   @Delete('conversations/:id')
   deleteConversation(
     @Param('id', new ParseUUIDPipe()) conversationId: string,

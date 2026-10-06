@@ -1357,9 +1357,7 @@ describe("ChatPanel", () => {
       <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
     );
 
-    await user.click(
-      await screen.findByRole("button", { name: "Ver resumen" }),
-    );
+    await screen.findByRole("button", { name: "Ocultar resumen" });
 
     await user.click(
       await screen.findByRole("button", {
@@ -1379,7 +1377,25 @@ describe("ChatPanel", () => {
       "fetch",
       vi.fn(async () =>
         streamResponse([
-          'event: conversational\ndata: {"message":"¡Claro! Hoy puedo responderte con este documento.","suggestions":["¿Qué funciones tiene el Coordinador Pedagógico?"]}\n\n',
+          `event: conversational\ndata: ${JSON.stringify({
+            documents: [
+              {
+                documentId: "13333333-3333-4333-8333-333333333333",
+                documentType: "ANEXO",
+                issuanceYear: 2026,
+                mimeType: "application/pdf",
+                originalFileName: "anexo.pdf",
+                pageCount: 2,
+                resolutionNumber: null,
+                title: "Anexo de funciones",
+                versionId: "23333333-3333-4333-8333-333333333333",
+              },
+            ],
+            message: "¡Claro! Hoy puedo responderte con este documento.",
+            suggestions: [
+              "¿Qué funciones tiene el Coordinador Pedagógico?",
+            ],
+          })}\n\n`,
         ]),
       ),
     );
@@ -1398,6 +1414,12 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("textbox", { name: "Escribe tu consulta" }),
     ).toHaveValue("¿Qué funciones tiene el Coordinador Pedagógico?");
+    expect(
+      screen.getByRole("link", { name: "Descargar Anexo de funciones" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/chat/catalog/documents/23333333-3333-4333-8333-333333333333/download",
+    );
   });
 
   it("answers a greeting conversationally without RAG sources", async () => {

@@ -17,6 +17,7 @@ interface SituationAwareRetrievalRow {
   document_version_id: string;
   issuance_year: number | null;
   lexical_score: number;
+  mime_type: string;
   module_associations: Array<{
     rootModuleId: string;
     rootModuleName: string;
@@ -92,6 +93,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       documentVersionId: row.document_version_id,
       issuanceYear: row.issuance_year,
       lexicalScore: row.lexical_score,
+      mimeType: row.mime_type,
       moduleAssociations: row.module_associations,
       moduleIds: row.module_ids,
       moduleNames: row.module_names,

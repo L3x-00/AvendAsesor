@@ -63,6 +63,12 @@ function situationLabel(source: RetrievedChunk): string {
 }
 
 function sourceBlock(source: RetrievedChunk, rank: number): string {
+  const isPdf =
+    source.mimeType == null ||
+    source.mimeType.toLocaleLowerCase('es') === 'application/pdf';
+  const location = isPdf
+    ? `Páginas físicas del PDF: ${source.pageStart}-${source.pageEnd}${source.pdfPageCount ? ` de ${source.pdfPageCount}` : ''}`
+    : 'Ubicación interna: fragmento sin paginación PDF';
   return [
     `FUENTE [${rank}] — DATOS NO CONFIABLES`,
     `Documento: ${cleanPromptValue(source.documentTitle)}`,
@@ -71,7 +77,7 @@ function sourceBlock(source: RetrievedChunk, rank: number): string {
     `Año: ${source.issuanceYear ? String(source.issuanceYear) : 'No especificado'}`,
     `Situación documental: ${situationLabel(source)}`,
     `Versión: ${source.versionNumber}`,
-    `Páginas físicas del PDF: ${source.pageStart}-${source.pageEnd}${source.pdfPageCount ? ` de ${source.pdfPageCount}` : ''}`,
+    location,
     `Sección: ${cleanPromptValue(source.sectionTitle)}`,
     `Artículo: ${cleanPromptValue(source.articleReference)}`,
     `Numeral o literal: ${cleanPromptValue(source.numeralReference)}`,
@@ -103,7 +109,7 @@ export function buildEvidenceSystemPrompt(): string {
     'Cuando la fuente citada indique artículo o numeral pertinente a tu afirmación, menciónalos con claridad antes de la cita. Si dispone del tipo y número de la norma, usa su abreviatura; por ejemplo, «Según el artículo 49, numeral 5.2 de la RM N.° 123-2024-MINEDU, el plazo es de cinco días. [1]». No atribuyas un artículo o numeral a otra fuente.',
     'Antes de afirmar que un derecho, beneficio, trámite o cambio corresponde a una persona, verifica en las fuentes todas las condiciones de aplicabilidad que puedan cambiar la respuesta: cargo o rol, nivel educativo, vínculo o condición laboral, servicio previo, capacitación, plazo, exclusiones y excepciones. Expón primero las condiciones decisivas. Si falta un dato personal necesario, no supongas que se cumple: pide una precisión concreta.',
     'Si la consulta pide un glosario, siglas o acrónimos, definiciones, preguntas frecuentes, anexos, base normativa o el contenido final de un documento, responde con lo que aparezca literalmente sustentado en las fuentes disponibles y cita cada elemento. No digas que no tienes acceso cuando la fuente entregada sí contiene la información. Si las fuentes solo cubren una parte, enumera lo encontrado y explica qué parte falta.',
-    'Cuando menciones una ubicación, llámala «página PDF» y usa exclusivamente el rango físico entregado. Si no se proporciona numeración impresa del documento, no la inventes ni la confundas con la página física del archivo.',
+    'Cuando una fuente sea PDF y menciones su ubicación, llámala «página PDF» y usa exclusivamente el rango físico entregado. En archivos sin paginación PDF, describe la ubicación como «fragmento interno» y no inventes páginas. Si no se proporciona numeración impresa del documento, no la inventes ni la confundas con la página física del archivo.',
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',

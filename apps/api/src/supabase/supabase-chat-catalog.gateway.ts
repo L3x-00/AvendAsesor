@@ -6,14 +6,53 @@ import type {
 } from '../chat/catalog/chat-catalog.types';
 import type { SupabaseServerClient } from './supabase.server-client';
 
-/** Documentos candidatos por consulta; el conteo mostrado sale de aquí. */
-const MAX_CANDIDATES = 200;
-/** Documentos listados y descritos a la IA (ver ChatCatalogService). */
-const MAX_DESCRIBED_DOCUMENTS = 25;
+/** Página acotada de PostgREST; se recorren varias para no confundir página con top-k. */
+const CATALOG_PAGE_SIZE = 100;
+/** Máximo configurado por respuesta en Supabase local; las relaciones se recorren por páginas. */
+const RELATION_PAGE_SIZE = 1_000;
 const MAX_SECTIONS_PER_DOCUMENT = 6;
 /** Fragmentos iniciales que se envían a la IA para resumir un documento. */
 const OPENING_CHUNKS = 8;
 const OPENING_TEXT_CHARS = 6_000;
+
+interface CatalogDocumentRow {
+  approved_version_id: string | null;
+  document_type: string;
+  id: string;
+  issuance_year: number | null;
+  metadata: unknown;
+  resolution_number: string | null;
+  title: string;
+}
+
+interface CatalogDocumentVersionRow {
+  id: string;
+  mime_type: string;
+  original_file_name: string;
+  page_count: number;
+}
+
+interface CatalogDocumentModuleRow {
+  document_id: string;
+  module_id: string;
+}
+
+interface CatalogModuleRow {
+  id: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  name: string;
+  parent_module_id: string | null;
+  sort_order: number;
+}
+
+function batches<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+}
 
 function databaseError(error: PostgrestError): never {
   throw new ServiceUnavailableException({
@@ -45,23 +84,30 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
   async listAvailableDocuments(): Promise<AvailableDocument[]> {
     const client = this.requireClient();
 
-    // Tope amplio: el conteo que ve el docente debe ser el real, así que los
-    // demos se excluyen en la consulta y no después de limitar filas.
-    const documents = await client
-      .from('documents')
-      .select(
-        'id, title, document_type, issuance_year, resolution_number, approved_version_id, metadata',
-      )
-      .eq('is_deleted', false)
-      .eq('situation', 'current')
-      .eq('publication_status', 'active')
-      .not('approved_version_id', 'is', null)
-      .is('metadata->demoSeed', null)
-      .order('title', { ascending: true })
-      .limit(MAX_CANDIDATES);
-    if (documents.error) databaseError(documents.error);
+    // El conteo que ve el docente debe ser el real: se recorren todas las
+    // páginas y se usa un desempate único para no omitir homónimos en frontera.
+    const documentRows: CatalogDocumentRow[] = [];
+    for (let from = 0; ; from += CATALOG_PAGE_SIZE) {
+      const documents = await client
+        .from('documents')
+        .select(
+          'id, title, document_type, issuance_year, resolution_number, approved_version_id, metadata',
+        )
+        .eq('is_deleted', false)
+        .eq('situation', 'current')
+        .eq('publication_status', 'active')
+        .not('approved_version_id', 'is', null)
+        .is('metadata->demoSeed', null)
+        .order('title', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + CATALOG_PAGE_SIZE - 1);
+      if (documents.error) databaseError(documents.error);
+      const page = documents.data ?? [];
+      documentRows.push(...(page as CatalogDocumentRow[]));
+      if (page.length < CATALOG_PAGE_SIZE) break;
+    }
 
-    const candidates = (documents.data ?? []).filter((document) => {
+    const candidates = documentRows.filter((document) => {
       const metadata = document.metadata;
       return !(
         metadata &&
@@ -77,30 +123,66 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       .filter((id): id is string => Boolean(id));
     const documentIds = candidates.map((document) => document.id);
 
-    const [versions, links, modules] = await Promise.all([
-      client
-        .from('document_versions')
-        .select('id')
-        .in('id', approvedVersionIds)
-        .eq('ingestion_status', 'indexed'),
-      client
-        .from('document_modules')
-        .select('document_id, module_id')
-        .in('document_id', documentIds),
-      client
-        .from('modules')
-        .select(
-          'id, name, parent_module_id, is_active, is_deleted, sort_order',
-        ),
-    ]);
-    for (const result of [versions, links, modules]) {
-      if (result.error) databaseError(result.error);
-    }
+    const loadVersions = async (): Promise<CatalogDocumentVersionRow[]> => {
+      const rows: CatalogDocumentVersionRow[] = [];
+      for (const batch of batches(approvedVersionIds, CATALOG_PAGE_SIZE)) {
+        const result = await client
+          .from('document_versions')
+          .select('id, mime_type, original_file_name, page_count')
+          .in('id', batch)
+          .eq('ingestion_status', 'indexed');
+        if (result.error) databaseError(result.error);
+        rows.push(...((result.data ?? []) as CatalogDocumentVersionRow[]));
+      }
+      return rows;
+    };
+    const loadLinks = async (): Promise<CatalogDocumentModuleRow[]> => {
+      const rows: CatalogDocumentModuleRow[] = [];
+      for (const batch of batches(documentIds, CATALOG_PAGE_SIZE)) {
+        for (let from = 0; ; from += RELATION_PAGE_SIZE) {
+          const result = await client
+            .from('document_modules')
+            .select('document_id, module_id')
+            .in('document_id', batch)
+            .order('document_id', { ascending: true })
+            .order('module_id', { ascending: true })
+            .range(from, from + RELATION_PAGE_SIZE - 1);
+          if (result.error) databaseError(result.error);
+          const page = (result.data ?? []) as CatalogDocumentModuleRow[];
+          rows.push(...page);
+          if (page.length < RELATION_PAGE_SIZE) break;
+        }
+      }
+      return rows;
+    };
+    const loadModules = async (): Promise<CatalogModuleRow[]> => {
+      const rows: CatalogModuleRow[] = [];
+      for (let from = 0; ; from += RELATION_PAGE_SIZE) {
+        const result = await client
+          .from('modules')
+          .select(
+            'id, name, parent_module_id, is_active, is_deleted, sort_order',
+          )
+          .order('id', { ascending: true })
+          .range(from, from + RELATION_PAGE_SIZE - 1);
+        if (result.error) databaseError(result.error);
+        const page = (result.data ?? []) as CatalogModuleRow[];
+        rows.push(...page);
+        if (page.length < RELATION_PAGE_SIZE) break;
+      }
+      return rows;
+    };
 
-    const indexed = new Set((versions.data ?? []).map((version) => version.id));
-    const moduleById = new Map(
-      (modules.data ?? []).map((module) => [module.id, module]),
+    const [versions, links, modules] = await Promise.all([
+      loadVersions(),
+      loadLinks(),
+      loadModules(),
+    ]);
+
+    const indexedVersionById = new Map(
+      versions.map((version) => [version.id, version]),
     );
+    const moduleById = new Map(modules.map((module) => [module.id, module]));
     /** Nombre del módulo raíz si el módulo (y su padre) están activos. */
     const activeRootName = (moduleId: string): string | null => {
       const module = moduleById.get(moduleId);
@@ -114,7 +196,7 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
 
     const rootNamesByDocument = new Map<string, Set<string>>();
     const moduleIdsByDocument = new Map<string, Set<string>>();
-    for (const link of links.data ?? []) {
+    for (const link of links) {
       const name = activeRootName(link.module_id);
       if (!name) continue;
       const names = rootNamesByDocument.get(link.document_id) ?? new Set();
@@ -130,27 +212,39 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
     const eligible = candidates.filter(
       (document) =>
         document.approved_version_id !== null &&
-        indexed.has(document.approved_version_id) &&
+        indexedVersionById.has(document.approved_version_id) &&
         rootNamesByDocument.has(document.id),
     );
     if (!eligible.length) return [];
 
-    // Secciones solo de los documentos que se muestran y se dan a la IA.
-    const described = eligible.slice(0, MAX_DESCRIBED_DOCUMENTS);
-    const sections = await client
-      .from('document_chunks')
-      .select('document_id, section_title')
-      .in(
-        'document_version_id',
-        described.map((document) => document.approved_version_id),
-      )
-      .not('section_title', 'is', null)
-      .order('chunk_index', { ascending: true })
-      .limit(MAX_DESCRIBED_DOCUMENTS * MAX_SECTIONS_PER_DOCUMENT * 4);
-    if (sections.error) databaseError(sections.error);
+    // Secciones de todo el catálogo, por lotes: un glosario ubicado después
+    // del documento 30 también debe poder encontrarse por su encabezado.
+    const sectionBatches: (typeof eligible)[] = [];
+    for (let index = 0; index < eligible.length; index += 40) {
+      sectionBatches.push(eligible.slice(index, index + 40));
+    }
+    const sectionResults = await Promise.all(
+      sectionBatches.map((batch) =>
+        client
+          .from('document_chunks')
+          .select('document_id, section_title')
+          .in(
+            'document_version_id',
+            batch
+              .map((document) => document.approved_version_id)
+              .filter((id): id is string => id !== null),
+          )
+          .not('section_title', 'is', null)
+          .order('chunk_index', { ascending: true })
+          .limit(batch.length * MAX_SECTIONS_PER_DOCUMENT * 4),
+      ),
+    );
+    for (const result of sectionResults) {
+      if (result.error) databaseError(result.error);
+    }
 
     const sectionsByDocument = new Map<string, string[]>();
-    for (const row of sections.data ?? []) {
+    for (const row of sectionResults.flatMap((result) => result.data ?? [])) {
       const title = row.section_title?.trim();
       if (!title) continue;
       const list = sectionsByDocument.get(row.document_id) ?? [];
@@ -160,17 +254,29 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
       sectionsByDocument.set(row.document_id, list);
     }
 
-    return eligible.map((document) => ({
-      documentType: document.document_type,
-      id: document.id,
-      issuanceYear: document.issuance_year,
-      moduleIds: [...(moduleIdsByDocument.get(document.id) ?? [])],
-      moduleNames: [...(rootNamesByDocument.get(document.id) ?? [])].sort(),
-      resolutionNumber: document.resolution_number,
-      sectionTitles: sectionsByDocument.get(document.id) ?? [],
-      title: document.title,
-      versionId: document.approved_version_id,
-    }));
+    return eligible.map((document) => {
+      const version = indexedVersionById.get(document.approved_version_id!);
+      if (!version) {
+        throw new ServiceUnavailableException({
+          code: 'CHAT_CATALOG_UNAVAILABLE',
+          message: 'An indexed catalog version could not be loaded.',
+        });
+      }
+      return {
+        documentType: document.document_type,
+        id: document.id,
+        issuanceYear: document.issuance_year,
+        mimeType: version.mime_type,
+        moduleIds: [...(moduleIdsByDocument.get(document.id) ?? [])],
+        moduleNames: [...(rootNamesByDocument.get(document.id) ?? [])].sort(),
+        originalFileName: version.original_file_name,
+        pageCount: version.page_count,
+        resolutionNumber: document.resolution_number,
+        sectionTitles: sectionsByDocument.get(document.id) ?? [],
+        title: document.title,
+        versionId: document.approved_version_id!,
+      };
+    });
   }
 
   async getOpeningText(versionId: string): Promise<string> {

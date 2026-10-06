@@ -89,6 +89,7 @@ describe('ChatService — lineamientos del cliente', () => {
       completeTurn: jest.fn().mockResolvedValue({
         answerMessageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
       }),
+      createCatalogDocumentDownloadUrl: jest.fn(),
       createSourceDownloadUrl: jest.fn(),
       deleteConversation: jest.fn(),
       getConversation: jest.fn(),

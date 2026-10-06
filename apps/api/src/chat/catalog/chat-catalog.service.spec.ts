@@ -1,6 +1,7 @@
 import {
   ChatCatalogService,
   COVERAGE_CACHE_MS,
+  DOCUMENTS_CACHE_MS,
   FAILED_SUGGESTIONS_CACHE_MS,
   fallbackSuggestions,
 } from './chat-catalog.service';
@@ -14,8 +15,11 @@ function document(
     documentType: 'RESOLUCION_VICEMINISTERIAL',
     id: 'd1',
     issuanceYear: 2023,
+    mimeType: 'application/pdf',
     moduleIds: ['cargos'],
     moduleNames: ['Cargos y plazas'],
+    originalFileName: 'documento.pdf',
+    pageCount: 10,
     resolutionNumber: 'RVM 011-2023',
     sectionTitles: ['Funciones del Coordinador Pedagógico'],
     title:
@@ -122,6 +126,7 @@ describe('ChatCatalogService', () => {
   });
 
   it('una llamada vieja no pisa las sugerencias del catálogo nuevo', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     let resolveOld: (value: string[]) => void = () => undefined;
     const suggest = jest
       .fn()
@@ -136,17 +141,22 @@ describe('ChatCatalogService', () => {
       .mockResolvedValueOnce([document()])
       .mockResolvedValue([document({ id: 'd2' })]);
 
-    const old = catalog.reply();
-    await new Promise((done) => setImmediate(done));
-    await catalog.reply();
-    resolveOld(['¿Pregunta vieja del catálogo anterior?']);
-    await old;
-    const latest = await catalog.reply();
+    try {
+      const old = catalog.reply();
+      await new Promise((done) => setImmediate(done));
+      now.mockReturnValue(1_000_000 + DOCUMENTS_CACHE_MS + 1);
+      await catalog.reply();
+      resolveOld(['¿Pregunta vieja del catálogo anterior?']);
+      await old;
+      const latest = await catalog.reply();
 
-    expect(latest.suggestions).toEqual([
-      '¿Qué dice la Ley de Reforma Magisterial?',
-    ]);
-    expect(suggest).toHaveBeenCalledTimes(2);
+      expect(latest.suggestions).toEqual([
+        '¿Qué dice la Ley de Reforma Magisterial?',
+      ]);
+      expect(suggest).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('si el docente se va, no espera a la IA y usa el respaldo', async () => {
@@ -240,6 +250,49 @@ describe('ChatCatalogService', () => {
     expect(reply.suggestions).toEqual([]);
     expect(reply.message).toContain('Aún estoy preparándome');
     expect(suggest).not.toHaveBeenCalled();
+  });
+
+  it('devuelve los 40 archivos elegibles sin el límite top-k del RAG', async () => {
+    const documents = Array.from({ length: 40 }, (_, index) =>
+      document({
+        documentType: 'ANEXO',
+        id: `d-${index + 1}`,
+        originalFileName: `anexo-${index + 1}.pdf`,
+        title: `Anexo ${index + 1}`,
+        versionId: `v-${index + 1}`,
+      }),
+    );
+    const { service: catalog, suggest } = service(documents);
+
+    const reply = await catalog.reply(undefined, {
+      question: '¿Qué anexos hay?',
+    });
+
+    expect(reply.documents).toHaveLength(40);
+    expect(reply.documents.at(-1)?.title).toBe('Anexo 40');
+    expect(reply.message).toContain('estos 40 documentos');
+    expect(reply.message).toContain('Y 15 documentos más.');
+    expect(suggest).toHaveBeenCalledWith(documents);
+  });
+
+  it('filtra categoría y tema abierto sin ocultar otros archivos elegibles', async () => {
+    const { service: catalog } = service([
+      document({ documentType: 'ANEXO', id: 'a1', versionId: 'va1' }),
+      document({
+        documentType: 'ANEXO',
+        id: 'a2',
+        moduleIds: ['remuneraciones'],
+        versionId: 'va2',
+      }),
+      document({ documentType: 'LEY', id: 'l1', versionId: 'vl1' }),
+    ]);
+
+    const reply = await catalog.reply(undefined, {
+      question: 'Descárgame los anexos',
+      selectedModuleId: 'cargos',
+    });
+
+    expect(reply.documents.map((item) => item.id)).toEqual(['a1']);
   });
 
   it('recorta títulos largos en las preguntas de respaldo', () => {
