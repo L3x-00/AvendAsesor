@@ -1,4 +1,9 @@
 import type { OutOfScopeSubtype, SocialSubtype } from './intent-classifier';
+import {
+  OFFICIAL_SITES,
+  type OfficialSite,
+  buildOfficialSitesReply,
+} from './official-sites';
 
 /**
  * Respuestas amables DETERMINISTAS para los carriles no-RAG (Hito 3, Fases 2 y 10):
@@ -22,6 +27,8 @@ export type ConversationalReplyKind =
   SocialSubtype | OutOfScopeSubtype | 'unrelated_no_evidence';
 
 export interface ConversationalReplyOptions {
+  /** Portales oficiales que pidió la persona (pedido de enlaces). */
+  officialSites?: readonly OfficialSite[];
   /** Rol de la persona que consulta: ajusta el saludo sin prometer nada nuevo. */
   role?: 'docente' | 'admin' | 'superadmin';
   /** Temas (módulos raíz activos) que hoy se pueden consultar. */
@@ -72,6 +79,13 @@ export function buildConversationalReply(
     case 'document_catalog':
       // Respaldo si no se pudo leer la lista de documentos.
       return `Respondo con base en los documentos oficiales cargados en la plataforma.${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} Cuéntame tu consulta con el mayor detalle posible y la busco.`;
+    case 'official_sites':
+      // Sin entidad reconocida (no debería ocurrir), los portales del sector.
+      return buildOfficialSitesReply(
+        options.officialSites?.length
+          ? options.officialSites
+          : OFFICIAL_SITES.slice(0, 3),
+      );
     case 'capabilities':
       return `Soy AVEND ASESOR. ${SCOPE_SENTENCE}${topicsSentence(options.topics)} ${EXAMPLES_SENTENCE} ¿Qué necesitas consultar?`;
     case 'out_of_domain':

@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createAiGatewayClient } from '../../config/ai-gateway';
+import {
+  INTERACTIVE_AI_LIMITS,
+  createAiGatewayClient,
+} from '../../config/ai-gateway';
 import type {
   AvailableDocument,
   SuggestedQuestionsGateway,
@@ -70,7 +73,10 @@ export class OpenAiSuggestedQuestionsGateway implements SuggestedQuestionsGatewa
 
   async suggest(documents: AvailableDocument[]): Promise<string[]> {
     if (!documents.length) return [];
-    const client = createAiGatewayClient(this.configService);
+    const client = createAiGatewayClient(
+      this.configService,
+      INTERACTIVE_AI_LIMITS,
+    );
     const model =
       this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini';
     const completion = await client.chat.completions.create(

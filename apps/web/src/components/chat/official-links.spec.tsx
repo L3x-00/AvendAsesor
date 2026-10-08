@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  isOfficialUrl,
   linkifyOfficialEntities,
+  linkifyOfficialUrls,
   startsSuggestions,
   ThoughtDuration,
   withoutLegacyLeadIn,
@@ -21,13 +23,19 @@ describe("official links", () => {
     expect(
       screen.getByRole("link", { name: /MINEDU \(portal oficial de MINEDU/ }),
     ).toHaveAttribute("href", "https://www.gob.pe/minedu");
-    expect(screen.getByRole("link", { name: /^UGEL/ })).toHaveAttribute(
+    // Las UGEL y las DRE no tienen una página única: directorio filtrado de
+    // gob.pe, no la búsqueda general que abría con una UGEL concreta.
+    expect(
+      screen.getByRole("link", {
+        name: /^UGEL \(directorio oficial de las UGEL en gob\.pe/,
+      }),
+    ).toHaveAttribute(
       "href",
-      "https://www.gob.pe/busquedas?term=UGEL",
+      "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL",
     );
     expect(screen.getByRole("link", { name: /^DRE/ })).toHaveAttribute(
       "href",
-      "https://www.gob.pe/busquedas?term=DRE",
+      "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=DRE+GRE",
     );
     expect(screen.getByRole("link", { name: /^SUNEDU/ })).toHaveAttribute(
       "href",
@@ -61,6 +69,66 @@ describe("official links", () => {
     expect(linkifyOfficialEntities("Revisa tu boleta de pago.", "s")).toEqual([
       "Revisa tu boleta de pago.",
     ]);
+  });
+
+  it("links official addresses sent as Markdown or written plainly", () => {
+    render(
+      <p>
+        {linkifyOfficialUrls(
+          "- [Página oficial del Ministerio de Educación (MINEDU)](https://www.gob.pe/minedu): normas. Mira también https://www.perueduca.pe.",
+          "u",
+        )}
+      </p>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /^Página oficial del Ministerio/ }),
+    ).toHaveAttribute("href", "https://www.gob.pe/minedu");
+    const plain = screen.getByRole("link", {
+      name: /^https:\/\/www\.perueduca\.pe \(enlace oficial/,
+    });
+    // El punto final cierra la frase; no forma parte de la dirección.
+    expect(plain).toHaveAttribute("href", "https://www.perueduca.pe");
+    screen.getAllByRole("link").forEach((link) => {
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+    expect(screen.getByText(/: normas\. Mira también/)).toBeInTheDocument();
+  });
+
+  it("keeps typographic quotes and ellipses out of the address", () => {
+    render(
+      <p>
+        {linkifyOfficialUrls(
+          "Abre “https://www.gob.pe/minedu” o https://www.gob.pe/sunedu…",
+          "u",
+        )}
+      </p>,
+    );
+
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "https://www.gob.pe/minedu",
+      "https://www.gob.pe/sunedu",
+    ]);
+  });
+
+  it("leaves non-official addresses as plain text", () => {
+    const text =
+      "Descarga la norma en https://bit.ly/ContratacionAuxiliares2026 o en [este enlace](https://gob.pe.example.com/x).";
+
+    expect(linkifyOfficialUrls(text, "u")).toEqual([text]);
+  });
+
+  it("accepts only https addresses of official domains", () => {
+    expect(isOfficialUrl("https://www.gob.pe/minedu")).toBe(true);
+    expect(isOfficialUrl("https://escale.minedu.gob.pe/")).toBe(true);
+    expect(isOfficialUrl("https://busquedas.elperuano.pe")).toBe(true);
+    expect(isOfficialUrl("http://www.gob.pe/minedu")).toBe(false);
+    expect(isOfficialUrl("https://gob.pe.example.com")).toBe(false);
+    expect(isOfficialUrl("https://notgob.pe")).toBe(false);
+    expect(isOfficialUrl("https://user:pass@www.gob.pe")).toBe(false);
+    expect(isOfficialUrl("no es una dirección")).toBe(false);
   });
 
   it("recognizes where the suggestions start", () => {

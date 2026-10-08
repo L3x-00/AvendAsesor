@@ -3,10 +3,18 @@ import type { ReactNode } from "react";
 /**
  * Portales oficiales que el asistente sugiere visitar. En el bloque
  * «Sugerencias:» cada mención se convierte en un enlace, para que el docente
- * llegue a la página sin buscarla. Solo enlaces verificados (2026-10-01): el
+ * llegue a la página sin buscarla. Solo enlaces verificados (2026-10-08): el
  * modelo nunca escribe URL, así no hay direcciones inventadas.
+ *
+ * Las UGEL y las DRE/GRE no tienen una página única: se enlaza el directorio
+ * de instituciones de gob.pe filtrado. La búsqueda general que se usaba antes
+ * abría con una UGEL concreta («UGEL Huancané») y parecía que la respuesta
+ * dependía de ella. La API indica las mismas direcciones cuando piden la
+ * página de una entidad (apps/api/src/chat/intent/official-sites.ts).
  */
 const OFFICIAL_LINKS: ReadonlyArray<{
+  /** El enlace lleva a un directorio de instituciones, no a un portal. */
+  directory?: boolean;
   href: string;
   name: string;
   pattern: RegExp;
@@ -17,13 +25,15 @@ const OFFICIAL_LINKS: ReadonlyArray<{
     pattern: /\bMINEDU\b|Ministerio de Educación/u,
   },
   {
-    href: "https://www.gob.pe/busquedas?term=UGEL",
-    name: "UGEL",
+    directory: true,
+    href: "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL",
+    name: "las UGEL",
     pattern: /\bUGEL(?:es)?\b/u,
   },
   {
-    href: "https://www.gob.pe/busquedas?term=DRE",
-    name: "DRE",
+    directory: true,
+    href: "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=DRE+GRE",
+    name: "las DRE y GRE",
     pattern: /\b(?:DRE|GRE)\b/u,
   },
   { href: "https://www.gob.pe/sunedu", name: "SUNEDU", pattern: /\bSUNEDU\b/u },
@@ -98,13 +108,100 @@ export function linkifyOfficialEntities(
       >
         {match[0]}{" "}
         <span className="avend-visually-hidden">
-          {`(portal oficial de ${link.name}, se abre en una pestaña nueva)`}
+          {link.directory
+            ? `(directorio oficial de ${link.name} en gob.pe, se abre en una pestaña nueva)`
+            : `(portal oficial de ${link.name}, se abre en una pestaña nueva)`}
         </span>
-        <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-          <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-        </svg>
+        <ExternalLinkIcon />
       </a>,
     );
+    last = index + match[0].length;
+  }
+  if (last === 0) return [text];
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+  );
+}
+
+/**
+ * Dominios del Estado y del sector cuyas direcciones se muestran como enlace.
+ * `gob.pe` es un dominio reservado a entidades públicas (MINEDU, UGEL, DRE,
+ * SUNEDU…). Cualquier otra dirección —un acortador como bit.ly, aunque venga
+ * del documento— se deja como texto: no se ofrece un clic a un destino que
+ * nadie verificó.
+ */
+const OFFICIAL_DOMAINS = [
+  "gob.pe",
+  "perueduca.pe",
+  "elperuano.pe",
+  "derrama.org.pe",
+];
+
+export function isOfficialUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  return OFFICIAL_DOMAINS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
+/** «[texto](https://…)» o una dirección suelta «https://…». */
+const URL_TOKEN =
+  /\[([^\]\n]{1,200})\]\((https:\/\/[^\s)]+)\)|https:\/\/[^\s<>()[\]"'«»“”‘’]+/gu;
+/** Puntuación que cierra la frase, no la dirección. */
+const TRAILING_PUNCTUATION = /[.,;:!?¡¿…]+$/u;
+
+/**
+ * Convierte en enlace las direcciones de dominios oficiales, escritas sueltas
+ * o como «[texto](dirección)» (así las envía la API al pedir la página de una
+ * entidad). Las demás quedan tal como llegaron.
+ */
+export function linkifyOfficialUrls(
+  text: string,
+  keyPrefix: string,
+): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(URL_TOKEN)) {
+    const index = match.index ?? 0;
+    const label = match[1];
+    let href = match[2] ?? match[0];
+    let trailing = "";
+    if (label === undefined) {
+      trailing = href.match(TRAILING_PUNCTUATION)?.[0] ?? "";
+      href = href.slice(0, href.length - trailing.length);
+    }
+    if (!isOfficialUrl(href)) continue;
+    if (index > last) nodes.push(text.slice(last, index));
+    nodes.push(
+      <a
+        className="avend-chat-official-link"
+        href={href}
+        key={`${keyPrefix}-url-${index}`}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        {label ?? href}{" "}
+        <span className="avend-visually-hidden">
+          (enlace oficial, se abre en una pestaña nueva)
+        </span>
+        <ExternalLinkIcon />
+      </a>,
+    );
+    if (trailing) nodes.push(trailing);
     last = index + match[0].length;
   }
   if (last === 0) return [text];

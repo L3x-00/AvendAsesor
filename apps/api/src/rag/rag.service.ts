@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { INTERACTIVE_AI_LIMITS } from '../config/ai-gateway';
 import type { EmbeddingsGateway } from '../ingestion/embeddings.gateway';
 import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
@@ -434,7 +435,10 @@ export class RagService {
       selectedModuleId && selectedQuery !== globalQuery
         ? [globalQuery, selectedQuery]
         : [globalQuery];
-    const embeddings = await this.embeddings.embed(queries);
+    const embeddings = await this.embeddings.embed(
+      queries,
+      INTERACTIVE_AI_LIMITS,
+    );
     const globalEmbedding = embeddings[0];
     const selectedEmbedding = embeddings.at(-1);
 

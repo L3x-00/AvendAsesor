@@ -96,6 +96,11 @@ describe('OpenAiAnswerGateway', () => {
     expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
     expect(userMessage?.content).toContain(source.chunkContent);
     expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
+    // Alguien espera la respuesta: ni los 10 minutos ni los dos reintentos
+    // por defecto del SDK.
+    expect(mockOpenAi).toHaveBeenCalledWith(
+      expect.objectContaining({ maxRetries: 1, timeout: 30_000 }),
+    );
   });
 
   it('reports the provider finish reason (e.g. length) when the stream ends', async () => {

@@ -1,6 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  type AiGatewayRequestLimits,
   RAG_EMBEDDING_DIMENSIONS,
   createAiGatewayClient,
 } from '../config/ai-gateway';
@@ -9,8 +10,11 @@ import type { EmbeddingsGateway } from './embeddings.gateway';
 @Injectable()
 export class OpenAiEmbeddingsGateway implements EmbeddingsGateway {
   constructor(private readonly configService: ConfigService) {}
-  async embed(inputs: string[]): Promise<number[][]> {
-    const client = createAiGatewayClient(this.configService);
+  async embed(
+    inputs: string[],
+    limits?: AiGatewayRequestLimits,
+  ): Promise<number[][]> {
+    const client = createAiGatewayClient(this.configService, limits);
     const response = await client.embeddings.create({
       dimensions: RAG_EMBEDDING_DIMENSIONS,
       input: inputs,

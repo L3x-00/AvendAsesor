@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createAiGatewayClient } from '../../config/ai-gateway';
+import {
+  INTERACTIVE_AI_LIMITS,
+  createAiGatewayClient,
+} from '../../config/ai-gateway';
 import type { DocumentSummaryGateway } from './chat-catalog.types';
 
 const TIMEOUT_MS = 12_000;
@@ -49,7 +52,10 @@ export class OpenAiDocumentSummaryGateway implements DocumentSummaryGateway {
     title: string;
   }): Promise<string | null> {
     if (!input.excerpt.trim()) return null;
-    const client = createAiGatewayClient(this.configService);
+    const client = createAiGatewayClient(
+      this.configService,
+      INTERACTIVE_AI_LIMITS,
+    );
     const model =
       this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini';
     const completion = await client.chat.completions.create(

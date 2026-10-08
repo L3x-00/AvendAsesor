@@ -87,6 +87,8 @@ import {
   hasEducationalSignal,
   isTopiclessQuestion,
 } from './intent/intent-classifier';
+import { officialSitesIn } from './intent/official-sites';
+import { normalizeSpanishText } from '../rag/text-normalization';
 
 /** Caracteres sin cita tras los cuales la respuesta empieza a mostrarse. */
 const LEAD_IN_WINDOW_CHARS = 400;
@@ -1396,6 +1398,19 @@ export class ChatService {
           `Catálogo no disponible; se responde con los temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
         );
       }
+    }
+    // «¿Puedo saber la página del MINEDU?»: enlaces verificados, sin RAG.
+    if (kind === 'official_sites') {
+      return {
+        data: {
+          message: buildConversationalReply(kind, {
+            officialSites: officialSitesIn(
+              normalizeSpanishText(question ?? ''),
+            ),
+          }),
+        },
+        type: 'conversational',
+      };
     }
     const topics =
       kind === 'capabilities' ||

@@ -22,6 +22,7 @@ import {
 } from '../../rag/domain-lexicon';
 import { refersBack } from '../../rag/anaphora';
 import { normalizeSpanishText } from '../../rag/text-normalization';
+import { OFFICIAL_SITES, WEB_NOUN, officialSitesIn } from './official-sites';
 
 export type TurnIntentLane = 'social' | 'domain' | 'out_of_scope';
 
@@ -33,7 +34,8 @@ export type SocialSubtype =
   | 'ask_announcement'
   | 'capabilities'
   | 'catalog'
-  | 'document_catalog';
+  | 'document_catalog'
+  | 'official_sites';
 
 export type OutOfScopeSubtype = 'out_of_domain' | 'system_limit';
 
@@ -471,6 +473,90 @@ function isCatalogRequest(
     .every((word) => !word || CATALOG_RESIDUE_WORDS.has(word));
 }
 
+/** Palabras que piden o buscan algo («pásame», «¿dónde…?», «quiero ver»). */
+const OFFICIAL_SITE_REQUEST_WORDS = new Set(
+  (
+    'puedo podria podrias puedes puede saber conocer dar das dame darme dime ' +
+    'decirme pasa pasas pasar pasame pasarme comparte compartes compartir ' +
+    'comparteme compartirme indica indicar indicame indicarme brinda brindar ' +
+    'brindame brindarme envia enviar enviame enviarme manda mandame mandarme ' +
+    'muestra mostrar muestrame mostrarme tienes tiene hay existe sabes conoces ' +
+    'quisiera quiero queria necesito deseo gustaria encuentro encontrar ubico ' +
+    'ubicar busco buscar ingreso ingresar entro entrar acceder visitar ver ' +
+    'cual cuales donde seria'
+  ).split(' '),
+);
+
+/**
+ * Lo único que puede acompañar al pedido de una página oficial sin volverlo
+ * consulta. Lista blanca cerrada: «¿en qué página de la norma del MINEDU dice
+ * eso?» o «la página de la UGEL para ver las plazas» dejan sustancia y siguen
+ * al RAG. Sin «o»: «¿es la del MINEDU o la de la UGEL?» es una disyuntiva.
+ */
+const OFFICIAL_SITE_RESIDUE_WORDS = new Set([
+  ...SOCIAL_RESIDUE_WORDS,
+  ...OFFICIAL_SITE_REQUEST_WORDS,
+  ...(
+    'al del un una algun alguna es son esta como me mi nos sus tener oficial ' +
+    'oficiales principal institucional para por tambien ademas favor'
+  ).split(' '),
+]);
+
+/** «Es», «son», «está»: solo piden el enlace tras «cuál» o «dónde». */
+const COPULA = new Set(['es', 'son', 'esta']);
+const ASKS_WHICH_OR_WHERE = new Set(['cual', 'cuales', 'donde']);
+
+/**
+ * Pedido de la página web de una entidad oficial («¿puedo saber la página del
+ * MINEDU?», «pásame el link de la UGEL»): se responde con los enlaces
+ * verificados, sin RAG. Ante la duda sigue al RAG (fail-closed): «página»
+ * también es la de un documento, y una pregunta de sí o no («¿esta página es
+ * del MINEDU?»), una obligación («¿hay que entrar al portal…?») o un caso
+ * («si no encuentro la página…») no se contestan con un «Claro, aquí tienes».
+ */
+function isOfficialSiteRequest(normalized: string): boolean {
+  if (/\d/u.test(normalized)) return false;
+  if (!WEB_NOUN.test(normalized)) return false;
+  if (!officialSitesIn(normalized).length) return false;
+  const plain = normalized
+    .replace(/[^a-z0-9 ]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // «¿Si puedo saber…?» abre la pregunta con cortesía; no plantea un caso.
+  if (
+    CONDITIONAL_CLAUSE.test(plain.replace(/^si /u, '')) ||
+    OBLIGATION.test(plain)
+  ) {
+    return false;
+  }
+  const residue = stripped(
+    normalized,
+    new RegExp(WEB_NOUN.source, 'gu'),
+    ...OFFICIAL_SITES.map((site) => new RegExp(site.pattern.source, 'gu')),
+    GREETING,
+    COURTESY,
+    VOCATIVE,
+    THANKS,
+    INTRODUCTION,
+  )
+    .split(' ')
+    .filter(Boolean);
+  if (!residue.every((word) => OFFICIAL_SITE_RESIDUE_WORDS.has(word))) {
+    return false;
+  }
+  if (
+    residue.some((word) => COPULA.has(word)) &&
+    !residue.some((word) => ASKS_WHICH_OR_WHERE.has(word))
+  ) {
+    return false;
+  }
+  // «Gracias por el link de la UGEL» agradece; no vuelve a pedirlo.
+  return (
+    !new RegExp(THANKS.source, 'u').test(normalized) ||
+    residue.some((word) => OFFICIAL_SITE_REQUEST_WORDS.has(word))
+  );
+}
+
 /** Resto del mensaje sin saludo ni cortesía, para reglas de frase completa. */
 function withoutCourtesy(normalized: string): string {
   return stripped(normalized, GREETING, COURTESY, VOCATIVE, THANKS);
@@ -511,6 +597,12 @@ export function classifyTurnIntent(
   // información interna se declina con un límite amable, sin pasar al RAG.
   if (isSystemProbing(normalized)) {
     return { lane: 'out_of_scope', subtype: 'system_limit' };
+  }
+
+  // Antes de la señal fuerte de dominio: «MINEDU» y «UGEL» lo son, pero pedir
+  // su página no es una consulta normativa.
+  if (isOfficialSiteRequest(normalized)) {
+    return { lane: 'social', subtype: 'official_sites' };
   }
 
   if (isDocumentCatalogRequest(normalized)) {
