@@ -31,6 +31,7 @@ import {
 import { ChatThinking, ChatWriting } from "./chat-thinking";
 import {
   linkifyOfficialEntities,
+  linkifyOfficialUrls,
   startsSuggestions,
   ThoughtDuration,
   withoutLegacyLeadIn,
@@ -325,18 +326,26 @@ function linkCitations(
 function renderInline(
   text: string,
   citations?: CitationContext,
-  linkOfficialSites = false,
+  links: { entities?: boolean; urls?: boolean } = {},
 ): ReactNode[] {
   return text.split("**").map((segment, index) => {
     const cited = linkCitations(segment, citations, `c${index}`);
-    // En las sugerencias, MINEDU, UGEL, SUNEDU… enlazan a su portal oficial.
-    const parts = linkOfficialSites
+    // Direcciones de dominios oficiales (gob.pe…) en cualquier respuesta.
+    const linked = links.urls
       ? cited.flatMap((part, partIndex) =>
+          typeof part === "string"
+            ? linkifyOfficialUrls(part, `u${index}-${partIndex}`)
+            : [part],
+        )
+      : cited;
+    // En las sugerencias, MINEDU, UGEL, SUNEDU… enlazan a su portal oficial.
+    const parts = links.entities
+      ? linked.flatMap((part, partIndex) =>
           typeof part === "string"
             ? linkifyOfficialEntities(part, `o${index}-${partIndex}`)
             : [part],
         )
-      : cited;
+      : linked;
     if (index % 2 === 1) return <strong key={index}>{parts}</strong>;
     return parts.length === 1 && typeof parts[0] === "string" ? (
       parts[0]
@@ -368,7 +377,10 @@ function renderRichContent(
     const paragraph = paragraphLines.join(" ");
     blocks.push(
       <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
-        {renderInline(paragraph, citations, inSuggestions)}
+        {renderInline(paragraph, citations, {
+          entities: inSuggestions,
+          urls: officialLinks,
+        })}
       </p>,
     );
     paragraphLines = [];
@@ -381,7 +393,10 @@ function renderRichContent(
       <List className="avend-chat-list" key={`list-${blocks.length}`}>
         {listItems.map((item, index) => (
           <li key={`${index}-${item}`}>
-            {renderInline(item, citations, inSuggestions)}
+            {renderInline(item, citations, {
+              entities: inSuggestions,
+              urls: officialLinks,
+            })}
           </li>
         ))}
       </List>,

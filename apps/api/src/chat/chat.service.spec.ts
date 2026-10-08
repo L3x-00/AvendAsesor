@@ -454,6 +454,29 @@ describe('ChatService', () => {
     expect(ragService.retrieve).not.toHaveBeenCalled();
   });
 
+  it('answers «¿puedo saber la página del minedu?» with the official link, without RAG', async () => {
+    // Observación del PO (2026-10-08): dentro de una conversación sobre
+    // auxiliares, la pregunta llegaba al RAG y solo aparecía enlazada la UGEL.
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'puedo saber la pagina del minedu',
+    });
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event || event.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(event.data.message).toContain(
+      '[Página oficial del Ministerio de Educación (MINEDU)](https://www.gob.pe/minedu)',
+    );
+    expect(event.data.message).not.toMatch(/ugel/iu);
+    expect(event.data.message).not.toContain('bit.ly');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
   it('answers «¿de qué tienes información?» with the document catalog and suggestions', async () => {
     const catalogService = {
       reply: jest.fn().mockResolvedValue({

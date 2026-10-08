@@ -1480,6 +1480,45 @@ describe("ChatPanel", () => {
     ).toBeEnabled();
   });
 
+  it("shows the official links the API sends when a portal is requested", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const message = [
+      "Claro, aquí tienes los enlaces oficiales:",
+      "",
+      "- [Página oficial del Ministerio de Educación (MINEDU)](https://www.gob.pe/minedu): normas, convocatorias, trámites y comunicados del sector educación.",
+      "- [Directorio oficial de las UGEL en gob.pe](https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL): cada UGEL tiene su propia página; busca la tuya por el nombre de tu UGEL o de tu provincia.",
+    ].join("\n");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          `event: conversational\ndata: ${JSON.stringify({ message })}\n\n`,
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByRole("link", {
+        name: /^Página oficial del Ministerio de Educación \(MINEDU\)/,
+      }),
+    ).toHaveAttribute("href", "https://www.gob.pe/minedu");
+    expect(
+      screen.getByRole("link", {
+        name: /^Directorio oficial de las UGEL en gob\.pe/,
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL",
+    );
+    // Fuera de «Sugerencias:» la sigla no se enlaza otra vez.
+    expect(screen.queryByRole("link", { name: /^UGEL/ })).toBeNull();
+    expect(screen.queryByText(/\]\(https:/)).toBeNull();
+  });
+
   it.each([
     ["event: conversation\ndata: {}\n\n", FRIENDLY_ERRORS.malformed],
     ["event: conversational\ndata: {}\n\n", FRIENDLY_ERRORS.malformed],
