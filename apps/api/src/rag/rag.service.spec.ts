@@ -158,8 +158,12 @@ describe('RagService', () => {
       ]),
     ).resolves.toMatchObject({ kind: 'evidence', sources: [source] });
 
-    const embeddingCalls = embeddings.embed.mock.calls as Array<[string[]]>;
+    const embeddingCalls = embeddings.embed.mock.calls as Array<
+      [string[], unknown]
+    >;
     expect(embeddingCalls[0]?.[0]).toHaveLength(1);
+    // La consulta del chat no espera los 10 minutos por defecto del SDK.
+    expect(embeddingCalls[0]?.[1]).toEqual({ maxRetries: 1, timeout: 30_000 });
     expect(embeddingCalls[0]?.[0]?.[0]).toContain(
       'Necesito una reasignación por unidad familiar.',
     );

@@ -46,6 +46,26 @@ describe('OpenAiEmbeddingsGateway', () => {
       input: ['primera', 'segunda'],
       model: 'text-embedding-3-small',
     });
+    // La indexación embebe un documento entero: conserva los límites del SDK.
+    const [options] = mockOpenAi.mock.calls[0] as [Record<string, unknown>];
+    expect(options).not.toHaveProperty('timeout');
+    expect(options).not.toHaveProperty('maxRetries');
+  });
+
+  it('applies the interactive limits when a chat query is embedded', async () => {
+    const get = jest.fn((key: string) =>
+      key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
+    );
+    mockCreate.mockResolvedValue({ data: [{ embedding: vector(), index: 0 }] });
+    const gateway = new OpenAiEmbeddingsGateway({ get } as never);
+
+    await gateway.embed(['consulta'], { maxRetries: 1, timeout: 30_000 });
+
+    expect(mockOpenAi).toHaveBeenCalledWith({
+      apiKey: 'test-key',
+      maxRetries: 1,
+      timeout: 30_000,
+    });
   });
 
   it('rejects malformed embedding dimensions before persistence', async () => {

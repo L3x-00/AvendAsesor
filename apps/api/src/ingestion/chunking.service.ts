@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { getEncoding } from 'js-tiktoken';
+import { getEncoding, type Tiktoken } from 'js-tiktoken';
 
 export interface ExtractedPage {
   pageNumber: number;
@@ -100,7 +100,18 @@ function normalizeParagraph(raw: string): string {
 
 @Injectable()
 export class ChunkingService {
-  private readonly encoding = getEncoding('o200k_base');
+  private encodingCache: Tiktoken | null = null;
+
+  /**
+   * Se construye al trocear el primer documento, no al arrancar: armar el BPE
+   * de o200k cuesta ~0,7 s de CPU y ~66 MB, y en la instancia de 0,15 CPU
+   * alargaba varios segundos cada arranque en frío de la API (la primera
+   * consulta del chat lo esperaba).
+   */
+  private get encoding(): Tiktoken {
+    this.encodingCache ??= getEncoding('o200k_base');
+    return this.encodingCache;
+  }
 
   private decode(tokens: number[]): string {
     return this.encoding

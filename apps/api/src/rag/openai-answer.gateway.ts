@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type OpenAI from 'openai';
-import { createAiGatewayClient } from '../config/ai-gateway';
+import {
+  INTERACTIVE_AI_LIMITS,
+  createAiGatewayClient,
+} from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
 import {
   buildAdvisorySystemPrompt,
@@ -19,7 +22,10 @@ export class OpenAiAnswerGateway implements AnswerGateway {
   constructor(private readonly configService: ConfigService) {}
 
   async *generate(input: AnswerGatewayInput): AsyncIterable<string> {
-    const client = createAiGatewayClient(this.configService);
+    const client = createAiGatewayClient(
+      this.configService,
+      INTERACTIVE_AI_LIMITS,
+    );
     const primaryModel =
       this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini';
     const fallbackModel = this.configService.get<string>(
