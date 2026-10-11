@@ -193,25 +193,89 @@
   color: var(--avend-text-muted);
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.tableShell {
+  overflow-x: auto;
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  background: var(--avend-surface);
+  box-shadow: 0 12px 32px rgb(13 27 61 / 7%);
 }
 
-.row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.5rem 1rem;
-  padding: 1.15rem 1.25rem;
-  border: 1px solid var(--avend-border);
-  border-radius: 0.75rem;
-  background: var(--avend-surface);
-  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
+.userTable {
+  width: 100%;
+  min-width: 72rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 1rem;
+}
+
+.userTable th,
+.userTable td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.userTable th {
+  border-bottom: 1px solid var(--avend-border);
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.userTable th:first-child {
+  border-top-left-radius: calc(1rem - 1px);
+}
+
+.userTable th:last-child {
+  border-top-right-radius: calc(1rem - 1px);
+}
+
+.userTable td {
+  border-bottom: 1px solid var(--avend-border);
+  color: var(--avend-text-muted);
+}
+
+.tableRow {
+  animation: rowEnter 220ms ease-out both;
+  transition: background-color 150ms ease-out;
+}
+
+.tableRow:last-child td {
+  border-bottom: 0;
+}
+
+.tableRow:hover,
+.tableRow:focus-within {
+  background: color-mix(in srgb, var(--avend-soft-blue) 42%, var(--avend-surface));
+}
+
+.userIdentity {
+  display: flex;
+  min-width: 15rem;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.avatar {
+  display: inline-flex;
+  flex: 0 0 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--avend-accent) 35%, white);
+  border-radius: 0.8rem;
+  background: var(--avend-soft-blue);
+  color: var(--avend-accent-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.userIdentityText {
+  min-width: 0;
 }
 
 .rowName {
@@ -222,9 +286,10 @@
 }
 
 .rowMeta {
-  margin: 0.15rem 0 0;
+  margin: 0.2rem 0 0;
   font-size: 1rem;
   color: var(--avend-text-muted);
+  overflow-wrap: anywhere;
 }
 
 .rowMeta strong {
@@ -240,35 +305,87 @@
 .badgeExpiring,
 .badgeExpired,
 .badgePaused {
-  justify-self: end;
-  flex: none;
-  padding: 0.15rem 0.7rem;
-  border: 1px solid transparent;
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid;
   border-radius: 999px;
   font-size: 1rem;
   font-weight: 700;
   text-align: center;
+  white-space: nowrap;
 }
 
 .badgeActive {
+  border-color: var(--avend-success-soft-border);
+  background: var(--avend-success-soft-surface);
+  color: var(--avend-success);
+}
+
+.badgeExpiring {
+  border-color: var(--avend-accent);
   background: var(--avend-soft-blue);
   color: var(--avend-accent-strong);
 }
 
-.badgeExpiring {
-  border-color: var(--avend-danger);
-  background: var(--avend-surface);
+.badgeExpired {
+  border-color: var(--avend-danger-soft-border);
+  background: var(--avend-danger-soft-surface);
   color: var(--avend-danger);
 }
 
-.badgeExpired {
-  background: var(--avend-danger);
-  color: var(--avend-surface);
+.badgePaused {
+  border-color: var(--avend-danger-soft-border);
+  background: color-mix(in srgb, var(--avend-danger-soft-surface) 72%, var(--avend-surface-muted));
+  color: var(--avend-danger);
 }
 
-.badgePaused {
+.statusDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.roleBadge {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
   background: var(--avend-surface-muted);
   color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dateLine {
+  display: grid;
+  grid-template-columns: 3rem minmax(7.5rem, 1fr);
+  gap: 0.4rem;
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+}
+
+.dateLine + .dateLine {
+  margin-top: 0.25rem;
+}
+
+.dateLine strong {
+  color: var(--avend-text);
+  font-weight: 650;
+}
+
+.lastAccess {
+  display: block;
+  min-width: 10rem;
+  color: var(--avend-text);
+  font-size: 1rem;
 }
 
 /*
@@ -290,15 +407,13 @@
 }
 
 .rowActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  grid-column: 1 / -1;
+  display: grid;
+  min-width: 12rem;
+  gap: 0.25rem;
 }
 
 .manage {
-  border-top: 1px solid var(--avend-border);
-  padding-top: 0.5rem;
+  border: 0;
 }
 
 .manageSummary {
@@ -306,9 +421,15 @@
   min-height: 2.75rem;
   display: flex;
   align-items: center;
+  padding: 0 0.45rem;
+  border-radius: 0.45rem;
   font-size: 1rem;
   font-weight: 600;
   color: var(--avend-accent-strong);
+}
+
+.manageSummary:hover {
+  background: var(--avend-soft-blue);
 }
 
 .manageSummary:focus-visible {
@@ -403,7 +524,7 @@
   outline-offset: 2px;
 }
 
-@media (max-width: 40rem) {
+@media (max-width: 52rem) {
   .searchControls,
   .search,
   .searchButton,
@@ -411,25 +532,91 @@
     width: 100%;
   }
 
-  .row {
-    grid-template-columns: minmax(0, 1fr);
+  .tableShell {
+    overflow-x: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
-  .badgeActive,
-  .badgeExpiring,
-  .badgeExpired,
-  .badgePaused {
-    justify-self: start;
+  .userTable,
+  .userTable tbody,
+  .userTable tr,
+  .userTable td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .userTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tableRow {
+    display: grid;
+    gap: 0;
+    margin-bottom: 0.85rem;
+    padding: 0.25rem 0.85rem 0.75rem;
+    border: 1px solid var(--avend-border);
+    border-radius: 0.9rem;
+    background: var(--avend-surface);
+    box-shadow: 0 8px 24px rgb(13 27 61 / 6%);
+  }
+
+  .userTable td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid var(--avend-border);
+  }
+
+  .userTable td::before {
+    color: var(--avend-text);
+    content: attr(data-label);
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .userTable td:first-child {
+    display: block;
+  }
+
+  .userTable td:first-child::before {
+    display: none;
+  }
+
+  .userTable td:last-child {
+    border-bottom: 0;
+  }
+
+  .userIdentity {
+    min-width: 0;
+  }
+
+  .rowActions {
+    min-width: 0;
   }
 }
 
-/*
- * Barra de acciones de Usuarios, sobre el listado. Los botones solo abren o
- * cierran: el formulario va en un panel DEBAJO de la barra, fuera de ella.
- * Ningún botón crece (flex: none) y el estado abierto solo cambia fondo, color
- * de borde y sombra interior, así que abrir un alta no mueve ni cambia de
- * tamaño los demás botones.
- */
+@keyframes rowEnter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Barra compacta: las acciones abren diálogos y nunca desplazan la tabla. */
 .actionArea {
   display: flex;
   flex-direction: column;
@@ -441,7 +628,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem;
+  padding: 0.4rem;
   border: 1px solid var(--avend-border);
   border-radius: 0.75rem;
   background: var(--avend-surface-muted);
@@ -477,6 +664,12 @@
   color: var(--avend-accent-strong);
 }
 
+.primaryAction:first-child {
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-accent-strong);
+  color: var(--avend-surface);
+}
+
 /*
  * Importar y Exportar van juntos al final de la barra y saltan de línea juntos.
  * Son discretos por tamaño y por no tener caja, no por un gris que se lea como
@@ -503,6 +696,11 @@
   background: var(--avend-soft-blue);
 }
 
+.primaryAction:first-child:hover {
+  border-color: var(--avend-navy);
+  background: var(--avend-navy);
+}
+
 /* Presionado: se ve también en pantallas táctiles, sin depender del hover. */
 .primaryAction:active,
 .secondaryAction:active {
@@ -524,8 +722,7 @@
   outline-offset: 2px;
 }
 
-.actionIcon,
-.actionChevron {
+.actionIcon {
   flex: none;
   width: 1.1rem;
   height: 1.1rem;
@@ -535,26 +732,33 @@
   stroke-width: 2;
 }
 
-.actionChevron {
-  transition: transform 150ms ease-out;
+.modalBackdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 1rem;
+  background: rgb(13 27 61 / 58%);
+  backdrop-filter: blur(4px);
+  animation: modalFade 160ms ease-out both;
 }
 
-[aria-expanded="true"] > .actionChevron {
-  transform: rotate(180deg);
+.modalBackdrop[hidden] {
+  display: none;
 }
 
 .actionPanel {
-  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  width: min(46rem, 100%);
+  max-height: calc(100vh - 2rem);
+  flex-direction: column;
   border: 1px solid var(--avend-border);
-  border-top: 3px solid var(--avend-accent-strong);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   background: var(--avend-surface);
-  box-shadow: 0 1px 2px rgb(16 24 40 / 6%);
-  scroll-margin-top: 5rem;
-}
-
-.actionPanel[hidden] {
-  display: none;
+  box-shadow: 0 24px 64px rgb(13 27 61 / 28%);
+  animation: modalEnter 190ms ease-out both;
 }
 
 /* El panel recibe el foco al abrirse; el anillo solo se ve con teclado. */
@@ -573,15 +777,47 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  padding-bottom: 0.75rem;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--avend-border);
+}
+
+.actionPanelEyebrow {
+  margin: 0 0 0.2rem;
+  color: var(--avend-accent-strong);
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .actionPanelTitle {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--avend-navy);
+}
+
+.actionPanelBody {
+  overflow-y: auto;
+  padding: 0.25rem 1.25rem 1.25rem;
+  overscroll-behavior: contain;
+}
+
+.actionPanelBody .form {
+  max-width: none;
+}
+
+.actionPanelCloseIcon {
+  display: inline-flex;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  flex: 0 0 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--avend-border);
+  border-radius: 999px;
+  background: var(--avend-surface-muted);
+  color: var(--avend-text);
+  cursor: pointer;
 }
 
 .actionPanelClose {
@@ -600,25 +836,31 @@
   cursor: pointer;
 }
 
-.actionPanelClose:hover {
+.actionPanelClose:hover,
+.actionPanelCloseIcon:hover {
   border-color: var(--avend-accent-strong);
   background: var(--avend-surface-muted);
 }
 
-.actionPanelClose:active {
+.actionPanelClose:active,
+.actionPanelCloseIcon:active {
   background: var(--avend-surface-muted);
   box-shadow: inset 0 2px 4px rgb(13 27 61 / 18%);
 }
 
-.actionPanelClose:focus-visible {
+.actionPanelClose:focus-visible,
+.actionPanelCloseIcon:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
 
 .actionPanelFooter {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--avend-border);
+  background: var(--avend-surface-muted);
+  border-radius: 0 0 1rem 1rem;
 }
 
 .importReport {
@@ -683,16 +925,49 @@
     white-space: normal;
   }
 
+  .modalBackdrop {
+    align-items: end;
+    padding: 0;
+  }
+
   .actionPanel {
-    padding: 0.85rem 1rem 1rem;
+    width: 100%;
+    max-height: calc(100vh - 1rem);
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  .actionPanelHeader,
+  .actionPanelBody,
+  .actionPanelFooter {
+    padding-right: 1rem;
+    padding-left: 1rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .primaryAction,
   .secondaryAction,
-  .actionChevron {
+  .tableRow,
+  .modalBackdrop,
+  .actionPanel {
+    animation: none;
     transition: none;
+  }
+}
+
+@keyframes modalFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

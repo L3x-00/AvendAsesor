@@ -106,9 +106,18 @@ function formatDay(value: string | null, emptyLabel: string): string {
   return accessDayFormatter.format(new Date(value));
 }
 
+function userInitials(fullName: string): string {
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase("es-PE") ?? "")
+    .join("");
+}
+
 const GROUPS: ReadonlyArray<{ group: UserGroup; label: string }> = [
   { group: "docente", label: "Docentes" },
-  { group: "staff", label: "Equipo administrador" },
+  { group: "staff", label: "Administradores" },
 ];
 
 const STATUS_FILTERS: ReadonlyArray<{
@@ -125,12 +134,12 @@ const STATUS_FILTERS: ReadonlyArray<{
   },
   {
     countOf: (counts) => counts.expired,
-    label: "Expirados",
+    label: "Vencidos",
     value: "expirado",
   },
   {
     countOf: (counts) => counts.suspended,
-    label: "Pausados",
+    label: "Inactivos",
     value: "pausado",
   },
 ];
@@ -653,16 +662,16 @@ const ACTION_PANEL_TITLES: Record<UserActionPanel, string> = {
   import: "Importar usuarios desde Excel",
 };
 
-/** Flecha de despliegue: gira al abrir, sin cambiar el tamaño del botón. */
-function ChevronIcon() {
+/** Signo de alta vectorial; siempre acompaña a una etiqueta visible. */
+function PlusIcon() {
   return (
     <svg
       aria-hidden="true"
-      className={styles.actionChevron}
+      className={styles.actionIcon}
       fill="none"
       viewBox="0 0 24 24"
     >
-      <path d="m6 9 6 6 6-6" />
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }
@@ -690,12 +699,10 @@ function TransferIcon({ direction }: { direction: "down" | "up" }) {
  * Barra de acciones de Usuarios: dos altas (primarias) y la importación y
  * exportación de Excel (secundarias, discretas).
  *
- * Los botones solo abren o cierran; el formulario se pinta en un panel de
- * ancho completo DEBAJO de la barra, fuera de ella, para que abrir un alta no
- * mueva ni cambie de tamaño los otros botones. Hay un solo panel abierto a la
- * vez. Los paneles cerrados siguen montados (ocultos) para que un borrador o un
- * envío en curso no se pierdan al cambiar de panel; tras un alta confirmada
- * por el servidor el panel se cierra y su formulario se vuelve a montar vacío.
+ * Las altas y la importación se abren en un diálogo, sin desplazar la tabla.
+ * Los diálogos cerrados siguen montados (ocultos) para que un borrador o un
+ * envío en curso no se pierdan; tras un alta confirmada por el servidor el
+ * formulario se vuelve a montar vacío.
  */
 function UserActions({
   apiBaseUrl,
@@ -718,9 +725,8 @@ function UserActions({
     target: "panel" | "trigger";
   } | null>(null);
 
-  // El foco se mueve después de pintar: al abrir va al panel (el lector de
-  // pantalla anuncia su título y Tab entra en el primer campo); al cerrar
-  // vuelve al botón de la barra que lo abrió.
+  // El foco se mueve después de pintar: al abrir va al diálogo y al cerrar
+  // vuelve al botón que lo abrió.
   useEffect(() => {
     const request = pendingFocus.current;
     if (!request) return;
@@ -731,21 +737,19 @@ function UserActions({
       return;
     }
 
-    const panel = document.getElementById(`${baseId}-${request.panel}-panel`);
-    if (!panel) return;
-    panel.focus({ preventScroll: true });
-    // En el celular el panel puede quedar por debajo de la pantalla.
-    const top = panel.getBoundingClientRect().top;
-    if (top < 0 || top > window.innerHeight - 64) {
-      const reduceMotion = window.matchMedia?.(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      panel.scrollIntoView?.({
-        behavior: reduceMotion ? "auto" : "smooth",
-        block: "start",
-      });
-    }
+    document
+      .getElementById(`${baseId}-${request.panel}-panel`)
+      ?.focus({ preventScroll: true });
   }, [baseId, openPanel]);
+
+  useEffect(() => {
+    if (openPanel === null) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [openPanel]);
 
   const closePanel = useCallback(() => {
     if (openPanel === null) return;
@@ -786,12 +790,37 @@ function UserActions({
     [finishPanel],
   );
 
-  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Escape" || openPanel === null || event.defaultPrevented) {
+  function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && !event.defaultPrevented) {
+      event.preventDefault();
+      closePanel();
       return;
     }
-    event.preventDefault();
-    closePanel();
+    if (event.key !== "Tab") return;
+
+    const focusable = [
+      ...event.currentTarget.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ];
+    if (focusable.length === 0) {
+      event.preventDefault();
+      event.currentTarget.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const activeElement = document.activeElement;
+    if (activeElement === event.currentTarget) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   const panelId = (panel: UserActionPanel) => `${baseId}-${panel}-panel`;
@@ -828,7 +857,7 @@ function UserActions({
   };
 
   return (
-    <div className={styles.actionArea} onKeyDown={handleKeyDown}>
+    <div className={styles.actionArea}>
       <div
         aria-label="Acciones de usuarios"
         className={styles.actionBar}
@@ -837,33 +866,32 @@ function UserActions({
         <button
           aria-controls={panelId("docente")}
           aria-expanded={openPanel === "docente"}
+          aria-haspopup="dialog"
           className={styles.primaryAction}
           id={triggerId("docente")}
           onClick={() => togglePanel("docente")}
           type="button"
         >
-          <span>
-            <span aria-hidden="true">+ </span>Agregar usuario
-          </span>
-          <ChevronIcon />
+          <PlusIcon />
+          <span>Agregar usuario</span>
         </button>
         <button
           aria-controls={panelId("admin")}
           aria-expanded={openPanel === "admin"}
+          aria-haspopup="dialog"
           className={styles.primaryAction}
           id={triggerId("admin")}
           onClick={() => togglePanel("admin")}
           type="button"
         >
-          <span>
-            <span aria-hidden="true">+ </span>Agregar administrador
-          </span>
-          <ChevronIcon />
+          <PlusIcon />
+          <span>Agregar administrador</span>
         </button>
         <div className={styles.secondaryActions}>
           <button
             aria-controls={panelId("import")}
             aria-expanded={openPanel === "import"}
+            aria-haspopup="dialog"
             className={styles.secondaryAction}
             id={triggerId("import")}
             onClick={() => togglePanel("import")}
@@ -871,7 +899,6 @@ function UserActions({
           >
             <TransferIcon direction="up" />
             <span>Importar Excel</span>
-            <ChevronIcon />
           </button>
           <a className={styles.secondaryAction} href={exportHref}>
             <TransferIcon direction="down" />
@@ -881,47 +908,58 @@ function UserActions({
       </div>
 
       {(["docente", "admin", "import"] as const).map((panel) => (
-        <section
-          aria-labelledby={titleId(panel)}
-          className={styles.actionPanel}
+        <div
+          className={styles.modalBackdrop}
           hidden={openPanel !== panel}
-          id={panelId(panel)}
           key={panel}
-          tabIndex={-1}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closePanel();
+          }}
         >
-          <div className={styles.actionPanelHeader}>
-            <h2 className={styles.actionPanelTitle} id={titleId(panel)}>
-              {ACTION_PANEL_TITLES[panel]}
-            </h2>
-            <button
-              className={styles.actionPanelClose}
-              onClick={closePanel}
-              type="button"
-            >
-              <svg
-                aria-hidden="true"
-                className={styles.actionIcon}
-                fill="none"
-                viewBox="0 0 24 24"
+          <section
+            aria-labelledby={titleId(panel)}
+            aria-modal="true"
+            className={styles.actionPanel}
+            id={panelId(panel)}
+            onKeyDown={handleDialogKeyDown}
+            role="dialog"
+            tabIndex={-1}
+          >
+            <div className={styles.actionPanelHeader}>
+              <div>
+                <p className={styles.actionPanelEyebrow}>Usuarios y accesos</p>
+                <h2 className={styles.actionPanelTitle} id={titleId(panel)}>
+                  {ACTION_PANEL_TITLES[panel]}
+                </h2>
+              </div>
+              <button
+                aria-label="Cerrar"
+                className={styles.actionPanelCloseIcon}
+                onClick={closePanel}
+                type="button"
               >
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-              Cerrar
-            </button>
-          </div>
-          {panelContent[panel]}
-          {/* En el celular el formulario es largo: también se puede cerrar
-              desde abajo sin volver a subir. */}
-          <div className={styles.actionPanelFooter}>
-            <button
-              className={styles.actionPanelClose}
-              onClick={closePanel}
-              type="button"
-            >
-              Cerrar formulario
-            </button>
-          </div>
-        </section>
+                <svg
+                  aria-hidden="true"
+                  className={styles.actionIcon}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.actionPanelBody}>{panelContent[panel]}</div>
+            <div className={styles.actionPanelFooter}>
+              <button
+                className={styles.actionPanelClose}
+                onClick={closePanel}
+                type="button"
+              >
+                Cerrar formulario
+              </button>
+            </div>
+          </section>
+        </div>
       ))}
     </div>
   );
@@ -1067,52 +1105,74 @@ export function UsersManager({
           Ningún usuario coincide con la búsqueda y los filtros seleccionados.
         </p>
       ) : (
-        <ul className={styles.list} role="list">
-          {page.items.map((user) => (
-            <li className={styles.row} key={user.id}>
-              <div className={styles.rowMain}>
-                <h3 className={styles.rowName}>{user.fullName}</h3>
-                <p className={styles.rowMeta}>
-                  Rol: <strong>{formatUserRole(user.role)}</strong>
-                </p>
-                <p className={styles.rowMeta}>
-                  Inicio:{" "}
-                  <strong>
-                    {formatDay(user.accessStartAt, "Sin definir")}
-                  </strong>{" "}
-                  · Fin:{" "}
-                  <strong>
-                    {formatDay(user.accessExpiresAt, "Sin vencimiento")}
-                  </strong>
-                </p>
-                <p className={styles.rowMeta}>
-                  Correo: <strong>{user.email ?? "Sin correo"}</strong> ·
-                  Celular: <strong>{user.phone ?? "Sin celular"}</strong>
-                </p>
-                <p className={styles.rowMeta}>
-                  Último acceso: {formatAccess(user.lastAccessAt)}
-                </p>
-                {user.createdByName ? (
-                  <p className={styles.rowMeta}>
-                    Creado por: <strong>{user.createdByName}</strong>
-                  </p>
-                ) : null}
-              </div>
-              <span className={BADGE_CLASS[user.accessState]}>
-                {formatAccessState(user.accessState)}
-              </span>
-              <div className={styles.rowActions}>
-                <UserDetails user={user} />
-                <UserEditForm user={user} />
-                <AccessWindowForm today={today} user={user} />
-                <PasswordResetForm user={user} />
-                {user.accountStatus === "active" ? (
-                  <SuspendUserForm user={user} />
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className={styles.tableShell}>
+          <table className={styles.userTable} role="table">
+            <caption className="avend-visually-hidden">
+              Usuarios filtrados con su rol, estado, vigencia y acciones
+            </caption>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">Usuario</th>
+                <th role="columnheader" scope="col">Rol</th>
+                <th role="columnheader" scope="col">Estado</th>
+                <th role="columnheader" scope="col">Vigencia</th>
+                <th role="columnheader" scope="col">Último acceso</th>
+                <th role="columnheader" scope="col">Acciones</th>
+              </tr>
+            </thead>
+            <tbody role="rowgroup">
+              {page.items.map((user) => (
+                <tr className={styles.tableRow} key={user.id} role="row">
+                  <td data-label="Usuario" role="cell">
+                    <div className={styles.userIdentity}>
+                      <span aria-hidden="true" className={styles.avatar}>
+                        {userInitials(user.fullName)}
+                      </span>
+                      <div className={styles.userIdentityText}>
+                        <h3 className={styles.rowName}>{user.fullName}</h3>
+                        <p className={styles.rowMeta}>{user.email ?? "Sin correo"}</p>
+                        <p className={styles.rowMeta}>{user.phone ?? "Sin celular"}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td data-label="Rol" role="cell">
+                    <span className={styles.roleBadge}>{formatUserRole(user.role)}</span>
+                  </td>
+                  <td data-label="Estado" role="cell">
+                    <span className={BADGE_CLASS[user.accessState]}>
+                      <span aria-hidden="true" className={styles.statusDot} />
+                      {formatAccessState(user.accessState)}
+                    </span>
+                  </td>
+                  <td data-label="Vigencia" role="cell">
+                    <span className={styles.dateLine}>
+                      <span>Inicio</span>
+                      <strong>{formatDay(user.accessStartAt, "Sin definir")}</strong>
+                    </span>
+                    <span className={styles.dateLine}>
+                      <span>Fin</span>
+                      <strong>{formatDay(user.accessExpiresAt, "Sin vencimiento")}</strong>
+                    </span>
+                  </td>
+                  <td data-label="Último acceso" role="cell">
+                    <span className={styles.lastAccess}>{formatAccess(user.lastAccessAt)}</span>
+                  </td>
+                  <td data-label="Acciones" role="cell">
+                    <div className={styles.rowActions}>
+                      <UserDetails user={user} />
+                      <UserEditForm user={user} />
+                      <AccessWindowForm today={today} user={user} />
+                      <PasswordResetForm user={user} />
+                      {user.accountStatus === "active" ? (
+                        <SuspendUserForm user={user} />
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {totalPages > 1 ? (

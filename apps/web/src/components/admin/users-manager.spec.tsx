@@ -111,7 +111,7 @@ const API = "http://localhost:3001";
 /** The row of a given user, so a badge is asserted on its own row. */
 function rowFor(name: string): HTMLElement {
   const row = screen
-    .getAllByRole("listitem")
+    .getAllByRole("row")
     .find((item) => within(item).queryByRole("heading", { name }));
   if (!row) throw new Error('No row for ' + name);
   return row;
@@ -127,6 +127,11 @@ describe("UsersManager", () => {
     expect(
       screen.getByRole("heading", { name: "María Docente" }),
     ).toBeVisible();
+    const table = screen.getByRole("table", {
+      name: "Usuarios filtrados con su rol, estado, vigencia y acciones",
+    });
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(6);
+    expect(within(table).getByRole("columnheader", { name: "Estado" })).toBeVisible();
     expect(screen.getByText("Mostrando 1–4 de 15 usuarios.")).toBeVisible();
     expect(screen.getAllByText("Editar acceso")).toHaveLength(4);
     expect(screen.getAllByText("Extender vigencia")).toHaveLength(4);
@@ -162,10 +167,10 @@ describe("UsersManager", () => {
     expect(screen.getByRole("link", { name: /Por vencer/ })).toHaveTextContent(
       "3",
     );
-    expect(screen.getByRole("link", { name: /Expirados/ })).toHaveTextContent(
+    expect(screen.getByRole("link", { name: /Vencidos/ })).toHaveTextContent(
       "2",
     );
-    expect(screen.getByRole("link", { name: /Pausados/ })).toHaveTextContent(
+    expect(screen.getByRole("link", { name: /Inactivos/ })).toHaveTextContent(
       "1",
     );
   });
@@ -174,9 +179,9 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(
-      screen.getByRole("link", { name: "Equipo administrador" }),
+      screen.getByRole("link", { name: "Administradores" }),
     ).toHaveAttribute("href", "/admin/users?group=staff");
-    expect(screen.getByRole("link", { name: /Pausados/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Inactivos/ })).toHaveAttribute(
       "href",
       "/admin/users?status=pausado",
     );
@@ -233,10 +238,10 @@ describe("UsersManager", () => {
     const actions = screen.getByRole("group", { name: "Acciones de usuarios" });
     expect(
       within(actions).getByRole("button", { name: "Agregar usuario" }),
-    ).toHaveTextContent("+ Agregar usuario");
+    ).toHaveTextContent("Agregar usuario");
     expect(
       within(actions).getByRole("button", { name: "Agregar administrador" }),
-    ).toHaveTextContent("+ Agregar administrador");
+    ).toHaveTextContent("Agregar administrador");
 
     const emails = screen.getAllByLabelText("Correo electrónico");
     expect(emails[0]).toHaveAttribute("name", "email");
@@ -264,7 +269,8 @@ describe("UsersManager", () => {
     expect(within(maria).getAllByText("987654321").length).toBe(2);
 
     const ana = rowFor("Ana PorVencer");
-    expect(within(ana).getAllByText("Superadministrador Demo").length).toBe(2);
+    fireEvent.click(within(ana).getByText("Ver ficha"));
+    expect(within(ana).getByText("Superadministrador Demo")).toBeVisible();
 
     // Sin correo ni celular se dice explicitamente, no se deja en blanco.
     const luis = rowFor("Luis Expirado");
@@ -451,7 +457,7 @@ describe("UsersManager — barra de acciones", () => {
 
   /** Paneles de formulario visibles ahora mismo (los ocultos no cuentan). */
   function visiblePanels() {
-    return screen.queryAllByRole("region");
+    return screen.queryAllByRole("dialog");
   }
 
   it("carga con cuatro acciones y ningún formulario desplegado", () => {
@@ -477,15 +483,17 @@ describe("UsersManager — barra de acciones", () => {
 
     fireEvent.click(docente);
     expect(visiblePanels()).toHaveLength(1);
-    expect(
-      screen.getByRole("region", { name: "Agregar usuario docente" }),
-    ).toBeVisible();
+    const dialog = screen.getByRole("dialog", {
+      name: "Agregar usuario docente",
+    });
+    expect(dialog).toBeVisible();
+    expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(docente).toHaveAttribute("aria-expanded", "true");
 
     fireEvent.click(admin);
     expect(visiblePanels()).toHaveLength(1);
     expect(
-      screen.getByRole("region", { name: "Agregar administrador" }),
+      screen.getByRole("dialog", { name: "Agregar administrador" }),
     ).toBeVisible();
     expect(docente).toHaveAttribute("aria-expanded", "false");
     expect(admin).toHaveAttribute("aria-expanded", "true");
@@ -493,7 +501,7 @@ describe("UsersManager — barra de acciones", () => {
     fireEvent.click(importButton);
     expect(visiblePanels()).toHaveLength(1);
     expect(
-      screen.getByRole("region", { name: "Importar usuarios desde Excel" }),
+      screen.getByRole("dialog", { name: "Importar usuarios desde Excel" }),
     ).toBeVisible();
     expect(admin).toHaveAttribute("aria-expanded", "false");
     expect(importButton).toHaveAttribute("aria-expanded", "true");
@@ -507,7 +515,7 @@ describe("UsersManager — barra de acciones", () => {
 
     for (const trigger of [docente, admin, importButton]) {
       fireEvent.click(trigger);
-      const panel = screen.getByRole("region");
+      const panel = screen.getByRole("dialog");
 
       // Mismos botones, mismo orden, mismas clases: solo cambia aria-expanded.
       expect(controls()).toEqual(before);
@@ -527,7 +535,7 @@ describe("UsersManager — barra de acciones", () => {
     const { docente } = renderManager();
 
     fireEvent.click(docente);
-    const panel = screen.getByRole("region", {
+    const panel = screen.getByRole("dialog", {
       name: "Agregar usuario docente",
     });
     expect(panel).toHaveFocus();
@@ -536,6 +544,38 @@ describe("UsersManager — barra de acciones", () => {
 
     expect(visiblePanels()).toHaveLength(0);
     expect(docente).toHaveAttribute("aria-expanded", "false");
+    expect(docente).toHaveFocus();
+  });
+
+  it("mantiene el foco dentro del modal y bloquea el desplazamiento de fondo", () => {
+    const { docente } = renderManager();
+
+    fireEvent.click(docente);
+    const dialog = screen.getByRole("dialog", {
+      name: "Agregar usuario docente",
+    });
+    const first = within(dialog).getByRole("button", { name: "Cerrar" });
+    const last = within(dialog).getByRole("button", {
+      name: "Cerrar formulario",
+    });
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+
+    dialog.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(first).toHaveFocus();
+
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(first).toHaveFocus();
+
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+
+    fireEvent.click(first);
+    expect(document.body.style.overflow).toBe("");
     expect(docente).toHaveFocus();
   });
 
@@ -556,7 +596,7 @@ describe("UsersManager — barra de acciones", () => {
     const { admin } = renderManager();
 
     await user.click(admin);
-    const panel = screen.getByRole("region", { name: "Agregar administrador" });
+    const panel = screen.getByRole("dialog", { name: "Agregar administrador" });
     await user.click(within(panel).getByLabelText("Nombre y apellidos"));
     await user.keyboard("{Escape}");
 
@@ -580,7 +620,7 @@ describe("UsersManager — barra de acciones", () => {
 
     fireEvent.click(docente);
     const name = within(
-      screen.getByRole("region", { name: "Agregar usuario docente" }),
+      screen.getByRole("dialog", { name: "Agregar usuario docente" }),
     ).getByLabelText("Nombre y apellidos");
     fireEvent.change(name, { target: { value: "Rosa Borrador" } });
     fireEvent.click(admin);
@@ -598,7 +638,7 @@ describe("UsersManager — barra de acciones", () => {
     const { docente } = renderManager();
 
     await user.click(docente);
-    let panel = screen.getByRole("region", { name: "Agregar usuario docente" });
+    let panel = screen.getByRole("dialog", { name: "Agregar usuario docente" });
     await user.type(
       within(panel).getByLabelText("Nombre y apellidos"),
       "Rosa Nueva",
@@ -618,7 +658,7 @@ describe("UsersManager — barra de acciones", () => {
 
     // Al volver a abrirlo no queda el aviso del registro anterior.
     await user.click(docente);
-    panel = screen.getByRole("region", { name: "Agregar usuario docente" });
+    panel = screen.getByRole("dialog", { name: "Agregar usuario docente" });
     expect(within(panel).getByLabelText("Nombre y apellidos")).toHaveValue("");
     expect(within(panel).queryByText(/Usuario registrado/)).toBeNull();
   });
@@ -632,7 +672,7 @@ describe("UsersManager — barra de acciones", () => {
     const { docente } = renderManager();
 
     await user.click(docente);
-    const panel = screen.getByRole("region", {
+    const panel = screen.getByRole("dialog", {
       name: "Agregar usuario docente",
     });
     await user.type(
@@ -666,7 +706,7 @@ describe("UsersManager — barra de acciones", () => {
     const { admin, docente } = renderManager();
 
     await user.click(docente);
-    const docentePanel = screen.getByRole("region", {
+    const docentePanel = screen.getByRole("dialog", {
       name: "Agregar usuario docente",
     });
     await user.type(
@@ -688,7 +728,7 @@ describe("UsersManager — barra de acciones", () => {
     });
 
     expect(
-      screen.getByRole("region", { name: "Agregar administrador" }),
+      screen.getByRole("dialog", { name: "Agregar administrador" }),
     ).toBeVisible();
     expect(admin).toHaveAttribute("aria-expanded", "true");
   });
