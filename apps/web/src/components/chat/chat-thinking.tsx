@@ -8,7 +8,8 @@ import { AssistantAvatar } from "./chat-message-parts";
  * Lo que el asistente está haciendo mientras aún no llega texto. Las fases son
  * orientativas (el servidor no las informa): dan la sensación de avance real
  * sin prometer tiempos. Tras 20 s se tranquiliza a la persona: un arranque en
- * frío del servidor puede demorar la primera respuesta.
+ * frío del servidor puede demorar la primera respuesta. Sin cronómetro: el
+ * conteo de segundos se retiró por pedido del PO (2026-10-11).
  */
 const PHASES: { after: number; label: string }[] = [
   { after: 0, label: "Pensando" },
@@ -43,6 +44,7 @@ export function ChatThinking() {
         className="avend-chat-thinking-loader"
         label={PHASES[phase].label}
         pattern="orbit"
+        showTimer={false}
       />
     </article>
   );
