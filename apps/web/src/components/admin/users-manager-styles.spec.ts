@@ -11,6 +11,10 @@ const usersManagerStyles = readFileSync(
   resolve(webRoot, "src/components/admin/users-manager.module.css"),
   "utf8",
 );
+const adminModalStyles = readFileSync(
+  resolve(webRoot, "src/components/admin/admin-modal.module.css"),
+  "utf8",
+);
 
 function relativeLuminance(hex: string): number {
   const channels = hex
@@ -36,6 +40,10 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 const stylesWithoutComments = usersManagerStyles.replace(/\/\*[\s\S]*?\*\//g, "");
+const modalStylesWithoutComments = adminModalStyles.replace(
+  /\/\*[\s\S]*?\*\//g,
+  "",
+);
 
 function token(name: string): string {
   const value = globalStyles.match(
@@ -94,6 +102,21 @@ function declaredProperties(body: string): string[] {
     .filter((property): property is string => Boolean(property));
 }
 
+function ruleFinder(css: string) {
+  const rules = topLevelRules(css);
+  return (selector: string) => {
+    const found =
+      rules.find((candidate) => candidate.selector === selector) ??
+      rules.find((candidate) =>
+        candidate.selector
+          .split(",")
+          .map((part) => part.trim())
+          .includes(selector),
+      );
+    return found?.body ?? "";
+  };
+}
+
 describe("superadministrator user directory visual contracts", () => {
   it("keeps the search action above WCAG AA contrast", () => {
     const strongAccent = globalStyles.match(
@@ -130,24 +153,25 @@ describe("superadministrator user directory visual contracts", () => {
       contrastRatio(token("avend-danger"), token("avend-danger-soft-surface")),
     ).toBeGreaterThanOrEqual(4.5);
   });
+
+  it("las acciones de fila son botones de icono de al menos 44px, en fila", () => {
+    const button = ruleFinder(stylesWithoutComments)(".rowActionButton");
+    expect(button).toMatch(/width:\s*2\.75rem/);
+    expect(button).toMatch(/min-height:\s*2\.75rem/);
+    expect(
+      ruleFinder(stylesWithoutComments)(".rowActionButtons"),
+    ).toMatch(/display:\s*flex/);
+    expect(
+      ruleFinder(stylesWithoutComments)(".rowActionButtonDanger"),
+    ).toMatch(/color:\s*var\(--avend-danger\)/);
+    // Ya no hay <details>/<summary> que desplieguen dentro de la fila.
+    expect(stylesWithoutComments).not.toMatch(/\.manage\b/);
+    expect(stylesWithoutComments).not.toMatch(/\[open\]/);
+  });
 });
 
 describe("barra de acciones de Usuarios: contratos visuales", () => {
-  const rules = topLevelRules(stylesWithoutComments);
-  // Prefiere la regla propia del selector; si no la hay, la primera lista de
-  // selectores que lo incluya.
-  const rule = (selector: string) => {
-    const found =
-      rules.find((candidate) => candidate.selector === selector) ??
-      rules.find((candidate) =>
-        candidate.selector
-          .split(",")
-          .map((part) => part.trim())
-          .includes(selector),
-      );
-    if (!found) throw new Error(`No rule for ${selector}`);
-    return found.body;
-  };
+  const rule = ruleFinder(stylesWithoutComments);
 
   it("el estado abierto, hover y presionado no cambian el tamaño de ningún botón", () => {
     // Solo se permiten propiedades que no afectan al tamaño ni a la posición.
@@ -158,10 +182,11 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
       "color",
       "transform",
     ]);
-    const stateRules = rules.filter(({ selector }) =>
-      /\.(primaryAction|secondaryAction)[^,{]*(\[aria-expanded="true"\]|:hover|:active)/.test(
-        selector,
-      ),
+    const stateRules = topLevelRules(stylesWithoutComments).filter(
+      ({ selector }) =>
+        /\.(primaryAction|secondaryAction)[^,{]*(\[aria-expanded="true"\]|:hover|:active)/.test(
+          selector,
+        ),
     );
 
     expect(stateRules.length).toBeGreaterThanOrEqual(4);
@@ -177,22 +202,26 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
 
   it("ningún botón de la barra crece para ocupar el espacio de los demás", () => {
     const base = rule(".primaryAction");
-    expect(rules.find((candidate) => candidate.selector.startsWith(".primaryAction,"))?.body).toMatch(
-      /flex:\s*none/,
-    );
+    expect(
+      topLevelRules(stylesWithoutComments).find((candidate) =>
+        candidate.selector.startsWith(".primaryAction,"),
+      )?.body,
+    ).toMatch(/flex:\s*none/);
     expect(rule(".secondaryActions")).toMatch(/flex:\s*none/);
     // Importar y Exportar van juntos al final y saltan de línea juntos.
     expect(rule(".secondaryActions")).toMatch(/margin-left:\s*auto/);
     expect(base).not.toMatch(/flex:\s*1/);
-    // Ya no hay <details> que se ensanche al abrirse.
-    expect(stylesWithoutComments).not.toMatch(/\[open\]/);
   });
 
   it("los botones y el cierre del panel miden al menos 44px de alto", () => {
     expect(
-      rules.find((candidate) => candidate.selector.startsWith(".primaryAction,"))?.body,
+      topLevelRules(stylesWithoutComments).find((candidate) =>
+        candidate.selector.startsWith(".primaryAction,"),
+      )?.body,
     ).toMatch(/min-height:\s*2\.75rem/);
-    expect(rule(".actionPanelClose")).toMatch(/min-height:\s*2\.75rem/);
+    expect(ruleFinder(modalStylesWithoutComments)(".actionPanelClose")).toMatch(
+      /min-height:\s*2\.75rem/,
+    );
   });
 
   it("los secundarios son discretos pero legibles: azul con contraste AA, no gris", () => {
@@ -210,25 +239,33 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
     }
     // Mismo tamaño de letra que el resto del panel (16px).
     expect(
-      rules.find((candidate) => candidate.selector.startsWith(".primaryAction,"))?.body,
+      topLevelRules(stylesWithoutComments).find((candidate) =>
+        candidate.selector.startsWith(".primaryAction,"),
+      )?.body,
     ).toMatch(/font-size:\s*1rem/);
   });
 
   it("el panel oculto no ocupa espacio", () => {
-    expect(rule(".modalBackdrop[hidden]")).toMatch(/display:\s*none/);
+    expect(
+      ruleFinder(modalStylesWithoutComments)(".modalBackdrop[hidden]"),
+    ).toMatch(/display:\s*none/);
   });
 
   it("el formulario se presenta como modal estable sobre la tabla", () => {
-    expect(rule(".modalBackdrop")).toMatch(/position:\s*fixed/);
-    expect(rule(".modalBackdrop")).toMatch(/inset:\s*0/);
-    expect(rule(".actionPanel")).toMatch(/max-height:\s*calc\(100vh - 2rem\)/);
+    const modal = ruleFinder(modalStylesWithoutComments);
+    expect(modal(".modalBackdrop")).toMatch(/position:\s*fixed/);
+    expect(modal(".modalBackdrop")).toMatch(/inset:\s*0/);
+    expect(modal(".actionPanel")).toMatch(/max-height:\s*calc\(100vh - 2rem\)/);
+    // El portal pinta sobre la interfaz fija del panel.
+    expect(modal(".modalBackdrop")).toMatch(/z-index:\s*1[0-9]{2}/);
   });
 
   it("en el celular las etiquetas pueden partirse y Excel comparte una fila", () => {
     const mobile = mediaContent(stylesWithoutComments, "max-width: 40rem");
     const mobileRules = topLevelRules(mobile);
     const mobileRule = (selector: string) =>
-      mobileRules.find((candidate) => candidate.selector === selector)?.body ?? "";
+      mobileRules.find((candidate) => candidate.selector === selector)?.body ??
+      "";
 
     expect(mobileRule(".primaryAction")).toMatch(/white-space:\s*normal/);
     expect(mobileRule(".primaryAction")).toMatch(/flex:\s*1 1 100%/);
@@ -241,10 +278,18 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
   });
 
   it("los diálogos y filas respetan «reducir movimiento»", () => {
-    const reduced = mediaContent(
+    const reducedUsers = mediaContent(
       stylesWithoutComments,
       "prefers-reduced-motion: reduce",
     );
-    expect(reduced).toMatch(/\.tableRow,[\s\S]*\.modalBackdrop,[\s\S]*\.actionPanel\s*\{[^}]*animation:\s*none/);
+    expect(reducedUsers).toMatch(/\.tableRow[^{}]*\{[^}]*animation:\s*none/);
+
+    const reducedModal = mediaContent(
+      modalStylesWithoutComments,
+      "prefers-reduced-motion: reduce",
+    );
+    expect(reducedModal).toMatch(
+      /\.modalBackdrop,[\s\S]*\.actionPanel\s*\{[^}]*animation:\s*none/,
+    );
   });
 });
