@@ -413,7 +413,8 @@ function renderRichContent(
     }
     if (!line) {
       flushParagraph();
-      flushList();
+      // Una línea en blanco no cierra la lista: el modelo suele separar los
+      // elementos numerados con una, y cada uno se numeraba «1.» por su cuenta.
       continue;
     }
 

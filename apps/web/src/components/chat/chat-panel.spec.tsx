@@ -221,15 +221,14 @@ describe("ChatPanel", () => {
 
     expect(screen.getByText("Pensado por 9 segundos")).toBeInTheDocument();
     expect(screen.queryByText(/sin cita de norma/)).not.toBeInTheDocument();
-    // Solo el bloque de sugerencias enlaza: la mención del cuerpo queda en texto.
+    // Solo el bloque de sugerencias enlaza, y solo portales con una página
+    // única: la mención del cuerpo y la UGEL/DRE quedan como texto.
     const minedu = screen.getAllByRole("link", { name: /^MINEDU/ });
     expect(minedu).toHaveLength(1);
     expect(minedu[0]).toHaveAttribute("href", "https://www.gob.pe/minedu");
-    expect(screen.getByRole("link", { name: /^UGEL/ })).toHaveAttribute(
-      "target",
-      "_blank",
-    );
-    expect(screen.getByRole("link", { name: /^DRE/ })).toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("link", { name: /^(?:UGEL|DRE)/ }),
+    ).toHaveLength(0);
   });
 
   it("renders paragraphs, emphasis and lists with semantic structure", () => {
@@ -260,6 +259,31 @@ describe("ChatPanel", () => {
       within(answerContent as HTMLElement).getAllByRole("list"),
     ).toHaveLength(2);
     expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
+  });
+
+  it("une en una sola lista los elementos numerados separados por líneas en blanco", () => {
+    const { container } = render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "1. Acreditar estudios superiores\n\n1. Salud física y mental\n\n1. Edad",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    const lists = container.querySelectorAll(
+      ".avend-chat-message--assistant ol.avend-chat-list",
+    );
+
+    expect(lists).toHaveLength(1);
+    expect(lists[0].querySelectorAll("li")).toHaveLength(3);
   });
 
   it("dicta, detiene y comunica errores de voz cuando el navegador lo soporta", async () => {

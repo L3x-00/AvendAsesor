@@ -313,7 +313,10 @@ function claimNumbersAppearInSources(
  * A deterministic post-generation control complements the evidence-only
  * prompt. It cannot decide legal truth, so it flags a case for human review
  * whenever a substantive claim lacks a source marker or its cited evidence has
- * no meaningful lexical bridge to the claim.
+ * no meaningful lexical bridge to the claim. Una lista sustentada por una sola
+ * fuente se cubre con la cita de bloque (al inicio o al cierre), y dos citas
+ * individuales contiguas ([1][2]) son válidas: la corroboración entre el
+ * documento oficial y otro que coincide es el formato esperado.
  */
 function normalizedReviewExcerpt(claim: string): string {
   return claim.replace(/\s+/gu, ' ').trim().slice(0, 2_000);
@@ -329,23 +332,55 @@ export function evaluateAnswerCitationQualityDetails(
 
   const signals = new Set<CitationQualitySignal>();
   const excerpts: AnswerCitationQualityEvaluation['excerpts'] = {};
-  const claims = answer
+  const normalizedAnswer = answer
     .replace(/\r/gu, '')
     // N.° y numerales decimales no terminan una oración.
     .replace(/N\.\s*°/giu, 'N°')
     .replace(/(?<=\d)\.(?=\d)/gu, '∶')
+    // Los modelos separan los elementos de una lista con líneas en blanco; se
+    // tratan como un solo bloque para que una cita de cierre los cubra.
+    .replace(/\n{2,}(?=[ \t]*(?:[-*•]|\d+[.)])[ \t])/gu, '\n');
+  const claims = normalizedAnswer
     .split(/\n{2,}/gu)
-    .flatMap((paragraph) => paragraph.match(CLAIM_PATTERN) ?? [])
-    .map((claim) => claim.replace(/∶/gu, '.').trim())
+    .flatMap((paragraph) =>
+      [...paragraph.matchAll(CLAIM_PATTERN)].map((match) => {
+        // La afirmación puede cruzar saltos de línea (una oración envuelta):
+        // se mantiene entera y el ítem de lista se decide por la línea donde
+        // empieza, no por donde termina.
+        const lineStart = paragraph.lastIndexOf('\n', match.index) + 1;
+        const lineBreak = paragraph.indexOf('\n', lineStart);
+        const startLine = paragraph.slice(
+          lineStart,
+          lineBreak === -1 ? undefined : lineBreak,
+        );
+        return {
+          claim: match[0].replace(/∶/gu, '.').trim(),
+          isListItem: /^[ \t]*(?:[-*•]|\d+[.)])[ \t]/u.test(startLine),
+          paragraph,
+        };
+      }),
+    )
     .filter(
-      (claim) =>
+      ({ claim }) =>
         withoutCitations(claim).replace(/\s+/gu, '').length >=
         MIN_SUBSTANTIVE_CLAIM_CHARS,
     );
 
-  for (const claim of claims) {
+  for (const [index, { claim, isListItem, paragraph }] of claims.entries()) {
+    // Solo la pregunta de cierre (la última del mensaje) no exige cita: es una
+    // invitación al siguiente paso, no una afirmación.
+    if (
+      index === claims.length - 1 &&
+      (claim.startsWith('¿') || /\?\s*$/u.test(claim))
+    ) {
+      continue;
+    }
+
     const citationIndexes = citedIndexes(claim);
     if (!citationIndexes.length) {
+      // Cita de bloque: la cita única de una lista cubre sus ítems, nunca la
+      // prosa del párrafo (una afirmación suelta debe llevar su propia cita).
+      if (isListItem && citesAnySource(paragraph, sources.length)) continue;
       signals.add('support_partial');
       excerpts.support_partial ??= normalizedReviewExcerpt(claim);
       continue;
@@ -354,10 +389,6 @@ export function evaluateAnswerCitationQualityDetails(
     const citedSources = citationIndexes
       .map((index) => sources[index - 1])
       .filter((source): source is RetrievedChunk => Boolean(source));
-    if (/\]\s*\[/u.test(claim)) {
-      signals.add('citation_insufficient');
-      excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
-    }
     if (
       citedSources.length !== citationIndexes.length ||
       !citedSources.some((source) => sourceSupportsClaim(claim, source)) ||
@@ -516,11 +547,15 @@ function evidenceOrientation(sources: RetrievedChunk[]): string {
     .map((source, index) => {
       const excerpt = evidenceExcerpt(source);
       if (!excerpt) return null;
+      // Si la sección es en realidad el sustento derivado (la misma frase que
+      // el extracto), se nombra el documento para no citar dos veces lo mismo.
+      const section = source.sectionTitle;
       const reference =
         source.articleReference ??
         source.numeralReference ??
-        source.sectionTitle ??
-        source.documentTitle;
+        (section && !excerpt.startsWith(section.slice(0, 60))
+          ? section
+          : source.documentTitle);
       const situation =
         source.documentSituation === 'current'
           ? 'vigente'

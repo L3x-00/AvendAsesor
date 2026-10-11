@@ -10,8 +10,8 @@ import {
 } from "./official-links";
 
 describe("official links", () => {
-  it("links every official portal mentioned in a suggestion", () => {
-    render(
+  it("links official portals with a single useful page and leaves UGEL/DRE as text", () => {
+    const { container } = render(
       <p>
         {linkifyOfficialEntities(
           "Sugerencias: verifica en el portal oficial del MINEDU y consulta con tu UGEL o DRE; para títulos, SUNEDU.",
@@ -23,20 +23,12 @@ describe("official links", () => {
     expect(
       screen.getByRole("link", { name: /MINEDU \(portal oficial de MINEDU/ }),
     ).toHaveAttribute("href", "https://www.gob.pe/minedu");
-    // Las UGEL y las DRE no tienen una página única: directorio filtrado de
-    // gob.pe, no la búsqueda general que abría con una UGEL concreta.
+    // Las UGEL y las DRE no tienen una página única y su directorio no le
+    // sirve al docente (PO, 2026-10-10): quedan como texto, sin enlace.
     expect(
-      screen.getByRole("link", {
-        name: /^UGEL \(directorio oficial de las UGEL en gob\.pe/,
-      }),
-    ).toHaveAttribute(
-      "href",
-      "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL",
-    );
-    expect(screen.getByRole("link", { name: /^DRE/ })).toHaveAttribute(
-      "href",
-      "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=DRE+GRE",
-    );
+      screen.queryAllByRole("link", { name: /^(?:UGEL|DRE)/ }),
+    ).toHaveLength(0);
+    expect(container.textContent).toContain("consulta con tu UGEL o DRE");
     expect(screen.getByRole("link", { name: /^SUNEDU/ })).toHaveAttribute(
       "href",
       "https://www.gob.pe/sunedu",

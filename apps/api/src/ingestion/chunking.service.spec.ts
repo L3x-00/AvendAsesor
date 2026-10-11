@@ -241,6 +241,76 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     for (const chunk of withSentence) expect(chunk.pageStart).toBe(1);
   });
 
+  it('usa la primera oración del tramo nuevo como sustento cuando no hay rótulo', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: `${tokensOf('previo', 790)} Cierre del primer bloque.`,
+      },
+      {
+        pageNumber: 2,
+        text: '¿Cuáles son los requisitos para postular?\n\nLos postulantes presentan su expediente completo.',
+      },
+    ]);
+    const target = chunks.at(-1);
+
+    expect(target?.chunkContent).toContain('¿Cuáles son los requisitos');
+    // No toma el arrastre del chunk anterior: solo el tramo nuevo.
+    expect(target?.sectionTitle).toBe(
+      '¿Cuáles son los requisitos para postular?',
+    );
+  });
+
+  it('da a todas las ventanas de un párrafo largo el mismo sustento', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: `¿Qué documentos se presentan? ${words('cuerpo', 1_300)}`,
+      },
+    ]);
+    const windows = chunks.filter((chunk) =>
+      /cuerpow\d/u.test(chunk.chunkContent),
+    );
+
+    expect(windows.length).toBeGreaterThan(1);
+    for (const chunk of windows) {
+      expect(chunk.sectionTitle).toBe('¿Qué documentos se presentan?');
+    }
+  });
+
+  it('no deriva del corte cuando el párrafo largo no tiene sustento propio', () => {
+    const chunks = service.chunk([
+      { pageNumber: 1, text: `No. ${words('cuerpo', 1_300)}` },
+    ]);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.sectionTitle).toBeUndefined();
+    }
+  });
+
+  it('no usa un fragmento demasiado corto como sustento', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: 'Art. 5. La presente norma entra en vigencia al día siguiente de su publicación.',
+      },
+    ]);
+
+    expect(chunks[0].sectionTitle).toBeUndefined();
+  });
+
+  it('no toma un decimal menor que uno como numeral de la norma', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 1,
+        text: 'Puntaje 0.25 por formación académica y 2.4 de la norma técnica.',
+      },
+    ]);
+
+    expect(chunk.numeralReference).toBe('2.4');
+  });
+
   it('never leaves broken multi-token characters at window edges', () => {
     const form = Array.from(
       { length: 400 },

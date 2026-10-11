@@ -355,6 +355,35 @@ describe('ChatService — lineamientos del cliente', () => {
     expect(completion()?.sources).toEqual([]);
   });
 
+  it('nombra el documento cuando la sección es el sustento derivado', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [
+        { id: 'a', name: 'Licencias' },
+        { id: 'b', name: 'Remuneraciones' },
+      ],
+      sources: [
+        {
+          ...source,
+          articleReference: null,
+          numeralReference: null,
+          sectionTitle: 'La licencia se solicita dentro de 5 días.',
+          semanticScore: 0.62,
+        },
+      ],
+      topRelevanceScore: 0.62,
+    });
+
+    const events = await collect();
+
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    ) as { data: { message: string } } | undefined;
+    expect(clarification?.data.message).toContain(
+      'la fuente vigente Norma de licencias señala',
+    );
+  });
+
   it('avisa en lenguaje llano cuando el proveedor corta la respuesta por su extensión', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',

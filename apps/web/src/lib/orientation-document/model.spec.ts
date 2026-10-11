@@ -245,6 +245,19 @@ describe("orientation document model", () => {
     );
   });
 
+  it("imprime el sustento derivado tal cual, sin anteponer «sección»", () => {
+    expect(
+      describeOrientationSource({
+        ...source,
+        articleReference: null,
+        numeralReference: null,
+        sectionTitle: "¿Cuáles son los requisitos para postular?",
+      }),
+    ).toBe(
+      "[1] Ley de Reforma Magisterial (vigente), versión 2, páginas 33–34, ¿Cuáles son los requisitos para postular?",
+    );
+  });
+
   it("sanitizes filenames and emits ASCII plus RFC 5987 names without header injection", () => {
     const base = sanitizeFileBaseName(
       "  Caso / María\r\nContent-Type: text/html...  ",

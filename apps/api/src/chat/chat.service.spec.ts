@@ -1601,4 +1601,76 @@ describe('evaluateAnswerCitationQuality', () => {
       signals: ['support_partial'],
     });
   });
+
+  it('cubre una lista con la cita de bloque aunque el modelo separe los elementos', () => {
+    const requisitosSource = {
+      ...source,
+      chunkContent:
+        'Para postular como auxiliar de educación debes cumplir los requisitos generales de estudios, salud y edad que exige la norma.',
+    };
+    const answer = [
+      'Para postular como auxiliar de educación debes cumplir los requisitos generales. [1]',
+      '',
+      '1. Acreditar estudios superiores: debes presentar un título o certificado que demuestre que culminaste el sexto ciclo de estudios pedagógicos.',
+      '',
+      '1. Salud física y mental: es necesario gozar de buena salud y presentar una declaración jurada original.',
+      '',
+      '1. Edad: debes tener menos de 70 años al momento de postular y presentar una declaración jurada.',
+    ].join('\n');
+
+    expect(evaluateAnswerCitationQuality(answer, [requisitosSource])).toEqual(
+      [],
+    );
+  });
+
+  it('mantiene la exigencia de cita en la prosa fuera de las listas', () => {
+    const answer =
+      'La licencia se solicita mediante procedimiento institucional vigente. Además, el trámite demora treinta días calendario en total. [1]';
+
+    expect(evaluateAnswerCitationQuality(answer, [source])).toContain(
+      'support_partial',
+    );
+  });
+
+  it('no cubre la prosa pegada a una lista: solo los ítems de la misma fuente', () => {
+    const answer = [
+      'La licencia se concede automáticamente durante treinta días sin condición.',
+      '',
+      '1. Presenta la solicitud de licencia por procedimiento institucional. [1]',
+    ].join('\n');
+
+    expect(evaluateAnswerCitationQuality(answer, [source])).toEqual([
+      'support_partial',
+    ]);
+  });
+
+  it('no marca una oración envuelta partida por un salto de línea', () => {
+    const answer =
+      'La licencia se solicita mediante procedimiento\ninstitucional vigente. [1]';
+
+    expect(evaluateAnswerCitationQuality(answer, [source])).toEqual([]);
+  });
+
+  it('acepta la corroboración de dos documentos citados juntos', () => {
+    const corroboratingSource = {
+      ...source,
+      chunkId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+      documentId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+      documentTitle: 'Resolución Viceministerial de licencias',
+      documentVersionId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+    };
+    const answer =
+      'La licencia se solicita mediante procedimiento institucional vigente. [1][2]';
+
+    expect(
+      evaluateAnswerCitationQuality(answer, [source, corroboratingSource]),
+    ).toEqual([]);
+  });
+
+  it('no exige cita para una pregunta de cierre', () => {
+    const answer =
+      'La licencia se solicita mediante procedimiento institucional vigente. [1]\n\n¿Te gustaría saber qué documentos debes presentar?';
+
+    expect(evaluateAnswerCitationQuality(answer, [source])).toEqual([]);
+  });
 });

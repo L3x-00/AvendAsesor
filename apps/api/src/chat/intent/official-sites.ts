@@ -7,10 +7,11 @@
  *
  * Solo direcciones verificadas el 2026-10-08; el modelo nunca escribe URL. Las
  * UGEL y las DRE/GRE no tienen una página única: se enlaza el directorio de
- * instituciones de gob.pe filtrado (191 UGEL; 29 DRE y GRE). La web enlaza las
- * mismas direcciones en «Sugerencias:»
- * (apps/web/src/components/chat/official-links.tsx): si cambia una, cambian
- * las dos.
+ * instituciones de gob.pe filtrado (191 UGEL; 29 DRE y GRE). En «Sugerencias:»
+ * la web ya no enlaza esos directorios —al docente no le sirven para su caso
+ * (PO, 2026-10-10)—: solo convierte en enlace los portales con una página
+ * única (MINEDU, SUNEDU, SERVIR, PerúEduca, El Peruano, EsSalud, Derrama) en
+ * apps/web/src/components/chat/official-links.tsx.
  */
 export interface OfficialSite {
   /** Qué encontrará la persona al abrir el enlace. */

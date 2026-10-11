@@ -60,10 +60,33 @@ function isHeading(content: string): boolean {
   );
 }
 const ARTICLE = /art[ií]culo\s+([\w.-]+)/iu;
-const NUMERAL = /(?:^|\s)(\d+(?:\.\d+)+)\.?\s/u;
+const NUMERAL = /(?:^|\s)([1-9]\d*(?:\.\d+)+)\.?\s/u;
 const EXPLICIT_LITERAL = /\b(?:literal|inciso)\s+([a-z])\)\s/iu;
 const LIST_LITERAL = /(?:^|\n\n)\s*([a-z])\)\s/iu;
 const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
+/** Tope del «sustento» derivado del primer tramo nuevo de un fragmento. */
+const MAX_SUSTENTO_CHARS = 180;
+/** Por debajo de esto («Art.», «Requisitos: 1.») no vale como sustento. */
+const MIN_SUSTENTO_CHARS = 15;
+
+/**
+ * «Sustento» de un fragmento sin rótulo normativo (preguntas frecuentes,
+ * anexos, normas sin títulos): su primera oración, tal como está en el
+ * documento, acotada. Cada fila de «Referencias» explica así de qué trata la
+ * fuente, sin inventar nada (PO, 2026-10-10). Solo se usa el tramo nuevo: el
+ * arrastre del chunk anterior repetiría el cierre del fragmento previo.
+ */
+function sustentoFromText(text: string): string | undefined {
+  const normalized = text.replace(/\s+/gu, ' ').trim();
+  if (!normalized) return undefined;
+  const firstSentence =
+    normalized.match(/^.*?[.!?](?=\s|$)/u)?.[0] ?? normalized;
+  const excerpt = firstSentence.slice(0, MAX_SUSTENTO_CHARS).trim();
+  if (excerpt.length < MIN_SUSTENTO_CHARS) return undefined;
+  return excerpt.length < firstSentence.length
+    ? `${excerpt.trimEnd()}…`
+    : excerpt;
+}
 
 function subreference(content: string): string | undefined {
   const numeral = content.match(NUMERAL)?.[1];
@@ -82,6 +105,8 @@ interface ChunkUnit {
   overlap: boolean;
   pageEnd: number;
   pageStart: number;
+  /** «Sustento» explícito de una ventana de párrafo largo (título estable). */
+  sustento?: string;
   tokenCount: number;
 }
 
@@ -188,6 +213,14 @@ export class ChunkingService {
         .filter((unit) => !unit.overlap)
         .map((unit) => unit.content)
         .join(UNIT_SEPARATOR);
+      // Las ventanas de un párrafo largo traen su propio sustento (o su
+      // ausencia marcada con ''): todas comparten el mismo resultado, tomado
+      // del inicio del párrafo completo, nunca del corte a mitad de oración.
+      const windowSustento = units.find(
+        (unit) => !unit.overlap && unit.sustento !== undefined,
+      )?.sustento;
+      const sustento =
+        windowSustento === undefined ? sustentoFromText(fresh) : windowSustento;
       chunks.push({
         // El artículo del contenido nuevo; el del arrastre solo si no hay otro.
         articleReference: (fresh.match(ARTICLE) ?? content.match(ARTICLE))?.[0],
@@ -196,9 +229,13 @@ export class ChunkingService {
         numeralReference: subreference(content),
         pageEnd: units.at(-1)!.pageEnd,
         pageStart: units[0].pageStart,
-        sectionTitle: content.match(
-          /^(?:cap[ií]tulo|t[ií]tulo|secci[oó]n|art[ií]culo|anexo|disposici[oó]n(?:es)?).{1,240}/imu,
-        )?.[0],
+        // Rótulo normativo si existe; si no, la primera oración del tramo
+        // nuevo como «sustento» legible de la referencia.
+        sectionTitle:
+          content.match(
+            /^(?:cap[ií]tulo|t[ií]tulo|secci[oó]n|art[ií]culo|anexo|disposici[oó]n(?:es)?).{1,240}/imu,
+          )?.[0] ??
+          (sustento || undefined),
         tokenCount: tokens.length,
       });
       const overlap =
@@ -299,6 +336,10 @@ export class ChunkingService {
           overlap: false,
           pageEnd: unit.pageEnd,
           pageStart: headings[0]?.pageStart ?? unit.pageStart,
+          // El sustento se toma del párrafo completo una sola vez: cada
+          // ventana empieza en un corte de tokens y su inicio no es una frase.
+          // '' marca «sin sustento» para que ninguna ventana derive del corte.
+          sustento: sustentoFromText(unit.content) ?? '',
           tokenCount: this.encoding.encode(content).length,
         },
       ]);
