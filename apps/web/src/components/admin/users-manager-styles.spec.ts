@@ -111,6 +111,25 @@ describe("superadministrator user directory visual contracts", () => {
       /\.searchButton:hover\s*\{[^}]*background:\s*var\(--avend-navy\)/,
     );
   });
+
+  it("usa una tabla profesional y estados suaves con significado textual", () => {
+    expect(usersManagerStyles).toMatch(
+      /\.userTable\s*\{[^}]*border-collapse:\s*separate/,
+    );
+    expect(usersManagerStyles).toMatch(
+      /\.badgeActive\s*\{[^}]*background:\s*var\(--avend-success-soft-surface\)/,
+    );
+    expect(usersManagerStyles).toMatch(
+      /\.badgeExpired\s*\{[^}]*background:\s*var\(--avend-danger-soft-surface\)/,
+    );
+    expect(usersManagerStyles).toMatch(/\.statusDot\s*\{/);
+    expect(
+      contrastRatio(token("avend-success"), token("avend-success-soft-surface")),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(token("avend-danger"), token("avend-danger-soft-surface")),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe("barra de acciones de Usuarios: contratos visuales", () => {
@@ -140,7 +159,7 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
       "transform",
     ]);
     const stateRules = rules.filter(({ selector }) =>
-      /\.(primaryAction|secondaryAction)[^,{]*(\[aria-expanded="true"\]|:hover|:active)|\[aria-expanded="true"\]\s*>\s*\.actionChevron/.test(
+      /\.(primaryAction|secondaryAction)[^,{]*(\[aria-expanded="true"\]|:hover|:active)/.test(
         selector,
       ),
     );
@@ -196,7 +215,13 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
   });
 
   it("el panel oculto no ocupa espacio", () => {
-    expect(rule(".actionPanel[hidden]")).toMatch(/display:\s*none/);
+    expect(rule(".modalBackdrop[hidden]")).toMatch(/display:\s*none/);
+  });
+
+  it("el formulario se presenta como modal estable sobre la tabla", () => {
+    expect(rule(".modalBackdrop")).toMatch(/position:\s*fixed/);
+    expect(rule(".modalBackdrop")).toMatch(/inset:\s*0/);
+    expect(rule(".actionPanel")).toMatch(/max-height:\s*calc\(100vh - 2rem\)/);
   });
 
   it("en el celular las etiquetas pueden partirse y Excel comparte una fila", () => {
@@ -215,11 +240,11 @@ describe("barra de acciones de Usuarios: contratos visuales", () => {
     expect(mobile).not.toMatch(/justify-content:\s*center/);
   });
 
-  it("la flecha de despliegue respeta «reducir movimiento»", () => {
+  it("los diálogos y filas respetan «reducir movimiento»", () => {
     const reduced = mediaContent(
       stylesWithoutComments,
       "prefers-reduced-motion: reduce",
     );
-    expect(reduced).toMatch(/\.actionChevron[^{]*\{[^}]*transition:\s*none/);
+    expect(reduced).toMatch(/\.tableRow,[\s\S]*\.modalBackdrop,[\s\S]*\.actionPanel\s*\{[^}]*animation:\s*none/);
   });
 });
