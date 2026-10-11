@@ -17,18 +17,14 @@
  *
  * Sin `--confirm-reindex` solo lista los documentos candidatos (dry run).
  *
- * Requisitos: Supabase CLI autenticada y el repositorio enlazado al proyecto
- * (`supabase link --project-ref <ref>`). Acción de producción: requiere
+ * Requisitos: Supabase CLI autenticada con acceso al proyecto (las claves se
+ * piden en memoria y no se imprimen). Acción de producción: requiere
  * autorización del Product Owner.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createClient } from '@supabase/supabase-js';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_STATUSES = new Set(['indexed', 'failed', 'pending', 'processing']);
@@ -44,8 +40,10 @@ function usage() {
       'Opciones:',
       '  --project-ref <ref>     Proyecto Supabase destino (obligatorio).',
       '  --actor-email <correo>  Administrador solicitante (obligatorio con --confirm-reindex).',
+      '  --actor-id <uuid>       Id del administrador solicitante (alternativa al correo).',
       '  --status <estado>       Estado de la versión a reencolar (default: indexed).',
       '  --document <uuid>       Documento puntual (repetible). Sin él: todo el corpus.',
+      '  --list-actors          Lista los administradores que pueden figurar como solicitantes.',
       '  --confirm-reindex       Ejecuta el reencolado. Sin esta bandera solo lista.',
       '  --help                  Muestra esta ayuda.',
     ].join('\n'),
@@ -86,7 +84,7 @@ function runCli(argumentsList, label) {
     ? ['/d', '/c', 'supabase.cmd', ...argumentsList]
     : argumentsList;
   const result = spawnSync(command, commandArguments, {
-    cwd: repositoryRoot,
+    cwd: process.cwd(),
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -97,138 +95,175 @@ function runCli(argumentsList, label) {
   return result.stdout;
 }
 
-function executeSql(sql, label) {
-  const workDirectory = mkdtempSync(join(tmpdir(), 'avend-rag-reindex-'));
-  const statementFile = join(workDirectory, 'statement.sql');
-  try {
-    writeFileSync(statementFile, sql, { encoding: 'utf8', mode: 0o600 });
-    return runCli(
-      ['db', 'query', '--linked', '--file', statementFile, '--log-level', 'error'],
-      label,
-    );
-  } finally {
-    rmSync(workDirectory, { force: true, recursive: true });
-  }
-}
-
-function tryParseJsonOutput(raw) {
+function parseCliJson(raw, label) {
   const start = raw.search(/[[{]/u);
-  if (start < 0) return null;
+  if (start < 0) failure(label);
   try {
     return JSON.parse(raw.slice(start));
   } catch {
-    return null;
+    failure(label);
   }
 }
 
-function sqlLiteral(value) {
-  return `'${value.replaceAll("'", "''")}'`;
+/** Clave de servidor del proyecto, pedida en memoria a la CLI. */
+function loadServiceRoleKey(projectRef) {
+  const keys = parseCliJson(
+    runCli(
+      [
+        'projects',
+        'api-keys',
+        '--project-ref',
+        projectRef,
+        '--output',
+        'json',
+        '--log-level',
+        'error',
+      ],
+      'No se pudieron obtener las credenciales del proyecto',
+    ),
+    'La respuesta de claves del proyecto no es válida',
+  );
+  const key =
+    keys.find((candidate) => candidate.name === 'service_role' && candidate.type === 'legacy')
+      ?.api_key ??
+    keys.find((candidate) => candidate.name === 'service_role')?.api_key;
+  if (!key) failure('El proyecto no expone una clave service_role utilizable.');
+  return key;
 }
 
-function assertLinkedProject(projectRef) {
-  const linkedRefPath = resolve(repositoryRoot, 'supabase', '.temp', 'project-ref');
-  const linkedRef = existsSync(linkedRefPath)
-    ? readFileSync(linkedRefPath, 'utf8').trim()
-    : '';
-  if (linkedRef !== projectRef) {
-    failure(
-      `El repositorio no está enlazado a ${projectRef}. Ejecuta primero: supabase link --project-ref ${projectRef}`,
+async function resolveActorId(client, actorEmail, actorId) {
+  if (actorId) {
+    if (!UUID_PATTERN.test(actorId)) failure('--actor-id no es un UUID válido.');
+    return actorId;
+  }
+  const { data, error } = await client.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  if (error) failure(`No se pudo consultar la lista de usuarios: ${error.message}`);
+  const user = data.users.find(
+    (candidate) =>
+      (candidate.email ?? '').toLocaleLowerCase('es') ===
+      actorEmail.toLocaleLowerCase('es'),
+  );
+  if (!user) failure('No existe un usuario con el correo indicado.');
+  return user.id;
+}
+
+/** Administradores con perfil, para elegir un actor trazable del reencolado. */
+async function listActors(client) {
+  const { data: profiles, error } = await client
+    .from('profiles')
+    .select('id,full_name,role')
+    .in('role', ['superadmin', 'admin'])
+    .order('role')
+    .order('full_name');
+  if (error) failure(`No se pudo consultar los perfiles: ${error.message}`);
+  const { data, error: usersError } = await client.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  if (usersError) {
+    failure(`No se pudo consultar la lista de usuarios: ${usersError.message}`);
+  }
+  const emailById = new Map(
+    data.users.map((user) => [user.id, user.email ?? 'sin correo']),
+  );
+  for (const profile of profiles) {
+    console.log(
+      `  ${profile.role} · ${profile.full_name} · ${emailById.get(profile.id) ?? 'sin correo'} · ${profile.id}`,
     );
   }
+  if (!profiles.length) console.log('  (sin administradores)');
 }
 
-function candidateFilterSql(status, documentIds) {
-  const documentFilter = documentIds.length
-    ? `and d.id in (${documentIds.map((id) => `${sqlLiteral(id)}::uuid`).join(', ')})`
-    : '';
-  return `v.ingestion_status::text = ${sqlLiteral(status)} ${documentFilter}`;
+async function listCandidates(client, status, documentIds) {
+  let documentsQuery = client
+    .from('documents')
+    .select('id,title,current_version_id')
+    .eq('is_deleted', false)
+    .not('current_version_id', 'is', null);
+  if (documentIds.length) {
+    documentsQuery = documentsQuery.in('id', documentIds);
+  }
+  const { data: documents, error } = await documentsQuery.order('title');
+  if (error) failure(`No se pudo consultar el catálogo: ${error.message}`);
+  if (!documents.length) return [];
+
+  const { data: versions, error: versionsError } = await client
+    .from('document_versions')
+    .select('id,version_number,ingestion_status')
+    .in(
+      'id',
+      documents.map((document) => document.current_version_id),
+    );
+  if (versionsError) {
+    failure(`No se pudo consultar el estado de ingesta: ${versionsError.message}`);
+  }
+  const versionById = new Map(
+    versions.map((version) => [version.id, version]),
+  );
+
+  return documents
+    .map((document) => {
+      const version = versionById.get(document.current_version_id);
+      return {
+        documentId: document.id,
+        status: version?.ingestion_status ?? 'desconocido',
+        title: document.title,
+        versionId: document.current_version_id,
+        versionNumber: version?.version_number ?? 0,
+      };
+    })
+    .filter((candidate) => candidate.status === status);
 }
 
-function listCandidates(projectRef, status, documentIds) {
-  const sql = `
-select coalesce(
-  json_agg(
-    json_build_object(
-      'documentId', candidate.document_id,
-      'title', candidate.title,
-      'versionId', candidate.version_id,
-      'versionNumber', candidate.version_number,
-      'status', candidate.status
-    ) order by candidate.title
-  ),
-  '[]'::json
-)::text
-from (
-  select
-    d.id as document_id,
-    d.title,
-    v.id as version_id,
-    v.version_number,
-    v.ingestion_status::text as status
-  from public.documents as d
-  join public.document_versions as v on v.id = d.current_version_id
-  where not d.is_deleted
-    and ${candidateFilterSql(status, documentIds)}
-) as candidate;`;
-  const raw = executeSql(sql, 'No se pudo consultar el catálogo productivo');
-  return tryParseJsonOutput(raw);
+async function requeue(client, candidates, actorId) {
+  const results = [];
+  for (const candidate of candidates) {
+    const { error } = await client.rpc('retry_document_ingestion', {
+      p_actor_id: actorId,
+      p_document_version_id: candidate.versionId,
+    });
+    results.push({
+      error: error?.message ?? null,
+      ok: !error,
+      title: candidate.title,
+    });
+  }
+  return results;
 }
 
-function requeue(projectRef, status, documentIds, actorEmail) {
-  const sql = `
-do $$
-declare
-  actor uuid;
-  target record;
-  queued integer := 0;
-begin
-  select user_row.id
-  into actor
-  from auth.users as user_row
-  where lower(user_row.email) = lower(${sqlLiteral(actorEmail)})
-  limit 1;
-
-  if actor is null then
-    raise exception 'No existe un usuario con el correo indicado';
-  end if;
-
-  for target in
-    select d.title, v.id as version_id
-    from public.documents as d
-    join public.document_versions as v on v.id = d.current_version_id
-    where not d.is_deleted
-      and ${candidateFilterSql(status, documentIds)}
-    order by d.title
-  loop
-    perform public.retry_document_ingestion(target.version_id, actor);
-    queued := queued + 1;
-    raise notice 'Reencolado (%): %', queued, target.title;
-  end loop;
-
-  raise notice 'Total reencolado: %', queued;
-end
-$$;`;
-  return executeSql(sql, 'No se pudo reencolar el corpus');
+async function statusSummary(client) {
+  const { data: documents, error } = await client
+    .from('documents')
+    .select('current_version_id')
+    .eq('is_deleted', false)
+    .not('current_version_id', 'is', null);
+  if (error) failure(`No se pudo resumir la ingesta: ${error.message}`);
+  const { data: versions, error: versionsError } = await client
+    .from('document_versions')
+    .select('ingestion_status')
+    .in(
+      'id',
+      documents.map((document) => document.current_version_id),
+    );
+  if (versionsError) {
+    failure(`No se pudo resumir la ingesta: ${versionsError.message}`);
+  }
+  const summary = new Map();
+  for (const version of versions) {
+    summary.set(
+      version.ingestion_status,
+      (summary.get(version.ingestion_status) ?? 0) + 1,
+    );
+  }
+  return [...summary.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
 }
 
-function statusSummary(projectRef) {
-  const sql = `
-select coalesce(
-  json_agg(row_to_json(summary) order by summary.status),
-  '[]'::json
-)::text
-from (
-  select v.ingestion_status::text as status, count(*)::integer as versions
-  from public.document_versions as v
-  join public.documents as d on d.id = v.document_id and d.current_version_id = v.id
-  where not d.is_deleted
-  group by 1
-) as summary;`;
-  const raw = executeSql(sql, 'No se pudo consultar el estado de la ingesta');
-  return tryParseJsonOutput(raw);
-}
-
-function main() {
+async function main() {
   if (process.argv.includes('--help') || process.argv.length <= 2) {
     usage();
     return;
@@ -245,20 +280,31 @@ function main() {
     if (!UUID_PATTERN.test(documentId)) failure(`--document no es un UUID válido: ${documentId}`);
   }
   const actorEmail = optionValue('--actor-email');
+  const actorIdOption = optionValue('--actor-id');
   const confirm = process.argv.includes('--confirm-reindex');
-  if (confirm && (!actorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(actorEmail))) {
-    failure('Falta --actor-email válido (administrador solicitante).');
+  if (
+    confirm &&
+    !actorIdOption &&
+    (!actorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(actorEmail))
+  ) {
+    failure('Falta --actor-email válido o --actor-id (administrador solicitante).');
   }
 
-  assertLinkedProject(projectRef);
-  const candidates = listCandidates(projectRef, status, documentIds);
-  if (!candidates) {
-    console.log('La CLI no devolvió una lista interpretable (salida en bruto arriba).');
-    console.log('Dry run: no se cambió nada.');
+  const serviceRoleKey = loadServiceRoleKey(projectRef);
+  const client = createClient(`https://${projectRef}.supabase.co`, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  if (process.argv.includes('--list-actors')) {
+    console.log(`Administradores en ${projectRef}:`);
+    await listActors(client);
     return;
   }
 
-  console.log(`Documentos en estado «${status}» en ${projectRef}: ${candidates.length}`);
+  const candidates = await listCandidates(client, status, documentIds);
+  console.log(
+    `Documentos en estado «${status}» en ${projectRef}: ${candidates.length}`,
+  );
   for (const candidate of candidates) {
     console.log(
       `  - ${candidate.title} · versión ${candidate.versionNumber} → reencolar (${candidate.versionId})`,
@@ -272,30 +318,32 @@ function main() {
   if (!confirm) {
     console.log('');
     console.log('Dry run: no se cambió nada. Para ejecutar agrega:');
-    console.log(`  --actor-email <correo-admin> --confirm-reindex`);
+    console.log('  --actor-email <correo-admin> --confirm-reindex');
     return;
   }
 
-  requeue(projectRef, status, documentIds, actorEmail);
-  console.log('');
-  console.log('Reencolado enviado. El worker de la API lo procesará en segundos.');
-  const summary = statusSummary(projectRef);
-  if (!summary) {
-    console.log('Sin resumen interpretable: revisa la salida en bruto de arriba.');
-  } else {
-    console.log('Estado de la ingesta ahora:');
-    for (const entry of summary) {
-      console.log(`  - ${entry.status}: ${entry.versions}`);
-    }
+  const actorId = await resolveActorId(client, actorEmail, actorIdOption);
+  const results = await requeue(client, candidates, actorId);
+  const failed = results.filter((result) => !result.ok);
+  for (const result of results) {
+    console.log(`  ${result.ok ? '✓' : '✗'} ${result.title}${result.error ? ` — ${result.error}` : ''}`);
   }
   console.log('');
   console.log(
-    'Verificación final: cuando no queden «pending»/«processing», re-ejecuta este script (dry run) y revisa que «indexed» volvió a su conteo.',
+    `Reencolados: ${results.length - failed.length}/${results.length}. El worker de la API los procesará en los próximos segundos.`,
+  );
+  console.log('Estado de la ingesta ahora:');
+  for (const [name, total] of await statusSummary(client)) {
+    console.log(`  - ${name}: ${total}`);
+  }
+  console.log('');
+  console.log(
+    'Verificación final: repite el dry run hasta que no queden «pending»/«processing» y «indexed» recupere su conteo.',
   );
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
