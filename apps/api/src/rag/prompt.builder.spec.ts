@@ -44,6 +44,17 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('directivos');
   });
 
+  it('pide un tono cercano y formal y preferir la fuente vigente más reciente', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('tono cercano y formal');
+    expect(prompt).toContain('evita sonar robótico');
+    expect(prompt).toContain('cita preferentemente la vigente y más reciente');
+    expect(prompt).toContain(
+      'salvo que la persona pida expresamente el antecedente histórico',
+    );
+  });
+
   it('asks for the no-support marker and for clarification when the sources admit several readings', () => {
     const prompt = buildEvidenceSystemPrompt();
 
@@ -51,12 +62,25 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('pide al usuario que precise');
   });
 
-  it('separa la información y su cita por fuente', () => {
+  it('separa la información y su cita por fuente, con cita de bloque y corroboración', () => {
     const prompt = buildEvidenceSystemPrompt();
-    expect(prompt).toContain('Cada oración debe apoyarse en una sola fuente');
-    expect(prompt).toContain('Nunca escribas dos citas seguidas');
+    expect(prompt).toContain('cada una en su propio corchete');
+    expect(prompt).toContain('no repitas la cita en cada elemento');
     expect(prompt).toContain('justo después del punto');
-    expect(prompt).not.toContain('Escribe cada cita por separado: [1][2]');
+    expect(prompt).toContain('nunca agrupada como [1, 2]');
+    expect(prompt).not.toContain('Nunca escribas dos citas seguidas');
+    expect(prompt).not.toContain(
+      'Cada oración debe apoyarse en una sola fuente',
+    );
+  });
+
+  it('propone una pregunta de cierre al final cuando las fuentes la sustentan', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain(
+      '¿Te gustaría saber qué documentos debes presentar?',
+    );
+    expect(prompt).toContain('como última línea de la respuesta');
   });
 
   it('exige precondiciones y atiende glosarios, siglas y base normativa con evidencia', () => {

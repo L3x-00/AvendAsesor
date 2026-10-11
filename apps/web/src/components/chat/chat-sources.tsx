@@ -198,18 +198,29 @@ function SourceTable({
                   </span>
                 </td>
                 <td data-label="Sustento">
-                  <span className={styles.referenceLine}>
-                    <strong>Sección:</strong>{" "}
-                    {source.sectionTitle ?? "No especificada"}
-                  </span>
-                  <span className={styles.referenceLine}>
-                    <strong>Artículo:</strong>{" "}
-                    {source.articleReference ?? "No especificado"}
-                  </span>
-                  <span className={styles.referenceLine}>
-                    <strong>Numeral o literal:</strong>{" "}
-                    {source.numeralReference ?? "No especificado"}
-                  </span>
+                  {source.sectionTitle ? (
+                    <span className={styles.referenceLine}>
+                      <strong>Sección:</strong> {source.sectionTitle}
+                    </span>
+                  ) : null}
+                  {source.articleReference ? (
+                    <span className={styles.referenceLine}>
+                      <strong>Artículo:</strong> {source.articleReference}
+                    </span>
+                  ) : null}
+                  {source.numeralReference ? (
+                    <span className={styles.referenceLine}>
+                      <strong>Numeral o literal:</strong>{" "}
+                      {source.numeralReference}
+                    </span>
+                  ) : null}
+                  {!source.sectionTitle &&
+                  !source.articleReference &&
+                  !source.numeralReference ? (
+                    <span className={styles.referenceLine}>
+                      No especificado
+                    </span>
+                  ) : null}
                 </td>
                 <td data-label="Página">
                   {hasPdfPagination(source) ? (

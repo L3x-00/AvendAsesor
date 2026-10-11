@@ -216,8 +216,16 @@ export function describeOrientationSource(source: ChatSource): string {
       ? source.articleReference
       : `artículo ${source.articleReference}`
     : null;
+  // Un sustento derivado (oración del propio fragmento) se imprime tal cual:
+  // «sección ¿Cuáles son los requisitos…?» sería agramatical.
+  const section = source.sectionTitle
+    ? source.sectionTitle.startsWith("¿") ||
+      /[.!?…]$/u.test(source.sectionTitle)
+      ? source.sectionTitle
+      : `sección ${source.sectionTitle}`
+    : null;
   const details = [
-    source.sectionTitle ? `sección ${source.sectionTitle}` : null,
+    section,
     article,
     source.numeralReference ? `numeral ${source.numeralReference}` : null,
   ].filter((value): value is string => Boolean(value));
@@ -231,8 +239,11 @@ export function describeOrientationSource(source: ChatSource): string {
         ? "reemplazada / sin vigencia (solo antecedente histórico)"
         : "archivada (antecedente histórico)";
 
+  const suffix = details.length ? `, ${details.join(", ")}` : "";
+  const closing = /[.!?…]$/u.test(suffix) ? "" : ".";
+
   return sanitizeDocumentText(
-    `[${source.rank}] ${source.documentTitle} (${situation}), versión ${source.versionNumber}, ${pages}${details.length ? `, ${details.join(", ")}` : ""}.`,
+    `[${source.rank}] ${source.documentTitle} (${situation}), versión ${source.versionNumber}, ${pages}${suffix}${closing}`,
   );
 }
 

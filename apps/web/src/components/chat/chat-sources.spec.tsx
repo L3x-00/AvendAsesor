@@ -164,9 +164,84 @@ describe("ChatSources", () => {
     expect(
       within(sourceRow as HTMLTableRowElement).getByText(/Proceso:/),
     ).toHaveTextContent("Proceso: No especificado");
-    expect(sourceRow).toHaveTextContent("Sección: No especificada");
-    expect(sourceRow).toHaveTextContent("Artículo: No especificado");
-    expect(sourceRow).toHaveTextContent("Numeral o literal: No especificado");
+    // La celda «Sustento» no acumula etiquetas vacías: una sola línea.
+    expect(sourceRow).not.toHaveTextContent("Sección:");
+    expect(sourceRow).not.toHaveTextContent("Artículo:");
+    expect(
+      within(sourceRow as HTMLTableRowElement).getByText("No especificado"),
+    ).toBeVisible();
+  });
+
+  it("muestra solo los campos presentes del sustento", () => {
+    render(
+      <ChatSources
+        defaultOpen
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Norma puntual",
+            id: "dc8b56af-6d0c-4fef-881e-7c00907540dd",
+            moduleName: null,
+            numeralReference: "5.1",
+            pageEnd: 3,
+            pageStart: 3,
+            rank: 1,
+            relevanceScore: 0.8,
+            sectionTitle: null,
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+    const row = within(
+      screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      }),
+    )
+      .getByText("Norma puntual")
+      .closest("tr");
+
+    expect(row).toHaveTextContent("Numeral o literal: 5.1");
+    expect(row).not.toHaveTextContent("Sección:");
+    expect(row).not.toHaveTextContent("Artículo:");
+  });
+
+  it("muestra el sustento derivado de la sección cuando existe", () => {
+    render(
+      <ChatSources
+        defaultOpen
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Faq contratacion auxiliares",
+            id: "ec8b56af-6d0c-4fef-881e-7c00907540dd",
+            moduleName: null,
+            numeralReference: null,
+            pageEnd: 3,
+            pageStart: 2,
+            rank: 1,
+            relevanceScore: 0.8,
+            sectionTitle: "¿Cuáles son los requisitos para postular?",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+    const row = within(
+      screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      }),
+    )
+      .getByText("Faq contratacion auxiliares")
+      .closest("tr");
+
+    expect(row).toHaveTextContent(
+      "Sección: ¿Cuáles son los requisitos para postular?",
+    );
+    expect(row).not.toHaveTextContent("Artículo:");
+    expect(row).not.toHaveTextContent("Numeral o literal:");
   });
 
   it("no presenta como página PDF la ubicación sintética de un archivo Word", () => {

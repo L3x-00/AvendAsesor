@@ -6,15 +6,13 @@ import type { ReactNode } from "react";
  * llegue a la página sin buscarla. Solo enlaces verificados (2026-10-08): el
  * modelo nunca escribe URL, así no hay direcciones inventadas.
  *
- * Las UGEL y las DRE/GRE no tienen una página única: se enlaza el directorio
- * de instituciones de gob.pe filtrado. La búsqueda general que se usaba antes
- * abría con una UGEL concreta («UGEL Huancané») y parecía que la respuesta
- * dependía de ella. La API indica las mismas direcciones cuando piden la
- * página de una entidad (apps/api/src/chat/intent/official-sites.ts).
+ * Las UGEL y las DRE/GRE no se enlazan aquí: no tienen una página única y el
+ * directorio de gob.pe no le sirve al docente para su caso (PO, 2026-10-10).
+ * Quedan como texto; si piden expresamente la página de una entidad, la API
+ * responde con los directorios verificados
+ * (apps/api/src/chat/intent/official-sites.ts).
  */
 const OFFICIAL_LINKS: ReadonlyArray<{
-  /** El enlace lleva a un directorio de instituciones, no a un portal. */
-  directory?: boolean;
   href: string;
   name: string;
   pattern: RegExp;
@@ -23,18 +21,6 @@ const OFFICIAL_LINKS: ReadonlyArray<{
     href: "https://www.gob.pe/minedu",
     name: "MINEDU",
     pattern: /\bMINEDU\b|Ministerio de Educación/u,
-  },
-  {
-    directory: true,
-    href: "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL",
-    name: "las UGEL",
-    pattern: /\bUGEL(?:es)?\b/u,
-  },
-  {
-    directory: true,
-    href: "https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=DRE+GRE",
-    name: "las DRE y GRE",
-    pattern: /\b(?:DRE|GRE)\b/u,
   },
   { href: "https://www.gob.pe/sunedu", name: "SUNEDU", pattern: /\bSUNEDU\b/u },
   { href: "https://www.gob.pe/servir", name: "SERVIR", pattern: /\bSERVIR\b/u },
@@ -108,9 +94,7 @@ export function linkifyOfficialEntities(
       >
         {match[0]}{" "}
         <span className="avend-visually-hidden">
-          {link.directory
-            ? `(directorio oficial de ${link.name} en gob.pe, se abre en una pestaña nueva)`
-            : `(portal oficial de ${link.name}, se abre en una pestaña nueva)`}
+          {`(portal oficial de ${link.name}, se abre en una pestaña nueva)`}
         </span>
         <ExternalLinkIcon />
       </a>,
