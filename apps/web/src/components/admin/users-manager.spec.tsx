@@ -117,6 +117,17 @@ function rowFor(name: string): HTMLElement {
   return row;
 }
 
+/** Botón de acción de la fila (icono con nombre accesible). */
+function actionFor(name: string, action: string): HTMLElement {
+  return within(rowFor(name)).getByRole("button", { name: action });
+}
+
+/** Abre el diálogo de una acción de fila y lo devuelve. */
+function openRowDialog(name: string, action: string): HTMLElement {
+  fireEvent.click(actionFor(name, action));
+  return screen.getByRole("dialog", { name: action });
+}
+
 describe("UsersManager", () => {
   it("shows the protected directory page and exact result range", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
@@ -133,8 +144,12 @@ describe("UsersManager", () => {
     expect(within(table).getAllByRole("columnheader")).toHaveLength(6);
     expect(within(table).getByRole("columnheader", { name: "Estado" })).toBeVisible();
     expect(screen.getByText("Mostrando 1–4 de 15 usuarios.")).toBeVisible();
-    expect(screen.getAllByText("Editar acceso")).toHaveLength(4);
-    expect(screen.getAllByText("Extender vigencia")).toHaveLength(4);
+    expect(
+      screen.getAllByRole("button", { name: "Editar acceso" }),
+    ).toHaveLength(4);
+    expect(
+      screen.getAllByRole("button", { name: "Extender vigencia" }),
+    ).toHaveLength(4);
   });
 
   it("labels every derived access state as text, not colour alone", () => {
@@ -195,15 +210,53 @@ describe("UsersManager", () => {
     );
   });
 
+  it("cada acción de fila abre su propia ventana, no un despliegue en la fila", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    const maria = rowFor("María Docente");
+    expect(within(maria).queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(actionFor("María Docente", "Editar acceso"));
+    const dialog = screen.getByRole("dialog", { name: "Editar acceso" });
+    expect(dialog).toBeVisible();
+    expect(maria.contains(dialog)).toBe(false);
+    expect(
+      within(dialog).getByLabelText("Motivo (queda auditado)"),
+    ).toBeRequired();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(
+      screen.queryByRole("dialog", { name: "Editar acceso" }),
+    ).toBeNull();
+    expect(actionFor("María Docente", "Editar acceso")).toHaveFocus();
+  });
+
+  it("la suspensión se confirma en su propia ventana con tono de peligro", () => {
+    render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
+
+    fireEvent.click(actionFor("María Docente", "Suspender acceso"));
+    const dialog = screen.getByRole("dialog", { name: "Suspender acceso" });
+
+    expect(
+      within(dialog).getByText(/no un borrado/i),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByLabelText(/Motivo de la suspensión/),
+    ).toBeRequired();
+  });
+
   it("prefills the access window as the calendar day seen in Lima", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    const starts = screen.getAllByLabelText("Inicio");
-    const expiries = screen.getAllByLabelText("Fin");
+    const mariaDialog = openRowDialog("María Docente", "Extender vigencia");
+    expect(within(mariaDialog).getByLabelText("Inicio")).toHaveValue(
+      "2026-01-01",
+    );
+    expect(within(mariaDialog).getByLabelText("Fin")).toHaveValue("");
+    fireEvent.keyDown(mariaDialog, { key: "Escape" });
 
-    expect(starts[0]).toHaveValue("2026-01-01");
-    expect(expiries[0]).toHaveValue("");
-    expect(expiries[1]).toHaveValue("2026-09-09");
+    const anaDialog = openRowDialog("Ana PorVencer", "Extender vigencia");
+    expect(within(anaDialog).getByLabelText("Fin")).toHaveValue("2026-09-09");
   });
 
   it("binds the vigencia fields to the names the server action reads", () => {
@@ -211,8 +264,9 @@ describe("UsersManager", () => {
     // extending it, so the contract is asserted here and not just visually.
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    const start = screen.getAllByLabelText("Inicio")[0];
-    const expiry = screen.getAllByLabelText("Fin")[0];
+    const dialog = openRowDialog("María Docente", "Extender vigencia");
+    const start = within(dialog).getByLabelText("Inicio");
+    const expiry = within(dialog).getByLabelText("Fin");
 
     expect(start).toHaveAttribute("name", "accessStartAt");
     expect(expiry).toHaveAttribute("name", "accessExpiresAt");
@@ -223,8 +277,8 @@ describe("UsersManager", () => {
   it("stops an expired user from being sent a past expiry", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    const expired = rowFor("Luis Expirado");
-    const expiry = within(expired).getByLabelText("Fin");
+    const dialog = openRowDialog("Luis Expirado", "Extender vigencia");
+    const expiry = within(dialog).getByLabelText("Fin");
 
     // Prefilled with the past date it already had, so the minimum is what
     // keeps the main flow of the "Expirados" filter actionable.
@@ -264,18 +318,24 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     const maria = rowFor("María Docente");
-    // El dato se ve en la fila y también en la ficha de solo lectura.
-    expect(within(maria).getAllByText("maria@example.test").length).toBe(2);
-    expect(within(maria).getAllByText("987654321").length).toBe(2);
+    // El dato se ve en la fila; la ficha de solo lectura vive en su diálogo.
+    expect(within(maria).getAllByText("maria@example.test").length).toBe(1);
+    expect(within(maria).getAllByText("987654321").length).toBe(1);
 
-    const ana = rowFor("Ana PorVencer");
-    fireEvent.click(within(ana).getByText("Ver ficha"));
-    expect(within(ana).getByText("Superadministrador Demo")).toBeVisible();
+    const mariaDialog = openRowDialog("María Docente", "Ver ficha");
+    expect(within(mariaDialog).getByText("maria@example.test")).toBeVisible();
+    expect(within(mariaDialog).getByText("987654321")).toBeVisible();
+    fireEvent.keyDown(mariaDialog, { key: "Escape" });
+
+    const anaDialog = openRowDialog("Ana PorVencer", "Ver ficha");
+    expect(
+      within(anaDialog).getByText("Superadministrador Demo"),
+    ).toBeVisible();
 
     // Sin correo ni celular se dice explicitamente, no se deja en blanco.
     const luis = rowFor("Luis Expirado");
-    expect(within(luis).getAllByText("Sin correo").length).toBe(2);
-    expect(within(luis).getAllByText("Sin celular").length).toBe(2);
+    expect(within(luis).getAllByText("Sin correo").length).toBe(1);
+    expect(within(luis).getAllByText("Sin celular").length).toBe(1);
   });
 
   it("offers Excel import and an export that carries the visible filters", () => {
@@ -288,8 +348,8 @@ describe("UsersManager", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Importar Excel" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Exportar Excel" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Importar" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Exportar" })).toHaveAttribute(
       "href",
       "/api/admin/users/export?group=staff&search=Ana&accessState=expirado",
     );
@@ -372,58 +432,56 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     // Ana no tiene fecha de inicio: la vigencia rápida la completa.
-    const ana = rowFor("Ana PorVencer");
-    fireEvent.click(within(ana).getByText("Extender vigencia"));
-    fireEvent.click(within(ana).getByRole("button", { name: "6 meses" }));
+    const dialog = openRowDialog("Ana PorVencer", "Extender vigencia");
+    fireEvent.click(within(dialog).getByRole("button", { name: "6 meses" }));
 
-    expect(within(ana).getByText(/Vigencia hasta/)).toBeVisible();
+    expect(within(dialog).getByText(/Vigencia hasta/)).toBeVisible();
     // 2026-09-05 + 6 meses = 2027-03-05 en Lima.
-    expect(within(ana).getByLabelText("Fin")).toHaveValue("2027-03-05");
-    expect(within(ana).getByLabelText("Inicio")).toHaveValue("2026-09-05");
+    expect(within(dialog).getByLabelText("Fin")).toHaveValue("2027-03-05");
+    expect(within(dialog).getByLabelText("Inicio")).toHaveValue("2026-09-05");
   });
 
   it("una fecha de inicio existente no se pisa al usar la vigencia rápida", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    const maria = rowFor("María Docente");
-    fireEvent.click(within(maria).getByText("Extender vigencia"));
-    fireEvent.click(within(maria).getByRole("button", { name: "3 meses" }));
+    const dialog = openRowDialog("María Docente", "Extender vigencia");
+    fireEvent.click(within(dialog).getByRole("button", { name: "3 meses" }));
 
     // María ya tenía inicio: se conserva y solo cambia el fin.
-    expect(within(maria).getByLabelText("Inicio")).toHaveValue("2026-01-01");
-    expect(within(maria).getByLabelText("Fin")).toHaveValue("2026-12-05");
+    expect(within(dialog).getByLabelText("Inicio")).toHaveValue("2026-01-01");
+    expect(within(dialog).getByLabelText("Fin")).toHaveValue("2026-12-05");
   });
 
   it("ajusta fin de mes al usar vigencia rápida en un mes más corto", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today="2026-01-31" />);
 
-    const ana = rowFor("Ana PorVencer");
-    fireEvent.click(within(ana).getByText("Extender vigencia"));
-    fireEvent.click(within(ana).getByRole("button", { name: "3 meses" }));
+    const dialog = openRowDialog("Ana PorVencer", "Extender vigencia");
+    fireEvent.click(within(dialog).getByRole("button", { name: "3 meses" }));
 
-    expect(within(ana).getByLabelText("Fin")).toHaveValue("2026-04-30");
+    expect(within(dialog).getByLabelText("Fin")).toHaveValue("2026-04-30");
   });
 
   it("solo las cuentas activas ofrecen suspender y todas ofrecen el enlace de contraseña", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     // María, Ana y Luis están activos; Pedro está pausado.
-    expect(screen.getAllByText("Ver ficha")).toHaveLength(4);
-    expect(screen.getAllByText("Enviar enlace de contraseña")).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Ver ficha" })).toHaveLength(4);
     expect(
-      screen.getAllByText("Suspender acceso", { selector: "summary" }),
+      screen.getAllByRole("button", { name: "Enviar enlace de contraseña" }),
+    ).toHaveLength(4);
+    expect(
+      screen.getAllByRole("button", { name: "Suspender acceso" }),
     ).toHaveLength(3);
   });
 
   it("la ficha muestra el estado de la cuenta y quién la creó", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
-    const pedro = rowFor("Pedro Pausado");
-    fireEvent.click(within(pedro).getByText("Ver ficha"));
+    const dialog = openRowDialog("Pedro Pausado", "Ver ficha");
 
-    expect(within(pedro).getByText("Estado de la cuenta")).toBeVisible();
-    expect(within(pedro).getAllByText("Pausada").length).toBeGreaterThan(0);
-    expect(within(pedro).getByText("Creado por")).toBeVisible();
+    expect(within(dialog).getByText("Estado de la cuenta")).toBeVisible();
+    expect(within(dialog).getAllByText("Pausada").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("Creado por")).toBeVisible();
   });
 });
 
@@ -450,8 +508,8 @@ describe("UsersManager — barra de acciones", () => {
       admin: within(bar).getByRole("button", { name: "Agregar administrador" }),
       bar,
       docente: within(bar).getByRole("button", { name: "Agregar usuario" }),
-      exportLink: within(bar).getByRole("link", { name: "Exportar Excel" }),
-      importButton: within(bar).getByRole("button", { name: "Importar Excel" }),
+      exportLink: within(bar).getByRole("link", { name: "Exportar" }),
+      importButton: within(bar).getByRole("button", { name: "Importar" }),
     };
   }
 
@@ -522,11 +580,8 @@ describe("UsersManager — barra de acciones", () => {
       expect(controls().map((control) => control.className)).toEqual(
         classesBefore,
       );
-      // El formulario se pinta DEBAJO de la barra, nunca dentro de ella.
+      // El formulario se pinta en un portal, nunca dentro de la barra.
       expect(bar.contains(panel)).toBe(false);
-      expect(
-        bar.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
       expect(within(bar).queryByRole("textbox")).toBeNull();
     }
   });

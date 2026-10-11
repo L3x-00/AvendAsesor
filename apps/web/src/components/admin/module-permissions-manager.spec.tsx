@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AdminModulePermission } from "@/lib/admin-api/types";
 import { ModulePermissionsManager } from "./module-permissions-manager";
@@ -67,7 +67,8 @@ describe("ModulePermissionsManager", () => {
     expect(child).not.toBeChecked();
     expect(other).not.toBeChecked();
     expect(root).toHaveAttribute("name", "moduleId");
-    expect(screen.getByText("Módulos con acceso (1)")).toBeInTheDocument();
+    // El resumen del encabezado dice cuántos módulos tiene concedidos.
+    expect(screen.getByText("1 de 3 módulos con acceso")).toBeInTheDocument();
   });
 
   it("los superadministradores no reciben casillas de concesión", () => {
@@ -79,5 +80,39 @@ describe("ModulePermissionsManager", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(3);
     // El superadministrador conserva acceso total y no se configura aquí.
     expect(screen.queryByText("Super Dos")).toBeNull();
+  });
+
+  it("separa el acceso al área en un control visible, sin triángulos que desplieguen", () => {
+    const { container } = render(
+      <ModulePermissionsManager modules={modules} permissions={permissions} />,
+    );
+
+    const withAccess = screen.getByRole("radio", { name: "Con acceso" });
+    const withoutAccess = screen.getByRole("radio", { name: "Sin acceso" });
+
+    expect(withAccess).toBeChecked();
+    expect(withoutAccess).not.toBeChecked();
+    expect(withAccess).toHaveAttribute("name", "canAccess");
+    expect(withAccess).toHaveAttribute("value", "true");
+    expect(withoutAccess).toHaveAttribute("value", "false");
+    expect(screen.getByText("Habilitado")).toBeVisible();
+    // Nada queda plegado: ni <details> ni <summary>.
+    expect(container.querySelector("details")).toBeNull();
+    expect(container.querySelector("summary")).toBeNull();
+  });
+
+  it("marca y desmarca todos los módulos de una vez", () => {
+    render(
+      <ModulePermissionsManager modules={modules} permissions={permissions} />,
+    );
+
+    const checkboxes = () =>
+      screen.getAllByRole("checkbox") as HTMLInputElement[];
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar todos" }));
+    expect(checkboxes().every((checkbox) => checkbox.checked)).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Desmarcar todos" }));
+    expect(checkboxes().every((checkbox) => !checkbox.checked)).toBe(true);
   });
 });

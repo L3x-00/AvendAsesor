@@ -1,0 +1,299 @@
+/*
+ * Acceso a Módulos e Historial de documentos. Cada administrador se separa en
+ * dos bloques visibles (acceso al área y módulos permitidos); nada queda
+ * plegado tras un triángulo y todo lo que se puede tocar está a la vista.
+ */
+
+.section {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  padding: 1.25rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.description {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--avend-text-muted);
+}
+
+.list {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  padding: 1rem;
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--avend-text);
+}
+
+.meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+  color: var(--avend-text-muted);
+}
+
+.pillEnabled,
+.pillBlocked {
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pillEnabled {
+  background: var(--avend-success-soft-surface);
+  color: var(--avend-success);
+}
+
+.pillBlocked {
+  background: var(--avend-danger-soft-surface);
+  color: var(--avend-danger);
+}
+
+.blocks {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (min-width: 64rem) {
+  .blocks {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  }
+}
+
+.block {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.65rem;
+  background: var(--avend-surface-muted);
+  padding: 0.9rem 1rem 1rem;
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--avend-navy);
+}
+
+.blockHint {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--avend-text-muted);
+}
+
+.form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.segmentedLegend {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.segment {
+  position: relative;
+  display: inline-flex;
+}
+
+.segment input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.segmentText {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0 1rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.segment:hover .segmentText {
+  border-color: var(--avend-accent);
+}
+
+.segment input:checked + .segmentText {
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-soft-blue);
+  color: var(--avend-accent-strong);
+}
+
+.segment input:focus-visible + .segmentText {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--avend-text);
+}
+
+.input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  font-size: 1rem;
+  color: var(--avend-text);
+}
+
+.input:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.quickToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.quickToggle {
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  border: 1px dashed var(--avend-control-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--avend-accent-strong);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quickToggle:hover {
+  border-style: solid;
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-soft-blue);
+}
+
+.quickToggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.moduleFieldset {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.moduleCard {
+  border: 1px solid var(--avend-border);
+  border-radius: 0.6rem;
+  background: var(--avend-surface);
+  padding: 0.5rem 0.65rem;
+}
+
+.moduleRoot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.moduleRoot input,
+.moduleChild input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--avend-accent-strong);
+}
+
+.moduleChildren {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0 0 0.35rem 0.4rem;
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--avend-border);
+}
+
+.moduleChild {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  font-size: 0.98rem;
+}
+
+.empty {
+  margin-top: 1rem;
+  border: 1px dashed var(--avend-border);
+  border-radius: 0.6rem;
+  padding: 1rem;
+  font-size: 1rem;
+  color: var(--avend-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmentText {
+    transition: none;
+  }
+}

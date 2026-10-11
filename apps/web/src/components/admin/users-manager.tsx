@@ -1,27 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  createAdministrativeUserAction,
-  sendPasswordResetAction,
-  updateAccessWindowAction,
-  updateAdministrativeUserAction,
-} from "@/app/admin/actions";
+import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import { createAdministrativeUserAction } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
+import { AdminModal } from "@/components/admin/admin-modal";
+import { UserRowActions } from "@/components/admin/user-row-actions";
 import { UsersImportForm } from "@/components/admin/users-import-form";
 import { FieldError } from "@/components/ui/form-field";
-import type { FieldRules } from "@/lib/ui/field-validation";
-import { toDateInputValue } from "@/lib/admin-api/access-window";
 import { formatAccessState, formatUserRole } from "@/lib/admin-api/labels";
 import type {
   AdministrativeUser,
@@ -34,44 +20,10 @@ import {
   type UserGroup,
   type UserStatusFilter,
 } from "@/lib/admin-api/user-directory";
+import { QuickValidityButtons, quickValidity } from "./user-access-validity";
+import { CREATE_USER_RULES } from "./user-form-rules";
+import { formatAccess, formatDay, userInitials } from "./user-format";
 import styles from "./users-manager.module.css";
-
-/**
- * Reglas del alta de usuario y del cambio de vigencia. La fecha de fin se
- * compara con la de inicio para que el error salga en el campo que hay que
- * corregir, no en un aviso general al pie del formulario.
- */
-const ACCESS_WINDOW_RULES: FieldRules = {
-  accessExpiresAt: [
-    {
-      kind: "dateOrder",
-      label: "La fecha de fin",
-      startField: "accessStartAt",
-      startLabel: "la fecha de inicio",
-    },
-  ],
-};
-
-const USER_EDIT_RULES: FieldRules = {
-  reason: [
-    { kind: "required", label: "El motivo" },
-    { kind: "minLength", label: "El motivo", min: 4 },
-  ],
-};
-
-const CREATE_USER_RULES: FieldRules = {
-  ...ACCESS_WINDOW_RULES,
-  email: [
-    { kind: "required", label: "El correo electrónico" },
-    { kind: "email", label: "El correo electrónico" },
-  ],
-  fullName: [
-    { kind: "required", label: "El nombre y apellidos" },
-    { kind: "minLength", label: "El nombre y apellidos", min: 2 },
-    { kind: "maxLength", label: "El nombre y apellidos", max: 160 },
-  ],
-  phone: [{ kind: "phone", label: "El celular" }],
-};
 
 interface UsersManagerProps {
   /** Render base URL: the roster upload goes straight to the API. */
@@ -83,36 +35,6 @@ interface UsersManagerProps {
   query: ParsedUserDirectoryQuery;
   /** Today in Lima (YYYY-MM-DD), resolved on the server so hydration matches. */
   today: string;
-}
-
-const accessDateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Lima",
-});
-
-const accessDayFormatter = new Intl.DateTimeFormat("es-PE", {
-  dateStyle: "medium",
-  timeZone: "America/Lima",
-});
-
-function formatAccess(value: string | null): string {
-  if (!value) return "Sin acceso registrado";
-  return accessDateTimeFormatter.format(new Date(value));
-}
-
-function formatDay(value: string | null, emptyLabel: string): string {
-  if (!value) return emptyLabel;
-  return accessDayFormatter.format(new Date(value));
-}
-
-function userInitials(fullName: string): string {
-  return fullName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toLocaleUpperCase("es-PE") ?? "")
-    .join("");
 }
 
 const GROUPS: ReadonlyArray<{ group: UserGroup; label: string }> = [
@@ -150,369 +72,6 @@ const BADGE_CLASS: Record<AdministrativeUser["accessState"], string> = {
   pausado: styles.badgePaused,
   por_vencer: styles.badgeExpiring,
 };
-
-/** Icono de las acciones de fila; siempre acompaña a una etiqueta de texto. */
-function ManageIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={styles.summaryIcon}
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      {children}
-    </svg>
-  );
-}
-
-/**
- * Fecha fin resultante de sumar meses al día de hoy (Lima). El día llega del
- * servidor para que el cálculo coincida entre servidor y navegador.
- */
-function quickValidity(
-  today: string,
-  months: number,
-): { expiresAt: string; label: string; startAt: string } {
-  const base = new Date(`${today}T12:00:00.000Z`);
-  const year = base.getUTCFullYear();
-  const month = base.getUTCMonth() + months;
-  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  const target = new Date(
-    Date.UTC(
-      year,
-      month,
-      Math.min(base.getUTCDate(), lastDayOfTargetMonth),
-      12,
-    ),
-  );
-  return {
-    expiresAt: toDateInputValue(target.toISOString()),
-    label: accessDayFormatter.format(target),
-    startAt: toDateInputValue(base.toISOString()),
-  };
-}
-
-function QuickValidityButtons({
-  onApply,
-}: {
-  onApply: (months: number) => void;
-}) {
-  return (
-    <div
-      aria-label="Vigencias rápidas"
-      className={styles.validityButtons}
-      role="group"
-    >
-      {[3, 6, 12].map((months) => (
-        <button
-          className={styles.validityButton}
-          key={months}
-          onClick={() => onApply(months)}
-          type="button"
-        >
-          {months} meses
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function UserEditForm({ user }: { user: AdministrativeUser }) {
-  const fieldId = useId();
-
-  return (
-    <details className={styles.manage}>
-      <summary className={styles.manageSummary}>
-        <ManageIcon>
-          <path d="M4 20h4l10-10-4-4L4 16v4Z" />
-          <path d="m13.5 6.5 4 4" />
-        </ManageIcon>
-        Editar acceso
-      </summary>
-      <AdminActionForm
-        action={updateAdministrativeUserAction}
-        className={styles.form}
-        confirmMessage={`¿Confirmas cambiar el rol o estado de ${user.fullName}? Este cambio quedará auditado.`}
-        rules={USER_EDIT_RULES}
-        submitLabel="Actualizar usuario"
-        successMessage="Usuario actualizado con éxito."
-      >
-        <input name="userId" type="hidden" value={user.id} />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-role`}>
-          Rol
-        </label>
-        <select
-          className={styles.input}
-          defaultValue="__keep__"
-          id={`${fieldId}-role`}
-          name="role"
-        >
-          <option value="__keep__">Mantener rol actual</option>
-          <option value="docente">Docente</option>
-          <option value="admin">Administrador</option>
-          <option value="superadmin">Superadministrador</option>
-        </select>
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-status`}>
-          Estado
-        </label>
-        <select
-          className={styles.input}
-          defaultValue="__keep__"
-          id={`${fieldId}-status`}
-          name="accountStatus"
-        >
-          <option value="__keep__">Mantener estado actual</option>
-          <option value="active">Activo</option>
-          <option value="suspended">Pausado</option>
-        </select>
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-reason`}>
-          Motivo (queda auditado)
-        </label>
-        <textarea
-          className={styles.textarea}
-          id={`${fieldId}-reason`}
-          maxLength={500}
-          minLength={4}
-          name="reason"
-          required
-          rows={3}
-        />
-        <FieldError name="reason" />
-      </AdminActionForm>
-    </details>
-  );
-}
-
-function AccessWindowForm({
-  today,
-  user,
-}: {
-  today: string;
-  user: AdministrativeUser;
-}) {
-  const fieldId = useId();
-  const [startAt, setStartAt] = useState(toDateInputValue(user.accessStartAt));
-  const [expiresAt, setExpiresAt] = useState(
-    toDateInputValue(user.accessExpiresAt),
-  );
-  const [validitySummary, setValiditySummary] = useState<string | null>(null);
-
-  function applyQuickValidity(months: number) {
-    const quick = quickValidity(today, months);
-    setExpiresAt(quick.expiresAt);
-    setStartAt((current) => current || quick.startAt);
-    setValiditySummary(
-      `Vigencia hasta ${quick.label} (${months === 12 ? "un año" : `${months} meses`}).`,
-    );
-  }
-
-  return (
-    <details className={styles.manage}>
-      <summary className={styles.manageSummary}>
-        <ManageIcon>
-          <rect height="16" rx="2" width="18" x="3" y="5" />
-          <path d="M8 3v4M16 3v4M3 11h18" />
-        </ManageIcon>
-        Extender vigencia
-      </summary>
-      <AdminActionForm
-        action={updateAccessWindowAction}
-        className={styles.form}
-        rules={{ ...ACCESS_WINDOW_RULES, ...USER_EDIT_RULES }}
-        submitLabel="Guardar vigencia"
-        successMessage="Vigencia guardada con éxito."
-      >
-        <input name="userId" type="hidden" value={user.id} />
-        <p className={styles.formHint}>
-          El fin debe ser hoy o una fecha posterior. Deja una fecha vacía para
-          dejarla sin definir; si borras ambas, el acceso queda sin vencimiento.
-          Para bloquear el acceso de inmediato usa «Editar acceso» y pausa la
-          cuenta.
-        </p>
-        <div className={styles.validityRow}>
-          <span className={styles.fieldLabel}>Vigencia rápida</span>
-          <QuickValidityButtons onApply={applyQuickValidity} />
-          {validitySummary ? (
-            <p aria-live="polite" className={styles.formHint}>
-              {validitySummary}
-            </p>
-          ) : null}
-        </div>
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-start`}>
-          Inicio
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-start`}
-          name="accessStartAt"
-          onChange={(event) => setStartAt(event.target.value)}
-          type="date"
-          value={startAt}
-        />
-        <FieldError name="accessStartAt" />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-expires`}>
-          Fin
-        </label>
-        <input
-          className={styles.input}
-          id={`${fieldId}-expires`}
-          min={today}
-          name="accessExpiresAt"
-          onChange={(event) => setExpiresAt(event.target.value)}
-          type="date"
-          value={expiresAt}
-        />
-        <FieldError name="accessExpiresAt" />
-        <label className={styles.fieldLabel} htmlFor={`${fieldId}-reason`}>
-          Motivo (queda auditado)
-        </label>
-        <textarea
-          className={styles.textarea}
-          id={`${fieldId}-reason`}
-          maxLength={500}
-          minLength={4}
-          name="reason"
-          required
-          rows={3}
-        />
-        <FieldError name="reason" />
-      </AdminActionForm>
-    </details>
-  );
-}
-
-
-/**
- * Ojo: ficha de solo lectura con los datos completos del usuario, sin salir de
- * la fila ni cargar otra página.
- */
-function UserDetails({ user }: { user: AdministrativeUser }) {
-  return (
-    <details className={styles.manage}>
-      <summary className={styles.manageSummary}>
-        <ManageIcon>
-          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
-          <circle cx="12" cy="12" r="3" />
-        </ManageIcon>
-        Ver ficha
-      </summary>
-      <dl className={styles.details}>
-        <div>
-          <dt>Nombre</dt>
-          <dd>{user.fullName}</dd>
-        </div>
-        <div>
-          <dt>Rol</dt>
-          <dd>{formatUserRole(user.role)}</dd>
-        </div>
-        <div>
-          <dt>Estado de la cuenta</dt>
-          <dd>{user.accountStatus === "active" ? "Activa" : "Pausada"}</dd>
-        </div>
-        <div>
-          <dt>Correo</dt>
-          <dd>{user.email ?? "Sin correo"}</dd>
-        </div>
-        <div>
-          <dt>Celular</dt>
-          <dd>{user.phone ?? "Sin celular"}</dd>
-        </div>
-        <div>
-          <dt>Vigencia</dt>
-          <dd>
-            {formatDay(user.accessStartAt, "Sin inicio")} –{" "}
-            {formatDay(user.accessExpiresAt, "Sin vencimiento")}
-          </dd>
-        </div>
-        <div>
-          <dt>Último acceso</dt>
-          <dd>{formatAccess(user.lastAccessAt)}</dd>
-        </div>
-        <div>
-          <dt>Creado por</dt>
-          <dd>{user.createdByName ?? "No registrado"}</dd>
-        </div>
-      </dl>
-    </details>
-  );
-}
-
-/** Llave: envía el enlace de restablecimiento; nadie ve la contraseña. */
-function PasswordResetForm({ user }: { user: AdministrativeUser }) {
-  return (
-    <details className={styles.manage}>
-      <summary className={styles.manageSummary}>
-        <ManageIcon>
-          <circle cx="8" cy="15" r="4" />
-          <path d="m11 12 9-9M17 6l3 3M14 9l3 3" />
-        </ManageIcon>
-        Enviar enlace de contraseña
-      </summary>
-      <AdminActionForm
-        action={sendPasswordResetAction}
-        className={styles.form}
-        confirmMessage={`¿Enviar a ${user.email ?? "esta persona"} un enlace para crear una contraseña nueva?`}
-        submitLabel="Enviar enlace"
-        successMessage="Enlace enviado. La persona recibirá un correo para crear una contraseña nueva."
-      >
-        <input name="userId" type="hidden" value={user.id} />
-        <p className={styles.formHint}>
-          El enlace llega al correo registrado y solo lo puede usar esa persona;
-          aquí nadie ve ni define la contraseña. Queda auditado.
-        </p>
-      </AdminActionForm>
-    </details>
-  );
-}
-
-/** Tacho: suspensión lógica (no borra identidad ni historial). */
-function SuspendUserForm({ user }: { user: AdministrativeUser }) {
-  const fieldId = useId();
-
-  return (
-    <details className={styles.manage}>
-      <summary
-        className={`${styles.manageSummary} ${styles.manageSummaryDanger}`}
-      >
-        <ManageIcon>
-          <path d="M5 7h14M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
-        </ManageIcon>
-        Suspender acceso
-      </summary>
-      <AdminActionForm
-        action={updateAdministrativeUserAction}
-        className={styles.form}
-        confirmMessage={`¿Suspender el acceso de ${user.fullName}? Podrás reactivarlo después; todo queda auditado.`}
-        rules={USER_EDIT_RULES}
-        submitLabel="Suspender acceso"
-        successMessage="Acceso suspendido. La persona no podrá iniciar sesión."
-      >
-        <input name="userId" type="hidden" value={user.id} />
-        <input name="accountStatus" type="hidden" value="suspended" />
-        <p className={styles.formHint}>
-          La cuenta se pausa y el historial se conserva. Es una suspensión
-          lógica, no un borrado: podrás reactivarla cuando corresponda.
-        </p>
-        <label
-          className={styles.fieldLabel}
-          htmlFor={`${fieldId}-suspend-reason`}
-        >
-          Motivo de la suspensión (queda auditado)
-        </label>
-        <textarea
-          className={styles.textarea}
-          id={`${fieldId}-suspend-reason`}
-          maxLength={500}
-          minLength={4}
-          name="reason"
-          required
-          rows={3}
-        />
-        <FieldError name="reason" />
-      </AdminActionForm>
-    </details>
-  );
-}
 
 /**
  * Registration form. The email is the login and the person sets their own
@@ -662,8 +221,8 @@ const ACTION_PANEL_TITLES: Record<UserActionPanel, string> = {
   import: "Importar usuarios desde Excel",
 };
 
-/** Signo de alta vectorial; siempre acompaña a una etiqueta visible. */
-function PlusIcon() {
+/** Persona con signo de alta: el alta de docente se entiende de un vistazo. */
+function UserPlusIcon() {
   return (
     <svg
       aria-hidden="true"
@@ -671,7 +230,24 @@ function PlusIcon() {
       fill="none"
       viewBox="0 0 24 24"
     >
-      <path d="M12 5v14M5 12h14" />
+      <circle cx="10" cy="8" r="3.5" />
+      <path d="M3.5 20c.6-3.2 3.2-5 6.5-5s5.9 1.8 6.5 5" />
+      <path d="M18 7v6M15 10h6" />
+    </svg>
+  );
+}
+
+/** Escudo con signo de alta: distingue el alta de administrador. */
+function ShieldPlusIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.actionIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 3 5 5.8v5.4c0 4.3 2.9 7.6 7 9.3 4.1-1.7 7-5 7-9.3V5.8L12 3Z" />
+      <path d="M12 9v6M9 12h6" />
     </svg>
   );
 }
@@ -696,13 +272,13 @@ function TransferIcon({ direction }: { direction: "down" | "up" }) {
 }
 
 /**
- * Barra de acciones de Usuarios: dos altas (primarias) y la importación y
- * exportación de Excel (secundarias, discretas).
+ * Barra de acciones de Usuarios: dos altas (con icono de persona y de escudo)
+ * y la importación y exportación de Excel, compactas, al final.
  *
- * Las altas y la importación se abren en un diálogo, sin desplazar la tabla.
- * Los diálogos cerrados siguen montados (ocultos) para que un borrador o un
- * envío en curso no se pierdan; tras un alta confirmada por el servidor el
- * formulario se vuelve a montar vacío.
+ * Las altas y la importación se abren en un diálogo (portal a `body`, sin
+ * recortes), sin desplazar la tabla. Los diálogos cerrados siguen montados
+ * (ocultos) para que un borrador o un envío en curso no se pierdan; tras un
+ * alta confirmada por el servidor el formulario se vuelve a montar vacío.
  */
 function UserActions({
   apiBaseUrl,
@@ -720,50 +296,11 @@ function UserActions({
   const [formVersion, setFormVersion] = useState<
     Record<UserActionPanel, number>
   >({ admin: 0, docente: 0, import: 0 });
-  const pendingFocus = useRef<{
-    panel: UserActionPanel;
-    target: "panel" | "trigger";
-  } | null>(null);
 
-  // El foco se mueve después de pintar: al abrir va al diálogo y al cerrar
-  // vuelve al botón que lo abrió.
-  useEffect(() => {
-    const request = pendingFocus.current;
-    if (!request) return;
-    pendingFocus.current = null;
-
-    if (request.target === "trigger") {
-      document.getElementById(`${baseId}-${request.panel}-trigger`)?.focus();
-      return;
-    }
-
-    document
-      .getElementById(`${baseId}-${request.panel}-panel`)
-      ?.focus({ preventScroll: true });
-  }, [baseId, openPanel]);
-
-  useEffect(() => {
-    if (openPanel === null) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [openPanel]);
-
-  const closePanel = useCallback(() => {
-    if (openPanel === null) return;
-    pendingFocus.current = { panel: openPanel, target: "trigger" };
-    setOpenPanel(null);
-  }, [openPanel]);
+  const closePanel = useCallback(() => setOpenPanel(null), []);
 
   function togglePanel(panel: UserActionPanel) {
-    if (openPanel === panel) {
-      closePanel();
-      return;
-    }
-    pendingFocus.current = { panel, target: "panel" };
-    setOpenPanel(panel);
+    setOpenPanel((current) => (current === panel ? null : panel));
   }
 
   /**
@@ -771,15 +308,10 @@ function UserActions({
    * (sin el aviso de éxito anterior) y, si su panel sigue abierto, se cierra.
    * Si mientras tanto se abrió otro panel, ese no se toca.
    */
-  const finishPanel = useCallback(
-    (panel: UserActionPanel) => {
-      setFormVersion((current) => ({ ...current, [panel]: current[panel] + 1 }));
-      if (openPanel !== panel) return;
-      pendingFocus.current = { panel, target: "trigger" };
-      setOpenPanel(null);
-    },
-    [openPanel],
-  );
+  const finishPanel = useCallback((panel: UserActionPanel) => {
+    setFormVersion((current) => ({ ...current, [panel]: current[panel] + 1 }));
+    setOpenPanel((current) => (current === panel ? null : current));
+  }, []);
 
   const onSuccessFor = useMemo(
     () => ({
@@ -790,41 +322,7 @@ function UserActions({
     [finishPanel],
   );
 
-  function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape" && !event.defaultPrevented) {
-      event.preventDefault();
-      closePanel();
-      return;
-    }
-    if (event.key !== "Tab") return;
-
-    const focusable = [
-      ...event.currentTarget.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ];
-    if (focusable.length === 0) {
-      event.preventDefault();
-      event.currentTarget.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const activeElement = document.activeElement;
-    if (activeElement === event.currentTarget) {
-      event.preventDefault();
-      (event.shiftKey ? last : first).focus();
-    } else if (event.shiftKey && activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   const panelId = (panel: UserActionPanel) => `${baseId}-${panel}-panel`;
-  const titleId = (panel: UserActionPanel) => `${baseId}-${panel}-title`;
   const triggerId = (panel: UserActionPanel) => `${baseId}-${panel}-trigger`;
 
   const panelContent: Record<UserActionPanel, ReactNode> = {
@@ -872,7 +370,7 @@ function UserActions({
           onClick={() => togglePanel("docente")}
           type="button"
         >
-          <PlusIcon />
+          <UserPlusIcon />
           <span>Agregar usuario</span>
         </button>
         <button
@@ -884,7 +382,7 @@ function UserActions({
           onClick={() => togglePanel("admin")}
           type="button"
         >
-          <PlusIcon />
+          <ShieldPlusIcon />
           <span>Agregar administrador</span>
         </button>
         <div className={styles.secondaryActions}>
@@ -898,68 +396,28 @@ function UserActions({
             type="button"
           >
             <TransferIcon direction="up" />
-            <span>Importar Excel</span>
+            <span>Importar</span>
           </button>
           <a className={styles.secondaryAction} href={exportHref}>
             <TransferIcon direction="down" />
-            <span>Exportar Excel</span>
+            <span>Exportar</span>
           </a>
         </div>
       </div>
 
       {(["docente", "admin", "import"] as const).map((panel) => (
-        <div
-          className={styles.modalBackdrop}
-          hidden={openPanel !== panel}
+        <AdminModal
+          eyebrow="Usuarios y accesos"
+          keepMounted
           key={panel}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closePanel();
-          }}
+          onClose={closePanel}
+          open={openPanel === panel}
+          panelId={panelId(panel)}
+          returnFocusTo={triggerId(panel)}
+          title={ACTION_PANEL_TITLES[panel]}
         >
-          <section
-            aria-labelledby={titleId(panel)}
-            aria-modal="true"
-            className={styles.actionPanel}
-            id={panelId(panel)}
-            onKeyDown={handleDialogKeyDown}
-            role="dialog"
-            tabIndex={-1}
-          >
-            <div className={styles.actionPanelHeader}>
-              <div>
-                <p className={styles.actionPanelEyebrow}>Usuarios y accesos</p>
-                <h2 className={styles.actionPanelTitle} id={titleId(panel)}>
-                  {ACTION_PANEL_TITLES[panel]}
-                </h2>
-              </div>
-              <button
-                aria-label="Cerrar"
-                className={styles.actionPanelCloseIcon}
-                onClick={closePanel}
-                type="button"
-              >
-                <svg
-                  aria-hidden="true"
-                  className={styles.actionIcon}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M6 6l12 12M18 6 6 18" />
-                </svg>
-              </button>
-            </div>
-            <div className={styles.actionPanelBody}>{panelContent[panel]}</div>
-            <div className={styles.actionPanelFooter}>
-              <button
-                className={styles.actionPanelClose}
-                onClick={closePanel}
-                type="button"
-              >
-                Cerrar formulario
-              </button>
-            </div>
-          </section>
-        </div>
+          {panelContent[panel]}
+        </AdminModal>
       ))}
     </div>
   );
@@ -1158,15 +616,7 @@ export function UsersManager({
                     <span className={styles.lastAccess}>{formatAccess(user.lastAccessAt)}</span>
                   </td>
                   <td data-label="Acciones" role="cell">
-                    <div className={styles.rowActions}>
-                      <UserDetails user={user} />
-                      <UserEditForm user={user} />
-                      <AccessWindowForm today={today} user={user} />
-                      <PasswordResetForm user={user} />
-                      {user.accountStatus === "active" ? (
-                        <SuspendUserForm user={user} />
-                      ) : null}
-                    </div>
+                    <UserRowActions today={today} user={user} />
                   </td>
                 </tr>
               ))}
