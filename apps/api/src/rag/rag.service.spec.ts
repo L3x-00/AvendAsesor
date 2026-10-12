@@ -123,6 +123,172 @@ describe('RagService', () => {
     });
   });
 
+  it('resuelve el módulo nombrado en la consulta cuando otro compite dentro del margen', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'RENOVACIÓN DEL CONTRATO DOCENTE 2026.',
+        chunkId: 'chunk-docente',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkId: 'chunk-auxiliares',
+        moduleIds: ['module-auxiliares'],
+        moduleNames: ['Auxiliar de educación'],
+        semanticScore: 0.7,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    const result = await service.retrieve(
+      '¿Cuáles son las etapas del proceso de contratación docente 2026?',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('expected evidence');
+    expect(result.resolvedModule).toEqual({
+      id: 'module-contratacion',
+      name: 'Contratación y desplazamientos',
+    });
+    expect(
+      result.sources.every((item) =>
+        item.moduleIds.includes('module-contratacion'),
+      ),
+    ).toBe(true);
+  });
+
+  it('mantiene la aclaración cuando la consulta no nombra a los módulos en conflicto', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'RENOVACIÓN DEL CONTRATO DOCENTE 2026.',
+        chunkId: 'chunk-docente',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkId: 'chunk-auxiliares',
+        moduleIds: ['module-auxiliares'],
+        moduleNames: ['Auxiliar de educación'],
+        semanticScore: 0.7,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    await expect(
+      service.retrieve('¿Cuáles son las etapas del proceso?', null),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+  });
+
+  it('no desempata con palabras genéricas del dominio ni con un empate real', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'RENOVACIÓN DEL CONTRATO DOCENTE 2026.',
+        chunkId: 'chunk-docente',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkId: 'chunk-auxiliares',
+        moduleIds: ['module-auxiliares'],
+        moduleNames: ['Auxiliar de educación'],
+        semanticScore: 0.7,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    await expect(
+      service.retrieve('¿Qué educación se exige para los docentes?', null),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+    await expect(
+      service.retrieve(
+        '¿El cronograma de contratación de auxiliares es el mismo?',
+        null,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+  });
+
+  it('no desempata con palabras administrativas comunes', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'Criterios de calificación de expedientes.',
+        chunkId: 'chunk-situaciones',
+        moduleIds: ['module-situaciones'],
+        moduleNames: ['Situaciones Administrativas'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Norma técnica de la reasignación y permuta.',
+        chunkId: 'chunk-contratacion',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.7,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    await expect(
+      service.retrieve(
+        '¿En qué situaciones procede una permuta docente?',
+        null,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+    await expect(
+      service.retrieve('¿Quién administra los recursos del colegio?', null),
+    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+  });
+
+  it('entrega solo la evidencia del proceso resuelto y descarta la cola de otro', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'RENOVACIÓN DEL CONTRATO DOCENTE 2026.',
+        chunkId: 'chunk-docente',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkId: 'chunk-auxiliares',
+        moduleIds: ['module-auxiliares'],
+        moduleNames: ['Auxiliar de educación'],
+        semanticScore: 0.6,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    const result = await service.retrieve(
+      '¿Cómo se renueva el contrato de un docente para el 2026?',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('expected evidence');
+    expect(result.resolvedModule).toEqual({
+      id: 'module-contratacion',
+      name: 'Contratación y desplazamientos',
+    });
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'chunk-docente',
+    ]);
+  });
+
   it('resolves a module when every retrieved chunk shares exactly one', async () => {
     gateway.search.mockResolvedValue([
       {

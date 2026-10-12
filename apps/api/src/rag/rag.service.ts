@@ -80,6 +80,22 @@ function sourceIncludesContext(
 }
 
 /**
+ * Evidencia entregable de un proceso resuelto: se conserva lo atribuible al
+ * módulo (o sin asociaciones, que no contradice la ruta) y se descarta la cola
+ * de otros procesos, para que la lista de referencias de una respuesta no
+ * mezcle documentación de procesos no relacionados.
+ */
+function attributableToModule(
+  sources: RetrievedChunk[],
+  moduleId: string,
+): RetrievedChunk[] {
+  return sources.filter((source) => {
+    const associations = sourceAssociations(source);
+    return associations.length === 0 || sourceIncludesContext(source, moduleId);
+  });
+}
+
+/**
  * A submodule is disclosed only when every recovered source has one identical
  * submodule association below the detected root. This avoids inventing a
  * narrow route for documents that were associated directly with the root.
@@ -248,6 +264,80 @@ function balancedUniqueSources(
   }
 
   return result;
+}
+
+/**
+ * Palabras de los nombres de módulo que no discriminan entre procesos: son
+ * genéricas del dominio (docente, educación), funcionales (para, como) o
+ * describen un aspecto administrativo común (situaciones). Su presencia en la
+ * consulta no debe desempatar un conflicto entre módulos.
+ */
+const MODULE_NAME_STOPWORDS = new Set([
+  'como',
+  'desde',
+  'docencia',
+  'docente',
+  'docentes',
+  'educacion',
+  'entre',
+  'general',
+  'hacia',
+  'magisterial',
+  'otros',
+  'para',
+  'situaciones',
+  'sobre',
+]);
+
+function significantModuleTokens(name: string): string[] {
+  return normalizeSpanishText(name)
+    .split(/[^a-z0-9]+/u)
+    .filter((token) => token.length >= 4 && !MODULE_NAME_STOPWORDS.has(token));
+}
+
+/** Coincidencia por palabra completa o flexión (plural/sufijo cercano). */
+function questionWordMatchesToken(word: string, token: string): boolean {
+  if (word.length < 4) return false;
+  if (word.startsWith(token)) return true;
+  // «remuneracion» → «remuneraciones» sí; «administra» → «administrativas»
+  // no (proporción demasiado corta, sería un falso positivo genérico).
+  return token.startsWith(word) && word.length / token.length >= 0.8;
+}
+
+function questionMentionsModuleToken(
+  normalizedQuestion: string,
+  token: string,
+): boolean {
+  return normalizedQuestion
+    .split(/[^a-z0-9]+/u)
+    .some((word) => questionWordMatchesToken(word, token));
+}
+
+/**
+ * Cuando dos módulos compiten por puntajes casi idénticos, el nombre del
+ * módulo mencionado en la propia consulta («contratación docente» frente a
+ * «auxiliares») desempata: pedir precisión a quien ya nombró su tema es un
+ * falso positivo. Solo resuelve con una ventaja estricta sobre el segundo
+ * candidato; un empate mantiene la aclaración.
+ */
+export function disambiguateRouteByQuestion(
+  question: string,
+  modules: ResolvedModule[],
+): ResolvedModule | null {
+  if (modules.length < 2) return null;
+  const normalizedQuestion = normalizeSpanishText(question);
+  const scored = modules
+    .map((module) => ({
+      module,
+      hits: significantModuleTokens(module.name).filter((token) =>
+        questionMentionsModuleToken(normalizedQuestion, token),
+      ).length,
+    }))
+    .filter((entry) => entry.hits > 0)
+    .sort((left, right) => right.hits - left.hits);
+  const [best, second] = scored;
+  if (!best) return null;
+  return best.hits > (second?.hits ?? 0) ? best.module : null;
 }
 
 /**
@@ -497,8 +587,27 @@ export class RagService {
 
     if (!selectedModuleId) {
       const route = routeSources(globalSources);
-      const sources = relevantSources(globalSources, matchCount);
       if (route.kind === 'ambiguous') {
+        // Antes de pedir precisión: si la consulta nombra a uno de los módulos
+        // en conflicto, ese es el tema real y se responde con su evidencia.
+        const namedModule = disambiguateRouteByQuestion(
+          question,
+          route.modules,
+        );
+        const scopedSources = namedModule
+          ? attributableToModule(globalSources, namedModule.id)
+          : [];
+        if (namedModule && scopedSources.length) {
+          const sources = relevantSources(scopedSources, matchCount);
+          return {
+            kind: 'evidence',
+            resolvedModule: namedModule,
+            sources,
+            topRelevanceScore: topScore(sources),
+          };
+        }
+
+        const sources = relevantSources(globalSources, matchCount);
         return {
           kind: 'ambiguous',
           modules: route.modules,
@@ -506,9 +615,16 @@ export class RagService {
           topRelevanceScore: topScore(sources),
         };
       }
+      const resolvedModule = route.resolvedModule;
+      const sources = relevantSources(
+        resolvedModule
+          ? attributableToModule(globalSources, resolvedModule.id)
+          : globalSources,
+        matchCount,
+      );
       return {
         kind: 'evidence',
-        resolvedModule: route.resolvedModule,
+        resolvedModule,
         sources,
         topRelevanceScore: topScore(sources),
       };
@@ -538,7 +654,10 @@ export class RagService {
           selectedScore === null ||
           globalScore - selectedScore >= RAG_TOPIC_SWITCH_SCORE_MARGIN
         ) {
-          const sources = relevantSources(globalSources, matchCount);
+          const sources = relevantSources(
+            attributableToModule(globalSources, currentRoute.resolvedModule.id),
+            matchCount,
+          );
           return {
             kind: 'topic_change',
             resolvedModule: currentRoute.resolvedModule,
