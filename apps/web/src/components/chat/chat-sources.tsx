@@ -319,11 +319,11 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
               href={`/api/chat/sources/${encodeURIComponent(source.id)}/download?descargar=1`}
               rel="noopener noreferrer"
               target="_blank"
+              title="Descargar"
             >
               <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
                 <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
               </svg>
-              Descargar
             </a>
           </li>
         ))}

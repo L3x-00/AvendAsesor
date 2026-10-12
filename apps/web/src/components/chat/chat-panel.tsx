@@ -1503,6 +1503,14 @@ export function ChatPanel({
                     <CopyAnswerButton content={message.content} />
                   </div>
                 ) : null}
+                {message.id === latestReportableAnswerId ? (
+                  <ConsultationFeedback
+                    answerMessageId={latestReportableAnswerId}
+                    conversationId={conversationId}
+                    disabled={isStreaming}
+                    userMessageCount={userMessageCount}
+                  />
+                ) : null}
                 {message.sources.length && message.id !== "streaming" ? (
                   <ChatSources
                     citedRanks={
@@ -1549,13 +1557,6 @@ export function ChatPanel({
             <ChatThinking />
           ) : null}
         </section>
-
-        <ConsultationFeedback
-          answerMessageId={latestReportableAnswerId}
-          conversationId={conversationId}
-          disabled={isStreaming}
-          userMessageCount={userMessageCount}
-        />
 
         {error ? (
           <div className="avend-chat-error" role="alert">

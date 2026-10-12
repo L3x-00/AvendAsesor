@@ -104,6 +104,7 @@ export function CopyAnswerButton({ content }: { content: string }) {
       className="avend-chat-action"
       data-state={state}
       onClick={copy}
+      title={label}
       type="button"
     >
       {state === "copied" ? (
@@ -116,7 +117,7 @@ export function CopyAnswerButton({ content }: { content: string }) {
           <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" />
         </svg>
       )}
-      <span>{label}</span>
+      <span className="avend-visually-hidden">{label}</span>
     </button>
   );
 }
