@@ -162,6 +162,40 @@ describe('RagService', () => {
     ).toBe(true);
   });
 
+  it('desempata «contrato docente» aunque la consulta no diga «contratación»', async () => {
+    const sources = [
+      {
+        ...source,
+        chunkContent: 'RENOVACIÓN DEL CONTRATO DOCENTE 2026.',
+        chunkId: 'chunk-docente',
+        moduleIds: ['module-contratacion'],
+        moduleNames: ['Contratación y desplazamientos'],
+        semanticScore: 0.71,
+      },
+      {
+        ...source,
+        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkId: 'chunk-auxiliares',
+        moduleIds: ['module-auxiliares'],
+        moduleNames: ['Auxiliar de educación'],
+        semanticScore: 0.7,
+      },
+    ];
+    gateway.search.mockResolvedValue(sources);
+
+    const result = await service.retrieve(
+      '¿Cuáles son los requisitos del contrato docente 2026?',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('expected evidence');
+    expect(result.resolvedModule).toEqual({
+      id: 'module-contratacion',
+      name: 'Contratación y desplazamientos',
+    });
+  });
+
   it('mantiene la aclaración cuando la consulta no nombra a los módulos en conflicto', async () => {
     const sources = [
       {

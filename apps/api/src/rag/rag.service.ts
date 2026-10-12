@@ -295,13 +295,24 @@ function significantModuleTokens(name: string): string[] {
     .filter((token) => token.length >= 4 && !MODULE_NAME_STOPWORDS.has(token));
 }
 
+/**
+ * Variantes coloquiales verificadas contra consultas reales: la gente escribe
+ * «contrato docente» donde el módulo dice «contratación». Solo se registran
+ * pares probados; no se inventan sinónimos.
+ */
+const QUESTION_WORD_ALIASES: Record<string, string> = {
+  contrato: 'contratacion',
+  contratos: 'contratacion',
+};
+
 /** Coincidencia por palabra completa o flexión (plural/sufijo cercano). */
 function questionWordMatchesToken(word: string, token: string): boolean {
-  if (word.length < 4) return false;
-  if (word.startsWith(token)) return true;
+  const candidate = QUESTION_WORD_ALIASES[word] ?? word;
+  if (candidate.length < 4) return false;
+  if (candidate.startsWith(token)) return true;
   // «remuneracion» → «remuneraciones» sí; «administra» → «administrativas»
   // no (proporción demasiado corta, sería un falso positivo genérico).
-  return token.startsWith(word) && word.length / token.length >= 0.8;
+  return token.startsWith(candidate) && candidate.length / token.length >= 0.8;
 }
 
 function questionMentionsModuleToken(
