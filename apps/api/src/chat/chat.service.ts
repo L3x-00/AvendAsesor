@@ -27,6 +27,7 @@ import type { AnswerGateway } from '../rag/answer.gateway';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { normalizeDomainQuery } from '../rag/query-normalization';
+import { hasTopicTerm } from '../rag/domain-lexicon';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CHAT_CONTEXT_MESSAGES,
@@ -862,6 +863,25 @@ export class ChatService {
     const priorUserQuestions = conversationContext
       .filter((message) => message.role === 'user')
       .map((message) => message.content);
+    // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
+    // consulta actual ni las anteriores nombran un proceso, hay tantas
+    // interpretaciones como temas y corresponde pedir precisión. Cubre el
+    // reintento tras un fallo (la segunda pregunta idéntica llegaba con la
+    // conversación vacía y el contexto la resolvía como si tuviera tema).
+    if (
+      !selectedModuleId &&
+      isTopiclessQuestion(question) &&
+      !priorUserQuestions.some((prior) =>
+        hasTopicTerm(normalizeSpanishText(prior)),
+      )
+    ) {
+      yield* this.askForTopic({
+        faqMemory,
+        question: input.question,
+        userId: input.authorization.userId,
+      });
+      return;
+    }
     const documentFollowUp =
       continuesConversation && refersToPreviouslyMentionedDocument(question);
     const lastDocumentAnswer = documentFollowUp

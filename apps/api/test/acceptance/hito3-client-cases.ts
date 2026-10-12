@@ -459,12 +459,17 @@ async function main(): Promise<void> {
 
   // C12 — Consulta ambigua que requiere una precisión.
   const c12 = await ask('¿Cuáles son los requisitos?');
+  // C12b — Reintento de la misma pregunta sin tema en la conversación: debe
+  // volver a pedir precisión (no responder por contexto como si tuviera tema).
+  const c12b = await ask('¿Cuáles son los requisitos?', {
+    conversationId: c12.conversationId,
+  });
   record(
     'C12',
     'Consulta ambigua que requiere precisión',
-    [c12],
-    has(c12, 'clarification'),
-    `Temas ofrecidos: ${c12.clarificationModules.join(', ')}.`,
+    [c12, c12b],
+    has(c12, 'clarification') && has(c12b, 'clarification'),
+    `Temas ofrecidos: ${c12.clarificationModules.join(', ')} ; reintento sin contexto: ${has(c12b, 'clarification') ? 'vuelve a precisar' : 'respondió'}.`,
   );
 
   // C13 — Consulta completamente fuera del ámbito.

@@ -603,6 +603,56 @@ describe('ChatService — lineamientos del cliente', () => {
         { forceContext: false },
       );
     });
+
+    it('un reintento de la pregunta sin tema pide precisión en vez de responder', async () => {
+      // El primer envío falló y dejó la conversación sin respuesta: la segunda
+      // pregunta idéntica llegaba como «seguimiento» y el contexto la resolvía
+      // como si tuviera tema, respondiendo por contratación docente.
+      historyGateway.getConversationContext.mockResolvedValue({
+        messages: [{ content: '¿Cuáles son los requisitos?', role: 'user' }],
+        selectedModuleId: null,
+      });
+
+      const events = await collect({
+        conversationId: CONVERSATION_ID,
+        question: '¿Cuáles son los requisitos?',
+      });
+
+      expect(ragService.retrieve).not.toHaveBeenCalled();
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'clarification',
+        'done',
+      ]);
+      expect(completion()).toMatchObject({
+        replyRole: 'clarification',
+        unansweredReason: 'ambiguous_request',
+      });
+    });
+
+    it('un seguimiento sin tema tras una consulta con tema conserva el contexto', async () => {
+      historyGateway.getConversationContext.mockResolvedValue({
+        messages: [
+          {
+            content: '¿Cómo se renueva el contrato docente 2026?',
+            role: 'user',
+          },
+          { content: 'La renovación… [1]', role: 'assistant' },
+        ],
+        selectedModuleId: null,
+      });
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      await collect({
+        conversationId: CONVERSATION_ID,
+        question: '¿Cuáles son los requisitos?',
+      });
+
+      expect(ragService.retrieve).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('revisión de API y web (2026-09-24)', () => {
