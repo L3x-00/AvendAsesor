@@ -624,6 +624,15 @@ describe('ChatService — lineamientos del cliente', () => {
         'clarification',
         'done',
       ]);
+      // La aclaración continúa la misma conversación: sin bifurcar el hilo ni
+      // anunciar un tema nuevo para la misma pregunta.
+      expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: CONVERSATION_ID }),
+      );
+      expect(events[0]).toMatchObject({
+        data: { startedNewConversation: false },
+        type: 'conversation',
+      });
       expect(completion()).toMatchObject({
         replyRole: 'clarification',
         unansweredReason: 'ambiguous_request',

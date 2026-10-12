@@ -876,6 +876,7 @@ export class ChatService {
       )
     ) {
       yield* this.askForTopic({
+        conversationId,
         faqMemory,
         question: input.question,
         userId: input.authorization.userId,
@@ -1486,13 +1487,14 @@ export class ChatService {
    * para que la respuesta del usuario ("de reasignación") conserve la pregunta.
    */
   private async *askForTopic(input: {
+    conversationId?: string | null;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
     question: string;
     userId: string;
   }): AsyncIterable<ChatStreamEvent> {
     const modules = ((await this.activeTopics()) ?? []).slice(0, 8);
     const turn = await this.historyGateway.beginTurn({
-      conversationId: null,
+      conversationId: input.conversationId ?? null,
       question: input.question,
       selectedModuleId: null,
       userId: input.userId,
@@ -1501,7 +1503,7 @@ export class ChatService {
       data: {
         conversationId: turn.conversationId,
         moduleId: null,
-        startedNewConversation: true,
+        startedNewConversation: !input.conversationId,
         userMessageId: turn.userMessageId,
       },
       type: 'conversation',

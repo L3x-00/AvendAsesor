@@ -468,7 +468,10 @@ async function main(): Promise<void> {
     'C12',
     'Consulta ambigua que requiere precisión',
     [c12, c12b],
-    has(c12, 'clarification') && has(c12b, 'clarification'),
+    has(c12, 'clarification') &&
+      has(c12b, 'clarification') &&
+      !has(c12b, 'token') &&
+      c12b.clarificationModules.length > 0,
     `Temas ofrecidos: ${c12.clarificationModules.join(', ')} ; reintento sin contexto: ${has(c12b, 'clarification') ? 'vuelve a precisar' : 'respondió'}.`,
   );
 
