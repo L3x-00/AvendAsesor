@@ -2,6 +2,7 @@ import { classifyTurnIntent } from './intent-classifier';
 import { buildConversationalReply } from './conversational-replies';
 import {
   DRE_DIRECTORY_URL,
+  MINEDU_PUBLICATIONS_URL,
   OFFICIAL_SITES,
   UGEL_DIRECTORY_URL,
   buildOfficialSitesReply,
@@ -32,6 +33,8 @@ describe('pedido de la página oficial de una entidad', () => {
     '¿Cuál es la página de SERVIR?',
     'páginas del minedu y de la ugel',
     '¿Me das la página del MINEDU?',
+    'hola donde puedo conocer sobre las publicaciones oficiales del minedu',
+    '¿Dónde consulto los informes y publicaciones del Ministerio de Educación?',
     '¿Hay una página de la UGEL?',
     'Gracias, ¿me pasas el link de la UGEL?',
     // El corrector ortográfico puede dejar «ministerial» en lugar de «ministerio».
@@ -76,6 +79,24 @@ describe('pedido de la página oficial de una entidad', () => {
       DRE_DIRECTORY_URL,
     ]);
     expect(namesIn('me puede servir')).toEqual([]);
+    expect(
+      namesIn('dónde puedo conocer las publicaciones oficiales del MINEDU'),
+    ).toEqual([MINEDU_PUBLICATIONS_URL]);
+  });
+
+  it('dirige las publicaciones del MINEDU a su buscador específico, no a la portada', () => {
+    const reply = buildOfficialSitesReply(
+      officialSitesIn(
+        normalizeSpanishText(
+          'hola donde puedo conocer sobre las publicaciones oficiales del minedu',
+        ),
+      ),
+    );
+
+    expect(reply).toContain(
+      `[Informes y publicaciones oficiales del MINEDU](${MINEDU_PUBLICATIONS_URL})`,
+    );
+    expect(reply).not.toContain('](https://www.gob.pe/minedu):');
   });
 
   it('solo enlaza direcciones https verificadas de dominios oficiales', () => {

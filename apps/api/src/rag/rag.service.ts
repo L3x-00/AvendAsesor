@@ -6,6 +6,7 @@ import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
 import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
+import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_QUERY_TEXT_MAX_CHARS,
@@ -479,8 +480,16 @@ export class RagService {
       globalSearch,
       selectedSearch,
     ]);
-    const globalSources = uniqueSources(rawGlobalSources);
-    const selectedSources = uniqueSources(rawSelectedSources);
+    const globalSources = uniqueSources(
+      rawGlobalSources
+        .map(sanitizeRetrievedEvidence)
+        .filter((source): source is RetrievedChunk => Boolean(source)),
+    );
+    const selectedSources = uniqueSources(
+      rawSelectedSources
+        .map(sanitizeRetrievedEvidence)
+        .filter((source): source is RetrievedChunk => Boolean(source)),
+    );
 
     if (!globalSources.length && !selectedSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };

@@ -231,6 +231,64 @@ describe("ChatPanel", () => {
     ).toHaveLength(0);
   });
 
+  it("no convierte en enlace una URL incrustada en una fuente del RAG", () => {
+    const { container } = render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "Consulta el [validador de firma](https://apps.firmaperu.gob.pe/web/validador.xhtml) para verificar el documento. [1]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const assistantMessage = document.querySelector(
+      ".avend-chat-message--assistant",
+    );
+    expect(assistantMessage).toHaveTextContent("validador de firma");
+    expect(
+      within(assistantMessage as HTMLElement).queryByRole("link", {
+        name: /validador de firma/u,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Ver fuente 1/u }),
+    ).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("](https://");
+  });
+
+  it("limpia el enlace de validador mal formado de conversaciones guardadas", () => {
+    const { container } = render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "La firma puede verificarse en [**https://apps.firmaperu.gob.pe/web/validador.xhtml(enlace oficial, se abre en una pestaña nueva)**](<https://apps.firmaperu.gob.pe/web/validador.xhtml(enlace oficial, se abre en una pestaña nueva)>). [1]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /firmaperu/u }),
+    ).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent("](<https://");
+    expect(container).toHaveTextContent("https://apps.firmaperu.gob.pe");
+  });
+
   it("renders paragraphs, emphasis and lists with semantic structure", () => {
     const { container } = render(
       <ChatPanel

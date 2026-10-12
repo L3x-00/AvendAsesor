@@ -22,7 +22,11 @@ import {
 } from '../../rag/domain-lexicon';
 import { refersBack } from '../../rag/anaphora';
 import { normalizeSpanishText } from '../../rag/text-normalization';
-import { OFFICIAL_SITES, WEB_NOUN, officialSitesIn } from './official-sites';
+import {
+  OFFICIAL_RESOURCE_NOUN,
+  OFFICIAL_SITES,
+  officialSitesIn,
+} from './official-sites';
 
 export type TurnIntentLane = 'social' | 'domain' | 'out_of_scope';
 
@@ -483,7 +487,7 @@ const OFFICIAL_SITE_REQUEST_WORDS = new Set(
     'muestra mostrar muestrame mostrarme tienes tiene hay existe sabes conoces ' +
     'quisiera quiero queria necesito deseo gustaria encuentro encontrar ubico ' +
     'ubicar busco buscar ingreso ingresar entro entrar acceder visitar ver ' +
-    'cual cuales donde seria'
+    'cual cuales donde seria consulto consultar consulta'
   ).split(' '),
 );
 
@@ -498,7 +502,7 @@ const OFFICIAL_SITE_RESIDUE_WORDS = new Set([
   ...OFFICIAL_SITE_REQUEST_WORDS,
   ...(
     'al del un una algun alguna es son esta como me mi nos sus tener oficial ' +
-    'oficiales principal institucional para por tambien ademas favor'
+    'oficiales principal institucional para por sobre tambien ademas favor'
   ).split(' '),
 ]);
 
@@ -516,7 +520,7 @@ const ASKS_WHICH_OR_WHERE = new Set(['cual', 'cuales', 'donde']);
  */
 function isOfficialSiteRequest(normalized: string): boolean {
   if (/\d/u.test(normalized)) return false;
-  if (!WEB_NOUN.test(normalized)) return false;
+  if (!OFFICIAL_RESOURCE_NOUN.test(normalized)) return false;
   if (!officialSitesIn(normalized).length) return false;
   const plain = normalized
     .replace(/[^a-z0-9 ]+/gu, ' ')
@@ -531,7 +535,7 @@ function isOfficialSiteRequest(normalized: string): boolean {
   }
   const residue = stripped(
     normalized,
-    new RegExp(WEB_NOUN.source, 'gu'),
+    new RegExp(OFFICIAL_RESOURCE_NOUN.source, 'gu'),
     ...OFFICIAL_SITES.map((site) => new RegExp(site.pattern.source, 'gu')),
     GREETING,
     COURTESY,

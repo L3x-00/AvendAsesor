@@ -56,6 +56,21 @@ describe('RagService', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  it('descarta evidencia recuperada que pertenece únicamente a otro sector', async () => {
+    gateway.search.mockResolvedValue([
+      {
+        ...source,
+        chunkContent:
+          'El Ministerio de Energía y Minas autoriza una concesión eléctrica para una empresa generadora.',
+        sectionTitle: 'ENERGÍA Y MINAS',
+      },
+    ]);
+
+    await expect(
+      service.retrieve('¿Dónde están las publicaciones del MINEDU?', null),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
   it('classifies with the current question and enforces the selected module', async () => {
     gateway.search.mockResolvedValue([source]);
 

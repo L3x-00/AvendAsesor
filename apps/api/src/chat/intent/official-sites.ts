@@ -27,17 +27,25 @@ export const UGEL_DIRECTORY_URL =
   'https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=UGEL';
 export const DRE_DIRECTORY_URL =
   'https://www.gob.pe/busquedas?contenido%5B%5D=instituciones&term=DRE+GRE';
+export const MINEDU_PUBLICATIONS_URL =
+  'https://www.gob.pe/institucion/minedu/informes-publicaciones';
+const MINEDU_HOME_URL = 'https://www.gob.pe/minedu';
+
+const MINEDU_PATTERN =
+  /\b(?:minedu|minudo|minedo|ministeri(?:o|al) de educacion)\b/u;
+const MINEDU_PUBLICATIONS_REQUEST =
+  /\b(?:informes? y publicaciones?|publicaciones? oficiales?)\b/u;
 
 export const OFFICIAL_SITES: readonly OfficialSite[] = [
   {
     description:
       'normas, convocatorias, trámites y comunicados del sector educación.',
-    href: 'https://www.gob.pe/minedu',
+    href: MINEDU_HOME_URL,
     label: 'Página oficial del Ministerio de Educación (MINEDU)',
     // Incluye errores de escritura frecuentes («minudo», «minedo») y
     // «ministerial», en que el corrector ortográfico del chat puede convertir
     // «ministerio» si el vocabulario de documentos solo trae la segunda.
-    pattern: /\b(?:minedu|minudo|minedo|ministeri(?:o|al) de educacion)\b/u,
+    pattern: MINEDU_PATTERN,
   },
   {
     description:
@@ -105,9 +113,36 @@ export const OFFICIAL_SITES: readonly OfficialSite[] = [
 export const WEB_NOUN =
   /\b(?:paginas? web|paginas?|portal(?:es)?(?: web)?|sitios? web|sitios?|webs?|enlaces?|links?|url|direccion(?:es)? (?:web|electronicas?)|website)\b/u;
 
+/**
+ * «Publicaciones oficiales del MINEDU» también nombra un destino web concreto,
+ * aunque la persona no diga literalmente «página» o «enlace».
+ */
+export const OFFICIAL_RESOURCE_NOUN = new RegExp(
+  `(?:${WEB_NOUN.source}|${MINEDU_PUBLICATIONS_REQUEST.source})`,
+  'u',
+);
+
 /** Entidades nombradas en el texto normalizado, en el orden del catálogo. */
 export function officialSitesIn(normalized: string): OfficialSite[] {
-  return OFFICIAL_SITES.filter((site) => site.pattern.test(normalized));
+  const sites = OFFICIAL_SITES.filter((site) => site.pattern.test(normalized));
+  if (
+    !MINEDU_PATTERN.test(normalized) ||
+    !MINEDU_PUBLICATIONS_REQUEST.test(normalized)
+  ) {
+    return sites;
+  }
+
+  return sites.map((site) =>
+    site.href === MINEDU_HOME_URL
+      ? {
+          ...site,
+          description:
+            'buscador oficial de informes y publicaciones del Ministerio de Educación, con filtros por tipo y palabra clave.',
+          href: MINEDU_PUBLICATIONS_URL,
+          label: 'Informes y publicaciones oficiales del MINEDU',
+        }
+      : site,
+  );
 }
 
 /** Respuesta con los enlaces oficiales pedidos (enlaces en formato Markdown). */

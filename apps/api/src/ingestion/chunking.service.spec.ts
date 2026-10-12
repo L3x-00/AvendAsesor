@@ -289,7 +289,7 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     }
   });
 
-  it('no usa un fragmento demasiado corto como sustento', () => {
+  it('ignora fragmentos iniciales cortos y usa la siguiente oración completa', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
@@ -297,7 +297,39 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       },
     ]);
 
-    expect(chunks[0].sectionTitle).toBeUndefined();
+    expect(chunks[0].sectionTitle).toBe(
+      'La presente norma entra en vigencia al día siguiente de su publicación.',
+    );
+  });
+
+  it('omite sellos de validación y usa el primer contenido documental útil', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 2,
+        text: [
+          'Documento electrónico firmado digitalmente en el marco de la Ley N° 27269.',
+          'La integridad del documento y la autoría de las firmas pueden verificarse en el validador.',
+          'La evaluación del expediente considera la formación académica y la experiencia laboral.',
+        ].join(' '),
+      },
+    ]);
+
+    expect(chunk.sectionTitle).toBe(
+      'La evaluación del expediente considera la formación académica y la experiencia laboral.',
+    );
+  });
+
+  it('supera un corte breve como «puntos.» y conserva el siguiente aspecto útil', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 4,
+        text: 'puntos. La experiencia laboral se acredita por cada mes de trabajo realizado. ¿Qué pasa si el postulante no está de acuerdo?',
+      },
+    ]);
+
+    expect(chunk.sectionTitle).toBe(
+      'La experiencia laboral se acredita por cada mes de trabajo realizado.',
+    );
   });
 
   it('no toma un decimal menor que uno como numeral de la norma', () => {

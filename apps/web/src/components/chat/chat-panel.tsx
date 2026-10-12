@@ -328,7 +328,19 @@ function renderInline(
   citations?: CitationContext,
   links: { entities?: boolean; urls?: boolean } = {},
 ): ReactNode[] {
-  return text.split("**").map((segment, index) => {
+  // En una respuesta sustentada, un enlace Markdown proviene del contenido
+  // documental recuperado. Se conserva su etiqueta como texto, pero no se
+  // ofrece un clic a validadores, pies de firma o destinos no seleccionados por
+  // AVEND. Las respuestas deterministas de portales no tienen `citations` y sí
+  // pueden enlazar las direcciones verificadas del catálogo.
+  const displayText =
+    citations && !links.urls
+      ? text.replace(
+          /\[([^\]\n]{1,300})\]\(\s*<?(?:https?:)?\/\/(?:[^()\n]|\([^\n)]*\)){1,2048}>?\s*\)/gu,
+          "$1",
+        )
+      : text;
+  return displayText.split("**").map((segment, index) => {
     const cited = linkCitations(segment, citations, `c${index}`);
     // Direcciones de dominios oficiales (gob.pe…) en cualquier respuesta.
     const linked = links.urls
@@ -365,6 +377,7 @@ function renderRichContent(
   content: string,
   citations?: CitationContext,
   officialLinks = false,
+  officialUrls = officialLinks,
 ): ReactNode[] {
   const blocks: ReactNode[] = [];
   let paragraphLines: string[] = [];
@@ -379,7 +392,7 @@ function renderRichContent(
       <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
         {renderInline(paragraph, citations, {
           entities: inSuggestions,
-          urls: officialLinks,
+          urls: officialUrls,
         })}
       </p>,
     );
@@ -395,7 +408,7 @@ function renderRichContent(
           <li key={`${index}-${item}`}>
             {renderInline(item, citations, {
               entities: inSuggestions,
-              urls: officialLinks,
+              urls: officialUrls,
             })}
           </li>
         ))}
@@ -1425,6 +1438,9 @@ export function ChatPanel({
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
                     message.role !== "user",
+                    message.role !== "user" &&
+                      message.id !== "streaming" &&
+                      message.sources.length === 0,
                   )}
                   {message.id === "streaming" && isStreaming ? (
                     <ChatWriting />
