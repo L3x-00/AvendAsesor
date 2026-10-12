@@ -1179,12 +1179,23 @@
   margin-left: 2.375rem;
 }
 
-/* Acciones bajo la respuesta (Copiar). */
+/* Acciones bajo la respuesta (Copiar) y valoración en la misma fila: copiar al
+   extremo izquierdo y los iconos de acción al extremo derecho. */
+.avend-chat-message-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
 .avend-chat-message-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  margin-top: 0.5rem;
+  margin-top: 0;
 }
 
 .avend-chat-action {

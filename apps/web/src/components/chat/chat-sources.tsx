@@ -153,9 +153,9 @@ function SourceTable({
             <th scope="col">Tipo</th>
             <th scope="col">Documento</th>
             <th scope="col">Sustento</th>
-            <th scope="col">Página</th>
+            <th scope="col">Pág.</th>
             <th scope="col">Estado</th>
-            <th scope="col">Acción</th>
+            <th scope="col">Ver</th>
           </tr>
         </thead>
         <tbody>
@@ -222,7 +222,7 @@ function SourceTable({
                     </span>
                   ) : null}
                 </td>
-                <td data-label="Página">
+                <td data-label="Pág.">
                   {hasPdfPagination(source) ? (
                     <>
                       <span className={styles.mobileCellLabel}>
@@ -255,7 +255,7 @@ function SourceTable({
                     Versión {source.versionNumber}
                   </span>
                 </td>
-                <td data-label="Acción">
+                <td data-label="Ver">
                   <a
                     aria-label={`Abrir fuente [${source.rank}]: ${source.documentTitle} (se abre en una pestaña nueva)`}
                     className={styles.sourceLink}

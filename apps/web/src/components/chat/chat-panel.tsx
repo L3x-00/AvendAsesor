@@ -1496,20 +1496,27 @@ export function ChatPanel({
                 {message.catalogDocuments?.length ? (
                   <ChatCatalogDownloads documents={message.catalogDocuments} />
                 ) : null}
-                {message.role === "assistant" &&
-                message.id !== "streaming" &&
-                message.content.trim() ? (
-                  <div className="avend-chat-message-actions">
-                    <CopyAnswerButton content={message.content} />
+                {(message.role === "assistant" &&
+                  message.id !== "streaming" &&
+                  message.content.trim()) ||
+                message.id === latestReportableAnswerId ? (
+                  <div className="avend-chat-message-toolbar">
+                    {message.role === "assistant" &&
+                    message.id !== "streaming" &&
+                    message.content.trim() ? (
+                      <div className="avend-chat-message-actions">
+                        <CopyAnswerButton content={message.content} />
+                      </div>
+                    ) : null}
+                    {message.id === latestReportableAnswerId ? (
+                      <ConsultationFeedback
+                        answerMessageId={latestReportableAnswerId}
+                        conversationId={conversationId}
+                        disabled={isStreaming}
+                        userMessageCount={userMessageCount}
+                      />
+                    ) : null}
                   </div>
-                ) : null}
-                {message.id === latestReportableAnswerId ? (
-                  <ConsultationFeedback
-                    answerMessageId={latestReportableAnswerId}
-                    conversationId={conversationId}
-                    disabled={isStreaming}
-                    userMessageCount={userMessageCount}
-                  />
                 ) : null}
                 {message.sources.length && message.id !== "streaming" ? (
                   <ChatSources

@@ -154,7 +154,7 @@ describe("ChatSources", () => {
     });
     expect(within(table).getByText("10–12").closest("td")).toHaveAttribute(
       "data-label",
-      "Página",
+      "Pág.",
     );
     expect(
       screen.queryByText(/Coincidencia documental/u),
