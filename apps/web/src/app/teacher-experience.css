@@ -1036,10 +1036,9 @@
   padding: 0;
 }
 
-.avend-chat-message--clarification,
-.avend-chat-message--no_evidence {
-  border-left: 3px solid var(--avend-accent);
-  padding-left: 1rem;
+.avend-chat-message--clarification > .avend-chat-message-content,
+.avend-chat-message--no_evidence > .avend-chat-message-content {
+  border-inline-start: 3px solid var(--avend-accent);
 }
 
 /* La consulta de la persona: burbuja a la derecha. */

@@ -15,6 +15,10 @@ const sourceStyles = readFileSync(
   resolve(webRoot, "src/components/chat/chat-sources.module.css"),
   "utf8",
 );
+const teacherExperienceStyles = readFileSync(
+  resolve(webRoot, "src/app/teacher-experience.css"),
+  "utf8",
+);
 
 function relativeLuminance(hex: string): number {
   const channels = hex
@@ -98,5 +102,16 @@ describe("teacher panel visual contracts", () => {
     expect(polishStyles).toMatch(
       /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*animation:\s*none/,
     );
+  });
+
+  it("limita la línea de aclaración al texto y no al panel ancho de referencias", () => {
+    const wideMessageRail =
+      /\.avend-chat-message--clarification,\s*\n\.avend-chat-message--no_evidence\s*\{[^}]*border-(?:left|inline-start)/gu;
+
+    expect(teacherExperienceStyles).toMatch(
+      /\.avend-chat-message--clarification\s*>\s*\.avend-chat-message-content,[\s\S]*?border-inline-start:\s*3px solid var\(--avend-accent\)/u,
+    );
+    expect(globalStyles).not.toMatch(wideMessageRail);
+    expect(teacherExperienceStyles).not.toMatch(wideMessageRail);
   });
 });

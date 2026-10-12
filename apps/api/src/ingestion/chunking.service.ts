@@ -68,6 +68,8 @@ const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
 const MAX_SUSTENTO_CHARS = 180;
 /** Por debajo de esto («Art.», «Requisitos: 1.») no vale como sustento. */
 const MIN_SUSTENTO_CHARS = 15;
+const SUSTENTO_BOILERPLATE =
+  /^(?:documento electr[oó]nico firmado digitalmente|la integridad del documento y la autor[ií]a|esto es una copia aut[eé]ntica|su autenticidad e integridad pueden ser contrastadas)/iu;
 
 /**
  * «Sustento» de un fragmento sin rótulo normativo (preguntas frecuentes,
@@ -79,13 +81,21 @@ const MIN_SUSTENTO_CHARS = 15;
 function sustentoFromText(text: string): string | undefined {
   const normalized = text.replace(/\s+/gu, ' ').trim();
   if (!normalized) return undefined;
-  const firstSentence =
-    normalized.match(/^.*?[.!?](?=\s|$)/u)?.[0] ?? normalized;
-  const excerpt = firstSentence.slice(0, MAX_SUSTENTO_CHARS).trim();
+  const completedSentences =
+    normalized.match(/.*?[.!?…]+(?=\s|$)/gu)?.map((item) => item.trim()) ?? [];
+  const firstSentence = completedSentences.find(
+    (item) =>
+      item.length >= MIN_SUSTENTO_CHARS && !SUSTENTO_BOILERPLATE.test(item),
+  );
+  // Un texto sin puntuación todavía puede ser un título útil. Si sí había
+  // oraciones pero todas eran fragmentos («puntos.», «Art.», «5.») o sellos de
+  // firma, no se usa el resto cortado como si fuera un subtítulo.
+  const candidate =
+    firstSentence ?? (completedSentences.length === 0 ? normalized : undefined);
+  if (!candidate) return undefined;
+  const excerpt = candidate.slice(0, MAX_SUSTENTO_CHARS).trim();
   if (excerpt.length < MIN_SUSTENTO_CHARS) return undefined;
-  return excerpt.length < firstSentence.length
-    ? `${excerpt.trimEnd()}…`
-    : excerpt;
+  return excerpt.length < candidate.length ? `${excerpt.trimEnd()}…` : excerpt;
 }
 
 function subreference(content: string): string | undefined {

@@ -50,6 +50,10 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('tono cercano y formal');
     expect(prompt).toContain('evita sonar robótico');
     expect(prompt).toContain('cita preferentemente la vigente y más reciente');
+    expect(prompt).toContain('Ignora sellos de firma digital');
+    expect(prompt).toContain(
+      'No reproduzcas direcciones web incluidas en sellos',
+    );
     expect(prompt).toContain(
       'salvo que la persona pida expresamente el antecedente histórico',
     );

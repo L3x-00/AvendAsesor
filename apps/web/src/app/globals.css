@@ -1068,11 +1068,6 @@ textarea[aria-invalid="true"]:focus,
   max-width: min(48rem, 92%);
 }
 
-.avend-chat-message--clarification,
-.avend-chat-message--no_evidence {
-  border-left: 4px solid var(--avend-accent);
-}
-
 /* "Pensando": la tarjeta del asistente aparece de inmediato, antes del primer
    texto, para que enviar nunca parezca no haber hecho nada. */
 .avend-chat-thinking {
