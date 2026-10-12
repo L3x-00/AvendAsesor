@@ -44,6 +44,7 @@ export default async function DocumentsPage({
         library={initialLibrary}
         modules={modules}
         query={query}
+        quickActions
         uploaders={uploaders}
       />
     </AdminPage>

@@ -227,6 +227,7 @@
   border: 1px solid var(--avend-border);
   border-radius: 999px;
   color: var(--avend-navy);
+  cursor: pointer;
   display: inline-flex;
   gap: 0.5rem;
   justify-content: center;
@@ -249,6 +250,18 @@
 .action:focus-visible {
   background: var(--avend-soft-blue);
   border-color: rgb(22 119 255 / 40%);
+}
+
+/* El tacho de eliminar va en rojo desde el reposo; al pasar el mouse o con el
+   foco se rellena con el rojo suave del sistema. */
+.actionDanger {
+  color: var(--avend-danger);
+}
+
+.actionDanger:hover,
+.actionDanger:focus-visible {
+  background: var(--avend-danger-soft-surface);
+  border-color: var(--avend-danger);
 }
 
 .action:focus-visible {
@@ -293,6 +306,19 @@
   transform: translate(50%, 0);
 }
 
+/* La última acción (Eliminar, la etiqueta más ancha) se ancla al borde derecho
+   de su botón: centrada sobresaldría de la celda y el contenedor con
+   desplazamiento horizontal la recortaría. */
+.actionsTable.actionsWide .action:last-child .actionLabel {
+  right: 0;
+  transform: translate(0, 4px);
+}
+
+.actionsTable.actionsWide .action:last-child:hover .actionLabel,
+.actionsTable.actionsWide .action:last-child:focus-visible .actionLabel {
+  transform: translate(0, 0);
+}
+
 /* Tarjetas: ícono y nombre siempre visibles. */
 .actionsCard {
   flex-wrap: wrap;
@@ -322,9 +348,15 @@
 }
 
 /* Ancho reservado: el nombre que se despliega al pasar el mouse no empuja la
-   tabla ni provoca un salto de diseño. */
+   tabla ni provoca un salto de diseño. Con las acciones rápidas del Historial
+   entran cuatro botones en una fila: 4 × 2.75rem + 3 separaciones + el relleno
+   y el borde de la celda. */
 .actionsCell {
   width: 8rem;
+}
+
+.actionsCellWide {
+  width: 14.25rem;
 }
 
 /* Si la tabla se desplaza en horizontal, las acciones quedan siempre a la

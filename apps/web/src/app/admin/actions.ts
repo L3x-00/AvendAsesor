@@ -584,7 +584,18 @@ export async function setDocumentTechnicalStatusAction(
         );
       }
 
-      await client.setDocumentTechnicalStatus(documentId, technicalStatus);
+      try {
+        await client.setDocumentTechnicalStatus(documentId, technicalStatus);
+      } catch (error) {
+        // La base rechaza «Listo» mientras la versión no esté indexada, y el
+        // estado repetido. El mensaje genérico del API no distingue el caso.
+        if (error instanceof AdminApiError && error.status === 400) {
+          throw new FormValidationError(
+            "No se pudo cambiar el estado técnico: la versión debe estar indexada y el estado debe ser distinto al actual. Actualiza la página y revisa el detalle del documento.",
+          );
+        }
+        throw error;
+      }
       revalidatePath("/admin/documents", "layout");
       revalidatePath(`/admin/documents/${documentId}`);
       revalidatePath("/admin/modules", "layout");
