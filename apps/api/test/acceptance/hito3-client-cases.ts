@@ -618,10 +618,9 @@ async function main(): Promise<void> {
   );
 
   // PI-04 — Diferenciación entre procesos similares: Contrato Docente vs
-  // Contratación de Auxiliares, sin mezclar fuentes.
-  const pi04a = await ask(
-    '¿Cuáles son las etapas del proceso de contratación docente 2026?',
-  );
+  // Contratación de Auxiliares, sin mezclar fuentes. La primera consulta usa
+  // el lenguaje natural «contrato docente» (la gente no escribe «contratación»).
+  const pi04a = await ask('¿Cuáles son las etapas del contrato docente 2026?');
   const pi04b = await ask(
     '¿Cuáles son las etapas de la contratación de auxiliares de educación 2026?',
   );

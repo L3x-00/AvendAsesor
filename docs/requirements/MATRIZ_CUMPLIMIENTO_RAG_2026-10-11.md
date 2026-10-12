@@ -120,11 +120,12 @@ title: MATRIZ DE CUMPLIMIENTO RAG — PRIMERA ETAPA
 
 **Hallazgo (FALLA en la línea base):** «¿Cuáles son las etapas del proceso de contratación docente 2026?» terminaba en aclaración porque las fuentes de Auxiliares quedaban dentro del margen de ruteo (0,08) del mejor puntaje, aunque la consulta nombraba expresamente «contratación docente». Afectaba CU-02.CA-4 y PI-04.
 
-**Corrección (5 pruebas nuevas en `rag.service.spec.ts`):**
+**Corrección (6 pruebas nuevas en `rag.service.spec.ts`):**
 
 1. `disambiguateRouteByQuestion` resuelve el ruteo ambiguo cuando la consulta nombra un módulo en conflicto; solo con ventaja estricta sobre el segundo candidato y con coincidencia de palabra o flexión cercana (proporción ≥ 0,8), nunca con palabras genéricas del dominio (`docente`, `educación`) ni administrativas (`situaciones`), ni en empate.
-2. La evidencia entregada de un proceso resuelto se restringe a lo atribuible a ese proceso (o sin asociaciones): la lista de referencias de PI-02 ya no incluye colas de Auxiliares, reforzando CU-03.CA-2.
-3. El cambio de tema entrega solo la evidencia del proceso nuevo.
+2. Alias verificado en consultas reales: «contrato/contratos» cuenta como «contratación» (la gente escribe «contrato docente»; el sistema antes pedía una aclaración falsa). Verificado contra el corpus real: «¿Cuáles son los requisitos del contrato docente 2026?» pasa de `ambiguous` a `evidence` de Contratación y desplazamientos.
+3. La evidencia entregada de un proceso resuelto se restringe a lo atribuible a ese proceso (o sin asociaciones): la lista de referencias de PI-02 ya no incluye colas de Auxiliares, reforzando CU-03.CA-2.
+4. El cambio de tema entrega solo la evidencia del proceso nuevo.
 
 Verificado contra el corpus real: la consulta pasó de `ambiguous` a `evidence` con módulo «Contratación y desplazamientos», sin colas de otros procesos.
 
@@ -140,7 +141,7 @@ Con ello el proceso «Contrato Docente» pasa a ser usable por el RAG y PI-02/PI
 
 ### 4.3 Reintento de documentos fallidos
 
-Los 3 documentos con `LEASE_EXPIRED` (padrón 2015, registro 2017, planilla 2018) fueron reencolados por el endpoint auditado `POST /admin/documents/:id/ingestion/retry`. Al cierre de esta matriz: padrón 2015 completó y quedó `indexed`; registro 2017 y planilla 2018 continúan `processing` en la cola del worker (el heartbeat de lease mantiene las renovaciones). Su aprobación editorial queda como decisión del PO vía «Estado técnico».
+Los 3 documentos con `LEASE_EXPIRED` (padrón 2015, registro 2017, planilla 2018) fueron reencolados por el endpoint auditado `POST /admin/documents/:id/ingestion/retry`. Resultado: padrón 2015 completó y quedó `indexed` (mejora real); registro 2017 volvió a fallar por `LEASE_EXPIRED` con los intentos agotados; planilla 2018 continuaba en su tercer intento al cierre. El OCR de esos escaneos excede la capacidad del plan Free con el lease actual: reintentar de nuevo no es recomendable sin subir `RAG_INGESTION_LEASE_SECONDS` a 900 en Render (o el plan), palanca ya identificada en TSK-0078. La aprobación editorial del padrón 2015 queda como decisión del PO vía «Estado técnico».
 
 ### 4.4 Sesgos y limitaciones conocidas (documentados, sin incumplir criterios)
 
@@ -155,16 +156,17 @@ Los 3 documentos con `LEASE_EXPIRED` (padrón 2015, registro 2017, planilla 2018
 
 1. **Cargar la Ley de Reforma Magisterial y su Reglamento** en el módulo «Ley y reglamento» (hoy vacío): único bloqueo de PI-01.
 2. **Corpus de directivos** para C05 (quién reemplaza al director en licencia).
-3. **Aprobar o descartar los 3 documentos reintentados** si completan su indexación.
-4. Render: plan o monitor externo para los arranques en frío (latencia percibida) y, opcionalmente, `RAG_INGESTION_LEASE_SECONDS=900`.
+3. **Registro 2017 y planilla 2018**: subir `RAG_INGESTION_LEASE_SECONDS` a 900 en Render (o cambiar de plan) y reintentar; aprobar el padrón 2015 (ya `indexed`) si el contenido es de interés vigente.
+4. Render: plan o monitor externo para los arranques en frío (latencia percibida).
 
-## 6. Evidencia de verificación (2026-10-11)
+## 6. Evidencia de verificación (2026-10-11/12)
 
-- API: 99 suites / 1211 pruebas PASS (incluye las 5 nuevas de desambiguación y evidencia atribuible).
-- Web: 105 archivos / 834 pruebas PASS (sin cambios web).
+- API: 99 suites / 1212 pruebas PASS (incluye las 6 nuevas de desambiguación y evidencia atribuible).
+- Web: 105 archivos / 834 pruebas PASS (sin cambios web en toda la sesión).
 - Lint y typecheck PASS en API y web; build de producción PASS en ambos.
-- Arnés real: `PASA 25 · FALLA 0 · REQUIERE_CORPUS 2` (línea base del mismo día: `PASA 19 · FALLA 6 · REQUIERE_CORPUS 2`), con reporte completo en `apps/api/test/acceptance/out/hito3-acceptance.md` (fuera de git).
+- Arnés real: `PASA 25 · FALLA 0 · REQUIERE_CORPUS 2` (línea base: `PASA 19 · FALLA 6 · REQUIERE_CORPUS 2`), con reporte completo en `apps/api/test/acceptance/out/hito3-acceptance.md` (fuera de git). PI-04 usa el lenguaje natural «contrato docente».
 - Revisión independiente del cambio: sin hallazgos BLOCKER ni HIGH; los MEDIUM/LOW aplicables fueron corregidos (PI-01 con veredicto condicional, evidencia atribuible al proceso resuelto, desempate sin palabras administrativas comunes, PI-03 con seguimiento, PI-05 con documento previo específico, aserciones menos frágiles).
+- Auditoría posterior de la sesión: invariantes de producción verificadas (las 3 aprobaciones con actor QA auditado, versión aprobada = vigente e `indexed`; 0 documentos vivos sin módulo activo); alias «contrato docente» confirmado contra el corpus real y sondeo negativo sin falsos positivos («¿Quién administra los recursos del colegio?» → sin evidencia).
 - Aprobaciones y reintentos de producción: respuestas 200/202 verificadas por API y estado confirmado en base de datos.
 
 **Conclusión:** los criterios RAG de CU-02…CU-09, CU-12 y CU-13 quedan cumplidos y verificados contra el corpus real, con la única excepción de PI-01 (documentación ausente, PEND. CORPUS) y C05 (corpus de directivos). La aceptación contractual final corresponde al cliente con el entorno desplegado.
