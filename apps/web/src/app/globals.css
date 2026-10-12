@@ -1153,21 +1153,22 @@ textarea[aria-invalid="true"]:focus,
   color: var(--avend-text-muted);
 }
 
-/* Cita [n] enlazada a su fila en Referencias (Hito 3, punto 8). */
+/* Cita [n] enlazada a su fila en Referencias (Hito 3, punto 8). Discreta y en
+   línea, después del punto: sin recuadro, sin negrita y sin saltos propios. */
 .avend-chat-citation {
-  align-items: center;
-  background: var(--avend-soft-blue);
-  border-radius: 0.45rem;
   color: var(--avend-accent-strong);
-  display: inline-flex;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.25;
-  margin: 0.15rem 0.25rem;
-  min-height: 2.75rem;
-  padding: 0 0.75rem;
+  display: inline;
+  font-size: 0.875em;
+  font-weight: 400;
+  line-height: inherit;
+  margin: 0 0.0625em;
+  padding: 0;
   text-decoration: none;
-  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.avend-chat-citation:hover {
+  text-decoration: underline;
 }
 
 .avend-chat-citation:focus-visible {

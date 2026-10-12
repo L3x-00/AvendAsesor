@@ -97,7 +97,7 @@ describe("teacher panel visual contracts", () => {
       /\.table\s*\{[^}]*table-layout:\s*fixed/,
     );
     expect(sourceStyles).toMatch(
-      /@container\s+sources\s*\(max-width:\s*54rem\)[\s\S]*\.table td,[\s\S]*?display:\s*grid/,
+      /@container\s+sources\s*\(max-width:\s*46rem\)[\s\S]*\.table td,[\s\S]*?display:\s*grid/,
     );
     expect(polishStyles).toMatch(
       /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*animation:\s*none/,

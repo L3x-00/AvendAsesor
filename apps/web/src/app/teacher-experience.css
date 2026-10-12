@@ -1015,8 +1015,7 @@
 .avend-chat-conversation,
 .avend-chat-composer,
 .avend-chat-error,
-.avend-chat-context,
-.avend-chat-page [aria-label="Reportes y sugerencias"] {
+.avend-chat-context {
   margin-left: auto;
   margin-right: auto;
   max-width: 50rem;
@@ -1200,8 +1199,10 @@
   font-size: 0.9375rem;
   font-weight: 600;
   gap: 0.4rem;
+  justify-content: center;
   min-height: 2.75rem;
-  padding: 0 0.625rem;
+  min-width: 2.75rem;
+  padding: 0;
   transition:
     background-color 150ms ease-out,
     color 150ms ease-out;
@@ -1494,10 +1495,6 @@ ul.avend-chat-list {
   margin-right: auto;
   max-width: 50rem;
   width: 100%;
-}
-
-.avend-chat-page {
-  container: chat-page / inline-size;
 }
 
 .avend-chat-header {

@@ -95,28 +95,28 @@ function AnswerRatingControls({
       <button
         aria-label="La respuesta fue útil"
         aria-pressed={rating === "helpful"}
-        className={`avend-button avend-button--secondary ${styles.ratingButton}`}
+        className={styles.iconAction}
         disabled={disabled}
         onClick={() => rateAnswer("helpful")}
+        title="Útil"
         type="button"
       >
         <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
           <path d="m7 10 3-6c.6-1.2 2.4-.8 2.4.5V8h4.1c1.4 0 2.4 1.3 2.1 2.7L17.5 17c-.3 1.2-1.3 2-2.5 2H7m0-9v9m0-9H4v9h3" />
         </svg>
-        Útil
       </button>
       <button
         aria-label="La respuesta no fue útil"
         aria-pressed={rating === "not_helpful"}
-        className={`avend-button avend-button--secondary ${styles.ratingButton}`}
+        className={styles.iconAction}
         disabled={disabled}
         onClick={() => rateAnswer("not_helpful")}
+        title="No útil"
         type="button"
       >
         <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
           <path d="m7 14 3 6c.6 1.2 2.4.8 2.4-.5V16h4.1c1.4 0 2.4-1.3 2.1-2.7L17.5 7c-.3-1.2-1.3-2-2.5-2H7m0 9V5m0 9H4V5h3" />
         </svg>
-        No útil
       </button>
     </div>
   );
@@ -442,9 +442,11 @@ export function ConsultationFeedback({
             Sugerencia
           </button> : null}
           <button
-            className="avend-button avend-button--secondary"
+            aria-label="Reportar"
+            className={styles.iconAction}
             disabled={disabled || !answerMessageId || isSubmitting}
             onClick={(event) => open("report", event.currentTarget)}
+            title="Reportar"
             type="button"
           >
             <svg
@@ -455,7 +457,6 @@ export function ConsultationFeedback({
             >
               <path d="M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6Z" />
             </svg>
-            Reportar
           </button>
         </div>
       </div>
