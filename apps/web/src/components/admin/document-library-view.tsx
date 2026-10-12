@@ -22,6 +22,7 @@ import {
   documentYears,
   issuingEntityLabel,
 } from "@/lib/admin-api/document-taxonomy";
+import { DocumentRowActions } from "./document-row-actions";
 import styles from "./document-library-view.module.css";
 
 interface DocumentLibraryViewProps {
@@ -31,6 +32,11 @@ interface DocumentLibraryViewProps {
   lockLocation?: boolean;
   modules: ManagedModule[];
   query: ParsedDocumentLibraryQuery;
+  /**
+   * Acciones rápidas de administración en la columna Acciones (eliminar y
+   * marcar como Listo). Se activan en el Historial de documentos.
+   */
+  quickActions?: boolean;
   resultsTitle?: string;
   uploaders?: DocumentUploader[];
 }
@@ -198,7 +204,9 @@ function PencilIcon() {
 }
 
 /**
- * Acciones compactas: ojo = ver detalle, lápiz = editar.
+ * Acciones compactas: ojo = ver detalle, lápiz = editar. En el Historial de
+ * documentos se suman las acciones rápidas de administración (marcar como
+ * Listo y eliminar), cada una con su diálogo de confirmación.
  * - En la tabla solo se ve el ícono; el nombre completo aparece como etiqueta
  *   flotante al pasar el mouse o al llegar con el teclado, sin mover nada.
  * - En las tarjetas (pantallas pequeñas y táctiles) el nombre se ve siempre.
@@ -206,13 +214,19 @@ function PencilIcon() {
  */
 function DocumentActions({
   document,
+  quickActions,
   variant = "table",
 }: {
   document: DocumentLibraryItem;
+  quickActions: boolean;
   variant?: "card" | "table";
 }) {
   return (
-    <div className={`${styles.actions} ${variant === "card" ? styles.actionsCard : styles.actionsTable}`}>
+    <div
+      className={`${styles.actions} ${
+        variant === "card" ? styles.actionsCard : styles.actionsTable
+      }${quickActions ? ` ${styles.actionsWide}` : ""}`}
+    >
       <Link
         aria-label={`Ver detalle: ${document.title}`}
         className={styles.action}
@@ -235,6 +249,7 @@ function DocumentActions({
           Editar
         </span>
       </Link>
+      {quickActions ? <DocumentRowActions document={document} /> : null}
     </div>
   );
 }
@@ -263,6 +278,7 @@ export function DocumentLibraryView({
   lockLocation = false,
   modules,
   query,
+  quickActions = false,
   resultsTitle = "Biblioteca documental",
   uploaders = [],
 }: DocumentLibraryViewProps) {
@@ -625,7 +641,10 @@ export function DocumentLibraryView({
                     <th className="px-3 py-3 font-bold" scope="col">
                       Fecha de carga
                     </th>
-                    <th className={`${styles.actionsCell} px-3 py-3 text-right font-bold`} scope="col">
+                    <th
+                      className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 py-3 text-right font-bold`}
+                      scope="col"
+                    >
                       Acciones
                     </th>
                   </tr>
@@ -677,8 +696,13 @@ export function DocumentLibraryView({
                         </span>
                         <LastVersionDate document={document} />
                       </td>
-                      <td className={`${styles.actionsCell} px-3 pb-4 pt-1`}>
-                        <DocumentActions document={document} />
+                      <td
+                        className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 pb-4 pt-1`}
+                      >
+                        <DocumentActions
+                          document={document}
+                          quickActions={quickActions}
+                        />
                       </td>
                     </tr>
                   </tbody>
@@ -740,7 +764,11 @@ export function DocumentLibraryView({
                     </div>
                   </dl>
                   <div className="mt-5">
-                    <DocumentActions document={document} variant="card" />
+                    <DocumentActions
+                      document={document}
+                      quickActions={quickActions}
+                      variant="card"
+                    />
                   </div>
                 </li>
               ))}

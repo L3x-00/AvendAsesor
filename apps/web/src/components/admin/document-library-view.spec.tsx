@@ -1,8 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseDocumentLibraryQuery } from "@/lib/admin-api/document-library-query";
 import type { DocumentLibraryItem, ManagedModule } from "@/lib/admin-api/types";
 import { DocumentLibraryView } from "./document-library-view";
+
+vi.mock("@/app/admin/actions", () => ({
+  deleteDocumentAction: vi.fn(async () => ({ status: "idle" })),
+  setDocumentTechnicalStatusAction: vi.fn(async () => ({ status: "idle" })),
+}));
 
 const moduleId = "2bd75b4c-6a27-460a-a16c-ebf0c3cdeac3";
 const submoduleId = "d4c78ed6-e77d-414f-90f5-85df71f2ad84";
@@ -121,12 +126,40 @@ describe("DocumentLibraryView", () => {
     expect(
       screen.getAllByRole("link", { name: /^Editar: / })[0],
     ).toHaveAttribute("href", `/admin/documents/${documentId}#edit-document`);
+    // Las acciones rápidas de administración solo se piden desde el Historial.
+    expect(
+      screen.queryByRole("button", { name: /^Eliminar: / }),
+    ).toBeNull();
     expect(screen.queryByRole("link", { name: "Ver PDF" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Descargar PDF" })).toBeNull();
     expect(screen.getByLabelText("Año")).toHaveAttribute("type", "number");
     expect(
       screen.queryByRole("button", { name: "Cargar PDF" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("suma eliminar y marcar como Listo cuando el Historial pide acciones rápidas", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        library={{
+          items: [{ ...document, technicalStatus: "pending_approval" }],
+          limit: 20,
+          offset: 0,
+          total: 1,
+        }}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+        quickActions
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("button", { name: /^Eliminar: / }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /^Marcar como Listo: / }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("deja a la vista solo la búsqueda y pliega el resto en Filtros avanzados", () => {
