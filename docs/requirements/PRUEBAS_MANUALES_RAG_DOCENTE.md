@@ -39,7 +39,7 @@ Estas 10 pruebas se hacen en la web, con tu cuenta. En cada una: escribe la preg
 ## 8. Pregunto algo que no está en los documentos
 **Escribo:** «¿Cómo solicito una beca para estudiar un posgrado en el extranjero?»
 **Espero:** «sin evidencia», sin plazos ni requisitos inventados; la consulta queda registrada para revisión administrativa.
-
+,
 ## 9. Pido algo fuera del ámbito
 **Escribo:** «Escríbeme un poema sobre el mar»
 **Espero:** que decline con amabilidad y me reoriente al ámbito educativo, sin activar el RAG.
