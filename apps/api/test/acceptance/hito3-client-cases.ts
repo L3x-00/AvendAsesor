@@ -1,6 +1,7 @@
 /**
  * Validación integral del Hito 3 (lineamiento 12 del cliente): ejecuta los 15
- * casos mínimos, las seis pruebas integrales PI-01…PI-06 del documento
+ * casos mínimos, las seis pruebas integrales PI-01…PI-06 del documento,
+ * cuatro observaciones de remuneraciones O01…O04
  * «Casos de Uso y Criterios de Aceptación (actualizado)» y un red-team con los
  * servicios REALES —clasificador, retrieval contra la base configurada,
  * embeddings y generación del proveedor—. Las escrituras del historial se
@@ -15,8 +16,10 @@
  * El archivo de entorno (ignorado por git) necesita SUPABASE_URL,
  * SUPABASE_SERVICE_ROLE_KEY y la clave del proveedor (OPENROUTER_API_KEY u
  * OPENAI_API_KEY). Las preguntas corresponden al corpus cargado; al ampliarlo,
- * ajústalas para cubrir docentes, auxiliares y directivos. Consume saldo del
- * proveedor (unas 25 consultas).
+ * ajústalas para cubrir docentes, auxiliares y directivos. Para validar una
+ * tabla real, define ACCEPTANCE_TABLE_SOURCE_TITLES con fragmentos de títulos
+ * separados por | que identifiquen las versiones tabulares aprobadas. Consume saldo del
+ * proveedor (unas 45 consultas).
  */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,11 +34,12 @@ import { validateEnvironment } from '../../src/config/environment.validation';
 import { OpenAiEmbeddingsGateway } from '../../src/ingestion/openai-embeddings.gateway';
 import { OpenAiAnswerGateway } from '../../src/rag/openai-answer.gateway';
 import { RagService } from '../../src/rag/rag.service';
+import { normalizeSpanishText } from '../../src/rag/text-normalization';
 import { SupabaseChatGatewayAdapter } from '../../src/supabase/supabase-chat.gateway';
 import { SupabaseRetrievalGatewayAdapter } from '../../src/supabase/supabase-retrieval.gateway';
 import { createSupabaseServerClient } from '../../src/supabase/supabase.server-client';
 
-type Verdict = 'PASA' | 'FALLA' | 'REQUIERE_CORPUS' | 'REQUIERE_PO';
+type Verdict = 'PASA' | 'FALLA' | 'REQUIERE_CORPUS' | 'REQUIERE_REVISION';
 
 interface StoredMessage {
   content: string;
@@ -57,7 +61,15 @@ interface TurnResult {
   events: string[];
   moduleId: string | null | undefined;
   question: string;
-  sources: Array<{ page: number; rank: number; title: string }>;
+  sources: Array<{
+    issuanceYear: number | null;
+    moduleName: string | null;
+    page: number;
+    pageCount: number | null;
+    rank: number;
+    relatedModuleName: string | null;
+    title: string;
+  }>;
   startedNewConversation: boolean | undefined;
 }
 
@@ -184,6 +196,15 @@ async function main(): Promise<void> {
     throw new Error('Define ACCEPTANCE_ENV_FILE con el archivo de entorno.');
   }
   const env = readEnvironmentFile(envFile);
+  /**
+   * Fragmentos de títulos de las versiones que contienen una tabla comprobable.
+   * Se separan con | en el .env local; sin esta fotografía del corpus no se
+   * declara que una respuesta sin tabla sea un fallo del modelo.
+   */
+  const tableSourceTitleFragments = (env.ACCEPTANCE_TABLE_SOURCE_TITLES ?? '')
+    .split('|')
+    .map((value) => normalizeSpanishText(value).trim())
+    .filter(Boolean);
   const values = validateEnvironment({
     ...env,
     RAG_INGESTION_WORKER_ENABLED: 'false',
@@ -212,6 +233,18 @@ async function main(): Promise<void> {
       module.id,
     ]),
   );
+  const requireModule = (name: string): string => {
+    const moduleId = moduleIdByName.get(name);
+    if (!moduleId) {
+      throw new Error(
+        `Precondición de aceptación incumplida: falta el módulo activo «${name}». Actualiza la fotografía del corpus antes de ejecutar la campaña.`,
+      );
+    }
+    return moduleId;
+  };
+  const remuneraciones = requireModule('Remuneraciones');
+  const desplazamientos = requireModule('Contratación y desplazamientos');
+  const auxiliares = requireModule('Auxiliar de educación');
 
   const teacher: AuthorizationContext = {
     email: 'qa-docente@example.com',
@@ -266,8 +299,12 @@ async function main(): Promise<void> {
       }
       if (event.type === 'sources') {
         sources = event.data.sources.map((source) => ({
+          issuanceYear: source.issuanceYear,
+          moduleName: source.moduleName,
           page: source.pageStart,
+          pageCount: source.pdfPageCount ?? null,
           rank: source.rank,
+          relatedModuleName: source.relatedModuleName,
           title: source.documentTitle,
         }));
       }
@@ -298,8 +335,118 @@ async function main(): Promise<void> {
     console.log(`${verdict.padEnd(15)} ${id} ${title}`);
   };
   const has = (turn: TurnResult, type: string) => turn.events.includes(type);
-  const citedRanks = (turn: TurnResult) =>
-    new Set([...turn.answer.matchAll(/\[(\d+)\]/gu)].map((m) => Number(m[1])));
+  const citationRanksIn = (text: string) =>
+    new Set(
+      [...text.matchAll(/\[\[?\s*(\d+)\s*\]\]?/gu)].map((match) =>
+        Number(match[1]),
+      ),
+    );
+  const citedRanks = (turn: TurnResult) => citationRanksIn(turn.answer);
+  const citationsPointToKnownSources = (turn: TurnResult): boolean => {
+    const citations = citedRanks(turn);
+    const knownRanks = new Set(turn.sources.map((source) => source.rank));
+    return (
+      citations.size > 0 && [...citations].every((rank) => knownRanks.has(rank))
+    );
+  };
+
+  /** Replica el contrato estricto del renderizador web de tablas Markdown. */
+  const MAX_TABLE_CELL_CHARS = 180;
+  const MAX_TABLE_COLUMNS = 4;
+  const MAX_TABLE_ROWS = 6;
+  type MarkdownTable = { headers: string[]; rows: string[][] };
+  const tableCells = (line: string): string[] | null => {
+    const trimmed = line.trim();
+    if (!trimmed.includes('|')) return null;
+    const cells = trimmed
+      .replace(/^\|/u, '')
+      .replace(/\|$/u, '')
+      .split('|')
+      .map((cell) => cell.trim());
+    if (
+      cells.length < 2 ||
+      cells.length > MAX_TABLE_COLUMNS ||
+      cells.some((cell) => cell.length > MAX_TABLE_CELL_CHARS)
+    ) {
+      return null;
+    }
+    return cells;
+  };
+  const markdownTables = (answer: string): MarkdownTable[] => {
+    const lines = answer.replace(/\r/gu, '').split('\n');
+    const tables: MarkdownTable[] = [];
+    for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
+      const headers = tableCells(lines[startIndex] ?? '');
+      const separator = tableCells(lines[startIndex + 1] ?? '');
+      if (
+        !headers ||
+        !separator ||
+        headers.some((header) => !header) ||
+        separator.length !== headers.length ||
+        !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))
+      ) {
+        continue;
+      }
+      const rows: string[][] = [];
+      let rowIndex = startIndex + 2;
+      while (rowIndex < lines.length) {
+        const row = tableCells(lines[rowIndex] ?? '');
+        if (!row || row.length !== headers.length) break;
+        if (rows.length === MAX_TABLE_ROWS) return [];
+        rows.push(row);
+        rowIndex += 1;
+      }
+      if (rows.length) tables.push({ headers, rows });
+    }
+    return tables;
+  };
+  const tableRowsHaveKnownCitations = (turn: TurnResult): boolean => {
+    const tables = markdownTables(turn.answer);
+    const knownRanks = new Set(turn.sources.map((source) => source.rank));
+    return (
+      tables.length === 1 &&
+      tables[0].rows.length >= 2 &&
+      tables[0].rows.every((row) =>
+        [...citationRanksIn(row.join(' '))].some((rank) =>
+          knownRanks.has(rank),
+        ),
+      ) &&
+      citationsPointToKnownSources(turn)
+    );
+  };
+  const tableRowsAreNewestFirst = (turn: TurnResult): boolean => {
+    const table = markdownTables(turn.answer)[0];
+    if (!table || !tableRowsHaveKnownCitations(turn)) return false;
+    const sourceByRank = new Map(
+      turn.sources.map((source) => [source.rank, source]),
+    );
+    const rowsWithYears = table.rows.map((row) => {
+      const years = [...citationRanksIn(row.join(' '))]
+        .map((rank) => sourceByRank.get(rank)?.issuanceYear)
+        .filter((year): year is number => year !== null && year !== undefined);
+      return {
+        maximumYear: Math.max(...years),
+        visiblyIdentifiesYear: years.some((year) =>
+          new RegExp(`\\b${year}\\b`, 'u').test(row.join(' ')),
+        ),
+      };
+    });
+    const years = rowsWithYears.map(({ maximumYear }) => maximumYear);
+    return (
+      years.every(Number.isFinite) &&
+      rowsWithYears.every(
+        ({ visiblyIdentifiesYear }) => visiblyIdentifiesYear,
+      ) &&
+      years.every(
+        (year, index) => index === 0 || year <= (years[index - 1] ?? year),
+      )
+    );
+  };
+  const markdownTableRowCount = (turn: TurnResult): number =>
+    markdownTables(turn.answer).reduce(
+      (count, table) => count + table.rows.length,
+      0,
+    );
 
   // C01 — Saludo normal sin activar el RAG.
   const c01 = await ask('Hola, buenos días');
@@ -315,12 +462,19 @@ async function main(): Promise<void> {
   const c02 = await ask(
     '¿Quiénes pueden participar en la contratación de auxiliares de educación 2026?',
   );
+  const c02SourcesMatchDestination = c02.sources.every(
+    (source) => source.relatedModuleName === 'Auxiliar de educación',
+  );
   record(
     'C02',
     'Consulta educativa sin nombrar módulo',
     [c02],
-    has(c02, 'token') && c02.sources.length > 0 && Boolean(c02.moduleId),
-    'Módulo inferido desde la evidencia.',
+    has(c02, 'token') &&
+      c02.sources.length > 0 &&
+      citationsPointToKnownSources(c02) &&
+      c02.moduleId === auxiliares &&
+      c02SourcesMatchDestination,
+    `Módulo inferido: ${c02.moduleId === auxiliares ? 'Auxiliar de educación' : String(c02.moduleId)}; citas conocidas: ${citationsPointToKnownSources(c02)}; fuentes asociadas al destino: ${c02SourcesMatchDestination}.`,
   );
 
   // C03 — Consulta de un docente.
@@ -331,8 +485,8 @@ async function main(): Promise<void> {
     'C03',
     'Consulta de docente',
     [c03],
-    has(c03, 'token') && citedRanks(c03).size > 0,
-    'Respuesta con citas.',
+    has(c03, 'token') && citationsPointToKnownSources(c03),
+    `Respuesta con citas conocidas: ${citationsPointToKnownSources(c03)}.`,
   );
 
   // C04 — Consulta de un auxiliar de educación.
@@ -343,7 +497,7 @@ async function main(): Promise<void> {
     'C04',
     'Consulta de auxiliar de educación',
     [c04],
-    has(c04, 'token') && citedRanks(c04).size > 0,
+    has(c04, 'token') && citationsPointToKnownSources(c04),
     has(c04, 'no_evidence')
       ? 'Sin documentación aprobada de auxiliares: revisar corpus.'
       : 'Respuesta sustentada con citas.',
@@ -358,7 +512,7 @@ async function main(): Promise<void> {
     'C05',
     'Consulta de directivo',
     [c05],
-    has(c05, 'token') && citedRanks(c05).size > 0,
+    has(c05, 'token') && citationsPointToKnownSources(c05),
     has(c05, 'no_evidence')
       ? 'Sin documentos de directivos: «sin evidencia» correcto; falta corpus.'
       : 'Revisar.',
@@ -373,8 +527,8 @@ async function main(): Promise<void> {
     'C06',
     'Consulta normativa con sustento',
     [c06],
-    has(c06, 'token') && citedRanks(c06).size > 0,
-    'Respuesta citada.',
+    has(c06, 'token') && citationsPointToKnownSources(c06),
+    `Respuesta con citas conocidas: ${citationsPointToKnownSources(c06)}.`,
   );
 
   // C07 — Respuesta con visualización de fuentes.
@@ -382,9 +536,7 @@ async function main(): Promise<void> {
     '¿Qué requisitos se deben cumplir para la reasignación docente?',
   );
   const c07Cited = citedRanks(c07);
-  const c07Valid = [...c07Cited].every((rank) =>
-    c07.sources.some((source) => source.rank === rank),
-  );
+  const c07Valid = citationsPointToKnownSources(c07);
   record(
     'C07',
     'Fuentes visibles y citas válidas',
@@ -406,19 +558,34 @@ async function main(): Promise<void> {
   );
 
   // C09 — Usuario ubicado en un módulo y preguntando sobre otro.
-  const remuneraciones = moduleIdByName.get('Remuneraciones') ?? null;
-  const desplazamientos =
-    moduleIdByName.get('Contratación y desplazamientos') ?? null;
   const c09 = await ask(
     '¿Qué requisitos se piden para la reasignación docente?',
     { moduleId: remuneraciones },
+  );
+  const c09Stored = c09.conversationId
+    ? await history.getConversationContext({
+        conversationId: c09.conversationId,
+        messageLimit: 10,
+        userId: teacher.userId,
+      })
+    : null;
+  const c09SourcesMatchDestination = c09.sources.every(
+    (source) =>
+      source.relatedModuleName === 'Contratación y desplazamientos' &&
+      !/remuneraci[oó]n/iu.test(source.moduleName ?? ''),
   );
   record(
     'C09',
     'En un módulo preguntando por otro',
     [c09],
-    has(c09, 'token') && c09.moduleId === desplazamientos,
-    'La evidencia del otro módulo se usa (módulo = contexto).',
+    has(c09, 'token') &&
+      c09.sources.length > 0 &&
+      citationsPointToKnownSources(c09) &&
+      c09.moduleId === desplazamientos &&
+      c09.startedNewConversation === true &&
+      c09Stored?.selectedModuleId === desplazamientos &&
+      c09SourcesMatchDestination,
+    `Módulo resuelto: ${c09.moduleId === desplazamientos ? 'correcto' : 'incorrecto'}; guardado en el módulo resuelto: ${c09Stored?.selectedModuleId === desplazamientos}; fuentes asociadas al destino: ${c09SourcesMatchDestination}.`,
   );
 
   // C10 — Cambio de tema durante una misma conversación.
@@ -429,13 +596,38 @@ async function main(): Promise<void> {
     'Otra consulta: ¿quiénes pueden participar en la contratación de auxiliares de educación 2026?',
     { conversationId: c10a.conversationId },
   );
+  const c10bStored = c10b.conversationId
+    ? await history.getConversationContext({
+        conversationId: c10b.conversationId,
+        messageLimit: 10,
+        userId: teacher.userId,
+      })
+    : null;
+  const c10SourcesMatchDestination = c10b.sources.every(
+    (source) => source.relatedModuleName === 'Auxiliar de educación',
+  );
+  const c10aIsRemunerationAnswer =
+    has(c10a, 'token') &&
+    c10a.sources.length > 0 &&
+    citationsPointToKnownSources(c10a) &&
+    c10a.moduleId === remuneraciones &&
+    c10a.sources.every(
+      (source) => source.relatedModuleName === 'Remuneraciones',
+    );
   record(
     'C10',
     'Cambio de tema en la conversación',
     [c10a, c10b],
-    has(c10b, 'token') &&
-      c10b.sources.some((source) => /auxiliar/iu.test(source.title)),
-    'El 2.º turno busca el tema nuevo.',
+    c10aIsRemunerationAnswer &&
+      has(c10b, 'token') &&
+      c10b.sources.length > 0 &&
+      citationsPointToKnownSources(c10b) &&
+      c10b.startedNewConversation === true &&
+      c10b.conversationId !== c10a.conversationId &&
+      c10b.moduleId === auxiliares &&
+      c10bStored?.selectedModuleId === auxiliares &&
+      c10SourcesMatchDestination,
+    `Primer turno sustentado en Remuneraciones: ${c10aIsRemunerationAnswer}; el 2.º inicia otro chat, se guarda en Auxiliar de educación: ${c10bStored?.selectedModuleId === auxiliares}; fuentes asociadas al destino: ${c10SourcesMatchDestination}.`,
   );
 
   // C11 — Pregunta de seguimiento que depende del contexto anterior.
@@ -445,16 +637,26 @@ async function main(): Promise<void> {
   const c11b = await ask('¿Y qué documentos deben presentar?', {
     conversationId: c11a.conversationId,
   });
+  const c11SourcesMatchDestination = [c11a, c11b].every(
+    (turn) =>
+      turn.sources.length > 0 &&
+      turn.sources.every(
+        (source) =>
+          source.relatedModuleName === 'Contratación y desplazamientos',
+      ),
+  );
   record(
     'C11',
     'Seguimiento dependiente del contexto',
     [c11a, c11b],
-    has(c11b, 'token') &&
+    has(c11a, 'token') &&
+      has(c11b, 'token') &&
       c11b.conversationId === c11a.conversationId &&
-      c11b.sources.some((source) =>
-        /reasignaci[oó]n|permuta/iu.test(source.title),
-      ),
-    'Misma conversación y mismo tema.',
+      citationsPointToKnownSources(c11a) &&
+      citationsPointToKnownSources(c11b) &&
+      c11a.moduleId === desplazamientos &&
+      c11SourcesMatchDestination,
+    `Misma conversación y módulo: ${c11a.moduleId === desplazamientos}; citas conocidas en ambos turnos: ${citationsPointToKnownSources(c11a) && citationsPointToKnownSources(c11b)}; fuentes asociadas al destino: ${c11SourcesMatchDestination}.`,
   );
 
   // C12 — Consulta ambigua que requiere una precisión.
@@ -496,6 +698,14 @@ async function main(): Promise<void> {
   const c14b = await ask('¿Y cuáles son los requisitos de participación?', {
     conversationId: c14a.conversationId,
   });
+  const c14SourcesMatchDestination = [c14a, c14b].every(
+    (turn) =>
+      turn.sources.length > 0 &&
+      turn.sources.every(
+        (source) =>
+          source.relatedModuleName === 'Contratación y desplazamientos',
+      ),
+  );
   record(
     'C14',
     'Historial guardado y recuperación',
@@ -503,8 +713,13 @@ async function main(): Promise<void> {
     saved.length === 2 &&
       (saved[1]?.sourceCount ?? 0) > 0 &&
       c14b.conversationId === c14a.conversationId &&
-      has(c14b, 'token'),
-    'Persistencia simulada; en la base la cubren las pruebas pgTAP.',
+      has(c14a, 'token') &&
+      has(c14b, 'token') &&
+      citationsPointToKnownSources(c14a) &&
+      citationsPointToKnownSources(c14b) &&
+      c14a.moduleId === desplazamientos &&
+      c14SourcesMatchDestination,
+    `Persistencia simulada; módulo y fuentes de reasignación: ${c14a.moduleId === desplazamientos && c14SourcesMatchDestination}; citas conocidas en ambos turnos: ${citationsPointToKnownSources(c14a) && citationsPointToKnownSources(c14b)}. En la base la cubren las pruebas pgTAP.`,
   );
 
   // C15 — Un usuario no puede acceder al historial de otro.
@@ -528,9 +743,169 @@ async function main(): Promise<void> {
     'Lecturas acotadas a authorization.userId (P0002 → 404).',
   );
 
+  // C16 — Faltas ortográficas frecuentes: la búsqueda entiende el trámite,
+  // pero el historial conserva la redacción original de la persona.
+  const c16 = await ask(
+    'Ola, kiero saver los rekisitos para reasingnacion docente',
+  );
+  const c16PreservesTeacherWording = Boolean(
+    c16.conversationId &&
+    history
+      .messagesOf(c16.conversationId, teacher.userId)
+      .some(
+        (message) =>
+          message.role === 'user' &&
+          message.content ===
+            'Ola, kiero saver los rekisitos para reasingnacion docente',
+      ),
+  );
+  const c16SourcesMatchDestination = c16.sources.every(
+    (source) => source.relatedModuleName === 'Contratación y desplazamientos',
+  );
+  record(
+    'C16',
+    'Errores ortográficos en consulta de reasignación',
+    [c16],
+    has(c16, 'token') &&
+      citedRanks(c16).size > 0 &&
+      citationsPointToKnownSources(c16) &&
+      c16.moduleId === desplazamientos &&
+      c16PreservesTeacherWording &&
+      c16SourcesMatchDestination,
+    has(c16, 'no_evidence')
+      ? 'No hay corpus aprobado de reasignación para comprobar la corrección lingüística.'
+      : `Módulo resuelto: ${c16.moduleId === desplazamientos ? 'reasignación' : String(c16.moduleId)}; conserva redacción original: ${c16PreservesTeacherWording}; citas conocidas: ${citationsPointToKnownSources(c16)}; fuentes asociadas al destino: ${c16SourcesMatchDestination}.`,
+    has(c16, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+  );
+
+  // C17 — Error de dominio habitual: «renumeración» debe buscar el vocabulario
+  // de remuneraciones, no otro proceso por coincidencia superficial.
+  const c17 = await ask(
+    '¿Qué incremento de renumeración corresponde a los profesores?',
+  );
+  const c17SourcesMatchDestination = c17.sources.every(
+    (source) => source.relatedModuleName === 'Remuneraciones',
+  );
+  record(
+    'C17',
+    'Error ortográfico en remuneraciones',
+    [c17],
+    has(c17, 'token') &&
+      citedRanks(c17).size > 0 &&
+      citationsPointToKnownSources(c17) &&
+      c17.moduleId === remuneraciones &&
+      c17SourcesMatchDestination,
+    has(c17, 'no_evidence')
+      ? 'No hay corpus aprobado de remuneraciones para comprobar la corrección del término.'
+      : `Módulo resuelto: ${c17.moduleId === remuneraciones ? 'remuneraciones' : String(c17.moduleId)}; citas conocidas: ${citationsPointToKnownSources(c17)}; fuentes asociadas al destino: ${c17SourcesMatchDestination}.`,
+    has(c17, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+  );
+
+  // C18 — Las escalas comparables se presentan como tabla únicamente si las
+  // fuentes reales permiten sustentar cada fila con una cita existente.
+  const c18 = await ask(
+    'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
+  );
+  const c18ExpectedTableSourcesRecovered = tableSourceTitleFragments.every(
+    (fragment) =>
+      c18.sources.some((source) =>
+        normalizeSpanishText(source.title).includes(fragment),
+      ),
+  );
+  const c18StructurePass =
+    c18ExpectedTableSourcesRecovered &&
+    has(c18, 'token') &&
+    tableRowsHaveKnownCitations(c18) &&
+    tableRowsAreNewestFirst(c18);
+  record(
+    'C18',
+    'Tabla de remuneraciones con filas sustentadas',
+    [c18],
+    false,
+    !tableSourceTitleFragments.length
+      ? 'No se configuró ACCEPTANCE_TABLE_SOURCE_TITLES con títulos de documentos que contienen una tabla comprobable.'
+      : !c18ExpectedTableSourcesRecovered
+        ? 'La consulta no recuperó todas las versiones declaradas como fuentes de tabla.'
+        : has(c18, 'no_evidence')
+          ? 'No hay una escala aprobada e indexada para validar la tabla.'
+          : `Filas Markdown: ${markdownTableRowCount(c18)}; contrato visual y citas conocidas: ${tableRowsHaveKnownCitations(c18)}; orden temporal: ${tableRowsAreNewestFirst(c18)}. La revisión humana debe contrastar los valores con el PDF.`,
+    !tableSourceTitleFragments.length ||
+      !c18ExpectedTableSourcesRecovered ||
+      has(c18, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : c18StructurePass
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
+  );
+
+  // C19 — La capa de servicio debe entregar fuente y página concretas; la
+  // prueba autenticada de interfaz comprueba después que el enlace las abra.
+  const c19 = await ask(
+    '¿En qué documento y página se menciona el incremento de remuneraciones de 2025?',
+  );
+  const c19Cites2025Source = [...citedRanks(c19)].some((rank) =>
+    c19.sources.some(
+      (source) =>
+        source.rank === rank &&
+        (source.issuanceYear === 2025 || /\b2025\b/u.test(source.title)),
+    ),
+  );
+  const c19PagesAreWithinDocument = c19.sources.every(
+    (source) =>
+      source.page > 0 &&
+      (source.pageCount === null || source.page <= source.pageCount),
+  );
+  const c19MentionsPage = /\bp[aá]g(?:ina)?\.?\s*\d+/iu.test(c19.answer);
+  const c19TechnicalPass =
+    has(c19, 'token') &&
+    citationsPointToKnownSources(c19) &&
+    c19Cites2025Source &&
+    c19PagesAreWithinDocument &&
+    c19MentionsPage;
+  record(
+    'C19',
+    'Referencia documental con página verificable',
+    [c19],
+    false,
+    has(c19, 'no_evidence')
+      ? 'No hay documento aprobado de incremento 2025.'
+      : `Cita fuente 2025: ${c19Cites2025Source}; páginas dentro del PDF: ${c19PagesAreWithinDocument}; respuesta indica página: ${c19MentionsPage}; citas conocidas: ${citationsPointToKnownSources(c19)}. El enlace se valida en la prueba autenticada de interfaz.`,
+    has(c19, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : c19TechnicalPass
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
+  );
+
+  // C20 — Un PDF se referencia por página: nunca se inventa un minuto como si
+  // fuera un video. La respuesta puede aclarar, buscar evidencia o pedir precisión.
+  const c20 = await ask(
+    '¿En qué minuto del documento se menciona el incremento de remuneraciones?',
+  );
+  const c20ExplainsPdfPage =
+    /(?:pdf|documento).{0,80}p[aá]gin/iu.test(c20.answer) ||
+    /p[aá]gin.{0,80}(?:pdf|documento)/iu.test(c20.answer);
+  const c20RefusesMinute =
+    /(?:no (?:existe|corresponde|puedo|se usa)|no hay).{0,80}minuto/iu.test(
+      c20.answer,
+    );
+  const c20MentionsTimestamp = /\b\d{1,2}:\d{2}\b/u.test(c20.answer);
+  const c20FabricatesMinute =
+    (c20MentionsTimestamp ||
+      /\b(?:minuto|segundo)\s*(?:n[.º°]+)?\s*\d+\b/iu.test(c20.answer)) &&
+    !c20RefusesMinute;
+  record(
+    'C20',
+    'No inventa marcas de minuto para un PDF',
+    [c20],
+    c20ExplainsPdfPage && !c20FabricatesMinute,
+    `Explica referencia por página: ${c20ExplainsPdfPage}; atribuye minuto inexistente: ${c20FabricatesMinute}; eventos: ${c20.events.join(', ')}.`,
+  );
+
   // PI-01 — Ley y Reglamento: consulta general sobre un derecho regulado por
   // la Ley de Reforma Magisterial y seguimiento dentro del mismo proceso.
   const leyModuleId = moduleIdByName.get('Ley y reglamento') ?? null;
+  const leyModuleAvailable = Boolean(leyModuleId);
   const pi01a = await ask(
     '¿Qué derechos laborales reconoce la Ley de Reforma Magisterial a los profesores nombrados?',
   );
@@ -542,17 +917,23 @@ async function main(): Promise<void> {
     'PI-01',
     'Ley y Reglamento: consulta general y seguimiento',
     [pi01a, pi01b],
-    has(pi01a, 'token') &&
-      citedRanks(pi01a).size > 0 &&
+    leyModuleAvailable &&
+      has(pi01a, 'token') &&
+      citationsPointToKnownSources(pi01a) &&
       pi01a.moduleId === leyModuleId &&
       has(pi01b, 'token') &&
-      pi01b.conversationId === pi01a.conversationId,
-    has(pi01a, 'no_evidence')
-      ? 'Sin documentos en Ley y reglamento: falta cargar la Ley de Reforma Magisterial (corpus del cliente).'
-      : has(pi01a, 'clarification')
-        ? 'El módulo Ley y reglamento está vacío: el sistema pidió precisión entre otros temas en lugar de inventar; falta el corpus del cliente.'
-        : `Módulo resuelto: ${pi01a.moduleId === leyModuleId ? 'Ley y reglamento' : 'otro'} ; seguimiento conservado: ${pi01b.conversationId === pi01a.conversationId}.`,
-    has(pi01a, 'no_evidence') || has(pi01a, 'clarification')
+      pi01b.conversationId === pi01a.conversationId &&
+      citationsPointToKnownSources(pi01b),
+    !leyModuleAvailable
+      ? 'No existe el módulo activo Ley y reglamento: falta preparar el corpus correspondiente.'
+      : has(pi01a, 'no_evidence')
+        ? 'Sin documentos en Ley y reglamento: falta cargar la Ley de Reforma Magisterial (corpus del cliente).'
+        : has(pi01a, 'clarification')
+          ? 'El módulo Ley y reglamento está vacío: el sistema pidió precisión entre otros temas en lugar de inventar; falta el corpus del cliente.'
+          : `Módulo resuelto: ${pi01a.moduleId === leyModuleId ? 'Ley y reglamento' : 'otro'} ; seguimiento conservado: ${pi01b.conversationId === pi01a.conversationId}.`,
+    !leyModuleAvailable ||
+      has(pi01a, 'no_evidence') ||
+      has(pi01a, 'clarification')
       ? 'REQUIERE_CORPUS'
       : 'FALLA',
   );
@@ -576,13 +957,13 @@ async function main(): Promise<void> {
     'Contrato Docente: proceso inferido y continuación',
     [pi02a, pi02b],
     has(pi02a, 'token') &&
-      citedRanks(pi02a).size > 0 &&
+      citationsPointToKnownSources(pi02a) &&
       pi02DocRe.test(pi02a.sources[0]?.title ?? '') &&
       pi02a.sources.some((source) => pi02DocRe.test(source.title)) &&
       pi02Clean &&
       has(pi02b, 'token') &&
       pi02b.conversationId === pi02a.conversationId &&
-      citedRanks(pi02b).size > 0,
+      citationsPointToKnownSources(pi02b),
     has(pi02a, 'no_evidence')
       ? 'Sin documentación aprobada de Contrato Docente: se requiere aprobación editorial.'
       : `Fuentes: ${pi02a.sources.map((s) => s.title.slice(0, 48)).join(' | ')} ; sin colas de otros procesos: ${pi02Clean}.`,
@@ -592,7 +973,7 @@ async function main(): Promise<void> {
   // PI-03 — Contratación de Auxiliares de Educación: requisitos con
   // documentación propia del proceso y continuación sin mezclar Contrato
   // Docente.
-  const auxModuleId = moduleIdByName.get('Auxiliar de educación') ?? null;
+  const auxModuleId = auxiliares;
   const auxTitleRe = /auxiliar/iu;
   const contractDocTitleRe =
     /contrataci[oó]n docente|renovaci[oó]n|norma del proceso|preguntas frecuentes/iu;
@@ -610,11 +991,12 @@ async function main(): Promise<void> {
     'Contratación de Auxiliares: requisitos y continuación',
     [pi03, pi03b],
     has(pi03, 'token') &&
-      citedRanks(pi03).size > 0 &&
+      citationsPointToKnownSources(pi03) &&
       pi03.sources.some((source) => auxTitleRe.test(source.title)) &&
       pi03.moduleId === auxModuleId &&
       has(pi03b, 'token') &&
       pi03b.conversationId === pi03.conversationId &&
+      citationsPointToKnownSources(pi03b) &&
       pi03b.sources.some((source) => auxTitleRe.test(source.title)) &&
       pi03bClean,
     has(pi03, 'no_evidence') || has(pi03b, 'no_evidence')
@@ -644,8 +1026,10 @@ async function main(): Promise<void> {
     [pi04a, pi04b],
     has(pi04a, 'token') &&
       has(pi04b, 'token') &&
-      citedRanks(pi04a).size > 0 &&
-      citedRanks(pi04b).size > 0 &&
+      citationsPointToKnownSources(pi04a) &&
+      citationsPointToKnownSources(pi04b) &&
+      Boolean(pi04a.moduleId) &&
+      Boolean(pi04b.moduleId) &&
       pi04a.moduleId !== pi04b.moduleId &&
       pi04a.sources.some((source) => contractDocTitleRe.test(source.title)) &&
       pi04b.sources.some((source) => auxTitleRe.test(source.title)) &&
@@ -675,15 +1059,15 @@ async function main(): Promise<void> {
     'Documento nuevo recuperable sin afectar el anterior',
     [pi05a, pi05b],
     has(pi05a, 'token') &&
-      citedRanks(pi05a).size > 0 &&
+      citationsPointToKnownSources(pi05a) &&
       pi05a.sources.some((source) => newDocRe.test(source.title)) &&
       has(pi05b, 'token') &&
-      citedRanks(pi05b).size > 0 &&
+      citationsPointToKnownSources(pi05b) &&
       pi05b.sources.some((source) => priorDocRe.test(source.title)),
     has(pi05a, 'no_evidence')
       ? 'El documento incorporado no está aprobado aún: se requiere aprobación editorial.'
       : `Nuevo: ${pi05a.sources.map((s) => s.title.slice(0, 42)).join('|')} ; previo: ${pi05b.sources.map((s) => s.title.slice(0, 42)).join('|')}.`,
-    has(pi05a, 'no_evidence') ? 'REQUIERE_PO' : 'FALLA',
+    has(pi05a, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
   );
 
   // PI-06 — Consulta sin sustento suficiente: se reconoce, no se inventa y
@@ -701,6 +1085,88 @@ async function main(): Promise<void> {
     [pi06],
     has(pi06, 'no_evidence') && !has(pi06, 'sources') && pi06Registered,
     `Registrada: ${pi06Registered} ; eventos: ${pi06.events.join(', ')}.`,
+  );
+
+  // O01…O04 — Ronda adicional de observación que reproduce literalmente la
+  // consulta de remuneraciones reportada por el cliente y variantes naturales.
+  // No modifica el comportamiento del RAG: solo amplía la evidencia de la
+  // campaña real antes de iniciar el análisis de causa raíz.
+  const o01 = await ask('¿Cuánto gana un profesor en Perú?');
+  const o01Grounded =
+    has(o01, 'token') &&
+    citationsPointToKnownSources(o01) &&
+    o01.sources.some((source) => source.relatedModuleName === 'Remuneraciones');
+  record(
+    'O01',
+    'Pregunta literal del cliente sobre remuneración docente',
+    [o01],
+    o01Grounded,
+    `Respuesta sustentada en Remuneraciones: ${o01Grounded}; fuentes: ${o01.sources.length}.`,
+    has(o01, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+  );
+
+  const o02 = await ask('cuanto gana un profe del peru');
+  const o02Grounded =
+    has(o02, 'token') &&
+    citationsPointToKnownSources(o02) &&
+    o02.sources.some((source) => source.relatedModuleName === 'Remuneraciones');
+  record(
+    'O02',
+    'Variante coloquial y sin tildes sobre remuneración',
+    [o02],
+    o02Grounded,
+    `Respuesta sustentada en Remuneraciones: ${o02Grounded}; fuentes: ${o02.sources.length}.`,
+    has(o02, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+  );
+
+  const o03 = await ask(
+    'Soy docente contratado de secundaria con jornada de 30 horas. ¿Cuánto debería ganar en 2025? Muéstralo en una tabla y cita el documento y la página.',
+  );
+  const o03Recovers2025Scale = o03.sources.some(
+    (source) =>
+      /049-2025-EF/iu.test(source.title) &&
+      source.relatedModuleName === 'Remuneraciones',
+  );
+  const o03MentionsExpectedAmount = /(?:S\/?\s*)?3[ .]?300(?:[,.]60)?\b/u.test(
+    o03.answer,
+  );
+  const o03TablePass =
+    markdownTables(o03.answer).length > 0 &&
+    citationsPointToKnownSources(o03) &&
+    o03Recovers2025Scale &&
+    o03MentionsExpectedAmount;
+  record(
+    'O03',
+    'Monto 2025 de 30 horas solicitado como tabla',
+    [o03],
+    o03TablePass,
+    `Recupera DS 049-2025-EF: ${o03Recovers2025Scale}; tabla: ${markdownTables(o03.answer).length > 0}; monto S/ 3 300,60: ${o03MentionsExpectedAmount}; citas conocidas: ${citationsPointToKnownSources(o03)}.`,
+    has(o03, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+  );
+
+  const o04 = await ask(
+    'Dame el enlace del documento exacto donde aparece el sueldo de un profesor de 30 horas en 2025.',
+  );
+  const o04TechnicalPass =
+    has(o04, 'token') &&
+    citationsPointToKnownSources(o04) &&
+    o04.sources.some(
+      (source) =>
+        /049-2025-EF/iu.test(source.title) &&
+        source.page > 0 &&
+        (source.pageCount === null || source.page <= source.pageCount),
+    );
+  record(
+    'O04',
+    'Solicitud explícita del enlace a la fuente exacta',
+    [o04],
+    false,
+    `Fuente y página técnicas disponibles: ${o04TechnicalPass}. El enlace firmado y su apertura requieren una sesión autenticada de interfaz.`,
+    has(o04, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : o04TechnicalPass
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   // Red-team evidence-only y charla.
