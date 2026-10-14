@@ -332,7 +332,9 @@ export default async function DocumentDetailPage({
                       viewerVersion.originalFileName
                     }${
                       isPdfVersion(viewerVersion)
-                        ? ` · ${viewerVersion.pageCount} páginas`
+                        ? viewerVersion.pageCount
+                          ? ` · ${viewerVersion.pageCount} páginas`
+                          : " · total de páginas por verificar"
                         : ""
                     }`
                   : "No hay un documento disponible."}
@@ -547,7 +549,9 @@ export default async function DocumentDetailPage({
                             </h3>
                             <p className="mt-1 text-base text-avend-text-muted">
                               {isPdfVersion(version)
-                                ? `${version.pageCount} páginas · `
+                                ? version.pageCount
+                                  ? `${version.pageCount} páginas · `
+                                  : "Total de páginas por verificar · "
                                 : ""}
                               {fileSize(version.fileSizeBytes)}
                             </p>

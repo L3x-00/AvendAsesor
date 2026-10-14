@@ -1,5 +1,9 @@
 import type { StoredDocumentVersion } from './document';
-import { toDocumentLibraryRow, toManagedDocumentVersion } from './document';
+import {
+  toDocumentLibraryRow,
+  toManagedDocumentVersion,
+  toStoredDocumentVersion,
+} from './document';
 
 const documentId = '411a0188-bb7c-4ef9-847d-8abf506e67c1';
 const actorId = 'f4ca2c55-9eb1-48ae-9e96-1e4a8397d37c';
@@ -102,5 +106,30 @@ describe('document library domain mapping', () => {
       toManagedDocumentVersion(version, 'Administrador de prueba')
         .uploadedByName,
     ).toBe('Administrador de prueba');
+  });
+
+  it('preserves an unknown physical page total instead of inventing one', () => {
+    const version = toStoredDocumentVersion({
+      document_id: documentId,
+      file_size_bytes: 23_000_000,
+      id: versionId,
+      ingestion_status: 'pending',
+      ingestion_updated_at: '2026-08-10T00:00:00.000Z',
+      issuance_year: 2026,
+      mime_type: 'application/pdf',
+      original_file_name: 'norma-grande.pdf',
+      page_count: null,
+      sha256: 'b'.repeat(64),
+      storage_bucket: 'normative-documents',
+      storage_path: `documents/${documentId}/versions/${versionId}.pdf`,
+      uploaded_at: '2026-08-09T00:00:00.000Z',
+      uploaded_by: actorId,
+      uploaded_by_name: 'Administradora',
+      version_number: 1,
+      version_relation: null,
+    });
+
+    expect(version.pageCount).toBeNull();
+    expect(toManagedDocumentVersion(version).pageCount).toBeNull();
   });
 });

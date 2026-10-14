@@ -45,8 +45,19 @@ export class SupabaseIngestionGatewayAdapter implements IngestionGateway {
     await this.callLeaseRpc('clear_document_ingestion_chunks', job);
   }
 
-  async complete(job: ClaimedIngestionJob): Promise<void> {
-    await this.callLeaseRpc('complete_document_ingestion_job', job);
+  async complete(
+    job: ClaimedIngestionJob,
+    verifiedPdfPageCount: number | null,
+  ): Promise<void> {
+    const { error } = await this.requireClient().rpc(
+      'complete_document_ingestion_job',
+      {
+        p_job_id: job.jobId,
+        p_lease_token: job.leaseToken,
+        p_verified_pdf_page_count: verifiedPdfPageCount,
+      },
+    );
+    if (error) toServiceUnavailable(error);
   }
 
   async downloadPdf(
@@ -121,7 +132,7 @@ export class SupabaseIngestionGatewayAdapter implements IngestionGateway {
   }
 
   private async callLeaseRpc(
-    name: 'clear_document_ingestion_chunks' | 'complete_document_ingestion_job',
+    name: 'clear_document_ingestion_chunks',
     job: ClaimedIngestionJob,
   ): Promise<void> {
     const { error } = await this.requireClient().rpc(name, {

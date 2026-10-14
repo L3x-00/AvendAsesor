@@ -139,7 +139,7 @@ export interface ChatCatalogDocument {
   issuanceYear: number | null;
   mimeType: string;
   originalFileName: string;
-  pageCount: number;
+  pageCount: number | null;
   resolutionNumber: string | null;
   title: string;
   versionId: string;

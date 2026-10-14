@@ -54,7 +54,7 @@ export interface CreateDocumentRecord {
   moduleIds: string[];
   observation?: string;
   originalFileName: string;
-  pageCount: number;
+  pageCount: number | null;
   processingError?: string;
   resolutionNumber?: string | null;
   reason?: string;
@@ -75,7 +75,7 @@ export interface AddDocumentVersionRecord {
   /** Año del documento para esta versión. */
   issuanceYear?: number | null;
   originalFileName: string;
-  pageCount: number;
+  pageCount: number | null;
   processingError?: string;
   sha256: string;
   storagePath: string;

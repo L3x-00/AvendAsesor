@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MAX_PDF_PAGES } from '../documents/pdf-inspection.service';
 import { SUPABASE_INGESTION_GATEWAY } from '../supabase/supabase.constants';
 import { ChunkingService, type ExtractedPage } from './chunking.service';
 import { DocxExtractionService } from './docx-extraction.service';
@@ -107,11 +108,8 @@ export class IngestionService {
       job.storageBucket,
       job.storagePath,
     );
-    const pages = await this.extractPages(
-      detectIngestionFormat(file),
-      file,
-      job,
-    );
+    const format = detectIngestionFormat(file);
+    const pages = await this.extractPages(format, file, job);
     const chunks = this.chunking.chunk(pages);
     if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');
     const vectors = await this.embeddings.embed(
@@ -135,7 +133,12 @@ export class IngestionService {
       );
       await this.gateway.refreshLease(job, leaseSeconds);
     }
-    await this.gateway.complete(job);
+    await this.gateway.complete(
+      job,
+      format === 'pdf'
+        ? Math.max(...pages.map((page) => page.pageNumber))
+        : null,
+    );
   }
 
   private async extractPages(
@@ -168,6 +171,12 @@ export class IngestionService {
     // de memoria para Render Free (512 MB): tope de páginas, lotes de render y un
     // único worker Tesseract reutilizado por trabajo.
     const pages = await this.pdf.extract(file);
+    // Los PDFs grandes omiten el conteo durante la carga para no duplicar una
+    // extracción costosa. La ingesta aplica el mismo límite en cuanto conoce
+    // el total, antes de OCR, embeddings y escrituras parciales.
+    if (pages.length > MAX_PDF_PAGES) {
+      throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
+    }
     const sparsePages = pages
       .filter((page) => page.text.replace(/\s/g, '').length < 50)
       .map((page) => page.pageNumber);

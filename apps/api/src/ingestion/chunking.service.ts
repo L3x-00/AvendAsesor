@@ -33,11 +33,12 @@ const MAX_HEADING_TOKENS = 60;
 const HEADING_LABEL =
   /^(?:cap[ií]tulos?|art[ií]culos?|t[ií]tulos?|secci[oó]n(?:es)?|anexos?|disposici[oó]n(?:es)?)(?![\p{L}])\s*[\w.°º-]*\.?\s*/iu;
 const MAX_HEADING_WORDS = 15;
-/** Una frase terminada en punto con más palabras que esto ya es una disposición. */
-const MAX_TITLE_SENTENCE_WORDS = 8;
 /** Disposición breve: «Dejar sin efecto…», «La presente norma entra en vigencia…». */
 const PROVISION_START =
   /^(?:\p{L}+(?:ar|er|ir)\s|(?:la|el|los|las)\s+presentes?\b)/iu;
+/** Mandatos conjugados frecuentes en normas: «Apruébase», «Dispóngase», etc. */
+const LEGAL_DIRECTIVE_START =
+  /^(?:apru[eé](?:base|bese)|modif[ií](?:case|quese)|disp[oó]ngase|autor[ií](?:zase|cese)|der[oó]g(?:ase|uese)|incorp[oó]r(?:ase|ese)|publ[ií]quese|enc[aá]rguese|decl[aá]rese|d[eé]jase|establ[eé]cese|prec[ií]sase|sustit[uú]yase|excl[uú]yase|ampl[ií]ase|prorr[oó]gase|reg[ií]strese|comun[ií]quese|c[uú]mplase|refr[eé]ndese|ot[oó]rgase|conc[eé]dese|des[ií]gnase|conf[oó]rmase|resu[eé]lvase|ac[eé]ptase|rectif[ií]quese|susp[eé]ndase)\b/iu;
 
 /**
  * Título puro: rótulo más, a lo sumo, una frase breve («Artículo 14.
@@ -48,75 +49,89 @@ const PROVISION_START =
  */
 function isHeading(content: string): boolean {
   const label = HEADING_LABEL.exec(content);
+  // Las mayúsculas por sí solas no prueban estructura: importes, firmas y
+  // nombres institucionales suelen venir destacados de esa forma en un PDF.
   if (!label) return false;
   const title = content.slice(label[0].length).trim();
   const words = title.split(/\s+/u).filter(Boolean).length;
   if (/[.;:]\s+\S/u.test(title) || words > MAX_HEADING_WORDS) return false;
-  // Una sola frase terminada en punto: título si es breve y no dispone nada.
+  // Un sufijo terminado como oración es contenido normativo, aunque sea corto
+  // («La remuneración mensual es…»). Sin evidencia adicional no se presenta
+  // como título/subtítulo. Los mandatos se rechazan incluso sin puntuación.
   return !(
-    title.endsWith('.') &&
-    (words > MAX_TITLE_SENTENCE_WORDS ||
-      (words > 3 && PROVISION_START.test(title)))
+    title.endsWith('.') ||
+    LEGAL_DIRECTIVE_START.test(title) ||
+    (words > 3 && PROVISION_START.test(title))
   );
 }
-const ARTICLE = /art[ií]culo\s+([\w.-]+)/iu;
-const NUMERAL = /(?:^|\s)([1-9]\d*(?:\.\d+)+)\.?\s/u;
-const EXPLICIT_LITERAL = /\b(?:literal|inciso)\s+([a-z])\)\s/iu;
-const LIST_LITERAL = /(?:^|\n\n)\s*([a-z])\)\s/iu;
+const ARTICLE_AT_START =
+  /^art[ií]culo\s+[\p{L}\p{N}]+(?:[.-][\p{L}\p{N}]+)*(?:°|º)?(?:\s*[.:\-–—]+)?/iu;
+const NUMERAL_AT_START = /^([1-9]\d*(?:\.\d+)+)\.?(?:\s|$)/u;
+const EXPLICIT_LITERAL_AT_START = /^(?:literal|inciso)\s+([a-z])\)(?:\s|$)/iu;
+const LIST_LITERAL_AT_START = /^([a-z])\)(?:\s|$)/iu;
 const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
-/** Tope del «sustento» derivado del primer tramo nuevo de un fragmento. */
-const MAX_SUSTENTO_CHARS = 180;
-/** Por debajo de esto («Art.», «Requisitos: 1.») no vale como sustento. */
-const MIN_SUSTENTO_CHARS = 15;
-const SUSTENTO_BOILERPLATE =
-  /^(?:documento electr[oó]nico firmado digitalmente|la integridad del documento y la autor[ií]a|esto es una copia aut[eé]ntica|su autenticidad e integridad pueden ser contrastadas)/iu;
+
+interface StructuralLocation {
+  articleReference?: string;
+  containerSectionTitle?: string;
+  literal?: string;
+  numeral?: string;
+  sectionTitle?: string;
+  structuralHeading: boolean;
+}
 
 /**
- * «Sustento» de un fragmento sin rótulo normativo (preguntas frecuentes,
- * anexos, normas sin títulos): su primera oración, tal como está en el
- * documento, acotada. Cada fila de «Referencias» explica así de qué trata la
- * fuente, sin inventar nada (PO, 2026-10-10). Solo se usa el tramo nuevo: el
- * arrastre del chunk anterior repetiría el cierre del fragmento previo.
+ * Solo reconoce ubicación que comienza en la propia unidad. Una mención a un
+ * artículo o numeral dentro del texto corrido nunca se convierte en metadato.
  */
-function sustentoFromText(text: string): string | undefined {
-  const normalized = text.replace(/\s+/gu, ' ').trim();
-  if (!normalized) return undefined;
-  const completedSentences =
-    normalized.match(/.*?[.!?…]+(?=\s|$)/gu)?.map((item) => item.trim()) ?? [];
-  const firstSentence = completedSentences.find(
-    (item) =>
-      item.length >= MIN_SUSTENTO_CHARS && !SUSTENTO_BOILERPLATE.test(item),
-  );
-  // Un texto sin puntuación todavía puede ser un título útil. Si sí había
-  // oraciones pero todas eran fragmentos («puntos.», «Art.», «5.») o sellos de
-  // firma, no se usa el resto cortado como si fuera un subtítulo.
-  const candidate =
-    firstSentence ?? (completedSentences.length === 0 ? normalized : undefined);
-  if (!candidate) return undefined;
-  const excerpt = candidate.slice(0, MAX_SUSTENTO_CHARS).trim();
-  if (excerpt.length < MIN_SUSTENTO_CHARS) return undefined;
-  return excerpt.length < candidate.length ? `${excerpt.trimEnd()}…` : excerpt;
-}
-
-function subreference(content: string): string | undefined {
-  const numeral = content.match(NUMERAL)?.[1];
+function structuralLocation(content: string): StructuralLocation {
+  const articleReference = content.match(ARTICLE_AT_START)?.[0].trim();
+  const structuralHeading = isHeading(content);
+  const numeral = content.match(NUMERAL_AT_START)?.[1];
   const literal =
-    content.match(EXPLICIT_LITERAL)?.[1] ?? content.match(LIST_LITERAL)?.[1];
-  return (
-    [numeral, literal ? `Literal ${literal.toLocaleLowerCase('es')})` : null]
-      .filter(Boolean)
-      .join(' · ') || undefined
-  );
+    content.match(EXPLICIT_LITERAL_AT_START)?.[1] ??
+    content.match(LIST_LITERAL_AT_START)?.[1];
+
+  if (articleReference) {
+    const articleTitle = structuralHeading
+      ? content
+          .slice(articleReference.length)
+          .replace(/^[\s.:\-–—]+/u, '')
+          .trim()
+      : '';
+    return {
+      articleReference,
+      literal,
+      numeral,
+      ...(articleTitle ? { sectionTitle: articleTitle } : {}),
+      structuralHeading,
+    };
+  }
+
+  return {
+    ...(structuralHeading
+      ? {
+          containerSectionTitle: content,
+          sectionTitle: content,
+        }
+      : {}),
+    literal,
+    numeral,
+    structuralHeading,
+  };
 }
 
 interface ChunkUnit {
+  articleReference?: string;
   content: string;
+  /** La unidad es un título/subtítulo comprobable, no texto descriptivo. */
+  structuralHeading: boolean;
+  numeralReference?: string;
   /** Texto arrastrado del chunk anterior como contexto; nunca forma un chunk por sí solo. */
   overlap: boolean;
   pageEnd: number;
   pageStart: number;
-  /** «Sustento» explícito de una ventana de párrafo largo (título estable). */
-  sustento?: string;
+  sectionTitle?: string;
   tokenCount: number;
 }
 
@@ -185,10 +200,14 @@ export class ChunkingService {
       if (covered >= tokenCount) break;
     }
     return {
+      articleReference: last.articleReference,
       content,
+      structuralHeading: false,
+      numeralReference: last.numeralReference,
       overlap: true,
       pageEnd: last.pageEnd,
       pageStart,
+      sectionTitle: last.sectionTitle,
       tokenCount,
     };
   }
@@ -196,6 +215,11 @@ export class ChunkingService {
   chunk(pages: ExtractedPage[]): TextChunk[] {
     const chunks: TextChunk[] = [];
     let units: ChunkUnit[] = [];
+    let activeArticleReference: string | undefined;
+    let activeArticleTitle: string | undefined;
+    let activeContainerTitle: string | undefined;
+    let activeLiteral: string | undefined;
+    let activeNumeral: string | undefined;
     // Tokens de las unidades pendientes, separadores incluidos: se lleva
     // incremental (antes se recodificaba todo lo pendiente por cada párrafo).
     let pendingTokens = 0;
@@ -219,33 +243,15 @@ export class ChunkingService {
       }
       const content = units.map((unit) => unit.content).join(UNIT_SEPARATOR);
       const tokens = this.encoding.encode(content);
-      const fresh = units
-        .filter((unit) => !unit.overlap)
-        .map((unit) => unit.content)
-        .join(UNIT_SEPARATOR);
-      // Las ventanas de un párrafo largo traen su propio sustento (o su
-      // ausencia marcada con ''): todas comparten el mismo resultado, tomado
-      // del inicio del párrafo completo, nunca del corte a mitad de oración.
-      const windowSustento = units.find(
-        (unit) => !unit.overlap && unit.sustento !== undefined,
-      )?.sustento;
-      const sustento =
-        windowSustento === undefined ? sustentoFromText(fresh) : windowSustento;
+      const latestFresh = units.filter((unit) => !unit.overlap).at(-1)!;
       chunks.push({
-        // El artículo del contenido nuevo; el del arrastre solo si no hay otro.
-        articleReference: (fresh.match(ARTICLE) ?? content.match(ARTICLE))?.[0],
+        articleReference: latestFresh.articleReference,
         chunkContent: content,
         chunkIndex: chunks.length,
-        numeralReference: subreference(content),
+        numeralReference: latestFresh.numeralReference,
         pageEnd: units.at(-1)!.pageEnd,
         pageStart: units[0].pageStart,
-        // Rótulo normativo si existe; si no, la primera oración del tramo
-        // nuevo como «sustento» legible de la referencia.
-        sectionTitle:
-          content.match(
-            /^(?:cap[ií]tulo|t[ií]tulo|secci[oó]n|art[ií]culo|anexo|disposici[oó]n(?:es)?).{1,240}/imu,
-          )?.[0] ??
-          (sustento || undefined),
+        sectionTitle: latestFresh.sectionTitle,
         tokenCount: tokens.length,
       });
       const overlap =
@@ -257,12 +263,59 @@ export class ChunkingService {
       for (const raw of page.text.split(/\n{2,}|(?<=\.)\s{2,}/)) {
         const content = normalizeParagraph(raw);
         if (!content) continue;
+        const location = structuralLocation(content);
+        const hasFreshBody = units.some(
+          (pending) => !pending.overlap && !pending.structuralHeading,
+        );
+        const startsLiteral = location.literal != null;
+        if (
+          hasFreshBody &&
+          (location.articleReference != null ||
+            location.containerSectionTitle != null ||
+            location.numeral != null ||
+            startsLiteral)
+        ) {
+          // Un fragmento visible nunca mezcla dos ubicaciones estructurales.
+          flush({ keepOverlap: false });
+        }
+
+        if (location.containerSectionTitle) {
+          activeContainerTitle = location.containerSectionTitle;
+          activeArticleReference = undefined;
+          activeArticleTitle = undefined;
+          activeNumeral = undefined;
+          activeLiteral = undefined;
+        }
+        if (location.articleReference) {
+          activeArticleReference = location.articleReference;
+          activeArticleTitle = location.sectionTitle;
+          activeNumeral = undefined;
+          activeLiteral = undefined;
+        }
+        if (location.numeral) {
+          activeNumeral = location.numeral;
+          activeLiteral = undefined;
+        }
+        if (location.literal) {
+          activeLiteral = location.literal.toLocaleLowerCase('es');
+        }
+
         const tokens = this.encoding.encode(content);
         const unit: ChunkUnit = {
+          articleReference: activeArticleReference,
           content,
+          structuralHeading: location.structuralHeading,
+          numeralReference:
+            [
+              activeNumeral,
+              activeLiteral ? `Literal ${activeLiteral})` : undefined,
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined,
           overlap: false,
           pageEnd: page.pageNumber,
           pageStart: page.pageNumber,
+          sectionTitle: activeArticleTitle ?? activeContainerTitle,
           tokenCount: tokens.length,
         };
         if (tokens.length > MAX_TOKENS) {
@@ -314,7 +367,7 @@ export class ChunkingService {
       const candidate = units[index];
       if (
         candidate.overlap ||
-        !isHeading(candidate.content) ||
+        !candidate.structuralHeading ||
         headingTokens + candidate.tokenCount + SEPARATOR_TOKENS >
           MAX_HEADING_TOKENS
       ) {
@@ -342,14 +395,14 @@ export class ChunkingService {
       // solapamiento con la ventana previa).
       state.setUnits([
         {
+          articleReference: unit.articleReference,
           content,
+          structuralHeading: false,
+          numeralReference: unit.numeralReference,
           overlap: false,
           pageEnd: unit.pageEnd,
           pageStart: headings[0]?.pageStart ?? unit.pageStart,
-          // El sustento se toma del párrafo completo una sola vez: cada
-          // ventana empieza en un corte de tokens y su inicio no es una frase.
-          // '' marca «sin sustento» para que ninguna ventana derive del corte.
-          sustento: sustentoFromText(unit.content) ?? '',
+          sectionTitle: unit.sectionTitle,
           tokenCount: this.encoding.encode(content).length,
         },
       ]);

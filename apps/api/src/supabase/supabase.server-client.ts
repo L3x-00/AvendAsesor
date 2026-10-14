@@ -194,9 +194,13 @@ export interface SupabaseDatabase {
           id: string;
           ingestion_status: 'failed' | 'indexed' | 'pending' | 'processing';
           ingestion_updated_at: string;
-          mime_type: 'application/pdf';
+          mime_type:
+            | 'application/msword'
+            | 'application/pdf'
+            | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            | 'text/markdown';
           original_file_name: string;
-          page_count: number;
+          page_count: number | null;
           sha256: string;
           storage_bucket: 'normative-documents';
           storage_path: string;
@@ -340,7 +344,7 @@ export interface SupabaseDatabase {
           p_file_size_bytes: number;
           p_issuance_year?: number | null;
           p_original_file_name: string;
-          p_page_count: number;
+          p_page_count: number | null;
           p_processing_error: string | null;
           p_sha256: string;
           p_storage_path: string;
@@ -366,7 +370,7 @@ export interface SupabaseDatabase {
           p_module_ids: string[];
           p_observation: string | null;
           p_original_file_name: string;
-          p_page_count: number;
+          p_page_count: number | null;
           p_processing_error: string | null;
           p_reason: string | null;
           p_replacement_date: string | null;
@@ -619,7 +623,7 @@ export interface SupabaseDatabase {
           document_version_id: string;
           job_id: string;
           lease_token: string;
-          page_count: number;
+          page_count: number | null;
           sha256: string;
           storage_bucket: string;
           storage_path: string;
@@ -630,7 +634,11 @@ export interface SupabaseDatabase {
         Returns: null;
       };
       complete_document_ingestion_job: {
-        Args: { p_job_id: string; p_lease_token: string };
+        Args: {
+          p_job_id: string;
+          p_lease_token: string;
+          p_verified_pdf_page_count: number | null;
+        };
         Returns: null;
       };
       fail_document_ingestion_job: {

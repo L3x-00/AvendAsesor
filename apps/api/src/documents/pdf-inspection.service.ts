@@ -54,7 +54,8 @@ export interface InspectedDocument {
   format: DocumentFormat;
   mimeType: string;
   originalFileName: string;
-  pageCount: number;
+  /** Total físico del PDF; `null` cuando todavía no se pudo verificar. */
+  pageCount: number | null;
   sha256: string;
   sizeBytes: number;
 }
@@ -142,7 +143,7 @@ function detectFormat(fileName: string): DocumentFormat {
 export class PdfInspectionService {
   inspectUnreadable(file: Express.Multer.File | undefined): InspectedDocument {
     const basic = this.inspectBasic(file);
-    return { ...basic, pageCount: 1 };
+    return { ...basic, pageCount: null };
   }
 
   async inspect(
@@ -156,13 +157,13 @@ export class PdfInspectionService {
     // Solo el PDF tiene conteo de páginas; los demás formatos se almacenan
     // sin analizar (el conteo real llegaría con la indexación).
     if (basic.format !== 'pdf') {
-      return { ...basic, pageCount: 1 };
+      return { ...basic, pageCount: null };
     }
 
     // Un PDF grande no se analiza: mantiene la instancia dentro de los 512 MB.
     // Se guarda sin conteo de páginas; el tope de 300 no aplica a estos.
     if (basic.sizeBytes > MAX_PDF_PARSE_BYTES) {
-      return { ...basic, pageCount: 1 };
+      return { ...basic, pageCount: null };
     }
 
     const parser = new PDFParse({

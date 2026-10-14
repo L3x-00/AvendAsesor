@@ -79,7 +79,8 @@ export interface ManagedDocumentVersion {
   /** Año del documento para esta versión; puede no estar registrado. */
   issuanceYear: number | null;
   originalFileName: string;
-  pageCount: number;
+  /** Total físico del PDF; `null` hasta que la ingesta pueda verificarlo. */
+  pageCount: number | null;
   uploadedAt: string;
   uploadedBy: string | null;
   uploadedByName: string | null;
@@ -262,7 +263,7 @@ const storedDocumentVersionRowSchema = z.object({
     'text/markdown',
   ]),
   original_file_name: z.string().min(1),
-  page_count: z.number().int().min(1).max(300),
+  page_count: z.number().int().min(1).max(300).nullable(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   storage_bucket: z.literal('normative-documents'),
   storage_path: z.string().min(1),

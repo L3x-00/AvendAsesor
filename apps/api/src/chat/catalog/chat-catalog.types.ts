@@ -19,7 +19,8 @@ export interface AvailableDocument {
   moduleNames: string[];
   resolutionNumber: string | null;
   originalFileName: string;
-  pageCount: number;
+  /** Total físico del PDF; nulo si todavía no fue comprobado. */
+  pageCount: number | null;
   /** Títulos de sección detectados al indexar; alimentan las sugerencias. */
   sectionTitles: string[];
   title: string;

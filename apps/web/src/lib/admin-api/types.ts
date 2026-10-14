@@ -138,7 +138,7 @@ export const managedDocumentVersionSchema = z.object({
   /** Ausente en respuestas anteriores al despliegue de versiones con año. */
   issuanceYear: z.number().int().nullable().optional(),
   originalFileName: z.string(),
-  pageCount: z.number().int().min(1).max(300),
+  pageCount: z.number().int().min(1).max(300).nullable(),
   uploadedAt: timestampSchema,
   uploadedBy: z.string().uuid().nullable(),
   uploadedByName: z.string().nullable(),

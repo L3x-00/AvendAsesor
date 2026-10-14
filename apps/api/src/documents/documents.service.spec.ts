@@ -171,7 +171,7 @@ describe('DocumentsService', () => {
         format: 'pdf',
         mimeType: 'application/pdf',
         originalFileName: 'documento.pdf',
-        pageCount: 1,
+        pageCount: null,
         sha256: 'a'.repeat(64),
         sizeBytes: 512,
       }),
@@ -289,6 +289,7 @@ describe('DocumentsService', () => {
     );
     expect(documentsGateway.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        pageCount: null,
         processingError:
           'El archivo tiene estructura PDF, pero la lectura o procesamiento automático falló.',
       }),

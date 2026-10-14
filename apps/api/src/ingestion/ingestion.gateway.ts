@@ -4,7 +4,7 @@ export interface ClaimedIngestionJob {
   documentVersionId: string;
   jobId: string;
   leaseToken: string;
-  pageCount: number;
+  pageCount: number | null;
   sha256: string;
   storageBucket: string;
   storagePath: string;
@@ -27,7 +27,10 @@ export interface PersistedDocumentChunk {
 export interface IngestionGateway {
   claimNext(leaseSeconds: number): Promise<ClaimedIngestionJob | null>;
   clearChunks(job: ClaimedIngestionJob): Promise<void>;
-  complete(job: ClaimedIngestionJob): Promise<void>;
+  complete(
+    job: ClaimedIngestionJob,
+    verifiedPdfPageCount: number | null,
+  ): Promise<void>;
   downloadPdf(storageBucket: string, storagePath: string): Promise<Buffer>;
   fail(
     job: ClaimedIngestionJob,
