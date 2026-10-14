@@ -98,6 +98,7 @@ export class SupabaseChatCatalogGatewayAdapter implements ChatCatalogGateway {
         .eq('publication_status', 'active')
         .not('approved_version_id', 'is', null)
         .is('metadata->demoSeed', null)
+        .order('issuance_year', { ascending: false, nullsFirst: false })
         .order('title', { ascending: true })
         .order('id', { ascending: true })
         .range(from, from + CATALOG_PAGE_SIZE - 1);

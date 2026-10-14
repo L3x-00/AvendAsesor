@@ -125,6 +125,52 @@ function normReference(source: ChatSource): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
+/**
+ * Los PDF de El Peruano suelen repetir la cabecera de página como si fuera una
+ * sección («7 NORMAS LEGALES · Domingo…»). No ayuda a localizar la afirmación
+ * y, junto a un artículo o literal, aparenta una precisión que el fragmento no
+ * ofrece. Las conversaciones históricas ya guardadas se corrigen al renderizar.
+ */
+const GENERIC_SECTION_TITLE =
+  /\b(?:normas legales|el peruano|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/iu;
+const DOCUMENT_NAME_AS_SECTION =
+  /^\s*(?:ley|decreto|resoluci[oó]n|directiva|norma)\b.{0,180}\bn[.°º]/iu;
+
+function locationSectionTitle(source: ChatSource): string | null {
+  let title = source.sectionTitle?.replace(/\s+/gu, " ").trim();
+  if (!title) return null;
+  if (GENERIC_SECTION_TITLE.test(title)) return null;
+
+  // El título completo de la norma no es una sección. Si existe una ubicación
+  // jurídica concreta, se muestra esa referencia y se evita repetir el nombre
+  // del documento en la columna de ubicación.
+  if (
+    (source.articleReference || source.numeralReference) &&
+    DOCUMENT_NAME_AS_SECTION.test(title)
+  ) {
+    return null;
+  }
+
+  // Si el extractor identificó un subtítulo como «Artículo 3.-
+  // Implementación…», la referencia jurídica ya aparece en su propia línea.
+  // Se conserva solo el nombre del apartado, que es lo que permite ubicar el
+  // pasaje sin repetir «Artículo 3» dos veces.
+  const articleReference = source.articleReference?.replace(/\s+/gu, " ").trim();
+  if (
+    articleReference &&
+    title.toLocaleLowerCase("es").startsWith(
+      articleReference.toLocaleLowerCase("es"),
+    )
+  ) {
+    title = title
+      .slice(articleReference.length)
+      .replace(/^[\s:–—-]+/u, "")
+      .trim();
+  }
+
+  return title || null;
+}
+
 function SourceTable({
   caption,
   messageId,
@@ -152,7 +198,7 @@ function SourceTable({
             <th scope="col">#</th>
             <th scope="col">Tipo</th>
             <th scope="col">Documento</th>
-            <th scope="col">Sustento</th>
+            <th scope="col">Ubicación</th>
             <th scope="col">Pág.</th>
             <th scope="col">Estado</th>
             <th scope="col">Ver</th>
@@ -162,6 +208,7 @@ function SourceTable({
           {sources.map((source) => {
             // Se abre en la página citada (los PDF se ven en el navegador).
             const downloadPath = `/api/chat/sources/${encodeURIComponent(source.id)}/download?pagina=${source.pageStart}`;
+            const sectionTitle = locationSectionTitle(source);
 
             return (
               <tr
@@ -197,10 +244,10 @@ function SourceTable({
                     Proceso: {source.moduleName ?? "No especificado"}
                   </span>
                 </td>
-                <td data-label="Sustento">
-                  {source.sectionTitle ? (
+                <td data-label="Ubicación">
+                  {sectionTitle ? (
                     <span className={styles.referenceLine}>
-                      <strong>Sección:</strong> {source.sectionTitle}
+                      <strong>Sección o subtítulo:</strong> {sectionTitle}
                     </span>
                   ) : null}
                   {source.articleReference ? (
@@ -214,11 +261,11 @@ function SourceTable({
                       {source.numeralReference}
                     </span>
                   ) : null}
-                  {!source.sectionTitle &&
+                  {!sectionTitle &&
                   !source.articleReference &&
                   !source.numeralReference ? (
                     <span className={styles.referenceLine}>
-                      No especificado
+                      No se identificó una ubicación más precisa en el fragmento
                     </span>
                   ) : null}
                 </td>

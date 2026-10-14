@@ -11,7 +11,7 @@ function vector(value = 0.1): number[] {
 
 const source = {
   articleReference: 'Artículo 1.',
-  chunkContent: 'Contenido recuperado.',
+  chunkContent: 'Artículo 1. Contenido recuperado.',
   chunkId: 'chunk-id',
   documentId: 'document-id',
   documentSituation: 'current' as const,
@@ -105,7 +105,7 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-b',
-        chunkContent: 'Contenido chunk-b.',
+        chunkContent: 'Artículo 1. Contenido chunk-b.',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
@@ -503,7 +503,7 @@ describe('RagService', () => {
     // uno de otro módulo a 0.52 pedían aclaración en «¿y cuál es el plazo?».
     const main = [0.665, 0.665, 0.595].map((semanticScore, index) => ({
       ...source,
-      chunkContent: `Destitución ${index}.`,
+      chunkContent: `Artículo 1. Destitución ${index}.`,
       chunkId: `main-${index}`,
       semanticScore,
     }));
@@ -560,7 +560,7 @@ describe('RagService', () => {
     ]);
   });
 
-  it('drops a legacy chunk contained in a better one of the same version, not of another', async () => {
+  it('keeps a short shared passage from another document as distinct corroboration', async () => {
     const whole =
       'Inicio del artículo. Tramo compartido del párrafo largo. Cierre.';
     gateway.search.mockResolvedValue([
@@ -583,6 +583,143 @@ describe('RagService', () => {
     expect(result.sources.map((item) => item.chunkId)).toEqual([
       'whole',
       'other-version',
+    ]);
+  });
+
+  it('deduplicates identical normalized evidence across documents and keeps the more relevant source', async () => {
+    const repeatedEvidence =
+      'Los docentes coordinadores de las oficinas diocesanas perciben una remuneración mensual de dos mil seiscientos sesenta y seis soles.';
+    const lowerRelevance = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'lower-relevance',
+      documentId: 'document-a',
+      documentVersionId: 'version-a',
+      semanticScore: 0.84,
+    };
+    const higherRelevance = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'higher-relevance',
+      documentId: 'document-b',
+      documentVersionId: 'version-b',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([lowerRelevance, higherRelevance]);
+
+    const result = await service.retrieve('¿Cuánto gana un profesor?', null);
+
+    expect(result).toMatchObject({
+      kind: 'evidence',
+      sources: [higherRelevance],
+      topRelevanceScore: 0.9,
+    });
+  });
+
+  it('preserves an ambiguous route when equivalent evidence belongs to different modules', async () => {
+    const repeatedEvidence =
+      'Los docentes coordinadores de las oficinas diocesanas perciben una remuneración mensual de dos mil seiscientos sesenta y seis soles.';
+    const contracts = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'contracts-evidence',
+      documentId: 'contracts-document',
+      documentVersionId: 'contracts-version',
+      moduleIds: ['module-a'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.9,
+    };
+    const remuneration = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'remuneration-evidence',
+      documentId: 'remuneration-document',
+      documentVersionId: 'remuneration-version',
+      moduleIds: ['module-b'],
+      moduleNames: ['Remuneraciones'],
+      semanticScore: 0.88,
+    };
+    gateway.search.mockResolvedValue([contracts, remuneration]);
+
+    const result = await service.retrieve('¿Cuánto gana un profesor?', null);
+
+    if (result.kind !== 'ambiguous') throw new Error('Expected ambiguity.');
+    expect(result.modules).toEqual([
+      { id: 'module-a', name: 'Contratación y desplazamientos' },
+      { id: 'module-b', name: 'Remuneraciones' },
+    ]);
+    // La interfaz recibe una sola fuente, pero la ruta aún recuerda ambos
+    // módulos para pedir la precisión antes de responder.
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'contracts-evidence',
+    ]);
+  });
+
+  it('keeps separate documents when their shared statement has independent details', async () => {
+    const sharedStatement =
+      'Los docentes coordinadores perciben una remuneración mensual de dos mil seiscientos sesenta y seis soles.';
+    const salaryRule = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. ${sharedStatement} El pago corresponde únicamente a la jornada adicional autorizada.`,
+      chunkId: 'salary-rule',
+      documentId: 'document-a',
+      documentVersionId: 'version-a',
+      semanticScore: 0.9,
+    };
+    const eligibilityRule = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. ${sharedStatement} La norma exige resolución de encargatura vigente para acceder al pago.`,
+      chunkId: 'eligibility-rule',
+      documentId: 'document-b',
+      documentVersionId: 'version-b',
+      semanticScore: 0.88,
+    };
+    gateway.search.mockResolvedValue([salaryRule, eligibilityRule]);
+
+    const result = await service.retrieve('¿Cuánto gana un profesor?', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'salary-rule',
+      'eligibility-rule',
+    ]);
+  });
+
+  it('keeps documents whose only difference is a short material exception', async () => {
+    const applies = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent:
+        'Artículo 3. La asignación se aplica a los docentes coordinadores con jornada adicional autorizada.',
+      chunkId: 'applies',
+      documentId: 'document-a',
+      documentVersionId: 'version-a',
+      semanticScore: 0.9,
+    };
+    const doesNotApply = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent:
+        'Artículo 3. La asignación no se aplica a los docentes coordinadores con jornada adicional autorizada.',
+      chunkId: 'does-not-apply',
+      documentId: 'document-b',
+      documentVersionId: 'version-b',
+      semanticScore: 0.88,
+    };
+    gateway.search.mockResolvedValue([applies, doesNotApply]);
+
+    const result = await service.retrieve('Consulta', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'applies',
+      'does-not-apply',
     ]);
   });
 
@@ -663,7 +800,7 @@ describe('RagService', () => {
     const switchedSource = {
       ...source,
       chunkId: 'chunk-b',
-      chunkContent: 'Contenido chunk-b.',
+      chunkContent: 'Artículo 1. Contenido chunk-b.',
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95,
@@ -695,7 +832,7 @@ describe('RagService', () => {
     const switchedSource = {
       ...source,
       chunkId: 'chunk-b',
-      chunkContent: 'Contenido chunk-b.',
+      chunkContent: 'Artículo 1. Contenido chunk-b.',
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95,
@@ -716,6 +853,49 @@ describe('RagService', () => {
         { id: 'module-b', name: 'Módulo B' },
       ],
       sources: [switchedSource, source],
+      topRelevanceScore: 0.95,
+    });
+  });
+
+  it('does not repeat identical evidence in a clarification returned by both searches', async () => {
+    const repeatedEvidence =
+      'Los docentes coordinadores de las oficinas diocesanas perciben una remuneración mensual de dos mil seiscientos sesenta y seis soles.';
+    const globalSource = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'global-duplicate',
+      documentId: 'document-b',
+      documentVersionId: 'version-b',
+      moduleIds: ['module-b'],
+      moduleNames: ['Módulo B'],
+      semanticScore: 0.95,
+    };
+    const selectedSource = {
+      ...source,
+      articleReference: 'Artículo 3.',
+      chunkContent: `Artículo 3. Literal h) ${repeatedEvidence}`,
+      chunkId: 'selected-duplicate',
+      documentId: 'document-a',
+      documentVersionId: 'version-a',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockImplementation(
+      (input: { selectedModuleId: string | null }) =>
+        Promise.resolve(
+          input.selectedModuleId ? [selectedSource] : [globalSource],
+        ),
+    );
+
+    await expect(
+      service.retrieve('Consulta potencialmente nueva', 'module-a'),
+    ).resolves.toEqual({
+      kind: 'ambiguous',
+      modules: [
+        { id: 'module-a', name: 'Módulo A' },
+        { id: 'module-b', name: 'Módulo B' },
+      ],
+      sources: [globalSource],
       topRelevanceScore: 0.95,
     });
   });
@@ -763,14 +943,14 @@ describe('RagService', () => {
       {
         ...source,
         chunkId: 'chunk-b',
-        chunkContent: 'Contenido chunk-b.',
+        chunkContent: 'Artículo 1. Contenido chunk-b.',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
       {
         ...source,
         chunkId: 'chunk-c',
-        chunkContent: 'Contenido chunk-c.',
+        chunkContent: 'Artículo 1. Contenido chunk-c.',
         moduleIds: ['module-c'],
         moduleNames: ['Módulo C'],
       },

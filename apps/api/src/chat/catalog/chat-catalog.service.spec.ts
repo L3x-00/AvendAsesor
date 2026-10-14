@@ -4,6 +4,8 @@ import {
   DOCUMENTS_CACHE_MS,
   FAILED_SUGGESTIONS_CACHE_MS,
   fallbackSuggestions,
+  newestDocumentsFirst,
+  requestedCatalogDocuments,
 } from './chat-catalog.service';
 import type { AvailableDocument } from './chat-catalog.types';
 import { parseSuggestedQuestions } from './openai-suggested-questions.gateway';
@@ -48,6 +50,54 @@ function service(
 }
 
 describe('ChatCatalogService', () => {
+  it('ordena los documentos aprobados del más reciente al más antiguo', async () => {
+    const unordered = [
+      document({ id: 'sin-fecha', issuanceYear: null, title: 'Sin fecha' }),
+      document({ id: 'dos-mil-diecisiete', issuanceYear: 2017, title: '2017' }),
+      document({
+        id: 'dos-mil-veinticinco',
+        issuanceYear: 2025,
+        title: '2025',
+      }),
+      document({ id: 'dos-mil-veintitres', issuanceYear: 2023, title: '2023' }),
+    ];
+    const { service: catalog } = service(unordered);
+
+    const reply = await catalog.reply();
+
+    expect(reply.documents.map((item) => item.id)).toEqual([
+      'dos-mil-veinticinco',
+      'dos-mil-veintitres',
+      'dos-mil-diecisiete',
+      'sin-fecha',
+    ]);
+    expect(reply.message.indexOf('2025')).toBeLessThan(
+      reply.message.indexOf('2023'),
+    );
+    expect(reply.message.indexOf('2023')).toBeLessThan(
+      reply.message.indexOf('2017'),
+    );
+  });
+
+  it('usa título e identificador como desempate estable dentro del mismo año', () => {
+    expect(
+      newestDocumentsFirst([
+        document({ id: 'b', issuanceYear: 2025, title: 'Documento 10' }),
+        document({ id: 'a', issuanceYear: 2025, title: 'Documento 2' }),
+        document({ id: 'c', issuanceYear: null, title: 'Sin fecha' }),
+      ]).map((item) => item.id),
+    ).toEqual(['a', 'b', 'c']);
+  });
+
+  it('mantiene el orden cronológico aun si se invoca el filtro sin pregunta', () => {
+    expect(
+      requestedCatalogDocuments([
+        document({ id: 'old', issuanceYear: 2017 }),
+        document({ id: 'new', issuanceYear: 2025 }),
+      ]).map((item) => item.id),
+    ).toEqual(['new', 'old']);
+  });
+
   it('lista los documentos por tema y devuelve preguntas sugeridas por la IA', async () => {
     const { service: catalog } = service([
       document(),

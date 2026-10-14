@@ -220,6 +220,11 @@ describe('SupabaseChatCatalogGatewayAdapter', () => {
     ).toEqual(
       expect.arrayContaining([
         {
+          args: ['issuance_year', { ascending: false, nullsFirst: false }],
+          method: 'order',
+          table: 'documents',
+        },
+        {
           args: ['title', { ascending: true }],
           method: 'order',
           table: 'documents',

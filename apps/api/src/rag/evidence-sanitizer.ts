@@ -2,7 +2,6 @@ import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
 const MIN_EVIDENCE_CHARS = 1;
-const MAX_SECTION_CHARS = 180;
 
 /**
  * Páginas de El Peruano anexadas a una resolución del MINEDU pueden contener
@@ -18,6 +17,35 @@ const MINEDU_ENTRY =
   /\b(?:resoluci[oó]n\s+(?:viceministerial|ministerial|suprema)\s+)?n[.°º\s]*\d{2,4}\s*-\s*\d{4}\s*-\s*minedu\b/iu;
 const VERIFICATION_BOILERPLATE =
   /^(?:documento electr[oó]nico firmado digitalmente|la integridad del documento y la autor[ií]a|esto es una copia aut[eé]ntica|su autenticidad e integridad pueden ser contrastadas)/iu;
+/**
+ * Cabeceras de página del diario oficial. No identifican el pasaje normativo
+ * que sustenta una respuesta, aun cuando hayan quedado como `section_title`
+ * durante la ingesta.
+ */
+const OFFICIAL_GAZETTE_BOILERPLATE =
+  /\b(?:\d+\s+)?normas legales\b|\b(?:diario oficial\s+)?el peruano\b/iu;
+// Un título normativo auténtico puede mencionar El Peruano (por ejemplo,
+// «Artículo 3.- Publicación en El Peruano»); se conserva solo si empieza con
+// una estructura jurídica comprobable, nunca si es la cabecera de la página.
+const STRUCTURED_SECTION_TITLE =
+  /^\s*(?:art[ií]culo\s+[\dIVXLCDM]+(?:[.°º-]+)?|cap[ií]tulo\s+[\wIVXLCDM.-]+|t[ií]tulo\s+[\wIVXLCDM.-]+|secci[oó]n\s+[\wIVXLCDM.-]+|anexo\s+[\wIVXLCDM.-]+|disposici[oó]n(?:es)?\s+[\wIVXLCDM.-]+)/iu;
+const REFERENCE_PART_SEPARATOR = /\s*·\s*/u;
+const LITERAL_REFERENCE = /^(?:literal|inciso)\s+([a-z])\)$/iu;
+
+function hasOfficialGazetteHeader(value: string): boolean {
+  return (
+    OFFICIAL_GAZETTE_BOILERPLATE.test(value) &&
+    !STRUCTURED_SECTION_TITLE.test(value)
+  );
+}
+
+function sectionIsBoilerplate(sectionTitle: string): boolean {
+  return (
+    VERIFICATION_BOILERPLATE.test(sectionTitle) ||
+    ENERGY_SECTOR.test(sectionTitle) ||
+    hasOfficialGazetteHeader(sectionTitle)
+  );
+}
 
 function trimAdjacentSector(paragraph: string): string {
   const sectorHeader = ENERGY_SECTOR_HEADER.exec(paragraph);
@@ -70,21 +98,30 @@ function cleanParagraph(paragraph: string): string | null {
   return cleaned;
 }
 
-function meaningfulSection(content: string): string | null {
-  const normalized = content.replace(/\s+/gu, ' ').trim();
-  const sentences = normalized.match(/.*?(?:[.!?…]+(?=\s|$)|$)/gu) ?? [];
-  const sentence = sentences
-    .map((item) => item.trim())
-    .find(
-      (item) =>
-        item.length >= 15 &&
-        !VERIFICATION_BOILERPLATE.test(item) &&
-        !ENERGY_SECTOR.test(item),
-    );
-  if (!sentence) return null;
-  return sentence.length > MAX_SECTION_CHARS
-    ? `${sentence.slice(0, MAX_SECTION_CHARS).trimEnd()}…`
-    : sentence;
+function normalizedTextIncludes(content: string, reference: string): boolean {
+  const normalizedReference = normalizeSpanishText(reference);
+  if (!normalizedReference) return false;
+  const escapedReference = normalizedReference.replace(
+    /[.*+?^${}()|[\]\\]/gu,
+    '\\$&',
+  );
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escapedReference}(?=$|[^\\p{L}\\p{N}])`,
+    'u',
+  ).test(normalizeSpanishText(content));
+}
+
+function listedLiteralStillAppears(
+  reference: string,
+  content: string,
+): boolean {
+  const literal = LITERAL_REFERENCE.exec(reference.trim())?.[1];
+  if (!literal) return false;
+  const escapedLiteral = literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(
+    `(?:\\b(?:literal|inciso)\\s+${escapedLiteral}\\)(?=\\s|$)|(?:^|\\n{1,2})\\s*${escapedLiteral}\\)(?=\\s|$))`,
+    'iu',
+  ).test(content);
 }
 
 function referenceStillAppears(
@@ -92,9 +129,24 @@ function referenceStillAppears(
   content: string,
 ): string | null {
   if (!reference) return null;
-  return normalizeSpanishText(content).includes(normalizeSpanishText(reference))
-    ? reference
-    : null;
+  if (normalizedTextIncludes(content, reference)) return reference;
+
+  const parts = reference
+    .split(REFERENCE_PART_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (
+    parts.length > 1 &&
+    parts.every(
+      (part) =>
+        normalizedTextIncludes(content, part) ||
+        listedLiteralStillAppears(part, content),
+    )
+  ) {
+    return reference;
+  }
+
+  return listedLiteralStillAppears(reference, content) ? reference : null;
 }
 
 /**
@@ -111,24 +163,25 @@ export function sanitizeRetrievedEvidence(
     .filter((item): item is string => Boolean(item));
   const chunkContent = paragraphs.join('\n\n').trim();
   if (chunkContent.length < MIN_EVIDENCE_CHARS) return null;
-  const contentChanged = chunkContent !== source.chunkContent.trim();
 
   const sectionInvalid =
-    !source.sectionTitle ||
-    VERIFICATION_BOILERPLATE.test(source.sectionTitle) ||
-    ENERGY_SECTOR.test(source.sectionTitle);
+    !source.sectionTitle || sectionIsBoilerplate(source.sectionTitle);
 
   return {
     ...source,
-    articleReference: contentChanged
-      ? referenceStillAppears(source.articleReference, chunkContent)
-      : source.articleReference,
+    articleReference: referenceStillAppears(
+      source.articleReference,
+      chunkContent,
+    ),
     chunkContent,
-    numeralReference: contentChanged
-      ? referenceStillAppears(source.numeralReference, chunkContent)
-      : source.numeralReference,
-    sectionTitle: sectionInvalid
-      ? meaningfulSection(chunkContent)
-      : source.sectionTitle,
+    numeralReference: referenceStillAppears(
+      source.numeralReference,
+      chunkContent,
+    ),
+    // Una oración recuperada no demuestra ser un título o subtítulo. Si la
+    // ingesta guardó una cabecera genérica del diario oficial, se omite; la UI
+    // mostrará solo las referencias verificables (artículo/literal) o avisará
+    // que no hay una ubicación más precisa.
+    sectionTitle: sectionInvalid ? null : source.sectionTitle,
   };
 }

@@ -213,3 +213,16 @@ const LEGACY_ADVISORY_LEAD_IN =
 export function withoutLegacyLeadIn(content: string): string {
   return content.replace(LEGACY_ADVISORY_LEAD_IN, "");
 }
+
+/**
+ * Respuestas antiguas sin evidencia recibían este cierre fijo aunque MINEDU,
+ * UGEL o DRE no guardaran relación con la consulta. Se oculta solo al
+ * renderizar para no reescribir el historial ni convertir ese texto en enlaces
+ * automáticos.
+ */
+const LEGACY_GENERIC_OFFICIAL_SUGGESTION =
+  /\s*(?:\r?\n\s*){1,2}Sugerencias:\s*verifica esta orientaci[oó]n en el portal oficial del MINEDU y consulta con tu UGEL o DRE antes de decidir\.?\s*$/iu;
+
+export function withoutLegacyGenericOfficialSuggestion(content: string): string {
+  return content.replace(LEGACY_GENERIC_OFFICIAL_SUGGESTION, "").trimEnd();
+}

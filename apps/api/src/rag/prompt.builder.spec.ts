@@ -57,6 +57,17 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain(
       'salvo que la persona pida expresamente el antecedente histórico',
     );
+    expect(prompt).toContain('de tres a cinco viñetas claras');
+    expect(prompt).toContain('tabla Markdown únicamente');
+    expect(prompt).toContain(
+      'ordénala de lo vigente o más reciente a lo histórico',
+    );
+    expect(prompt).toContain('no conviertas una cifra aislada');
+    expect(prompt).toContain('al menos una cita [n] en cada fila');
+    expect(prompt).toContain(
+      'no añadas por defecto portales, entidades o enlaces genéricos',
+    );
+    expect(prompt).toContain('explica brevemente para qué le sirve en su caso');
   });
 
   it('asks for the no-support marker and for clarification when the sources admit several readings', () => {

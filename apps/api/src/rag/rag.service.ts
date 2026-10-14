@@ -166,22 +166,54 @@ function topScore(sources: RetrievedChunk[]): number {
   return clampScore(Math.max(...sources.map((source) => source.semanticScore)));
 }
 
+function evidenceTokens(content: string): string[] {
+  return normalizeSpanishText(content)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
 /**
- * Quita fragmentos repetidos de la misma versión: el mismo texto, o uno
- * contenido íntegro en otro ya elegido (mejor puntaje primero). El chunker
- * anterior guardaba duplicados y tramos contenidos en el vecino; hasta
- * reindexar, ocupaban varias de las cinco fuentes y repetían filas en las
- * referencias.
+ * Quita fragmentos vecinos repetidos de una misma versión. Esta colección se
+ * usa para decidir la ruta: no se puede colapsar aún evidencia de documentos
+ * distintos porque podría ocultar un segundo módulo aplicable.
+ */
+function sourcesWithoutVersionDuplicates(
+  sources: RetrievedChunk[],
+): RetrievedChunk[] {
+  const kept: Array<{
+    source: RetrievedChunk;
+    text: string;
+  }> = [];
+  for (const source of sources) {
+    const text = evidenceTokens(source.chunkContent).join(' ');
+    const repeated = kept.some((item) => {
+      return (
+        item.source.documentVersionId === source.documentVersionId &&
+        (item.text === text || item.text.includes(text))
+      );
+    });
+    if (!repeated) kept.push({ source, text });
+  }
+  return kept.map((item) => item.source);
+}
+
+/**
+ * Quita evidencia idéntica para una respuesta visible. Entre documentos solo
+ * colapsa texto normalizado idéntico: una diferencia breve puede contener una
+ * excepción, negación, importe o condición jurídica material y por eso se
+ * conserva. La decisión de módulo siempre se toma antes, con
+ * `sourcesWithoutVersionDuplicates`.
  */
 function uniqueSources(sources: RetrievedChunk[]): RetrievedChunk[] {
-  const kept: Array<{ source: RetrievedChunk; text: string }> = [];
-  for (const source of sources) {
-    const text = source.chunkContent.replace(/\s+/gu, ' ').trim();
-    const repeated = kept.some(
-      (item) =>
-        item.source.documentVersionId === source.documentVersionId &&
-        item.text.includes(text),
-    );
+  const kept: Array<{
+    source: RetrievedChunk;
+    text: string;
+  }> = [];
+  for (const source of sourcesWithoutVersionDuplicates(sources)) {
+    const text = evidenceTokens(source.chunkContent).join(' ');
+    const repeated = kept.some((item) => item.text === text);
     if (!repeated) kept.push({ source, text });
   }
   return kept.map((item) => item.source);
@@ -237,7 +269,9 @@ function relevantSources(
 
 function byScoreDescending(sources: RetrievedChunk[]): RetrievedChunk[] {
   return [...sources].sort(
-    (left, right) => right.semanticScore - left.semanticScore,
+    (left, right) =>
+      right.semanticScore - left.semanticScore ||
+      right.lexicalScore - left.lexicalScore,
   );
 }
 
@@ -581,23 +615,26 @@ export class RagService {
       globalSearch,
       selectedSearch,
     ]);
-    const globalSources = uniqueSources(
-      rawGlobalSources
-        .map(sanitizeRetrievedEvidence)
-        .filter((source): source is RetrievedChunk => Boolean(source)),
+    const globalRoutingSources = sourcesWithoutVersionDuplicates(
+      byScoreDescending(
+        rawGlobalSources
+          .map(sanitizeRetrievedEvidence)
+          .filter((source): source is RetrievedChunk => Boolean(source)),
+      ),
     );
-    const selectedSources = uniqueSources(
-      rawSelectedSources
-        .map(sanitizeRetrievedEvidence)
-        .filter((source): source is RetrievedChunk => Boolean(source)),
+    const selectedRoutingSources = sourcesWithoutVersionDuplicates(
+      byScoreDescending(
+        rawSelectedSources
+          .map(sanitizeRetrievedEvidence)
+          .filter((source): source is RetrievedChunk => Boolean(source)),
+      ),
     );
-
-    if (!globalSources.length && !selectedSources.length) {
+    if (!globalRoutingSources.length && !selectedRoutingSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };
     }
 
     if (!selectedModuleId) {
-      const route = routeSources(globalSources);
+      const route = routeSources(globalRoutingSources);
       if (route.kind === 'ambiguous') {
         // Antes de pedir precisión: si la consulta nombra a uno de los módulos
         // en conflicto, ese es el tema real y se responde con su evidencia.
@@ -606,7 +643,7 @@ export class RagService {
           route.modules,
         );
         const scopedSources = namedModule
-          ? attributableToModule(globalSources, namedModule.id)
+          ? attributableToModule(globalRoutingSources, namedModule.id)
           : [];
         if (namedModule && scopedSources.length) {
           const sources = relevantSources(scopedSources, matchCount);
@@ -618,7 +655,7 @@ export class RagService {
           };
         }
 
-        const sources = relevantSources(globalSources, matchCount);
+        const sources = relevantSources(globalRoutingSources, matchCount);
         return {
           kind: 'ambiguous',
           modules: route.modules,
@@ -629,8 +666,8 @@ export class RagService {
       const resolvedModule = route.resolvedModule;
       const sources = relevantSources(
         resolvedModule
-          ? attributableToModule(globalSources, resolvedModule.id)
-          : globalSources,
+          ? attributableToModule(globalRoutingSources, resolvedModule.id)
+          : globalRoutingSources,
         matchCount,
       );
       return {
@@ -642,11 +679,11 @@ export class RagService {
     }
 
     const dominantGlobal = withinScoreMargin(
-      globalSources,
+      globalRoutingSources,
       RAG_ROUTING_SCORE_MARGIN,
     );
-    const currentRoute = globalSources.length
-      ? routeSources(globalSources)
+    const currentRoute = globalRoutingSources.length
+      ? routeSources(globalRoutingSources)
       : null;
     if (currentRoute) {
       if (
@@ -657,16 +694,19 @@ export class RagService {
           sourceIncludesContext(source, selectedModuleId),
         )
       ) {
-        const globalScore = topScore(globalSources);
-        const selectedScore = selectedSources.length
-          ? topScore(selectedSources)
+        const globalScore = topScore(globalRoutingSources);
+        const selectedScore = selectedRoutingSources.length
+          ? topScore(selectedRoutingSources)
           : null;
         if (
           selectedScore === null ||
           globalScore - selectedScore >= RAG_TOPIC_SWITCH_SCORE_MARGIN
         ) {
           const sources = relevantSources(
-            attributableToModule(globalSources, currentRoute.resolvedModule.id),
+            attributableToModule(
+              globalRoutingSources,
+              currentRoute.resolvedModule.id,
+            ),
             matchCount,
           );
           return {
@@ -677,14 +717,19 @@ export class RagService {
           };
         }
 
-        const competingSources = balancedUniqueSources(
+        const competingCandidates = balancedUniqueSources(
           10,
-          withinScoreMargin(globalSources, RAG_SOURCE_SCORE_MARGIN),
-          withinScoreMargin(selectedSources, RAG_SOURCE_SCORE_MARGIN),
+          withinScoreMargin(globalRoutingSources, RAG_SOURCE_SCORE_MARGIN),
+          withinScoreMargin(selectedRoutingSources, RAG_SOURCE_SCORE_MARGIN),
+        );
+        const competingSources = uniqueSources(
+          byScoreDescending(competingCandidates),
         );
         return {
           kind: 'ambiguous',
-          modules: routeSources(competingSources).modules,
+          // La ruta conserva ambos temas candidatos aunque sus extractos sean
+          // equivalentes; la lista visible no los repite.
+          modules: routeSources(competingCandidates).modules,
           sources: competingSources,
           topRelevanceScore: Math.max(globalScore, selectedScore),
         };
@@ -696,7 +741,7 @@ export class RagService {
           sourceIncludesContext(source, selectedModuleId),
         )
       ) {
-        const sources = relevantSources(globalSources, matchCount);
+        const sources = relevantSources(globalRoutingSources, matchCount);
         return {
           kind: 'ambiguous',
           modules: currentRoute.modules,
@@ -706,14 +751,14 @@ export class RagService {
       }
     }
 
-    if (selectedSources.length) {
+    if (selectedRoutingSources.length) {
       // Subtema dentro del mismo módulo: la evidencia global que pertenece al
       // módulo seleccionado también cuenta ("¿y para una permuta?" dentro de
       // Desplazamientos), no solo la de la búsqueda acotada.
       const sources = relevantSources(
         byScoreDescending([
-          ...selectedSources,
-          ...globalSources.filter((source) =>
+          ...selectedRoutingSources,
+          ...globalRoutingSources.filter((source) =>
             sourceIncludesContext(source, selectedModuleId),
           ),
         ]),
@@ -735,7 +780,7 @@ export class RagService {
       currentRoute?.kind === 'resolved' &&
       currentRoute.resolvedModule?.id === selectedModuleId
     ) {
-      const sources = relevantSources(globalSources, matchCount);
+      const sources = relevantSources(globalRoutingSources, matchCount);
       return {
         kind: 'evidence',
         resolvedModule: currentRoute.resolvedModule,
@@ -744,8 +789,8 @@ export class RagService {
       };
     }
 
-    if (globalSources.length) {
-      const sources = relevantSources(globalSources, matchCount);
+    if (globalRoutingSources.length) {
+      const sources = relevantSources(globalRoutingSources, matchCount);
       return {
         kind: 'ambiguous',
         modules: currentRoute?.modules ?? [],

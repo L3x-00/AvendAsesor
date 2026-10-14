@@ -1,5 +1,5 @@
 export const RAG_NO_EVIDENCE_MESSAGE =
-  'Por ahora no encontré información suficiente para orientarte bien sobre esto. ¿Me cuentas un poco más sobre el trámite o tu situación? También puedes revisar el portal oficial del MINEDU o consultar con tu UGEL o DRE.';
+  'Por ahora no encontré información suficiente para orientarte bien sobre esto. Cuéntame el trámite, tu cargo y qué necesitas resolver para buscar una respuesta más precisa.';
 
 /** Primera consulta sin tema: se pide el trámite antes de buscar (puntos 5 y 12). */
 export const RAG_TOPIC_CLARIFICATION_MESSAGE =

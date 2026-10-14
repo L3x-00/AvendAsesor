@@ -79,6 +79,28 @@ function withSummaries(
 }
 
 describe('ChatCatalogService — panorama de un tema', () => {
+  it('ordena los panoramas y sus resúmenes desde el documento más reciente', async () => {
+    const { catalog } = withSummaries([
+      document({ id: 'old', issuanceYear: 2017, moduleIds: ['rem'] }),
+      document({ id: 'new', issuanceYear: 2025, moduleIds: ['rem'] }),
+      document({ id: 'middle', issuanceYear: 2023, moduleIds: ['rem'] }),
+    ]);
+
+    const overview = await catalog.moduleOverview({
+      module: remuneraciones,
+      parent: null,
+    });
+
+    expect(overview.documents.map((item) => item.id)).toEqual([
+      'new',
+      'middle',
+      'old',
+    ]);
+    expect(overviewMessage(overview).indexOf('(Ley, 2025)')).toBeLessThan(
+      overviewMessage(overview).indexOf('(Ley, 2023)'),
+    );
+  });
+
   it('lista los documentos del tema con un resumen generado del texto', async () => {
     const { catalog, catalogGateway, summarize } = withSummaries([
       padrones,

@@ -34,10 +34,8 @@ import {
   MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
   RAG_ADVISORY_CLOSING,
-  RAG_AMBIGUITY_MESSAGE,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
-  RAG_ORIENTATION_SCORE_MARGIN,
   RAG_TOPIC_CLARIFICATION_MESSAGE,
 } from '../rag/rag.constants';
 import {
@@ -214,7 +212,6 @@ interface CitationBundle {
   sources: ChatSource[];
 }
 
-const MAX_AMBIGUITY_EXCERPT_CHARS = 280;
 const MIN_SUBSTANTIVE_CLAIM_CHARS = 30;
 type CitationQualitySignal =
   'citation_insufficient' | 'support_insufficient' | 'support_partial';
@@ -520,71 +517,69 @@ function toCitationBundle(
   return { inputs, sources };
 }
 
-function evidenceExcerpt(source: RetrievedChunk): string {
-  const normalized = [...source.chunkContent]
-    .map((character) => {
-      const codePoint = character.codePointAt(0);
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127)
-        ? ' '
-        : character;
-    })
-    .join('')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const firstSentence = normalized.match(/^.*?[.!?](?=\s|$)/u)?.[0];
-  const excerpt = (firstSentence ?? normalized).slice(
-    0,
-    MAX_AMBIGUITY_EXCERPT_CHARS,
-  );
-
-  return excerpt.length < (firstSentence ?? normalized).length
-    ? `${excerpt.trimEnd()}…`
-    : excerpt;
-}
-
-function evidenceOrientation(sources: RetrievedChunk[]): string {
-  return sources
-    .slice(0, 2)
-    .map((source, index) => {
-      const excerpt = evidenceExcerpt(source);
-      if (!excerpt) return null;
-      // Si la sección es en realidad el sustento derivado (la misma frase que
-      // el extracto), se nombra el documento para no citar dos veces lo mismo.
-      const section = source.sectionTitle;
-      const reference =
-        source.articleReference ??
-        source.numeralReference ??
-        (section && !excerpt.startsWith(section.slice(0, 60))
-          ? section
-          : source.documentTitle);
-      const situation =
-        source.documentSituation === 'current'
-          ? 'vigente'
-          : source.documentSituation === 'replaced'
-            ? 'reemplazada o sin vigencia, conservada como antecedente histórico'
-            : 'archivada, conservada como antecedente histórico';
-      return `Como orientación inicial, la fuente ${situation} ${reference} señala: “${excerpt}” [${index + 1}].`;
-    })
-    .filter((orientation): orientation is string => Boolean(orientation))
-    .join(' ');
-}
-
-function ambiguityMessage(
-  modules: ResolvedModule[],
-  sources: RetrievedChunk[],
-): string {
-  const names = modules
-    .slice(0, 4)
-    .map((module) => module.name)
-    .join(', ');
-  const orientation = evidenceOrientation(sources);
-  const clarification = names
-    ? `Los temas relacionados son: ${names}. ¿Sobre cuál de ellos es tu consulta?`
-    : '¿Sobre qué tema específico deseas que te oriente?';
-
-  return [RAG_AMBIGUITY_MESSAGE, orientation, clarification]
+function moduleMention(modules: ResolvedModule[]): string | null {
+  const names = [...new Set(modules.map((module) => module.name.trim()))]
     .filter(Boolean)
-    .join(' ');
+    .slice(0, 4);
+  if (!names.length) return null;
+  if (names.length === 1) return `el tema ${names[0]}`;
+  if (names.length === 2) return `los temas ${names[0]} y ${names[1]}`;
+  return `los temas ${names.slice(0, -1).join(', ')} y ${names.at(-1)}`;
+}
+
+/**
+ * Una consulta de remuneración amplia no admite un monto único: antes de
+ * comparar resultados del RAG, hay que conocer la condición que cambia la
+ * respuesta. Esta detección solo ajusta el lenguaje de la aclaración; no
+ * aporta importes, normas ni hechos que las fuentes no hayan confirmado.
+ */
+function isEducatorRemunerationQuestion(question: string): boolean {
+  const normalized = normalizeSpanishText(question);
+  const remunerationTerm =
+    /\b(?:remuneracion(?:es)?|sueldo(?:s)?|salario(?:s)?|ingreso(?:s)?|pago(?:s)?|gana(?:n)?|cobra(?:n)?|percibe(?:n|r)?)\b/u;
+  const educatorTerm =
+    /\b(?:docente(?:s)?|profesor(?:a|as|es)?|maestr(?:o|a|os|as)|auxiliar(?:es)?|direct(?:or|ora|ores|oras))\b/u;
+
+  return remunerationTerm.test(normalized) && educatorTerm.test(normalized);
+}
+
+/**
+ * La ambigüedad es una señal de que el RAG halló rutas posibles, no una base
+ * para atribuir un extracto o un monto al caso de la persona. Se mencionan los
+ * temas recuperados y se solicita la condición decisiva; las citas solo se
+ * exhiben cuando una respuesta concreta puede sustentarse de forma segura.
+ */
+function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
+  const foundTopics = moduleMention(modules);
+  if (isEducatorRemunerationQuestion(question)) {
+    const context = foundTopics
+      ? `La búsqueda encontró información en ${foundTopics}, pero eso no permite atribuirte una cifra o una norma sin conocer tu caso.`
+      : '';
+    return [
+      'No sería responsable darte una cifra única para todos los docentes del Perú sin confirmar tu situación.',
+      'Primero, indícame si trabajas en el sector público o privado.',
+      'Si trabajas en el sector público, necesito saber además si eres docente nombrado o contratado, tu jornada, escala o cargo y el período que deseas consultar.',
+      'Si trabajas en el sector privado, indícame el tipo de institución, tu jornada y el período que deseas revisar.',
+      context,
+      'Si conoces el año o norma aplicable, inclúyelos; con esos datos podré darte una respuesta precisa y sustentada.',
+    ]
+      .join(' ')
+      .replace(/\s{2,}/gu, ' ')
+      .trim();
+  }
+
+  const context = foundTopics
+    ? `La búsqueda encontró información relacionada con ${foundTopics}.`
+    : '';
+  return [
+    'Para orientarte con precisión, necesito delimitar tu caso antes de elegir una respuesta.',
+    context,
+    'Para no atribuirte una regla que podría corresponder a otra situación, necesito conocer el trámite, tu condición laboral y el documento o período que deseas revisar.',
+    'Indícame qué situación concreta tienes y, si corresponde, el trámite, año o norma que deseas consultar; así podré darte una respuesta sustentada.',
+  ]
+    .join(' ')
+    .replace(/\s{2,}/gu, ' ')
+    .trim();
 }
 
 /**
@@ -999,17 +994,10 @@ export class ChatService {
     }
 
     if (retrieval.kind === 'ambiguous') {
-      // Solo se citan fragmentos como «orientación inicial» si son claramente
-      // pertinentes; con coincidencias débiles se pide precisar sin citarlos.
-      const orient =
-        retrieval.topRelevanceScore >=
-        this.matchThreshold() + RAG_ORIENTATION_SCORE_MARGIN;
-      const orientationSources = orient ? retrieval.sources : [];
-      const citations = toCitationBundle(orientationSources, null, null, null);
-      const message = ambiguityMessage(retrieval.modules, orientationSources);
-      if (orient) {
-        yield { data: { sources: citations.sources }, type: 'sources' };
-      }
+      // La ambigüedad identifica rutas posibles, pero no demuestra que alguno
+      // de sus extractos sea aplicable al caso. No se muestran citas ni fuentes
+      // hasta que la persona precise la condición que permite responder.
+      const message = ambiguityMessage(question, retrieval.modules);
       if (input.abortSignal?.aborted) return;
       const completed = await this.historyGateway.completeTurn({
         answer: message,
@@ -1020,7 +1008,7 @@ export class ChatService {
         qualitySignals: [],
         replyRole: 'clarification',
         retrievalScope,
-        sources: citations.inputs,
+        sources: [],
         topRelevanceScore: retrieval.topRelevanceScore,
         unansweredReason: 'ambiguous_request',
         userId: input.authorization.userId,
