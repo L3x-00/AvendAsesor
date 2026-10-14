@@ -13,6 +13,7 @@ import type {
   ChatTurnStart,
 } from './chat-history.gateway';
 import { ChatService, type ChatStreamEvent } from './chat.service';
+import { buildConversationalReply } from './intent/conversational-replies';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -30,8 +31,10 @@ function source(input: {
   content: string;
   documentId: string;
   documentTitle: string;
+  documentType?: string;
   moduleId: string;
   moduleName: string;
+  resolutionNumber?: string;
   score: number;
   versionId: string;
   versionNumber: number;
@@ -43,6 +46,7 @@ function source(input: {
     documentId: input.documentId,
     documentSituation: 'current',
     documentTitle: input.documentTitle,
+    documentType: input.documentType ?? null,
     documentVersionId: input.versionId,
     lexicalScore: 0.5,
     moduleIds: [input.moduleId],
@@ -51,6 +55,7 @@ function source(input: {
     pageEnd: 1,
     pageStart: 1,
     sectionTitle: 'Regla aplicable',
+    resolutionNumber: input.resolutionNumber ?? null,
     semanticScore: input.score,
     versionNumber: input.versionNumber,
   };
@@ -90,6 +95,20 @@ const auxiliariesV1 = source({
   moduleName: 'Contratación de Auxiliares de Educación',
   score: 0.97,
   versionId: '00000000-0000-0000-0000-000000000404',
+  versionNumber: 1,
+});
+
+const exactResolution = source({
+  chunkId: '00000000-0000-0000-0000-000000000205',
+  content: 'La norma contiene una regla comprobable para el caso consultado.',
+  documentId: '00000000-0000-0000-0000-000000000305',
+  documentTitle: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
+  documentType: 'OTRO',
+  moduleId: CONTRACTS_MODULE_ID,
+  moduleName: 'Contrato docente',
+  resolutionNumber: '326-2017-MINEDU',
+  score: 0.9,
+  versionId: '00000000-0000-0000-0000-000000000405',
   versionNumber: 1,
 });
 
@@ -135,6 +154,36 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
       );
     }
     return Promise.resolve([]);
+  }
+
+  searchExactReferences(input: {
+    referenceKeys: string[];
+  }): Promise<RetrievedChunk[]> {
+    const normalize = (value: string) =>
+      value
+        .normalize('NFD')
+        .replace(/[^a-z0-9]+/giu, '')
+        .toUpperCase();
+    return Promise.resolve(
+      [...this.sources, exactResolution].filter((item) =>
+        input.referenceKeys.some((lookupKey) => {
+          const [code, identifier] = lookupKey.split(':');
+          if (!identifier) return false;
+          const expectedType =
+            code === 'RSG' ? 'OTRO' : 'UNUSED_IN_THIS_INTEGRATION_DOUBLE';
+          const identity = normalize(
+            `${item.resolutionNumber ?? ''} ${item.documentTitle}`,
+          );
+          return (
+            item.documentType === expectedType &&
+            identity.includes(identifier) &&
+            (code !== 'RSG' ||
+              identity.includes('RSG') ||
+              identity.includes('RESOLUCIONDESECRETARIAGENERAL'))
+          );
+        }),
+      ),
+    );
   }
 }
 
@@ -328,6 +377,50 @@ describe('ChatService + RagService integration', () => {
     ]);
   });
 
+  it('responde una norma exacta solo con el documento de esa identidad', async () => {
+    const events = await collect(service, {
+      question: '¿Qué dispone la RSG N.° 326-2017-MINEDU?',
+    });
+
+    expect(events.find((event) => event.type === 'sources')).toMatchObject({
+      data: {
+        sources: [
+          expect.objectContaining({
+            documentTitle:
+              'Resolución de Secretaría General N.° 326-2017-MINEDU',
+          }),
+        ],
+      },
+    });
+    expect(history.completions[0]?.sources).toEqual([
+      expect.objectContaining({ chunkId: exactResolution.chunkId }),
+    ]);
+  });
+
+  it('rechaza una norma exacta ausente sin sustituirla por otra parecida', async () => {
+    const events = await collect(service, {
+      question: '¿Qué dispone la RSG N.° 121-2026-MINEDU?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'no_evidence',
+      'done',
+    ]);
+    const noEvidence = events[1];
+    if (noEvidence?.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+    expect(noEvidence.data.message).toContain(
+      'Resolución de Secretaría General N.° 121-2026-MINEDU',
+    );
+    expect(history.completions[0]).toMatchObject({
+      replyRole: 'no_evidence',
+      sources: [],
+    });
+    expect(answers.inputs).toHaveLength(0);
+  });
+
   it('reuses persisted context for a follow-up in the same conversation', async () => {
     const first = await collect(service, {
       question: 'Necesito una licencia por salud.',
@@ -437,8 +530,7 @@ describe('ChatService + RagService integration', () => {
 
     expect(events).toContainEqual({
       data: {
-        message:
-          'Qué interesante lo de la papa, pero mi objetivo es orientarte en temas educativos.',
+        message: buildConversationalReply('unrelated_no_evidence'),
       },
       type: 'no_evidence',
     });
@@ -448,11 +540,11 @@ describe('ChatService + RagService integration', () => {
       sources: [],
       unansweredReason: 'insufficient_evidence',
     });
-    expect(answers.inputs).toHaveLength(1);
-    expect(answers.inputs[0]?.mode).toBe('advisory');
+    expect(answers.inputs).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ data: { provider: 'rule' } });
   });
 
-  it('sin sustento en el corpus ofrece orientación general y registra el hueco', async () => {
+  it('sin sustento en el corpus responde sin generar hechos y registra el hueco', async () => {
     const events = await collect(service, {
       question: '¿Cuáles son los requisitos de un trámite fuera del corpus?',
     });
@@ -462,17 +554,15 @@ describe('ChatService + RagService integration', () => {
       'no_evidence',
       'done',
     ]);
-    const advisory = events[1] as { data: { message: string } };
-    expect(advisory.data.message).toMatch(
-      /^Suele corresponder presentar la solicitud ante tu UGEL\./u,
+    const noEvidence = events[1] as { data: { message: string } };
+    expect(noEvidence.data.message).toContain(
+      'no encontré información suficiente',
     );
-    expect(advisory.data.message).not.toContain('sin cita de norma');
-    expect(advisory.data.message).toContain('Sugerencias:');
-    expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
-    expect(answers.inputs).toHaveLength(1);
-    expect(answers.inputs[0]?.mode).toBe('advisory');
+    expect(noEvidence.data.message).not.toContain('UGEL');
+    expect(noEvidence.data.message).not.toMatch(/\[\d+\]/u);
+    expect(answers.inputs).toHaveLength(0);
     expect(history.completions[0]).toMatchObject({
-      qualitySignals: ['support_insufficient'],
+      qualitySignals: [],
       replyRole: 'no_evidence',
       sources: [],
       unansweredReason: 'insufficient_evidence',

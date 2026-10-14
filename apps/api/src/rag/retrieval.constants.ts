@@ -17,3 +17,14 @@ export const RETRIEVAL_RPC_ARG_NAMES = [
   'p_match_count',
   'p_retrieval_scope',
 ] as const;
+
+export const EXACT_REFERENCE_RETRIEVAL_RPC_NAME =
+  'search_document_chunks_by_exact_references' as const;
+
+export const EXACT_REFERENCE_RETRIEVAL_RPC_ARG_NAMES = [
+  'p_query_embedding',
+  'p_query_text',
+  'p_reference_keys',
+  'p_match_count',
+  'p_retrieval_scope',
+] as const;

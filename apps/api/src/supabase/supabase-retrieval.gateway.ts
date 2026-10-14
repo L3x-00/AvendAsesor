@@ -1,5 +1,8 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { RETRIEVAL_RPC_NAME } from '../rag/retrieval.constants';
+import {
+  EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+  RETRIEVAL_RPC_NAME,
+} from '../rag/retrieval.constants';
 import type {
   RetrievalGateway,
   RetrievedChunk,
@@ -53,6 +56,49 @@ interface SituationAwareRetrievalClient {
   }>;
 }
 
+interface ExactReferenceRetrievalClient {
+  rpc(
+    name: typeof EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+    args: {
+      p_match_count: number;
+      p_query_embedding: number[];
+      p_query_text: string;
+      p_reference_keys: string[];
+      p_retrieval_scope: 'archived_explicit' | 'current' | 'historical';
+    },
+  ): Promise<{
+    data: SituationAwareRetrievalRow[] | null;
+    error: unknown;
+  }>;
+}
+
+function toRetrievedChunk(row: SituationAwareRetrievalRow): RetrievedChunk {
+  return {
+    articleReference: row.article_reference,
+    chunkContent: row.chunk_content,
+    chunkId: row.chunk_id,
+    documentId: row.document_id,
+    documentSituation: row.document_situation,
+    documentTitle: row.document_title,
+    documentType: row.document_type,
+    documentVersionId: row.document_version_id,
+    issuanceYear: row.issuance_year,
+    lexicalScore: row.lexical_score,
+    mimeType: row.mime_type,
+    moduleAssociations: row.module_associations,
+    moduleIds: row.module_ids,
+    moduleNames: row.module_names,
+    numeralReference: row.numeral_reference,
+    pageEnd: row.page_end,
+    pdfPageCount: row.pdf_page_count,
+    pageStart: row.page_start,
+    resolutionNumber: row.resolution_number,
+    sectionTitle: row.section_title,
+    semanticScore: row.semantic_score,
+    versionNumber: row.version_number,
+  };
+}
+
 @Injectable()
 export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
@@ -82,29 +128,36 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
         'Document retrieval is temporarily unavailable.',
       );
     }
-    return (data ?? []).map((row) => ({
-      articleReference: row.article_reference,
-      chunkContent: row.chunk_content,
-      chunkId: row.chunk_id,
-      documentId: row.document_id,
-      documentSituation: row.document_situation,
-      documentTitle: row.document_title,
-      documentType: row.document_type,
-      documentVersionId: row.document_version_id,
-      issuanceYear: row.issuance_year,
-      lexicalScore: row.lexical_score,
-      mimeType: row.mime_type,
-      moduleAssociations: row.module_associations,
-      moduleIds: row.module_ids,
-      moduleNames: row.module_names,
-      numeralReference: row.numeral_reference,
-      pageEnd: row.page_end,
-      pdfPageCount: row.pdf_page_count,
-      pageStart: row.page_start,
-      resolutionNumber: row.resolution_number,
-      sectionTitle: row.section_title,
-      semanticScore: row.semantic_score,
-      versionNumber: row.version_number,
-    }));
+    return (data ?? []).map(toRetrievedChunk);
+  }
+
+  async searchExactReferences(
+    input: Parameters<
+      NonNullable<RetrievalGateway['searchExactReferences']>
+    >[0],
+  ): Promise<RetrievedChunk[]> {
+    if (!this.client) {
+      throw new ServiceUnavailableException(
+        'Document retrieval is not configured.',
+      );
+    }
+    const retrievalClient = this
+      .client as unknown as ExactReferenceRetrievalClient;
+    const { data, error } = await retrievalClient.rpc(
+      EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+      {
+        p_match_count: input.matchCount,
+        p_query_embedding: input.embedding,
+        p_query_text: input.query,
+        p_reference_keys: input.referenceKeys,
+        p_retrieval_scope: input.retrievalScope,
+      },
+    );
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Exact document retrieval is temporarily unavailable.',
+      );
+    }
+    return (data ?? []).map(toRetrievedChunk);
   }
 }

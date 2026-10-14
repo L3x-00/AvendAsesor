@@ -14,6 +14,10 @@ describe('normalizeDomainQuery', () => {
       'sigo la RV del MEMO',
       'sigo la resolución viceministerial del memorándum',
     ],
+    [
+      'la RSG 326-2017-MINEDU y la RVM 158-2025-MINEDU',
+      'la resolución de secretaría general 326-2017-MINEDU y la resolución viceministerial 158-2025-MINEDU',
+    ],
     ['el DL 276 y la ley', 'el decreto legislativo 276 y la ley'],
   ])('expande abreviaturas en "%s"', (input, expected) => {
     expect(normalizeDomainQuery(input)).toBe(expected);

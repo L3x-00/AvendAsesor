@@ -1,18 +1,24 @@
 import { SupabaseRetrievalContractGatewayAdapter } from './supabase-retrieval-contract.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
+import {
+  EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+  RETRIEVAL_RPC_NAME,
+} from '../rag/retrieval.constants';
 
 let lastArgs: {
   p_query_text?: unknown;
   p_match_threshold?: unknown;
 } | null = null;
+let calledNames: string[] = [];
 
 function clientReturning(result: { error: unknown }): SupabaseServerClient {
   return {
     rpc: (
-      _name: string,
+      name: string,
       args: { p_query_text?: unknown; p_match_threshold?: unknown },
     ) => {
-      lastArgs = args;
+      calledNames.push(name);
+      if (name === RETRIEVAL_RPC_NAME) lastArgs = args;
       return { abortSignal: () => Promise.resolve(result) };
     },
   } as unknown as SupabaseServerClient;
@@ -21,6 +27,7 @@ function clientReturning(result: { error: unknown }): SupabaseServerClient {
 describe('SupabaseRetrievalContractGatewayAdapter', () => {
   beforeEach(() => {
     lastArgs = null;
+    calledNames = [];
   });
 
   it('reports unconfigured when the Supabase client is absent', async () => {
@@ -53,6 +60,30 @@ describe('SupabaseRetrievalContractGatewayAdapter', () => {
       clientReturning({ error: null }),
     );
     await expect(gateway.probe()).resolves.toEqual({ ok: true });
+    expect(calledNames).toEqual([
+      RETRIEVAL_RPC_NAME,
+      EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+    ]);
+  });
+
+  it('reports the exact-reference RPC as missing after the general contract passes', async () => {
+    const client = {
+      rpc: (name: string) => ({
+        abortSignal: () =>
+          Promise.resolve({
+            error:
+              name === EXACT_REFERENCE_RETRIEVAL_RPC_NAME
+                ? { code: 'PGRST202', message: 'Could not find the function' }
+                : null,
+          }),
+      }),
+    } as unknown as SupabaseServerClient;
+    const gateway = new SupabaseRetrievalContractGatewayAdapter(client);
+
+    const result = await gateway.probe();
+    expect(result).toMatchObject({ ok: false, reason: 'missing' });
+    if (result.ok) throw new Error('Expected a missing contract.');
+    expect(result.message).toContain(EXACT_REFERENCE_RETRIEVAL_RPC_NAME);
   });
 
   it('classifies a PostgREST "function not found" as missing', async () => {

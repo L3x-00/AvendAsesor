@@ -33,7 +33,6 @@ import {
   MAX_CHAT_CONTEXT_MESSAGES,
   MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
-  RAG_ADVISORY_CLOSING,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
   RAG_TOPIC_CLARIFICATION_MESSAGE,
@@ -89,8 +88,6 @@ import {
 import { officialSitesIn } from './intent/official-sites';
 import { normalizeSpanishText } from '../rag/text-normalization';
 
-/** Caracteres sin cita tras los cuales la respuesta empieza a mostrarse. */
-const LEAD_IN_WINDOW_CHARS = 400;
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
 
@@ -595,6 +592,37 @@ export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
   return RAG_NO_EVIDENCE_MESSAGE;
 }
 
+/**
+ * Negativa verificable cuando la persona pide una norma concreta que no forma
+ * parte de la evidencia aprobada. Solo repite identidades extraídas de la
+ * pregunta: no completa títulos, vigencia ni contenido con conocimiento del
+ * modelo.
+ */
+export function missingExactReferencesMessage(
+  references: readonly { display: string }[],
+): string {
+  const labels = references.map(({ display }) => display);
+  const named =
+    labels.length <= 1
+      ? labels[0]
+      : `${labels.slice(0, -1).join(', ')} y ${labels.at(-1)}`;
+  return `No encontré evidencia disponible y aprobada de ${named}. Para no atribuirle contenido de otra norma, no usaré documentos parecidos como sustituto. Verifica el número indicado o vuelve a consultar cuando el documento esté disponible.`;
+}
+
+/** Solicita completar una identidad normativa antes de buscar por similitud. */
+export function incompleteExactReferencesMessage(
+  references: readonly { display: string }[],
+): string {
+  const labels = references.map(({ display }) => display);
+  const named =
+    labels.length <= 1
+      ? labels[0]
+      : `${labels.slice(0, -1).join(', ')} y ${labels.at(-1)}`;
+  const subject = labels.length > 1 ? 'Las referencias' : 'La referencia';
+  const state = labels.length > 1 ? 'no están completas' : 'no está completa';
+  return `${subject} ${named} ${state} para identificar una norma sin ambigüedad. Indica el número, el año y la entidad emisora tal como aparecen en el documento; hasta entonces no usaré una norma parecida como sustituto.`;
+}
+
 /** Marca del modo asesor, tolerante a variantes («[[FUERA_DE_ÁMBITO]]»). */
 const ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN =
   /\[\[\s*FUERA[\s_-]*DE[\s_-]*[AÁ]MBITO\s*\]\]/iu;
@@ -965,26 +993,25 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     if (retrieval.kind === 'no_evidence') {
-      // Sin sustento: el asesor decide. Una consulta del ámbito recibe una
-      // orientación general (sin citas ni normas inventadas) y el hueco queda
-      // registrado para la administración. Un pedido ajeno («¿cómo preparo un
-      // arroz chaufa?») o que busca información interna recibe una respuesta
-      // amable que lo menciona y reorienta. Si el proveedor falla, se responde
-      // con una plantilla: la del alcance si el mensaje no trae ninguna señal
-      // del ámbito, o el aviso de «sin evidencia».
+      // Sin sustento no se consulta al modelo: cualquier orientación factual
+      // sin fuentes sería indistinguible de una alucinación. Para una norma
+      // nombrada, la negativa repite únicamente su identidad; para un pedido
+      // aparentemente ajeno se usa la plantilla conversacional existente.
       const unrelated =
         !input.conversationId &&
         !selectedModuleId &&
         !hasEducationalSignal(question);
-      yield* this.advisoryReply({
-        abortSignal: input.abortSignal,
-        conversationContext,
+      const message = retrieval.incompleteExactReferences?.length
+        ? incompleteExactReferencesMessage(retrieval.incompleteExactReferences)
+        : retrieval.missingExactReferences?.length
+          ? missingExactReferencesMessage(retrieval.missingExactReferences)
+          : unrelated
+            ? buildConversationalReply('unrelated_no_evidence')
+            : undefined;
+      yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
-        fallbackMessage: unrelated
-          ? buildConversationalReply('unrelated_no_evidence')
-          : undefined,
         faqMemory,
-        question: input.question,
+        message,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -1046,10 +1073,9 @@ export class ChatService {
     // («[1][2]») sin cortar una cita a medias: retiene el corchete abierto
     // hasta que cierra.
     const citator = new CitationGroupNormalizer(retrieval.sources.length);
-    // Ventana inicial: hasta ver una cita [n] (o suficiente texto) no se
-    // muestra nada. Así una negativa breve sin citas («Las fuentes no contienen
-    // …», con o sin la marca) se cierra como «sin evidencia» antes de exhibir
-    // fuentes que no sustentan nada.
+    // Hasta ver una cita [n] válida no se muestra nada. Así ninguna respuesta
+    // que termine en `no_evidence` filtra temporalmente hechos, fuentes o texto
+    // sin sustento a la web ni a otros clientes SSE.
     let leadIn = '';
     let streaming = false;
     let declined = false;
@@ -1092,7 +1118,12 @@ export class ChatService {
           declined = true;
           break;
         }
-        if (!cites(leadIn) && leadIn.length < LEAD_IN_WINDOW_CHARS) {
+        if (!cites(leadIn)) {
+          if (leadIn.length >= answerCap) {
+            leadIn = leadIn.slice(0, answerCap);
+            cutByLength = true;
+            break;
+          }
           continue;
         }
         streaming = true;
@@ -1124,12 +1155,9 @@ export class ChatService {
       declined ||
       (whole.trim() !== '' && !cites(whole))
     ) {
-      yield* this.advisoryReply({
-        abortSignal: input.abortSignal,
-        conversationContext,
+      yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
-        question: input.question,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -1203,80 +1231,6 @@ export class ChatService {
       data: {
         conversationId: turn.conversationId,
         inReplyToMessageId: turn.userMessageId,
-        messageId: completed.answerMessageId,
-        provider: 'openai',
-      },
-      type: 'done',
-    };
-  }
-
-  /**
-   * Respuesta del modo asesor cuando el RAG no encontró sustento:
-   * - consulta del ámbito: orientación breve SIN citas (nada de normas,
-   *   artículos ni plazos inventados) y cierre de verificación oficial;
-   * - pedido ajeno o de información interna: respuesta amable que lo menciona
-   *   y reorienta, sin cierre.
-   * Ya no abre con «Orientación general (sin cita de norma):», que restaba
-   * confianza: la web muestra cuánto tardó en pensar la respuesta.
-   */
-  private async *advisoryReply(input: {
-    abortSignal?: AbortSignal;
-    conversationContext: ChatContextMessage[];
-    conversationId: string;
-    /** Plantilla si el proveedor falla; por defecto, el aviso de sin evidencia. */
-    fallbackMessage?: string;
-    faqMemory: ReturnType<FaqMemoryService['prepare']>;
-    question: string;
-    retrievalScope: RetrievalScope;
-    topRelevanceScore: number | null;
-    userId: string;
-    userMessageId: string;
-  }): AsyncIterable<ChatStreamEvent> {
-    const reply = await this.generateAdvisoryBody(input);
-    if (input.abortSignal?.aborted) return;
-
-    if (!reply) {
-      yield* this.completeWithoutEvidence({
-        conversationId: input.conversationId,
-        faqMemory: input.faqMemory,
-        message: input.fallbackMessage,
-        retrievalScope: input.retrievalScope,
-        topRelevanceScore: input.topRelevanceScore,
-        userId: input.userId,
-        userMessageId: input.userMessageId,
-      });
-      return;
-    }
-
-    const message =
-      reply.kind === 'orientation'
-        ? `${reply.text}\n\n${RAG_ADVISORY_CLOSING}`
-        : reply.text;
-    const completed = await this.historyGateway.completeTurn({
-      answer: message,
-      conversationId: input.conversationId,
-      faqMemory: input.faqMemory,
-      detectedModuleId: null,
-      detectedSubmoduleId: null,
-      // Solo una consulta del ámbito señala falta de cobertura documental.
-      qualitySignals:
-        reply.kind === 'orientation' ? ['support_insufficient'] : [],
-      // La RPC exige fuentes para el rol assistant. La orientación generada
-      // carece de citas: se persiste como respuesta sin evidencia y se conserva
-      // la señal administrativa de falta de cobertura.
-      replyRole: 'no_evidence',
-      retrievalScope: input.retrievalScope,
-      sources: [],
-      topRelevanceScore: input.topRelevanceScore,
-      unansweredReason: 'insufficient_evidence',
-      userId: input.userId,
-      userMessageId: input.userMessageId,
-    });
-    yield { data: { message }, type: 'no_evidence' };
-    yield {
-      data: {
-        conversationId: input.conversationId,
-        inReplyToMessageId: input.userMessageId,
         messageId: completed.answerMessageId,
         provider: 'openai',
       },
