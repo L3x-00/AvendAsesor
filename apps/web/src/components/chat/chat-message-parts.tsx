@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CITATION_TOKEN } from "./chat-sources";
+import {
+  markdownTablesToPlainText,
+  tableRowsCiteKnownSources,
+} from "./chat-response-tables";
 
 /** Marca circular del asistente junto a su nombre, como en los chats de IA. */
 export function AssistantAvatar() {
@@ -19,11 +23,20 @@ export function AssistantAvatar() {
  * [n] (fuera del chat no enlazan a nada) ni el formato Markdown que el chat ya
  * interpreta (**negrita**, # títulos), para pegarlo limpio en Word o un correo.
  */
-export function plainAnswerText(content: string): string {
-  return content
+export function plainAnswerText(
+  content: string,
+  sourceRanks: readonly number[] = [],
+): string {
+  const textWithSupportedTables = markdownTablesToPlainText(
+    content,
+    (table) => tableRowsCiteKnownSources(table, sourceRanks),
+  );
+  const withoutCitations = textWithSupportedTables
     .split(CITATION_TOKEN)
     .filter((_, index) => index % 2 === 0)
-    .join("")
+    .join("");
+
+  return withoutCitations
     .replace(/^#{1,6}[ \t]+/gmu, "")
     .replace(/\*\*(.+?)\*\*/gu, "$1")
     .replace(/__(.+?)__/gu, "$1")
@@ -68,7 +81,13 @@ export function SuggestedQuestions({
 type CopyState = "copied" | "failed" | "idle";
 
 /** "Copiar respuesta": confirma en el mismo botón y vuelve a su estado. */
-export function CopyAnswerButton({ content }: { content: string }) {
+export function CopyAnswerButton({
+  content,
+  sourceRanks = [],
+}: {
+  content: string;
+  sourceRanks?: readonly number[];
+}) {
   const [state, setState] = useState<CopyState>("idle");
   const resetTimer = useRef<number | null>(null);
 
@@ -82,7 +101,7 @@ export function CopyAnswerButton({ content }: { content: string }) {
   async function copy() {
     let next: CopyState = "copied";
     try {
-      await navigator.clipboard.writeText(plainAnswerText(content));
+      await navigator.clipboard.writeText(plainAnswerText(content, sourceRanks));
     } catch {
       next = "failed";
     }

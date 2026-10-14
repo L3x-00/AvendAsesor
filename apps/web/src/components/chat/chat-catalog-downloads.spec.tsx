@@ -19,6 +19,27 @@ function documents(count: number): ChatCatalogDocument[] {
 }
 
 describe("ChatCatalogDownloads", () => {
+  it("muestra los documentos más recientes primero, incluso si el mensaje guardado venía desordenado", () => {
+    const unordered = documents(4).map((document, index) => ({
+      ...document,
+      issuanceYear: [2017, null, 2025, 2023][index] ?? null,
+      title: ["Documento 2017", "Documento sin año", "Documento 2025", "Documento 2023"][index] ?? document.title,
+    }));
+
+    render(<ChatCatalogDownloads documents={unordered} />);
+
+    expect(
+      screen
+        .getAllByRole("link", { name: /Descargar Documento/u })
+        .map((link) => link.getAttribute("aria-label")),
+    ).toEqual([
+      "Descargar Documento 2025",
+      "Descargar Documento 2023",
+      "Descargar Documento 2017",
+      "Descargar Documento sin año",
+    ]);
+  });
+
   it("muestra corpus grandes de forma progresiva sin perder archivos", async () => {
     const user = userEvent.setup();
     render(<ChatCatalogDownloads documents={documents(35)} />);

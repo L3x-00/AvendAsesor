@@ -330,15 +330,15 @@ describe('ChatService — lineamientos del cliente', () => {
     expect(conversational?.data.message).toContain('panel de administración');
   });
 
-  it('una aclaración con coincidencias débiles no cita documentos como orientación', async () => {
+  it('una aclaración ambigua no cita documentos ni extractos, aun con coincidencias altas', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
       modules: [
         { id: 'a', name: 'Licencias' },
         { id: 'b', name: 'Remuneraciones' },
       ],
-      sources: [{ ...source, semanticScore: 0.52 }],
-      topRelevanceScore: 0.52,
+      sources: [{ ...source, semanticScore: 0.95 }],
+      topRelevanceScore: 0.95,
     });
 
     const events = await collect();
@@ -349,39 +349,75 @@ describe('ChatService — lineamientos del cliente', () => {
       'done',
     ]);
     const clarification = events[1] as { data: { message: string } };
-    expect(clarification.data.message).not.toContain(
-      'Como orientación inicial',
-    );
+    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).not.toContain(source.chunkContent);
+    expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
     expect(completion()?.sources).toEqual([]);
   });
 
-  it('nombra el documento cuando la sección es el sustento derivado', async () => {
+  it('aclara profesionalmente una consulta amplia de remuneración sin inventar ni repetir las fuentes', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
       modules: [
-        { id: 'a', name: 'Licencias' },
+        { id: 'a', name: 'Contratación y desplazamientos' },
         { id: 'b', name: 'Remuneraciones' },
       ],
       sources: [
         {
           ...source,
-          articleReference: null,
-          numeralReference: null,
-          sectionTitle: 'La licencia se solicita dentro de 5 días.',
-          semanticScore: 0.62,
+          articleReference: 'Artículo 3',
+          chunkContent:
+            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+          numeralReference: 'Literal h)',
+          semanticScore: 0.95,
+        },
+        {
+          ...source,
+          articleReference: 'Artículo 3',
+          chunkId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
+          chunkContent:
+            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+          documentVersionId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+          moduleIds: ['b'],
+          moduleNames: ['Remuneraciones'],
+          numeralReference: 'Literal h)',
+          semanticScore: 0.94,
         },
       ],
-      topRelevanceScore: 0.62,
+      topRelevanceScore: 0.95,
     });
 
-    const events = await collect();
+    const events = await collect({
+      question: '¿Cuánto gana un profesor del Perú?',
+    });
 
-    const clarification = events.find(
-      (event) => event.type === 'clarification',
-    ) as { data: { message: string } } | undefined;
-    expect(clarification?.data.message).toContain(
-      'la fuente vigente Norma de licencias señala',
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events[1] as { data: { message: string } };
+    expect(clarification.data.message).toContain(
+      'No sería responsable darte una cifra única',
     );
+    expect(clarification.data.message).toContain('sector público o privado');
+    expect(clarification.data.message).toContain('nombrado o contratado');
+    expect(clarification.data.message).toContain('jornada, escala o cargo');
+    expect(clarification.data.message).toContain('tipo de institución');
+    expect(clarification.data.message).toContain('año o norma');
+    expect(clarification.data.message).toContain(
+      'Contratación y desplazamientos',
+    );
+    expect(clarification.data.message).toContain('Remuneraciones');
+    expect(clarification.data.message).not.toContain('S/ 2 666,80');
+    expect(clarification.data.message).not.toContain('Artículo 3');
+    expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(completion()).toMatchObject({
+      replyRole: 'clarification',
+      sources: [],
+      unansweredReason: 'ambiguous_request',
+    });
   });
 
   it('avisa en lenguaje llano cuando el proveedor corta la respuesta por su extensión', async () => {

@@ -398,7 +398,7 @@ describe('ChatService + RagService integration', () => {
     ]);
   });
 
-  it('returns evidence-backed ambiguity guidance without invoking the provider', async () => {
+  it('returns a professional ambiguity clarification without invoking the provider', async () => {
     const events = await collect(service, {
       question: 'Tengo requisitos ambiguos de licencia y de permuta.',
     });
@@ -410,9 +410,21 @@ describe('ChatService + RagService integration', () => {
     if (clarification?.type !== 'clarification') {
       throw new Error('EXPECTED_CLARIFICATION');
     }
-    expect(clarification.data.message).toContain('Como orientación inicial');
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).toContain(
+      'Contratación de Auxiliares de Educación',
+    );
+    expect(clarification.data.message).toContain('Contrato docente');
+    expect(clarification.data.message).not.toContain(licenseV1.chunkContent);
+    expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
     expect(history.completions[0]).toMatchObject({
       replyRole: 'clarification',
+      sources: [],
       unansweredReason: 'ambiguous_request',
     });
     expect(answers.inputs).toHaveLength(0);

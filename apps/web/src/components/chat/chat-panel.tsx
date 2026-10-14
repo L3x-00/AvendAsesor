@@ -34,12 +34,17 @@ import {
   linkifyOfficialUrls,
   startsSuggestions,
   ThoughtDuration,
+  withoutLegacyGenericOfficialSuggestion,
   withoutLegacyLeadIn,
 } from "./official-links";
 import { ChatWelcome } from "./chat-welcome";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
 import { ChatCatalogDownloads } from "./chat-catalog-downloads";
+import {
+  markdownTableAt,
+  tableRowsCiteKnownSources,
+} from "./chat-response-tables";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
@@ -153,7 +158,9 @@ function initialMessages(
     // que restaba confianza; se oculta al mostrarlas.
     content:
       message.role === "no_evidence"
-        ? withoutLegacyLeadIn(message.content)
+        ? withoutLegacyGenericOfficialSuggestion(
+            withoutLegacyLeadIn(message.content),
+          )
         : message.content,
     conversationId: conversation?.conversation.id,
     id: message.id,
@@ -373,6 +380,49 @@ const orderedListItemPattern = /^\s*\d+[.)]\s+(.+)$/;
 const persistedMessageIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function renderMarkdownTable(
+  headers: string[],
+  rows: string[][],
+  tableIndex: number,
+  citations: CitationContext | undefined,
+  links: { entities: boolean; urls: boolean },
+): ReactNode {
+  const label = `Tabla de la respuesta ${tableIndex}`;
+  return (
+    <div
+      aria-label={`${label}. Desplázate horizontalmente si es necesario.`}
+      className="avend-chat-table-scroll"
+      key={`table-${tableIndex}`}
+      role="region"
+      tabIndex={0}
+    >
+      <table aria-label={label} className="avend-chat-table">
+        <caption className="avend-visually-hidden">{label}</caption>
+        <thead>
+          <tr>
+            {headers.map((header, index) => (
+              <th key={`${index}-${header}`} scope="col">
+                {renderInline(header, citations, links)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${rowIndex}-${row.join("|")}`}>
+              {row.map((cell, columnIndex) => (
+                <td key={`${columnIndex}-${cell}`}>
+                  {renderInline(cell, citations, links)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function renderRichContent(
   content: string,
   citations?: CitationContext,
@@ -384,6 +434,7 @@ function renderRichContent(
   let listItems: string[] = [];
   let listOrdered = false;
   let inSuggestions = false;
+  let renderedTables = 0;
 
   function flushParagraph() {
     if (paragraphLines.length === 0) return;
@@ -417,17 +468,45 @@ function renderRichContent(
     listItems = [];
   }
 
-  for (const rawLine of content.split(/\r?\n/)) {
+  const lines = content.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; ) {
+    const rawLine = lines[lineIndex];
     const line = rawLine.trim();
     if (officialLinks && !inSuggestions && startsSuggestions(line)) {
       flushParagraph();
       flushList();
       inSuggestions = true;
     }
+    const markdownTable = citations?.sources.length
+      ? markdownTableAt(lines, lineIndex)
+      : null;
+    const tableRowsAreCited = markdownTable
+      ? tableRowsCiteKnownSources(
+          markdownTable,
+          citations?.sources.map((source) => source.rank) ?? [],
+        )
+      : false;
+    if (markdownTable && tableRowsAreCited) {
+      flushParagraph();
+      flushList();
+      renderedTables += 1;
+      blocks.push(
+        renderMarkdownTable(
+          markdownTable.headers,
+          markdownTable.rows,
+          renderedTables,
+          citations,
+          { entities: inSuggestions, urls: officialUrls },
+        ),
+      );
+      lineIndex = markdownTable.endIndex;
+      continue;
+    }
     if (!line) {
       flushParagraph();
       // Una línea en blanco no cierra la lista: el modelo suele separar los
       // elementos numerados con una, y cada uno se numeraba «1.» por su cuenta.
+      lineIndex += 1;
       continue;
     }
 
@@ -447,6 +526,7 @@ function renderRichContent(
           </strong>
         </p>,
       );
+      lineIndex += 1;
       continue;
     }
 
@@ -460,11 +540,13 @@ function renderRichContent(
       if (listItems.length > 0 && nextListOrdered !== listOrdered) flushList();
       listOrdered = nextListOrdered;
       listItems.push(listItem);
+      lineIndex += 1;
       continue;
     }
 
     flushList();
     paragraphLines.push(line);
+    lineIndex += 1;
   }
 
   flushParagraph();
@@ -1437,8 +1519,13 @@ export function ChatPanel({
                       message.id !== "streaming"
                       ? { messageId: message.id, sources: message.sources }
                       : undefined,
-                    message.role !== "user",
-                    message.role !== "user" &&
+                    // Las respuestas sin evidencia no agregan enlaces de
+                    // entidades por su cuenta: solo los pedidos explícitos de
+                    // portal llegan como mensajes conversacionales (`assistant`).
+                    message.role === "assistant" ||
+                      message.role === "clarification",
+                    (message.role === "assistant" ||
+                      message.role === "clarification") &&
                       message.id !== "streaming" &&
                       message.sources.length === 0,
                   )}
@@ -1505,7 +1592,10 @@ export function ChatPanel({
                     message.id !== "streaming" &&
                     message.content.trim() ? (
                       <div className="avend-chat-message-actions">
-                        <CopyAnswerButton content={message.content} />
+                        <CopyAnswerButton
+                          content={message.content}
+                          sourceRanks={message.sources.map((source) => source.rank)}
+                        />
                       </div>
                     ) : null}
                     {message.id === latestReportableAnswerId ? (

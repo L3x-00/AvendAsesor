@@ -1,11 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatCatalogDocument } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
 
 const PAGE_SIZE = 10;
+
+function newestDocumentsFirst(
+  left: ChatCatalogDocument,
+  right: ChatCatalogDocument,
+): number {
+  const byYear =
+    (right.issuanceYear ?? Number.NEGATIVE_INFINITY) -
+    (left.issuanceYear ?? Number.NEGATIVE_INFINITY);
+  if (byYear) return byYear;
+  const byTitle = left.title.localeCompare(right.title, "es", {
+    numeric: true,
+    sensitivity: "base",
+  });
+  return byTitle || left.documentId.localeCompare(right.documentId, "es");
+}
 
 function metadata(document: ChatCatalogDocument): string {
   return [
@@ -24,8 +39,14 @@ export function ChatCatalogDownloads({
   documents: ChatCatalogDocument[];
 }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // También ordena mensajes históricos que se guardaron antes de que la API
+  // expusiera el catálogo en orden cronológico.
+  const orderedDocuments = useMemo(
+    () => [...documents].sort(newestDocumentsFirst),
+    [documents],
+  );
   if (!documents.length) return null;
-  const visible = documents.slice(0, visibleCount);
+  const visible = orderedDocuments.slice(0, visibleCount);
 
   return (
     <section

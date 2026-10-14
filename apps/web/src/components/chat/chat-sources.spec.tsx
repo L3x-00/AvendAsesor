@@ -164,11 +164,13 @@ describe("ChatSources", () => {
     expect(
       within(sourceRow as HTMLTableRowElement).getByText(/Proceso:/),
     ).toHaveTextContent("Proceso: No especificado");
-    // La celda «Sustento» no acumula etiquetas vacías: una sola línea.
+    // La celda «Ubicación» no acumula etiquetas vacías: una sola línea.
     expect(sourceRow).not.toHaveTextContent("Sección:");
     expect(sourceRow).not.toHaveTextContent("Artículo:");
     expect(
-      within(sourceRow as HTMLTableRowElement).getByText("No especificado"),
+      within(sourceRow as HTMLTableRowElement).getByText(
+        "No se identificó una ubicación más precisa en el fragmento",
+      ),
     ).toBeVisible();
   });
 
@@ -238,10 +240,92 @@ describe("ChatSources", () => {
       .closest("tr");
 
     expect(row).toHaveTextContent(
-      "Sección: ¿Cuáles son los requisitos para postular?",
+      "Sección o subtítulo: ¿Cuáles son los requisitos para postular?",
     );
     expect(row).not.toHaveTextContent("Artículo:");
     expect(row).not.toHaveTextContent("Numeral o literal:");
+  });
+
+  it("oculta encabezados genéricos de El Peruano y conserva la ubicación precisa", () => {
+    render(
+      <ChatSources
+        sources={[
+          {
+            articleReference: "Artículo 3",
+            documentSituation: "current",
+            documentTitle: "Decreto Supremo N.° 306-2017-EF",
+            id: "generic-section-source",
+            moduleName: "Remuneraciones",
+            numeralReference: "Literal h)",
+            pageEnd: 1,
+            pageStart: 1,
+            rank: 1,
+            relevanceScore: 0.91,
+            sectionTitle:
+              "7 NORMAS LEGALES Domingo 29 de octubre de 2017 El Peruano",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
+    );
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const row = within(table)
+      .getByText("Decreto Supremo N.° 306-2017-EF")
+      .closest("tr");
+
+    expect(screen.getByRole("columnheader", { name: "Ubicación" })).toBeVisible();
+    expect(row).not.toHaveTextContent("NORMAS LEGALES");
+    expect(row).toHaveTextContent("Artículo: Artículo 3");
+    expect(row).toHaveTextContent("Numeral o literal: Literal h)");
+  });
+
+  it("muestra el subtítulo sin repetir su artículo", () => {
+    render(
+      <ChatSources
+        sources={[
+          {
+            articleReference: "Artículo 3.-",
+            documentSituation: "current",
+            documentTitle: "Decreto Supremo N.° 306-2017-EF",
+            id: "article-subtitle-source",
+            moduleName: "Remuneraciones",
+            numeralReference: "Literal h)",
+            pageEnd: 1,
+            pageStart: 1,
+            rank: 1,
+            relevanceScore: 0.91,
+            sectionTitle:
+              "Artículo 3.- Implementación de la nueva remuneración docente.",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
+    );
+    const row = within(
+      screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      }),
+    )
+      .getByText("Decreto Supremo N.° 306-2017-EF")
+      .closest("tr");
+
+    expect(row).toHaveTextContent(
+      "Sección o subtítulo: Implementación de la nueva remuneración docente.",
+    );
+    expect(row).not.toHaveTextContent(
+      "Sección o subtítulo: Artículo 3.-",
+    );
+    expect(row).toHaveTextContent("Artículo: Artículo 3.-");
   });
 
   it("no presenta como página PDF la ubicación sintética de un archivo Word", () => {

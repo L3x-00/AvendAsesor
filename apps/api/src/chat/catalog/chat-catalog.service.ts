@@ -60,6 +60,10 @@ function joinSpanish(items: string[]): string {
 const MAX_LISTED_DOCUMENTS = 25;
 const MAX_FALLBACK_SUGGESTIONS = 4;
 const SHORT_TITLE_CHARS = 70;
+const DOCUMENT_TITLE_COLLATOR = new Intl.Collator('es', {
+  numeric: true,
+  sensitivity: 'base',
+});
 const NORMATIVE_DOCUMENT_TYPES = new Set([
   'DECRETO_LEGISLATIVO',
   'DECRETO_SUPREMO',
@@ -91,6 +95,24 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   RESOLUCION_MINISTERIAL: 'Resolución Ministerial',
   RESOLUCION_VICEMINISTERIAL: 'Resolución Viceministerial',
 };
+
+/**
+ * El catálogo no expone una fecha de emisión más precisa que el año. Por eso
+ * se ordena por año descendente, deja los documentos sin año al final y usa
+ * título/identificador solo como desempate estable.
+ */
+export function newestDocumentsFirst<
+  T extends Pick<AvailableDocument, 'id' | 'issuanceYear' | 'title'>,
+>(documents: readonly T[]): T[] {
+  return [...documents].sort((left, right) => {
+    const byYear =
+      (right.issuanceYear ?? Number.NEGATIVE_INFINITY) -
+      (left.issuanceYear ?? Number.NEGATIVE_INFINITY);
+    if (byYear) return byYear;
+    const byTitle = DOCUMENT_TITLE_COLLATOR.compare(left.title, right.title);
+    return byTitle || DOCUMENT_TITLE_COLLATOR.compare(left.id, right.id);
+  });
+}
 
 function shortTitle(title: string): string {
   const clean = title
@@ -137,7 +159,7 @@ export function requestedCatalogDocuments(
       )
     : documents;
   const text = normalized(question ?? '');
-  if (!text) return inScope;
+  if (!text) return newestDocumentsFirst(inScope);
 
   let predicate: ((document: AvailableDocument) => boolean) | null = null;
   if (/\banex(?:o|os)\b/u.test(text)) {
@@ -157,7 +179,7 @@ export function requestedCatalogDocuments(
       ) !== null;
   }
 
-  return predicate ? inScope.filter(predicate) : inScope;
+  return newestDocumentsFirst(predicate ? inScope.filter(predicate) : inScope);
 }
 
 /**
@@ -253,7 +275,11 @@ export class ChatCatalogService {
     if (this.documents && this.documents.expiresAt > Date.now()) {
       return this.documents.promise;
     }
-    const promise = this.catalogGateway.listAvailableDocuments();
+    // El orden se refuerza aquí, además del orden SQL, para mantener el
+    // contrato aunque otro adaptador entregue filas sin ordenar.
+    const promise = this.catalogGateway
+      .listAvailableDocuments()
+      .then((documents) => newestDocumentsFirst(documents));
     const entry = { expiresAt: Date.now() + DOCUMENTS_CACHE_MS, promise };
     this.documents = entry;
     // Un fallo no se guarda: la próxima consulta vuelve a intentarlo.

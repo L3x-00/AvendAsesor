@@ -6,6 +6,7 @@ import {
   linkifyOfficialUrls,
   startsSuggestions,
   ThoughtDuration,
+  withoutLegacyGenericOfficialSuggestion,
   withoutLegacyLeadIn,
 } from "./official-links";
 
@@ -146,5 +147,18 @@ describe("official links", () => {
       ),
     ).toBe("Para postular a un colegio…");
     expect(withoutLegacyLeadIn("Texto normal.")).toBe("Texto normal.");
+  });
+
+  it("hides only the old generic official suggestion from saved answers", () => {
+    expect(
+      withoutLegacyGenericOfficialSuggestion(
+        "Respuesta útil.\n\nSugerencias: verifica esta orientación en el portal oficial del MINEDU y consulta con tu UGEL o DRE antes de decidir.",
+      ),
+    ).toBe("Respuesta útil.");
+    expect(
+      withoutLegacyGenericOfficialSuggestion(
+        "Sugerencias: consulta con tu UGEL sobre tu plaza específica.",
+      ),
+    ).toBe("Sugerencias: consulta con tu UGEL sobre tu plaza específica.");
   });
 });

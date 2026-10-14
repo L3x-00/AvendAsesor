@@ -61,7 +61,7 @@ describe('sanitizeRetrievedEvidence', () => {
     expect(cleaned?.chunkContent).toMatch(/^N° 074-2026-MINEDU/u);
     expect(cleaned?.chunkContent).not.toContain('firmaperu');
     expect(cleaned?.articleReference).toBeNull();
-    expect(cleaned?.sectionTitle).toContain('N° 074-2026-MINEDU');
+    expect(cleaned?.sectionTitle).toBeNull();
   });
 
   it('conserva contenido educativo legítimo aunque mencione otro sector', () => {
@@ -100,9 +100,80 @@ describe('sanitizeRetrievedEvidence', () => {
     expect(cleaned?.chunkContent).toBe(
       'La evaluación del expediente docente considera la formación académica.',
     );
+    expect(cleaned?.sectionTitle).toBeNull();
+  });
+
+  it('elimina el encabezado genérico de El Peruano y conserva las referencias verificables', () => {
+    const cleaned = sanitizeRetrievedEvidence({
+      ...source,
+      articleReference: 'Artículo 3.-',
+      chunkContent: [
+        'Artículo 3.- Implementación de la nueva remuneración docente.',
+        'h) Los profesores encargados perciben una remuneración mensual de S/ 2 666,80.',
+      ].join('\n\n'),
+      numeralReference: 'Literal h)',
+      sectionTitle:
+        '7 NORMAS LEGALES Domingo 29 de octubre de 2017 El Peruano / N° 28044, Ley General de Educación, la Ley N° 29944, Ley de Reforma Magisterial.',
+    });
+
+    expect(cleaned?.sectionTitle).toBeNull();
+    expect(cleaned?.articleReference).toBe('Artículo 3.-');
+    expect(cleaned?.numeralReference).toBe('Literal h)');
+  });
+
+  it('no presenta una oración de cuerpo como sección tras quitar una cabecera genérica', () => {
+    const cleaned = sanitizeRetrievedEvidence({
+      ...source,
+      articleReference: null,
+      chunkContent:
+        'Los profesores encargados perciben una remuneración mensual según la jornada adicional autorizada.',
+      numeralReference: null,
+      sectionTitle: '7 NORMAS LEGALES Domingo 29 de octubre de 2017 El Peruano',
+    });
+
+    expect(cleaned?.sectionTitle).toBeNull();
+  });
+
+  it('preserva un título normativo preciso aunque mencione El Peruano', () => {
+    const cleaned = sanitizeRetrievedEvidence({
+      ...source,
+      sectionTitle: 'Artículo 3.- Publicación en El Peruano.',
+    });
+
     expect(cleaned?.sectionTitle).toBe(
-      'La evaluación del expediente docente considera la formación académica.',
+      'Artículo 3.- Publicación en El Peruano.',
     );
+  });
+
+  it('limpia artículo y literal que no se pueden demostrar en el fragmento saneado', () => {
+    const cleaned = sanitizeRetrievedEvidence({
+      ...source,
+      articleReference: 'Artículo 3.-',
+      chunkContent:
+        'Los profesores encargados perciben una remuneración mensual según su jornada de trabajo.',
+      numeralReference: 'Literal h)',
+      sectionTitle: 'Remuneraciones docentes',
+    });
+
+    expect(cleaned?.articleReference).toBeNull();
+    expect(cleaned?.numeralReference).toBeNull();
+  });
+
+  it('conserva un numeral compuesto cuando todos sus componentes aparecen en el fragmento', () => {
+    const cleaned = sanitizeRetrievedEvidence({
+      ...source,
+      articleReference: 'Artículo 8.-',
+      chunkContent: [
+        'Artículo 8.- Requisitos para la evaluación.',
+        '2.1. Condiciones de postulación.',
+        'Literal a) Haber prestado servicios en el nivel inicial.',
+      ].join('\n\n'),
+      numeralReference: '2.1 · Literal a)',
+      sectionTitle: 'Requisitos para la evaluación',
+    });
+
+    expect(cleaned?.articleReference).toBe('Artículo 8.-');
+    expect(cleaned?.numeralReference).toBe('2.1 · Literal a)');
   });
 
   it('deja intacta la evidencia educativa ordinaria', () => {

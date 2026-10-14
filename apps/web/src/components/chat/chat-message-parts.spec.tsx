@@ -15,6 +15,24 @@ describe("plainAnswerText", () => {
       "El plazo es de 30 días. Aplica a docentes.",
     );
   });
+
+  it("copia una tabla Markdown como filas tabuladas, sin la línea de separadores", () => {
+    expect(
+      plainAnswerText(
+        "| Cargo | Remuneración |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 [1] |",
+        [1],
+      ),
+    ).toBe("Cargo\tRemuneración\nDocente coordinador\tS/ 2 666,80");
+  });
+
+  it("does not turn an uncited Markdown grid into a table when copying", () => {
+    expect(
+      plainAnswerText(
+        "| Cargo | Remuneración |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 |",
+        [1],
+      ),
+    ).toContain("| --- | ---: |");
+  });
 });
 
 describe("CopyAnswerButton", () => {

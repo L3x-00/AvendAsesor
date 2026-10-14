@@ -1129,6 +1129,53 @@ textarea[aria-invalid="true"]:focus,
   padding-left: 1.5rem;
 }
 
+/* Tablas breves emitidas por el RAG: datos comparables, no una cuadrícula
+   decorativa. El contenedor conserva el ancho del chat y permite revisar las
+   columnas en un teléfono sin reducir el texto por debajo de 16 px. */
+.avend-chat-table-scroll {
+  margin: 0 0 0.875rem;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.avend-chat-table-scroll:focus-visible {
+  border-radius: 0.5rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.avend-chat-table {
+  border-collapse: collapse;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-width: 34rem;
+  text-align: left;
+  width: 100%;
+}
+
+.avend-chat-table th,
+.avend-chat-table td {
+  border-bottom: 1px solid var(--avend-border);
+  overflow-wrap: anywhere;
+  padding: 0.625rem 0.75rem;
+  vertical-align: top;
+}
+
+.avend-chat-table th {
+  background: var(--avend-soft-blue);
+  color: var(--avend-navy);
+  font-weight: 700;
+}
+
+.avend-chat-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.avend-chat-table-scroll:last-child {
+  margin-bottom: 0;
+}
+
 .avend-chat-message-content strong {
   color: var(--avend-text);
   font-weight: 700;

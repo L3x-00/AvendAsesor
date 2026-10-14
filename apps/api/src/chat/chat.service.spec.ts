@@ -2,7 +2,6 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import type { AuthorizationContext } from '../authorization';
 import {
   MAX_RAG_ANSWER_CHARS,
-  RAG_AMBIGUITY_MESSAGE,
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
 import {
@@ -693,7 +692,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('records ambiguity without calling the answer provider', async () => {
+  it('records a professional ambiguity clarification without exposing raw citations', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
       modules: [{ id: source.moduleIds[0], name: 'Licencias' }],
@@ -705,32 +704,18 @@ describe('ChatService', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'sources',
       'clarification',
       'done',
     ]);
-    const clarification = events[2];
+    const clarification = events[1];
     expect(clarification?.type).toBe('clarification');
     if (!clarification || clarification.type !== 'clarification') {
       throw new Error('Expected a clarification event.');
     }
-    expect(clarification.data.message).toContain(RAG_AMBIGUITY_MESSAGE);
-    expect(clarification.data.message).toContain(source.chunkContent);
-    expect(clarification.data.message).toContain('[1]');
-    expect(
-      clarification.data.message.indexOf(source.chunkContent),
-    ).toBeLessThan(
-      clarification.data.message.indexOf(
-        '¿Sobre cuál de ellos es tu consulta?',
-      ),
-    );
-    // Sin frases duplicadas al concatenar la constante y la clarificación.
-    expect(
-      clarification.data.message.match(/orientarte con precisión/gu),
-    ).toHaveLength(1);
-    expect(
-      clarification.data.message.match(/¿Sobre cuál de ellos/gu),
-    ).toHaveLength(1);
+    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).toContain('Licencias');
+    expect(clarification.data.message).not.toContain(source.chunkContent);
+    expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
     expect(clarification.data.modules).toEqual([
       { id: source.moduleIds[0], name: 'Licencias' },
     ]);
@@ -743,8 +728,7 @@ describe('ChatService', () => {
       replyRole: 'clarification',
       unansweredReason: 'ambiguous_request',
     });
-    expect(completion?.sources[0]?.chunkId).toBe(source.chunkId);
-    expect(typeof completion?.sources[0]?.sourceId).toBe('string');
+    expect(completion?.sources).toEqual([]);
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',

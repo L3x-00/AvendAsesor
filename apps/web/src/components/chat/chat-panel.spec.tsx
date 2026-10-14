@@ -197,7 +197,7 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows how long a saved answer took, links official portals in its suggestions and hides the retired label", () => {
+  it("shows how long a saved answer took and hides its retired generic portal suggestion", () => {
     render(
       <ChatPanel
         initialConversation={{
@@ -221,14 +221,38 @@ describe("ChatPanel", () => {
 
     expect(screen.getByText("Pensado por 9 segundos")).toBeInTheDocument();
     expect(screen.queryByText(/sin cita de norma/)).not.toBeInTheDocument();
-    // Solo el bloque de sugerencias enlaza, y solo portales con una página
-    // única: la mención del cuerpo y la UGEL/DRE quedan como texto.
-    const minedu = screen.getAllByRole("link", { name: /^MINEDU/ });
-    expect(minedu).toHaveLength(1);
-    expect(minedu[0]).toHaveAttribute("href", "https://www.gob.pe/minedu");
+    expect(screen.queryByText(/^Sugerencias:/u)).not.toBeInTheDocument();
+    // La mención que queda pertenece al cuerpo de la orientación histórica,
+    // no a una petición de portal, así que no debe convertirse en un enlace.
+    expect(screen.queryAllByRole("link", { name: /^MINEDU/ })).toHaveLength(0);
     expect(
       screen.queryAllByRole("link", { name: /^(?:UGEL|DRE)/ }),
     ).toHaveLength(0);
+  });
+
+  it("does not turn a new no-evidence generic suggestion into an official link", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: no_evidence\ndata: {"message":"Sugerencias: visita el portal oficial del MINEDU antes de decidir."}\n\n',
+          doneEvent("openai"),
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText(
+        "Sugerencias: visita el portal oficial del MINEDU antes de decidir.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryAllByRole("link", { name: /^MINEDU/ })).toHaveLength(0);
   });
 
   it("no convierte en enlace una URL incrustada en una fuente del RAG", () => {
@@ -1117,6 +1141,89 @@ describe("ChatPanel", () => {
     expect(
       screen.getByText(/Esta consulta no se completó por un problema técnico/u),
     ).toBeVisible();
+  });
+
+  it("renders a short cited Markdown table as an accessible comparison table", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "La fuente muestra estos valores comparables:\n| Cargo | Remuneración mensual |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 [1] |\n| Director encargado | S/ 3 000,00 [1] |",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Tabla de la respuesta 1",
+    });
+    expect(within(table).getByRole("columnheader", { name: "Cargo" })).toBeVisible();
+    expect(
+      within(table).getByRole("columnheader", { name: "Remuneración mensual" }),
+    ).toBeVisible();
+    expect(table).toHaveTextContent("Docente coordinador");
+    expect(table).toHaveTextContent("S/ 2 666,80");
+    expect(
+      within(table).getAllByRole("link", {
+        name: "Ver fuente 1: Norma de licencias",
+      }),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("region", {
+        name: "Tabla de la respuesta 1. Desplázate horizontalmente si es necesario.",
+      }),
+    ).toHaveAttribute("tabindex", "0");
+  });
+
+  it("keeps a sentence with a vertical bar as regular text", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: "El tramo A | B es una referencia literal del documento. [1]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.getByText("El tramo A | B es una referencia literal del documento."),
+    ).toBeVisible();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("does not present a Markdown grid without source citations as evidence", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "| Cargo | Remuneración |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 |",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   it("normalizes old grouped citations and omits unknown sources", () => {
