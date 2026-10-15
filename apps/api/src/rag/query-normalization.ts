@@ -1,3 +1,5 @@
+import { normalizeSpanishText } from './text-normalization';
+
 /**
  * Normalización de la consulta para búsqueda y clasificación: expande
  * abreviaturas del ámbito («RM» → «resolución ministerial») y corrige errores
@@ -18,21 +20,52 @@ const ABBREVIATIONS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
   { pattern: /\bmemo\b/giu, replacement: 'memorándum' },
 ];
 
-const COMMON_TYPOS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /\brenumeraciones\b/giu, replacement: 'remuneraciones' },
-  { pattern: /\brenumeracion\b/giu, replacement: 'remuneración' },
-  { pattern: /\blicensia(s)?\b/giu, replacement: 'licencia$1' },
-  { pattern: /\bnombramineto(s)?\b/giu, replacement: 'nombramiento$1' },
-  { pattern: /\bratificasiones\b/giu, replacement: 'ratificaciones' },
-  { pattern: /\bratificasion\b/giu, replacement: 'ratificación' },
-  { pattern: /\bencargatura?z?\b/giu, replacement: 'encargatura' },
-];
+/**
+ * Errores frecuentes demostrados por la campaña real o por pruebas
+ * explícitas. Se comparan sin tildes —la gente escribe «renumeración» con
+ * tilde y sin ella— y siempre por palabra completa: una corrección difusa
+ * cambiaría números de norma, años, siglas, nombres propios o términos
+ * jurídicos válidos («numeración» no es «remuneración»). Las claves van sin
+ * tilde porque la comparación usa `normalizeSpanishText`.
+ */
+const COMMON_WORD_TYPOS: ReadonlyMap<string, string> = new Map([
+  ['renumeracion', 'remuneración'],
+  ['renumeraciones', 'remuneraciones'],
+  ['licensia', 'licencia'],
+  ['licensias', 'licencias'],
+  ['nombramineto', 'nombramiento'],
+  ['nombraminetos', 'nombramientos'],
+  ['ratificasion', 'ratificación'],
+  ['ratificasiones', 'ratificaciones'],
+  ['encargatur', 'encargatura'],
+  ['encargaturaz', 'encargatura'],
+  ['encargaturz', 'encargatura'],
+]);
+
+/** Conserva la capitalización original (inicio de oración o palabra en mayúsculas). */
+function matchWordCase(original: string, replacement: string): string {
+  const upper = original.toLocaleUpperCase('es');
+  const lower = original.toLocaleLowerCase('es');
+  if (original === upper && original !== lower) {
+    return replacement.toLocaleUpperCase('es');
+  }
+  const first = original[0];
+  if (first && first === upper[0] && first !== lower[0]) {
+    return `${replacement.charAt(0).toLocaleUpperCase('es')}${replacement.slice(1)}`;
+  }
+  return replacement;
+}
+
+/** Solo corrige palabras completas del mapa: no toca cifras ni siglas. */
+function correctCommonTypos(text: string): string {
+  return text.replace(/[\p{L}]+/gu, (word) => {
+    const replacement = COMMON_WORD_TYPOS.get(normalizeSpanishText(word));
+    return replacement ? matchWordCase(word, replacement) : word;
+  });
+}
 
 export function normalizeDomainQuery(question: string): string {
-  let normalized = question;
-  for (const { pattern, replacement } of COMMON_TYPOS) {
-    normalized = normalized.replace(pattern, replacement);
-  }
+  let normalized = correctCommonTypos(question);
   for (const { pattern, replacement } of ABBREVIATIONS) {
     normalized = normalized.replace(pattern, replacement);
   }
