@@ -31,6 +31,8 @@ const ABBREVIATIONS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
 const COMMON_WORD_TYPOS: ReadonlyMap<string, string> = new Map([
   ['renumeracion', 'remuneración'],
   ['renumeraciones', 'remuneraciones'],
+  ['renumreacion', 'remuneración'],
+  ['renumreaciones', 'remuneraciones'],
   ['licensia', 'licencia'],
   ['licensias', 'licencias'],
   ['nombramineto', 'nombramiento'],

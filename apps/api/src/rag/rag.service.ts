@@ -8,7 +8,12 @@ import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
-import { salaryApplicabilityTier } from './salary-applicability';
+import {
+  isSalarySourceCompatible,
+  salaryApplicabilityTier,
+  salaryQuestionProfile,
+  withInheritedSalaryFactors,
+} from './salary-applicability';
 import { orderSourcesForDelivery } from './temporal-precedence';
 import {
   exactDocumentReferencesIn,
@@ -232,6 +237,28 @@ function uniqueSources(sources: RetrievedChunk[]): RetrievedChunk[] {
     if (!repeated) kept.push({ source, text });
   }
   return kept.map((item) => item.source);
+}
+
+/**
+ * La situación documental y los factores explícitos de una consulta salarial
+ * se aplican antes de comparar puntajes. Una similitud alta no vuelve vigente a
+ * una fuente reemplazada ni hace aplicable una cifra de otra jornada, cargo,
+ * condición, escala o período.
+ */
+function sourcesEligibleForQuestion(
+  sources: RetrievedChunk[],
+  question: string,
+  retrievalScope: RetrievalScope,
+): RetrievedChunk[] {
+  return sources.filter((source) => {
+    if (
+      retrievalScope === 'current' &&
+      source.documentSituation !== 'current'
+    ) {
+      return false;
+    }
+    return isSalarySourceCompatible(question, source);
+  });
 }
 
 /** Fuentes a no más de `margin` del mejor puntaje, en su orden original. */
@@ -539,6 +566,61 @@ export function isEllipticalFollowUp(question: string): boolean {
   return !hasTopicTerm(normalized) || refersBack(question);
 }
 
+/**
+ * Consultas previas cuyos factores declarados completan la actual: solo la
+ * respuesta a una aclaración (o un seguimiento elíptico) hereda; una consulta
+ * con tema propio es una pregunta nueva. El extracto de una respuesta anterior
+ * del asistente no es una declaración de la persona.
+ */
+export function inheritedFactorQuestions(
+  question: string,
+  priorUserQuestions: readonly string[],
+  forceContext: boolean,
+): string[] {
+  if (!priorUserQuestions.length) return [];
+  if (!forceContext && !continuesSalaryThread(question)) return [];
+  const turns = priorUserQuestions.filter(
+    (prior) => !prior.startsWith('Respuesta anterior:'),
+  );
+  // Se hereda desde la consulta salarial más reciente hasta ahora. Si entre
+  // ella y este turno hubo una consulta con tema propio que no es salarial, la
+  // conversación cambió de tema y esos factores ya no describen a la persona.
+  const inherited: string[] = [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    inherited.unshift(turns[index]);
+    if (salaryQuestionProfile(turns[index]).isSalaryQuestion) return inherited;
+    if (!continuesSalaryThread(turns[index])) return [];
+  }
+  return [];
+}
+
+/** En una consulta salarial, estos términos de tema son factores de la cifra. */
+const SALARY_FACTOR_TERMS =
+  /\b(?:jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu;
+
+/**
+ * Un turno sigue el hilo de una consulta salarial cuando es elíptico o cuando
+ * solo nombra un factor de la cifra («Jornada de 30 horas», «Escala 2»): la
+ * aclaración que se le hizo a la persona usa esas mismas palabras. Un turno con
+ * otro tema propio («licencia por enfermedad») lo interrumpe.
+ */
+function continuesSalaryThread(turn: string): boolean {
+  // Solo es un factor de la cifra cuando trae su valor («jornada de 30 horas»,
+  // «escala magisterial 2»); «¿cuál es la jornada laboral de un auxiliar?» es
+  // otra pregunta.
+  const profile = salaryQuestionProfile(turn);
+  const declaresFactor =
+    profile.jornadaHours !== null || profile.scale !== null;
+  const normalized = normalizeSpanishText(turn);
+  return (
+    !hasTopicTerm(
+      declaresFactor
+        ? normalized.replace(SALARY_FACTOR_TERMS, ' ')
+        : normalized,
+    ) || refersBack(turn)
+  );
+}
+
 const ARCHIVED_INTENT_PATTERNS = [
   /\barchivad[oa]s?\b/u,
   /\bantecedentes? historicos? especificos?\b/u,
@@ -608,6 +690,16 @@ export class RagService {
     // tema), y con contexto dentro del módulo de la conversación.
     const globalUsesContext =
       hasPrior && (options.forceContext || isEllipticalFollowUp(question));
+    // Los factores salariales que declararon los turnos previos siguen
+    // vigentes en la respuesta a una aclaración y en un seguimiento.
+    const salaryQuestion = withInheritedSalaryFactors(
+      question,
+      inheritedFactorQuestions(
+        question,
+        priorUserQuestions,
+        Boolean(options.forceContext),
+      ),
+    );
     const contextual = hasPrior
       ? contextualQuery(question, priorUserQuestions)
       : question;
@@ -744,16 +836,24 @@ export class RagService {
     // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
     const globalRoutingSources = sourcesWithoutVersionDuplicates(
       byScoreDescending(
-        rawGlobalSources
-          .map(sanitizeRetrievedEvidence)
-          .filter((source): source is RetrievedChunk => Boolean(source)),
+        sourcesEligibleForQuestion(
+          rawGlobalSources
+            .map(sanitizeRetrievedEvidence)
+            .filter((source): source is RetrievedChunk => Boolean(source)),
+          salaryQuestion,
+          retrievalScope,
+        ),
       ),
     );
     const selectedRoutingSources = sourcesWithoutVersionDuplicates(
       byScoreDescending(
-        rawSelectedSources
-          .map(sanitizeRetrievedEvidence)
-          .filter((source): source is RetrievedChunk => Boolean(source)),
+        sourcesEligibleForQuestion(
+          rawSelectedSources
+            .map(sanitizeRetrievedEvidence)
+            .filter((source): source is RetrievedChunk => Boolean(source)),
+          salaryQuestion,
+          retrievalScope,
+        ),
       ),
     );
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {
@@ -773,7 +873,11 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, namedModule.id)
           : [];
         if (namedModule && scopedSources.length) {
-          const sources = relevantSources(scopedSources, matchCount, question);
+          const sources = relevantSources(
+            scopedSources,
+            matchCount,
+            salaryQuestion,
+          );
           return {
             kind: 'evidence',
             resolvedModule: namedModule,
@@ -785,7 +889,7 @@ export class RagService {
         const sources = relevantSources(
           globalRoutingSources,
           matchCount,
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -800,7 +904,7 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, resolvedModule.id)
           : globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'evidence',
@@ -840,7 +944,7 @@ export class RagService {
               currentRoute.resolvedModule.id,
             ),
             matchCount,
-            question,
+            salaryQuestion,
           );
           return {
             kind: 'topic_change',
@@ -857,7 +961,7 @@ export class RagService {
         );
         const competingSources = prepareDelivery(
           uniqueSources(byScoreDescending(competingCandidates)),
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -887,7 +991,7 @@ export class RagService {
           const sources = relevantSources(
             attributableToModule(globalRoutingSources, namedModule.id),
             matchCount,
-            question,
+            salaryQuestion,
           );
           if (sources.length) {
             return {
@@ -902,7 +1006,7 @@ export class RagService {
         const sources = relevantSources(
           globalRoutingSources,
           matchCount,
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -925,7 +1029,7 @@ export class RagService {
           ),
         ]),
         matchCount,
-        question,
+        salaryQuestion,
       );
       const selectedRoot = resolveSelectedRootModule(sources, selectedModuleId);
       return {
@@ -946,7 +1050,7 @@ export class RagService {
       const sources = relevantSources(
         globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'evidence',
@@ -960,7 +1064,7 @@ export class RagService {
       const sources = relevantSources(
         globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'ambiguous',

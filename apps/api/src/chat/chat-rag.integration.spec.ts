@@ -613,7 +613,8 @@ describe('ChatService + RagService integration', () => {
       'clarification',
       'done',
     ]);
-    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).toContain('identificar el trámite');
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
     expect(clarification.data.message).toContain(
       'Contratación de Auxiliares de Educación',
     );

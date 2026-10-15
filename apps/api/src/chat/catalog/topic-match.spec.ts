@@ -1,10 +1,4 @@
-import {
-  buildVocabulary,
-  correctDomainTypos,
-  detectOverviewRequest,
-  editDistance,
-  matchTopicModule,
-} from './topic-match';
+import { detectOverviewRequest, matchTopicModule } from './topic-match';
 
 const modules = [
   { id: 'rem', name: 'Remuneraciones', parentModuleId: null },
@@ -14,45 +8,6 @@ const modules = [
   { id: 'sit', name: 'Situaciones administrativas', parentModuleId: null },
   { id: 'ley', name: 'Ley y reglamento', parentModuleId: null },
 ];
-
-const vocabulary = buildVocabulary([
-  ...modules.map((module) => module.name),
-  'Aprueban Padrones de Instituciones Educativas Públicas',
-]);
-
-describe('editDistance', () => {
-  it('cuenta sustituciones, inserciones y letras vecinas cambiadas', () => {
-    expect(editDistance('remuneracion', 'remuneracion')).toBe(0);
-    expect(editDistance('renumeracion', 'remuneracion')).toBe(2);
-    expect(editDistance('licensia', 'licencia')).toBe(1);
-    expect(editDistance('ab', 'ba')).toBe(1);
-    expect(editDistance('', 'abc')).toBe(3);
-  });
-});
-
-describe('correctDomainTypos', () => {
-  it.each([
-    ['de que trata la renumeracion', 'de que trata la remuneraciones'],
-    ['¿Qué hay sobre renumreaciones?', '¿Qué hay sobre remuneraciones?'],
-    ['licensias docentes', 'licencias docentes'],
-  ])('«%s» → «%s»', (question, expected) => {
-    expect(correctDomainTypos(question, vocabulary)).toBe(expected);
-  });
-
-  it('no toca palabras correctas, cortas ni sin un candidato claro', () => {
-    const question = '¿Cuál es el plazo para pedir mi cese por límite de edad?';
-    expect(correctDomainTypos(question, vocabulary)).toBe(question);
-    expect(correctDomainTypos('Escala remunerativa', vocabulary)).toBe(
-      'Escala remunerativa',
-    );
-    expect(correctDomainTypos('hola', new Map())).toBe('hola');
-  });
-
-  it('ante dos candidatos igual de cercanos no adivina', () => {
-    const tied = buildVocabulary(['cargas', 'cargos']);
-    expect(correctDomainTypos('cargus', tied)).toBe('cargus');
-  });
-});
 
 describe('matchTopicModule', () => {
   it.each([
@@ -71,6 +26,21 @@ describe('matchTopicModule', () => {
     expect(
       matchTopicModule('remuneraciones', [
         { id: 'x', name: 'y z', parentModuleId: null },
+      ]),
+    ).toBeNull();
+  });
+
+  // La tolerancia por distancia de edición se retiró: una palabra válida distinta
+  // no se empareja con un módulo por parecerse a él.
+  it('no empareja palabras distintas por similitud ortográfica', () => {
+    expect(
+      matchTopicModule('ratificacion', [
+        { id: 'rec', name: 'Rectificación', parentModuleId: null },
+      ]),
+    ).toBeNull();
+    expect(
+      matchTopicModule('plazo', [
+        { id: 'plz', name: 'Plazas', parentModuleId: null },
       ]),
     ).toBeNull();
   });
@@ -112,28 +82,11 @@ describe('detectOverviewRequest', () => {
 });
 
 describe('regresiones con los módulos reales', () => {
-  const realVocabulary = buildVocabulary([
-    'Cargos y plazas',
-    'Cuadro de horas pedagógicas',
-    'Remuneraciones',
-    'Escala remunerativa',
-    'Ley y reglamento',
-    'Licencias docentes',
-    'Racionalización de plazas',
-  ]);
   const realModules = [
     { id: 'ley', name: 'Ley y reglamento', parentModuleId: null },
     { id: 'lic', name: 'Licencias docentes', parentModuleId: 'sit' },
     { id: 'car', name: 'Cargos y plazas', parentModuleId: null },
   ];
-
-  it.each([
-    '¿Cuál es el plazo de la licencia?',
-    'Quiero saber mi carga horaria',
-    'la remuneracion del docente',
-  ])('no cambia palabras correctas: «%s»', (question) => {
-    expect(correctDomainTypos(question, realVocabulary)).toBe(question);
-  });
 
   it.each([
     '¿De qué trata el artículo 12 del reglamento?',

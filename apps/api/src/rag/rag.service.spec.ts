@@ -1,9 +1,95 @@
 import {
   detectRetrievalScope,
+  inheritedFactorQuestions,
   RagService,
   resolveDetectedSubmodule,
 } from './rag.service';
 import type { RetrievalGateway } from './retrieval.gateway';
+
+describe('inheritedFactorQuestions', () => {
+  const salary = '¿Cuánto gana un docente de 30 horas?';
+
+  it('hereda desde la consulta salarial hasta la respuesta a la aclaración', () => {
+    expect(
+      inheritedFactorQuestions('Nombrado', [salary, 'Sector público'], true),
+    ).toEqual([salary, 'Sector público']);
+  });
+
+  // Ronda 3 (hallazgo 2): la aclaración usa las palabras «jornada» y «escala»;
+  // responderla con ellas no es cambiar de tema.
+  it.each([
+    'Jornada de 30 horas',
+    'Mi carga horaria es de 30 horas',
+    'Escala magisterial 2',
+  ])('«%s» responde a la aclaración y no interrumpe la herencia', (answer) => {
+    expect(
+      inheritedFactorQuestions('Escala 2', [salary, answer], true),
+    ).toEqual([salary, answer]);
+  });
+
+  // Ronda 4 (M1): sin valor, «jornada» o «escala magisterial» son otro tema.
+  it.each([
+    '¿Cuál es la jornada laboral de un auxiliar?',
+    '¿Qué es la escala magisterial?',
+    '¿Cuál es la carga horaria de aula en el colegio?',
+  ])('«%s» es otra pregunta y no hereda factores', (other) => {
+    expect(inheritedFactorQuestions(other, [salary], false)).toEqual([]);
+    expect(
+      inheritedFactorQuestions('¿y en secundaria?', [salary, other], false),
+    ).toEqual([]);
+  });
+
+  it('solo toma la consulta salarial más reciente', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿y para 40 horas?',
+        ['¿Cuánto es la bonificación por zona rural?', salary],
+        false,
+      ),
+    ).toEqual([salary]);
+  });
+
+  it('no hereda tras una consulta de otro tema', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿y cuál es el plazo para presentarla?',
+        [salary, '¿Cuántos días de licencia por enfermedad me corresponden?'],
+        false,
+      ),
+    ).toEqual([]);
+  });
+
+  it('no hereda sin consulta salarial previa ni sin seguimiento', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Sector público',
+        ['¿Cómo pido una licencia?'],
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      inheritedFactorQuestions(
+        '¿Cuál es la remuneración de un auxiliar de educación?',
+        [salary],
+        false,
+      ),
+    ).toEqual([]);
+    expect(inheritedFactorQuestions('30 horas', [], true)).toEqual([]);
+  });
+
+  it('el extracto de una respuesta anterior no es una declaración de la persona', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Sector público',
+        [
+          salary,
+          'Respuesta anterior: la remuneración del director es S/ 4 400,80.',
+        ],
+        true,
+      ),
+    ).toEqual([salary]);
+  });
+});
 
 function vector(value = 0.1): number[] {
   return Array.from({ length: 1536 }, () => value);
@@ -1256,7 +1342,7 @@ describe('RagService', () => {
     expect(result.sources[0]).toMatchObject({ pageEnd: 3, pageStart: 3 });
   });
 
-  it('prioriza la remuneración general vigente sobre la asignación especial y el antecedente', async () => {
+  it('excluye el antecedente de una consulta salarial actual', async () => {
     const historica = {
       ...source,
       chunkContent:
@@ -1298,13 +1384,102 @@ describe('RagService', () => {
     if (result.kind !== 'evidence') throw new Error('Expected evidence.');
 
     // La remuneración general vigente encabeza la respuesta; la asignación
-    // especial no la sustituye y el antecedente no compite con la regla actual.
+    // especial no la sustituye y el antecedente ni siquiera llega a competir.
     expect(result.sources.map((item) => item.chunkId)).toEqual([
       'remuneracion-vigente',
       'asignacion-especial',
-      'remuneracion-historica',
     ]);
-    expect(result.sources.at(-1)?.documentSituation).toBe('replaced');
+    expect(result.sources).not.toContainEqual(
+      expect.objectContaining({ documentSituation: 'replaced' }),
+    );
+  });
+
+  it('descarta antes de la banda de similitud la cifra salarial incompatible', async () => {
+    const director40 = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del director nombrado con jornada de 40 horas es de S/ 4 400,80.',
+      chunkId: 'director-40',
+      documentVersionId: 'version-director-40',
+      semanticScore: 0.99,
+    };
+    const docente30 = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del docente nombrado con jornada de 30 horas es de S/ 3 300,60.',
+      chunkId: 'docente-30',
+      documentVersionId: 'version-docente-30',
+      semanticScore: 0.8,
+    };
+    gateway.search.mockResolvedValue([director40, docente30]);
+
+    const result = await service.retrieve(
+      '¿Cuánto gana un docente nombrado de 30 horas?',
+      null,
+    );
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.chunkId)).toEqual(['docente-30']);
+  });
+
+  describe('factores salariales heredados de la consulta previa', () => {
+    const docente = (hours: number, semanticScore: number) => ({
+      ...source,
+      chunkContent: `La remuneración mensual del docente nombrado con jornada de ${hours} horas es de S/ ${hours},00.`,
+      chunkId: `docente-${hours}`,
+      documentVersionId: `version-docente-${hours}`,
+      semanticScore,
+    });
+
+    // H-3: «De 30 horas» no contiene ningún término salarial; sin heredar la
+    // consulta previa el filtro no se aplicaba a la respuesta de aclaración.
+    it('aplica el filtro a la respuesta de una aclaración', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        'De 30 horas',
+        null,
+        ['¿Cuánto gana un docente nombrado?'],
+        { forceContext: true },
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'docente-30',
+      ]);
+    });
+
+    it('la jornada de la respuesta prevalece sobre la de la consulta previa', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        '¿Y para 40 horas?',
+        null,
+        ['¿Cuánto gana un docente nombrado de 30 horas?'],
+        { forceContext: true },
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'docente-40',
+      ]);
+    });
+
+    it('una consulta con tema propio no hereda los factores de la anterior', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        '¿Cuál es la remuneración de un docente nombrado?',
+        null,
+        ['¿Cuánto gana un docente nombrado de 30 horas?'],
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId).sort()).toEqual([
+        'docente-30',
+        'docente-40',
+      ]);
+    });
   });
 
   it('ordena la comparación histórica de la más reciente a la más antigua', async () => {

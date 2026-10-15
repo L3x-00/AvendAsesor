@@ -53,7 +53,10 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
   { role: 'auxiliar de educación', pattern: /\bauxiliar(?:es)?\b/u },
   {
     role: 'directivo',
-    pattern: /\b(?:director|directora|directores|directoras|directiv[oa]s)\b/u,
+    // «directiva(s)» es el tipo de norma («la presente Directiva», «las
+    // Directivas aprobadas»), no un cargo; el cargo directivo se reconoce en
+    // masculino singular y plural.
+    pattern: /\b(?:director|directora|directores|directoras|directivos?)\b/u,
   },
   {
     role: 'docente',
@@ -63,7 +66,8 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
 
 const HOURS_PATTERN = /\b(\d{1,2})\)?\s*(?:h|horas)\b/u;
 const HOURS_PATTERN_ALL = new RegExp(HOURS_PATTERN.source, 'gu');
-const SCALE_PATTERN = /\bescala\s*(\d{1,2}|[ivx]{1,4})\b/u;
+const SCALE_PATTERN_ALL =
+  /\bescala\s*(?:magisterial\s+|remunerativa\s+)?(\d{1,2}|[ivx]{1,4})\b/gu;
 
 /**
  * Un plazo no es una jornada: «dentro de las 24 horas», «el plazo de 48 horas»
@@ -186,14 +190,75 @@ function rolesIn(text: string): string[] {
   );
 }
 
+const ROMAN_SCALES: ReadonlyMap<string, string> = new Map([
+  ['i', '1'],
+  ['ii', '2'],
+  ['iii', '3'],
+  ['iv', '4'],
+  ['v', '5'],
+  ['vi', '6'],
+  ['vii', '7'],
+  ['viii', '8'],
+  ['ix', '9'],
+  ['x', '10'],
+]);
+
+/** Todas las escalas nombradas; «escala III» y «escala 3» son la misma. */
 function scalesIn(text: string): string[] {
-  const match = SCALE_PATTERN.exec(text);
-  return match ? [match[1]] : [];
+  return sortedUnique(
+    [...text.matchAll(SCALE_PATTERN_ALL)].map(
+      (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
+    ),
+  );
 }
 
-function yearsIn(text: string): number[] {
-  const years = text.match(/\b(?:19|20)\d{2}\b/gu) ?? [];
-  return years.map(Number);
+/**
+ * Año explícito. No cuenta el año que forma parte del número de una norma
+ * («049-2025-EF») ni el que ancla un inicio o un fin («desde 2015», «a partir
+ * del 1 de enero de 2024»): ninguno declara el período que se consulta.
+ */
+const YEAR_PATTERN =
+  /(?<!\d\s*-\s*)(?<!s\/\.?\s*)\b(?:19|20)\d{2}\b(?![.,]\d)(?!\s*-\s*\d)/gu;
+/**
+ * Año de una fecha («20 de marzo de 2025», «1.° de marzo del 2025»): en la
+ * evidencia es la fecha de emisión o de publicación, no el período de la cifra.
+ * En la consulta, en cambio, «al 31 de diciembre de 2024» sí fija el período.
+ */
+const MONTHS =
+  'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre';
+const CALENDAR_DATE_BEFORE_YEAR = new RegExp(
+  `\\b\\d{1,2}\\s*[°º.]*\\s+de\\s+(?:${MONTHS})\\s+del?\\s*$`,
+  'u',
+);
+/** «al 31 de diciembre de 2024»: una fecha que sí fija el período consultado. */
+const POINT_IN_TIME_DATE_BEFORE_YEAR = new RegExp(
+  `\\b(?:al|vigente al|a la fecha del?)\\s+\\d{1,2}\\s*[°º.]*\\s+de\\s+(?:${MONTHS})\\s+del?\\s*$`,
+  'u',
+);
+const RANGE_ANCHOR_BEFORE_YEAR =
+  /\b(?:desde|hasta|partir de|partir del)\b(?:\s+[^\s.!?]+){0,6}\s*$/u;
+
+/**
+ * Años explícitos de un texto. En la evidencia ninguna fecha calendario cuenta.
+ * En la consulta solo la cuenta la que fija un punto en el tiempo («al 31 de
+ * diciembre de 2024»): «ingresé el 15 de marzo de 2015» es un hecho personal.
+ */
+function yearsIn(
+  text: string,
+  source: 'evidence' | 'question' = 'question',
+): number[] {
+  const years: number[] = [];
+  for (const match of text.matchAll(YEAR_PATTERN)) {
+    const before = text.slice(0, match.index);
+    if (RANGE_ANCHOR_BEFORE_YEAR.test(before)) continue;
+    if (CALENDAR_DATE_BEFORE_YEAR.test(before)) {
+      const fixesPeriod =
+        source === 'question' && POINT_IN_TIME_DATE_BEFORE_YEAR.test(before);
+      if (!fixesPeriod) continue;
+    }
+    years.push(Number(match[0]));
+  }
+  return years;
 }
 
 function sortedUnique(values: readonly (number | string)[]): string[] {
@@ -219,9 +284,15 @@ export function salaryApplicabilityTier(
 ): number {
   const profile = salaryQuestionProfile(question);
   if (!profile.isSalaryQuestion) return 0;
+  if (salarySourceConflictsWithProfile(profile, source)) return 3;
+  if (profile.asksSpecialAllocation) {
+    if (isSpecialAllocationSource(source)) return 0;
+    if (isGeneralRemunerationSource(source)) return 1;
+    return 2;
+  }
   if (isGeneralRemunerationSource(source)) return 0;
   if (isSpecialAllocationSource(source)) {
-    return profile.asksSpecialAllocation ? 1 : 2;
+    return 2;
   }
   return 1;
 }
@@ -258,6 +329,95 @@ export interface SalaryQuestionProfile {
   year: number | null;
 }
 
+const EMPTY_SALARY_PROFILE: SalaryQuestionProfile = {
+  asksSpecialAllocation: false,
+  condition: null,
+  isSalaryQuestion: false,
+  jornadaHours: null,
+  role: null,
+  scale: null,
+  year: null,
+};
+
+/**
+ * Suma un turno al perfil acumulado de la conversación. Lo que el turno declara
+ * manda. Jornada, vínculo y escala pertenecen a la persona que los declaró: si
+ * cambia de cargo («¿y un director?») no se le atribuyen los del anterior, y si
+ * cambia de vínculo tampoco su escala. Como se aplica turno a turno, un cambio
+ * ocurrido en un turno intermedio también corta lo declarado antes.
+ */
+function mergeSalaryTurn(
+  accumulated: SalaryQuestionProfile,
+  turn: SalaryQuestionProfile,
+): SalaryQuestionProfile {
+  const roleChanged =
+    turn.role !== null &&
+    accumulated.role !== null &&
+    turn.role !== accumulated.role;
+  const conditionChanged =
+    turn.condition !== null &&
+    accumulated.condition !== null &&
+    turn.condition !== accumulated.condition;
+  return {
+    // Un turno que pide un concepto adicional («¿y la compensación por…?») lo
+    // fija aunque no use un término salarial; uno que no dice nada lo conserva.
+    asksSpecialAllocation:
+      turn.isSalaryQuestion || turn.asksSpecialAllocation
+        ? turn.asksSpecialAllocation
+        : accumulated.asksSpecialAllocation,
+    condition: turn.condition ?? (roleChanged ? null : accumulated.condition),
+    isSalaryQuestion: accumulated.isSalaryQuestion || turn.isSalaryQuestion,
+    jornadaHours:
+      turn.jornadaHours ?? (roleChanged ? null : accumulated.jornadaHours),
+    role: turn.role ?? accumulated.role,
+    scale:
+      turn.scale ??
+      (roleChanged || conditionChanged ? null : accumulated.scale),
+    year: turn.year ?? accumulated.year,
+  };
+}
+
+/**
+ * La respuesta a una aclaración («Sector público», «30 horas») o un seguimiento
+ * («¿y para 40 horas?») no repite la consulta salarial. Devuelve la consulta
+ * con los factores que declararon los turnos previos y que el turno actual no
+ * declara, escritos de forma canónica para que el mismo lector los recupere. Lo
+ * que dice el turno actual manda; los turnos previos se suman en orden.
+ */
+export function withInheritedSalaryFactors(
+  question: string,
+  priorQuestions: readonly string[],
+): string {
+  if (!priorQuestions.length) return question;
+  const current = salaryQuestionProfile(question);
+  const accumulated = [...priorQuestions, question]
+    .map((turn) => salaryQuestionProfile(turn))
+    .reduce(mergeSalaryTurn, EMPTY_SALARY_PROFILE);
+  if (!accumulated.isSalaryQuestion) return question;
+
+  const fragments = [
+    !current.isSalaryQuestion ? 'remuneración' : null,
+    !current.isSalaryQuestion && accumulated.asksSpecialAllocation
+      ? 'asignación'
+      : null,
+    current.jornadaHours === null && accumulated.jornadaHours !== null
+      ? `jornada de ${accumulated.jornadaHours} horas`
+      : null,
+    current.condition === null ? accumulated.condition : null,
+    current.role === null ? accumulated.role : null,
+    current.scale === null && accumulated.scale !== null
+      ? `escala ${accumulated.scale}`
+      : null,
+    current.year === null && accumulated.year !== null
+      ? `en ${accumulated.year}`
+      : null,
+  ].filter((fragment): fragment is string => fragment !== null);
+
+  // Cada fragmento es su propia oración: un «desde» del turno actual no debe
+  // anclar el año heredado.
+  return fragments.length ? `${question} . ${fragments.join(' . ')}` : question;
+}
+
 /** Factores que la propia consulta ya declara. */
 export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
   const text = normalizeSpanishText(question);
@@ -270,6 +430,42 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
     scale: scalesIn(text)[0] ?? null,
     year: yearsIn(text)[0] ?? null,
   };
+}
+
+/**
+ * Una fuente contradice un factor solo cuando el factor aparece expresamente
+ * junto a una cifra comparable. La ausencia del dato no autoriza a inventar
+ * incompatibilidad; en cambio, «40 horas» no puede competir por una consulta
+ * explícita de «30 horas».
+ */
+function salarySourceConflictsWithProfile(
+  profile: SalaryQuestionProfile,
+  source: RetrievedChunk,
+): boolean {
+  if (!hasAmount(source.chunkContent)) return false;
+
+  return FACTOR_ORDER.some((factor) => {
+    const expected = declaredFactorValue(profile, factor);
+    if (expected === null) return false;
+    const values = factorValuesInSource(source, factor, true);
+    return values.length > 0 && !values.includes(String(expected));
+  });
+}
+
+/**
+ * Compatibilidad para el filtro previo al ranking. Así una fuente que expresa
+ * una jornada, cargo, vínculo, escala o período distinto no puede desplazar a
+ * la aplicable por una similitud semántica más alta.
+ */
+export function isSalarySourceCompatible(
+  question: string,
+  source: RetrievedChunk,
+): boolean {
+  const profile = salaryQuestionProfile(question);
+  return (
+    !profile.isSalaryQuestion ||
+    !salarySourceConflictsWithProfile(profile, source)
+  );
 }
 
 export interface SalaryEvidenceProfile {
@@ -287,7 +483,7 @@ function evidenceFactorsIn(text: string): Record<SalaryFactor, string[]> {
     condicion: conditionsIn(text),
     escala: scalesIn(text),
     jornada: evidenceJornadaHoursIn(text).map(String),
-    periodo: yearsIn(text).map(String),
+    periodo: yearsIn(text, 'evidence').map(String),
   };
 }
 
@@ -347,13 +543,20 @@ function amountSentencesIn(text: string): string[] {
 function factorValuesInSource(
   source: RetrievedChunk,
   factor: SalaryFactor,
+  sentenceOnly = false,
 ): string[] {
   const scoped = amountSentencesIn(source.chunkContent).flatMap(
     (sentence) => evidenceFactorsIn(sentence)[factor],
   );
-  return scoped.length
-    ? scoped
-    : evidenceFactorsIn(normalizeSpanishText(source.chunkContent))[factor];
+  if (scoped.length) return sortedUnique(scoped);
+  // Excluir una fuente exige que el factor esté en la propia oración del
+  // importe: un cargo o un año mencionado en otra oración del fragmento no
+  // describe esa cifra.
+  if (sentenceOnly) return [];
+
+  return sortedUnique(
+    evidenceFactorsIn(normalizeSpanishText(source.chunkContent))[factor],
+  );
 }
 
 function factorValuesInSources(
@@ -538,6 +741,35 @@ function presentsAllocationAsSalary(sentence: string): boolean {
     );
 }
 
+const CURRENT_SALARY_CLAIM = /\b(?:vigente|actual|actualmente|hoy)\b/u;
+
+function citedSourcesForSentence(
+  sentence: string,
+  sources: RetrievedChunk[],
+): RetrievedChunk[] {
+  return citedIndexes(sentence)
+    .map((index) => sources[index - 1])
+    .filter((source): source is RetrievedChunk => Boolean(source));
+}
+
+function matchingAmounts(sentence: string): Set<string> {
+  return new Set(amountsIn(sentence).map(canonicalAmount));
+}
+
+function sourceSupportsAmountAs(
+  source: RetrievedChunk,
+  amounts: ReadonlySet<string>,
+  terms: RegExp,
+): boolean {
+  if (!amounts.size) return false;
+  return sentencesIn(source.chunkContent).some((sourceSentence) => {
+    if (!terms.test(sourceSentence)) return false;
+    return amountsIn(sourceSentence)
+      .map(canonicalAmount)
+      .some((amount) => amounts.has(amount));
+  });
+}
+
 /** Sólo citas: la cita de cierre pertenece a la oración anterior. */
 const CITATION_TAIL = new RegExp(
   `^(?:\\s*(?:${CITATION_GROUP.source}))+\\s*$`,
@@ -577,17 +809,34 @@ export function assessSalaryAnswerCoverage(
   sources: RetrievedChunk[],
 ): SalaryAnswerFinding | null {
   const generalSources = sources.filter(isGeneralRemunerationSource);
-  if (!generalSources.length) return null;
-
-  const generalChunks = new Set(generalSources.map((source) => source.chunkId));
   for (const sentence of amountSentences(answer)) {
-    if (!presentsAllocationAsSalary(sentence)) continue;
-    const cited = citedIndexes(sentence)
-      .map((index) => sources[index - 1])
-      .filter((source): source is RetrievedChunk => Boolean(source));
+    const cited = citedSourcesForSentence(sentence, sources);
     if (!cited.length) continue;
-    if (cited.some((source) => generalChunks.has(source.chunkId))) continue;
-    return { excerpt: sentence.slice(0, 2_000) };
+
+    // Un documento reemplazado nunca se presenta como regla vigente. No basta
+    // con que el fragmento use la palabra «remuneración»: su situación
+    // verificable debe respaldar la vigencia afirmada.
+    if (
+      CURRENT_SALARY_CLAIM.test(normalizeSpanishText(sentence)) &&
+      cited.every((source) => source.documentSituation !== 'current')
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+
+    if (!generalSources.length || !presentsAllocationAsSalary(sentence)) {
+      continue;
+    }
+
+    const amounts = matchingAmounts(sentence);
+    const citedAllocation = cited.some((source) =>
+      sourceSupportsAmountAs(source, amounts, SPECIAL_ALLOCATION_TERMS),
+    );
+    const citedGeneral = cited.some((source) =>
+      sourceSupportsAmountAs(source, amounts, GENERAL_REMUNERATION_TERMS),
+    );
+    if (citedAllocation && !citedGeneral) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
   }
 
   return null;

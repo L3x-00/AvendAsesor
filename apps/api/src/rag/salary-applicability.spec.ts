@@ -3,11 +3,13 @@ import {
   assessSalaryAnswerCoverage,
   canonicalAmount,
   isGeneralRemunerationSource,
+  isSalarySourceCompatible,
   isSpecialAllocationSource,
   salaryApplicabilityTier,
   salaryClarificationFor,
   salaryEvidenceProfile,
   salaryQuestionProfile,
+  withInheritedSalaryFactors,
 } from './salary-applicability';
 
 function chunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
@@ -87,6 +89,12 @@ describe('salaryQuestionProfile', () => {
     });
   });
 
+  it('reconoce el cargo directivo también en singular', () => {
+    expect(
+      salaryQuestionProfile('¿Cuánto es la asignación de un directivo?').role,
+    ).toBe('directivo');
+  });
+
   it('no confunde una consulta no salarial con una consulta de montos', () => {
     expect(
       salaryQuestionProfile('¿Cuál es el plazo para solicitar una licencia?')
@@ -126,6 +134,8 @@ describe('salaryApplicabilityTier', () => {
     expect(
       salaryApplicabilityTier('¿Cuánto gana un profesor?', general30),
     ).toBe(0);
+    // «función directiva» describe el concepto, no un cargo contradictorio: la
+    // asignación se relega (2) sin tratarse como incompatible (3).
     expect(
       salaryApplicabilityTier('¿Cuánto gana un profesor?', allocation),
     ).toBe(2);
@@ -137,11 +147,416 @@ describe('salaryApplicabilityTier', () => {
         '¿Cuánto es la asignación por directivo?',
         allocation,
       ),
+    ).toBe(0);
+    expect(
+      salaryApplicabilityTier('¿Cuánto es la asignación?', general30),
     ).toBe(1);
   });
 
+  it('relega y excluye una cifra que contradice un factor declarado', () => {
+    const director40 = chunk({
+      chunkContent:
+        'La remuneración mensual del director nombrado con jornada de 40 horas es de S/ 4 400,80.',
+      chunkId: 'director-40',
+    });
+    const docente30 = chunk({
+      chunkContent:
+        'La remuneración mensual del docente nombrado con jornada de 30 horas es de S/ 3 300,60.',
+      chunkId: 'docente-30',
+    });
+    const question = '¿Cuánto gana un docente nombrado de 30 horas?';
+
+    expect(salaryApplicabilityTier(question, director40)).toBe(3);
+    expect(isSalarySourceCompatible(question, director40)).toBe(false);
+    expect(salaryApplicabilityTier(question, docente30)).toBe(0);
+    expect(isSalarySourceCompatible(question, docente30)).toBe(true);
+  });
+
+  it.each([
+    [
+      '¿Cuánto gana un docente contratado?',
+      'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
+    ],
+    [
+      '¿Cuánto gana un docente de escala 3?',
+      'La remuneración mensual del docente de escala 2 es de S/ 3 300,60.',
+    ],
+    [
+      '¿Cuánto gana un docente en 2025?',
+      'La remuneración mensual del docente para el año 2024 es de S/ 3 300,60.',
+    ],
+  ])(
+    'descarta una fuente que contradice un factor declarado: %s',
+    (question, content) => {
+      expect(
+        isSalarySourceCompatible(question, chunk({ chunkContent: content })),
+      ).toBe(false);
+    },
+  );
+
   it('no interviene en una consulta que no es salarial', () => {
     expect(salaryApplicabilityTier('¿Cuál es el plazo?', allocation)).toBe(0);
+  });
+
+  describe('cierre de la revisión independiente del punto 3', () => {
+    const compatible = (question: string, content: string, year = 2025) =>
+      isSalarySourceCompatible(
+        question,
+        chunk({ chunkContent: content, issuanceYear: year }),
+      );
+
+    // H-2: «Directiva» en singular es un tipo de norma, no un cargo.
+    it('no toma «la presente Directiva» por el cargo directivo', () => {
+      const content =
+        'De acuerdo con la presente Directiva, la remuneración mensual del personal nombrado es de S/ 3 300,60.';
+      expect(
+        salaryQuestionProfile('¿Cuánto gana un profesor nombrado?').role,
+      ).toBe('docente');
+      expect(compatible('¿Cuánto gana un profesor nombrado?', content)).toBe(
+        true,
+      );
+      expect(
+        salaryQuestionProfile(
+          '¿Cuánto es la remuneración según la Directiva de contratos?',
+        ).role,
+      ).toBeNull();
+    });
+
+    // H-1: el año de emisión y el año del número de norma no son el período.
+    it('no excluye una fuente vigente por su año de emisión', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
+          2025,
+        ),
+      ).toBe(true);
+    });
+
+    it('no toma el año del número de una norma como período', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'Según la Resolución 049-2025-EF, la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+      expect(
+        salaryQuestionProfile(
+          'Según el DS 049-2025-EF, ¿cuánto gana un docente?',
+        ).year,
+      ).toBeNull();
+    });
+
+    it('no toma un inicio o un fin de servicio ni de vigencia como período', () => {
+      expect(
+        salaryQuestionProfile('Soy docente nombrado desde 2015, ¿cuánto gano?')
+          .year,
+      ).toBeNull();
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2025?',
+          'A partir del 1 de enero de 2024 la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+    });
+
+    it('sí excluye el año explícito de otro período', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2025?',
+          'La remuneración mensual del docente nombrado para el año 2024 es de S/ 3 300,60.',
+        ),
+      ).toBe(false);
+    });
+
+    // M-1: romanos y tablas aplanadas.
+    it('reconoce la escala en números romanos y en una tabla aplanada', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente de escala 3?',
+          'La remuneración mensual del docente de la Escala III es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente de escala 3?',
+          'Remuneración mensual: escala 1 S/ 2 000,00 escala 2 S/ 2 300,00 escala 3 S/ 2 600,00.',
+        ),
+      ).toBe(true);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente de escala 3?',
+          'Remuneración mensual: escala 1 S/ 2 000,00 escala 2 S/ 2 300,00.',
+        ),
+      ).toBe(false);
+    });
+
+    // Ronda 2 (N-M3): un año que es un importe, una fecha o parte de una norma
+    // con guiones separados no declara el período.
+    it.each([
+      'El importe es de S/ 2050,00 mensuales para el docente nombrado.',
+      'Mediante la norma publicada el 20 de marzo de 2025 se fija la remuneración mensual del docente nombrado en S/ 3 300,60.',
+      'Según la RVM 045 - 2025 - MINEDU, la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+    ])('no toma como período el año de «%s»', (content) => {
+      expect(
+        compatible('¿Cuánto gana un docente nombrado en 2026?', content),
+      ).toBe(true);
+    });
+
+    // Ronda 3 (hallazgos 4 y 5): la fecha de la pregunta sí fija el período; la
+    // de la evidencia no. Un año al final de oración y un importe sin decimales.
+    it('la fecha de la pregunta fija el período y la de la evidencia no', () => {
+      expect(
+        salaryQuestionProfile(
+          '¿Cuánto ganaba un docente al 31 de diciembre de 2024?',
+        ).year,
+      ).toBe(2024);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'Publicada el 1.° de marzo del 2025, la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+    });
+
+    it('un importe sin decimales no es un año, y un año al final de oración sí', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'El importe es de S/ 2050 mensuales para el docente nombrado.',
+        ),
+      ).toBe(true);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2025?',
+          'La remuneración mensual del docente nombrado es de S/ 3 300,60 para el año 2024. Aplica a todo el país.',
+        ),
+      ).toBe(false);
+    });
+
+    // Ronda 4 (M2): una fecha de un hecho personal no fija el período; solo la
+    // que marca un punto en el tiempo.
+    it('la fecha de ingreso de la persona no es el período consultado', () => {
+      expect(
+        salaryQuestionProfile(
+          'Ingresé a la carrera el 15 de marzo de 2015, ¿cuál es mi remuneración?',
+        ).year,
+      ).toBeNull();
+      expect(
+        salaryQuestionProfile(
+          '¿Cuál era la remuneración vigente al 31 de diciembre de 2024?',
+        ).year,
+      ).toBe(2024);
+    });
+
+    // Ronda 4 (L2): solo los meses reales delimitan una fecha.
+    it('un número y «de» antes de una palabra que no es mes no es una fecha', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'La remuneración mensual del docente nombrado, tramo 2 de vigencia del 2025, es de S/ 3 300,60.',
+        ),
+      ).toBe(false);
+    });
+
+    // Ronda 4 (M3): la escala respondida con las palabras de la aclaración.
+    it.each([
+      ['Escala magisterial 2', '2'],
+      ['Escala remunerativa III', '3'],
+    ])('lee la escala de «%s»', (answer, scale) => {
+      expect(salaryQuestionProfile(answer).scale).toBe(scale);
+    });
+
+    // Ronda 2 (N-L1): «Directivas» es el tipo de norma también en plural.
+    it('no toma «las Directivas» por el cargo directivo', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un profesor nombrado?',
+          'Conforme a las Directivas aprobadas, la remuneración mensual del personal nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+    });
+
+    // M-2: un cargo de otra oración no describe la cifra.
+    it('no excluye por un cargo mencionado fuera de la oración del importe', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente?',
+          'La remuneración mensual es de S/ 3 300,60. El Director de la UGEL remite el informe.',
+        ),
+      ).toBe(true);
+    });
+  });
+});
+
+describe('withInheritedSalaryFactors', () => {
+  it('completa la respuesta a una aclaración con la consulta salarial previa', () => {
+    const effective = withInheritedSalaryFactors('Sector público', [
+      '¿Cuánto gana un profesor en el Perú?',
+    ]);
+    const profile = salaryQuestionProfile(effective);
+
+    expect(effective.startsWith('Sector público')).toBe(true);
+    expect(profile.isSalaryQuestion).toBe(true);
+    expect(profile.role).toBe('docente');
+  });
+
+  it('hereda solo lo que el turno actual no declara y el actual manda', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y para 40 horas?', [
+        '¿Cuánto gana un docente nombrado de 30 horas en 2025?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'nombrado',
+      isSalaryQuestion: true,
+      jornadaHours: 40,
+      role: 'docente',
+      year: 2025,
+    });
+    expect(
+      salaryQuestionProfile(
+        withInheritedSalaryFactors('Soy contratado', [
+          '¿Cuánto gana un docente nombrado?',
+        ]),
+      ).condition,
+    ).toBe('contratado');
+  });
+
+  // Ronda 2 (N-H1): la jornada, el vínculo y la escala son de la persona que
+  // los declaró; un seguimiento que cambia de cargo no los hereda.
+  it('un cambio de cargo no hereda la jornada ni el vínculo del cargo anterior', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y un director?', [
+        '¿Cuánto gana un docente contratado de 30 horas en la escala 2?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: null,
+      isSalaryQuestion: true,
+      jornadaHours: null,
+      role: 'directivo',
+      scale: null,
+    });
+  });
+
+  // Ronda 3 (hallazgo 1): el reinicio de un turno intermedio corta lo anterior.
+  it('el cambio de cargo de un turno intermedio no se deshace en el siguiente', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y en 2025?', [
+        '¿Cuánto gana un docente contratado de 30 horas en la escala 2?',
+        '¿y un director?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: null,
+      isSalaryQuestion: true,
+      jornadaHours: null,
+      role: 'directivo',
+      scale: null,
+      year: 2025,
+    });
+  });
+
+  it('el cambio de vínculo de un turno intermedio no recupera la escala anterior', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y en 2025?', [
+        '¿Cuánto gana un docente nombrado de 30 horas en la escala 3?',
+        '¿y si soy contratado?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'contratado',
+      jornadaHours: 30,
+      role: 'docente',
+      scale: null,
+      year: 2025,
+    });
+  });
+
+  it('la jornada respondida a una aclaración se suma a lo ya declarado', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('Escala 2', [
+        '¿Cuánto gana un docente nombrado?',
+        'Jornada de 30 horas',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'nombrado',
+      isSalaryQuestion: true,
+      jornadaHours: 30,
+      role: 'docente',
+      scale: '2',
+    });
+  });
+
+  // Ronda 4 (M4): el concepto adicional pedido en un turno intermedio que no
+  // usa un término salarial sigue pidiéndose en el turno siguiente.
+  it('conserva el concepto adicional pedido en un turno intermedio', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y para 30 horas?', [
+        '¿Cuánto gana un docente nombrado?',
+        '¿Y la compensación por tiempo de servicios?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      asksSpecialAllocation: true,
+      isSalaryQuestion: true,
+      jornadaHours: 30,
+    });
+  });
+
+  it('un cambio de vínculo conserva la jornada y descarta la escala', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y si soy contratado?', [
+        '¿Cuánto gana un docente nombrado de 30 horas en la escala 2?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'contratado',
+      jornadaHours: 30,
+      role: 'docente',
+      scale: null,
+    });
+  });
+
+  it('el más reciente de los turnos previos prevalece', () => {
+    expect(
+      salaryQuestionProfile(
+        withInheritedSalaryFactors('Sector público', [
+          '¿Cuánto gana un docente de 30 horas?',
+          '¿y uno de 40 horas?',
+        ]),
+      ).jornadaHours,
+    ).toBe(40);
+  });
+
+  it('no inventa una consulta salarial donde no la hubo', () => {
+    expect(
+      withInheritedSalaryFactors('Sector público', [
+        '¿Cuál es el plazo para solicitar una licencia?',
+      ]),
+    ).toBe('Sector público');
+    expect(withInheritedSalaryFactors('¿Cuánto gana un docente?', [])).toBe(
+      '¿Cuánto gana un docente?',
+    );
+  });
+
+  it('un año heredado no queda anclado por un «desde» del turno actual', () => {
+    expect(
+      salaryQuestionProfile(
+        withInheritedSalaryFactors('Trabajo desde marzo', [
+          '¿Cuánto gana un docente en 2025?',
+        ]),
+      ).year,
+    ).toBe(2025);
   });
 });
 
@@ -644,5 +1059,29 @@ describe('assessSalaryAnswerCoverage', () => {
         [general30, allocation],
       )?.excerpt,
     ).toContain('S/ 2 666,80');
+  });
+
+  it('marca una asignación citada desde un chunk que también contiene la remuneración general', () => {
+    const mixed = chunk({
+      chunkContent:
+        'La remuneración mensual del docente es de S/ 3 300,60. La asignación especial por función directiva es de S/ 2 666,80.',
+      chunkId: 'mixto',
+    });
+
+    expect(
+      assessSalaryAnswerCoverage(
+        'Tu remuneración mensual es de S/ 2 666,80. [1]',
+        [mixed],
+      )?.excerpt,
+    ).toContain('S/ 2 666,80');
+  });
+
+  it('marca una fuente reemplazada presentada como vigente', () => {
+    expect(
+      assessSalaryAnswerCoverage(
+        'La remuneración vigente es de S/ 2 000,10. [1]',
+        [historicalAmount],
+      )?.excerpt,
+    ).toContain('vigente');
   });
 });

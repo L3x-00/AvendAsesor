@@ -1,10 +1,9 @@
 import {
-  buildVocabulary,
-  correctDomainTypos,
   matchTopicModule,
   type TopicModule,
 } from '../chat/catalog/topic-match';
 import { classifyTurnIntent } from '../chat/intent/intent-classifier';
+import { normalizeDomainQuery } from '../rag/query-normalization';
 import type { ConsultationCaseSummary } from './consultation-cases.gateway';
 
 /**
@@ -47,7 +46,6 @@ export function groupUnansweredCases(
   cases: ConsultationCaseSummary[],
   modules: TopicModule[],
 ): UnansweredGroup[] {
-  const vocabulary = buildVocabulary(modules.map((module) => module.name));
   const byId = new Map(modules.map((module) => [module.id, module]));
   const groups = new Map<string, UnansweredGroup>();
 
@@ -63,7 +61,7 @@ export function groupUnansweredCases(
       const detectedId = item.detectedSubmoduleId ?? item.detectedModuleId;
       const fromWords = question
         ? // Para agrupar basta con que la consulta nombre el tema.
-          matchTopicModule(correctDomainTypos(question, vocabulary), modules, {
+          matchTopicModule(normalizeDomainQuery(question), modules, {
             requireTopicCoverage: false,
           })
         : null;

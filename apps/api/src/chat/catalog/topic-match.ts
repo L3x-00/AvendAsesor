@@ -1,9 +1,9 @@
 import { normalizeSpanishText } from '../../rag/text-normalization';
 
 /**
- * Temas y documentos por nombre, tolerando errores de escritura. El público
- * (docentes 30+) escribe rápido y sin tildes: «renumeración» o
- * «renumreaciones» deben llevar a «Remuneraciones», no a «sin sustento».
+ * Temas y documentos por nombre. La consulta ya llega con la normalización
+ * explícita de errores demostrados («renumeración» → «remuneración»); aquí no
+ * se infieren sustituciones por distancia de edición.
  */
 
 const STOPWORDS = new Set([
@@ -26,44 +26,6 @@ export interface TopicModule {
   parentModuleId: string | null;
 }
 
-/** Distancia de edición con transposición de letras vecinas (OSA). */
-export function editDistance(left: string, right: string): number {
-  const rows = left.length + 1;
-  const cols = right.length + 1;
-  const table: number[][] = Array.from({ length: rows }, (_, row) =>
-    Array.from({ length: cols }, (_, col) =>
-      row === 0 ? col : col === 0 ? row : 0,
-    ),
-  );
-  for (let row = 1; row < rows; row += 1) {
-    for (let col = 1; col < cols; col += 1) {
-      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
-      let best = Math.min(
-        table[row - 1][col] + 1,
-        table[row][col - 1] + 1,
-        table[row - 1][col - 1] + cost,
-      );
-      if (
-        row > 1 &&
-        col > 1 &&
-        left[row - 1] === right[col - 2] &&
-        left[row - 2] === right[col - 1]
-      ) {
-        best = Math.min(best, table[row - 2][col - 2] + 1);
-      }
-      table[row][col] = best;
-    }
-  }
-  return table[rows - 1][cols - 1];
-}
-
-/** Errores tolerados según el largo: más letras, más margen. */
-function typoBudget(length: number): number {
-  if (length >= 12) return 3;
-  if (length >= 8) return 2;
-  return length >= 5 ? 1 : 0;
-}
-
 function significantWords(text: string): string[] {
   return normalizeSpanishText(text)
     .split(/[^a-z0-9]+/u)
@@ -78,76 +40,8 @@ function stem(word: string): string {
   return word;
 }
 
-/** Vocabulario del dominio: palabras de los módulos y títulos de documentos. */
-export function buildVocabulary(texts: string[]): Map<string, string> {
-  const vocabulary = new Map<string, string>();
-  for (const text of texts) {
-    for (const match of text.matchAll(/[\p{L}]+/gu)) {
-      const normalized = normalizeSpanishText(match[0]);
-      if (normalized.length < 5 || STOPWORDS.has(normalized)) continue;
-      if (!vocabulary.has(normalized)) {
-        vocabulary.set(normalized, match[0].toLocaleLowerCase('es'));
-      }
-    }
-  }
-  return vocabulary;
-}
-
-/** Solo se corrigen palabras largas: las cortas («plazo», «carga») suelen ser
- * palabras correctas del español cercanas a términos del dominio («plazas»,
- * «cargos») y cambiarlas desviaría la búsqueda. */
-const MIN_CORRECTABLE_LENGTH = 8;
-
-/**
- * Corrige palabras mal escritas contra el vocabulario del dominio. Solo cambia
- * una palabra larga que no existe en él (ni como singular o plural), cuando hay
- * un único candidato cercano que empieza con la misma letra; el resto del
- * texto queda igual.
- */
-export function correctDomainTypos(
-  question: string,
-  vocabulary: Map<string, string>,
-): string {
-  if (!vocabulary.size) return question;
-  return question.replace(/[\p{L}]+/gu, (word) => {
-    const normalized = normalizeSpanishText(word);
-    if (normalized.length < MIN_CORRECTABLE_LENGTH) return word;
-    if (vocabulary.has(normalized)) return word;
-    const budget = typoBudget(normalized.length);
-    let best: string | null = null;
-    let bestDistance = Infinity;
-    let tied = false;
-    for (const [candidate, display] of vocabulary) {
-      if (candidate[0] !== normalized[0]) continue;
-      if (Math.abs(candidate.length - normalized.length) > budget + 2) continue;
-      // Singular y plural cuentan igual: «renumeracion» ≈ «remuneraciones».
-      const distance = Math.min(
-        editDistance(normalized, candidate),
-        editDistance(stem(normalized), stem(candidate)),
-      );
-      if (distance > budget) continue;
-      // Misma palabra en otro número («remuneracion»/«remuneraciones»): está
-      // bien escrita, no se toca.
-      if (stem(normalized) === stem(candidate)) return word;
-      if (distance < bestDistance) {
-        best = display;
-        bestDistance = distance;
-        tied = false;
-      } else if (distance === bestDistance && display !== best) {
-        tied = true;
-      }
-    }
-    return best && !tied ? best : word;
-  });
-}
-
 function wordsMatch(left: string, right: string): boolean {
-  const a = stem(left);
-  const b = stem(right);
-  if (a === b) return true;
-  if (a[0] !== b[0]) return false;
-  const budget = Math.min(2, typoBudget(Math.min(a.length, b.length)));
-  return editDistance(a, b) <= budget;
+  return stem(left) === stem(right);
 }
 
 /**

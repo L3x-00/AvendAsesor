@@ -164,7 +164,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     const events = await collect(service);
 
     expect(ragService.retrieve).toHaveBeenCalledWith(
-      'de que trata la remuneraciones',
+      'de que trata la remuneración',
       'esc',
       [],
       { forceContext: false },

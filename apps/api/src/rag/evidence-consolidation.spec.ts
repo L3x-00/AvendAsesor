@@ -82,7 +82,7 @@ describe('consolidateDocumentEvidence', () => {
     ).toBe(false);
   });
 
-  it('conserva un tramo de páginas claramente separado como segunda ubicación', () => {
+  it('no abre otra referencia para un tramo separado sin contenido material', () => {
     const consolidated = consolidateDocumentEvidence([
       chunk({
         chunkId: 'c-1',
@@ -98,10 +98,7 @@ describe('consolidateDocumentEvidence', () => {
       }),
     ]);
 
-    expect(consolidated.map((source) => source.chunkId)).toEqual([
-      'c-1',
-      'c-2',
-    ]);
+    expect(consolidated.map((source) => source.chunkId)).toEqual(['c-1']);
   });
 
   // Hallazgo del cross-review: un tramo lejano que no aporta nada no puede
@@ -175,7 +172,7 @@ describe('consolidateDocumentEvidence', () => {
     ]);
   });
 
-  it('conserva el mejor puntaje cuando el fragmento sin contenido no desplaza a nada', () => {
+  it('no usa un pie de firma como referencia principal aunque tenga mejor puntaje', () => {
     const consolidated = consolidateDocumentEvidence([
       chunk({
         chunkId: 'c-pie',
@@ -194,13 +191,7 @@ describe('consolidateDocumentEvidence', () => {
       }),
     ]);
 
-    // Solo hay un fragmento con contenido: conservarlo junto al pie no deja
-    // fuera ninguna condición, así que la referencia principal sigue siendo la
-    // de mejor puntaje.
-    expect(consolidated.map((source) => source.chunkId)).toEqual([
-      'c-pie',
-      'c-general',
-    ]);
+    expect(consolidated.map((source) => source.chunkId)).toEqual(['c-general']);
   });
 
   // Hallazgo del cross-review: una referencia de página no es contenido. Un pie
@@ -362,7 +353,7 @@ describe('consolidateDocumentEvidence', () => {
     expect(consolidated[0]?.chunkId).toBe('c-1');
   });
 
-  it('limita a dos las referencias visibles de un mismo documento', () => {
+  it('conserva toda condición material aunque el documento aporte más de dos fragmentos', () => {
     const consolidated = consolidateDocumentEvidence([
       chunk({
         chunkId: 'c-1',
@@ -380,10 +371,32 @@ describe('consolidateDocumentEvidence', () => {
       }),
     ]);
 
-    expect(consolidated).toHaveLength(2);
+    expect(consolidated).toHaveLength(3);
     expect(consolidated.map((source) => source.chunkId)).toEqual([
       'c-1',
       'c-2',
+      'c-3',
+    ]);
+  });
+
+  it('conserva condiciones distintas aunque usen la misma marca normativa', () => {
+    const consolidated = consolidateDocumentEvidence([
+      chunk({
+        chunkId: 'nombrado',
+        chunkContent:
+          'Solo el personal nombrado percibe la remuneración indicada.',
+      }),
+      chunk({
+        chunkId: 'contratado',
+        chunkContent:
+          'Solo el personal contratado percibe la asignación correspondiente.',
+        pageStart: 4,
+      }),
+    ]);
+
+    expect(consolidated.map((source) => source.chunkId)).toEqual([
+      'nombrado',
+      'contratado',
     ]);
   });
 
