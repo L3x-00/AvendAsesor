@@ -1,9 +1,71 @@
 import {
   detectRetrievalScope,
+  inheritedFactorQuestions,
   RagService,
   resolveDetectedSubmodule,
 } from './rag.service';
 import type { RetrievalGateway } from './retrieval.gateway';
+
+describe('inheritedFactorQuestions', () => {
+  const salary = '¿Cuánto gana un docente de 30 horas?';
+
+  it('hereda desde la consulta salarial hasta la respuesta a la aclaración', () => {
+    expect(
+      inheritedFactorQuestions('Nombrado', [salary, 'Sector público'], true),
+    ).toEqual([salary, 'Sector público']);
+  });
+
+  it('solo toma la consulta salarial más reciente', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿y para 40 horas?',
+        ['¿Cuánto es la bonificación por zona rural?', salary],
+        false,
+      ),
+    ).toEqual([salary]);
+  });
+
+  it('no hereda tras una consulta de otro tema', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿y cuál es el plazo para presentarla?',
+        [salary, '¿Cuántos días de licencia por enfermedad me corresponden?'],
+        false,
+      ),
+    ).toEqual([]);
+  });
+
+  it('no hereda sin consulta salarial previa ni sin seguimiento', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Sector público',
+        ['¿Cómo pido una licencia?'],
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      inheritedFactorQuestions(
+        '¿Cuál es la remuneración de un auxiliar de educación?',
+        [salary],
+        false,
+      ),
+    ).toEqual([]);
+    expect(inheritedFactorQuestions('30 horas', [], true)).toEqual([]);
+  });
+
+  it('el extracto de una respuesta anterior no es una declaración de la persona', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Sector público',
+        [
+          salary,
+          'Respuesta anterior: la remuneración del director es S/ 4 400,80.',
+        ],
+        true,
+      ),
+    ).toEqual([salary]);
+  });
+});
 
 function vector(value = 0.1): number[] {
   return Array.from({ length: 1536 }, () => value);

@@ -11,6 +11,7 @@ import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
   isSalarySourceCompatible,
   salaryApplicabilityTier,
+  salaryQuestionProfile,
   withInheritedSalaryFactors,
 } from './salary-applicability';
 import { orderSourcesForDelivery } from './temporal-precedence';
@@ -578,9 +579,19 @@ export function inheritedFactorQuestions(
 ): string[] {
   if (!priorUserQuestions.length) return [];
   if (!forceContext && !isEllipticalFollowUp(question)) return [];
-  return priorUserQuestions.filter(
+  const turns = priorUserQuestions.filter(
     (prior) => !prior.startsWith('Respuesta anterior:'),
   );
+  // Se hereda desde la consulta salarial más reciente hasta ahora. Si entre
+  // ella y este turno hubo una consulta con tema propio que no es salarial, la
+  // conversación cambió de tema y esos factores ya no describen a la persona.
+  const inherited: string[] = [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    inherited.unshift(turns[index]);
+    if (salaryQuestionProfile(turns[index]).isSalaryQuestion) return inherited;
+    if (!isEllipticalFollowUp(turns[index])) return [];
+  }
+  return [];
 }
 
 const ARCHIVED_INTENT_PATTERNS = [

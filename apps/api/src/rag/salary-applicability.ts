@@ -53,10 +53,10 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
   { role: 'auxiliar de educación', pattern: /\bauxiliar(?:es)?\b/u },
   {
     role: 'directivo',
-    // «directiva» en singular es el tipo de norma («la presente Directiva»), no
-    // un cargo; el cargo se reconoce en masculino singular y en plural.
-    pattern:
-      /\b(?:director|directora|directores|directoras|directivos?|directivas)\b/u,
+    // «directiva(s)» es el tipo de norma («la presente Directiva», «las
+    // Directivas aprobadas»), no un cargo; el cargo directivo se reconoce en
+    // masculino singular y plural.
+    pattern: /\b(?:director|directora|directores|directoras|directivos?)\b/u,
   },
   {
     role: 'docente',
@@ -216,7 +216,10 @@ function scalesIn(text: string): string[] {
  * («049-2025-EF») ni el que ancla un inicio o un fin («desde 2015», «a partir
  * del 1 de enero de 2024»): ninguno declara el período que se consulta.
  */
-const YEAR_PATTERN = /(?<!\d-)\b(?:19|20)\d{2}\b(?!-\d)/gu;
+const YEAR_PATTERN =
+  /(?<!\d\s*-\s*)(?<!s\/\.?\s*)\b(?:19|20)\d{2}\b(?![.,]\d)(?!\s*-\s*\d)/gu;
+/** Año de una fecha («20 de marzo de 2025»): fecha de emisión, no período. */
+const CALENDAR_DATE_BEFORE_YEAR = /\b\d{1,2}\s+de\s+[a-z]+\s+de\s*$/u;
 const RANGE_ANCHOR_BEFORE_YEAR =
   /\b(?:desde|hasta|partir de|partir del)\b(?:\s+[^\s.!?]+){0,6}\s*$/u;
 
@@ -224,7 +227,12 @@ function yearsIn(text: string): number[] {
   const years: number[] = [];
   for (const match of text.matchAll(YEAR_PATTERN)) {
     const before = text.slice(0, match.index);
-    if (RANGE_ANCHOR_BEFORE_YEAR.test(before)) continue;
+    if (
+      RANGE_ANCHOR_BEFORE_YEAR.test(before) ||
+      CALENDAR_DATE_BEFORE_YEAR.test(before)
+    ) {
+      continue;
+    }
     years.push(Number(match[0]));
   }
   return years;
@@ -323,12 +331,28 @@ export function withInheritedSalaryFactors(
 
   const inherited = <T>(pick: (profile: SalaryQuestionProfile) => T | null) =>
     prior.map(pick).find((value): value is T => value !== null) ?? null;
+  // Jornada, vínculo y escala pertenecen al cargo y al vínculo de la consulta
+  // previa: si la persona cambia de cargo («¿y un director?»), no se le
+  // atribuyen los de otro; si cambia de vínculo, tampoco su escala.
+  const priorRole = inherited((p) => p.role);
+  const priorCondition = inherited((p) => p.condition);
+  const roleChanged =
+    current.role !== null && priorRole !== null && current.role !== priorRole;
+  const conditionChanged =
+    current.condition !== null &&
+    priorCondition !== null &&
+    current.condition !== priorCondition;
   const hours =
-    current.jornadaHours === null ? inherited((p) => p.jornadaHours) : null;
+    current.jornadaHours === null && !roleChanged
+      ? inherited((p) => p.jornadaHours)
+      : null;
   const condition =
-    current.condition === null ? inherited((p) => p.condition) : null;
-  const role = current.role === null ? inherited((p) => p.role) : null;
-  const scale = current.scale === null ? inherited((p) => p.scale) : null;
+    current.condition === null && !roleChanged ? priorCondition : null;
+  const role = current.role === null ? priorRole : null;
+  const scale =
+    current.scale === null && !roleChanged && !conditionChanged
+      ? inherited((p) => p.scale)
+      : null;
   const year = current.year === null ? inherited((p) => p.year) : null;
   const fragments = [
     !current.isSalaryQuestion ? 'remuneración' : null,

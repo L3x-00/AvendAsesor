@@ -291,6 +291,28 @@ describe('salaryApplicabilityTier', () => {
       ).toBe(false);
     });
 
+    // Ronda 2 (N-M3): un año que es un importe, una fecha o parte de una norma
+    // con guiones separados no declara el período.
+    it.each([
+      'El importe es de S/ 2050,00 mensuales para el docente nombrado.',
+      'Mediante la norma publicada el 20 de marzo de 2025 se fija la remuneración mensual del docente nombrado en S/ 3 300,60.',
+      'Según la RVM 045 - 2025 - MINEDU, la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+    ])('no toma como período el año de «%s»', (content) => {
+      expect(
+        compatible('¿Cuánto gana un docente nombrado en 2026?', content),
+      ).toBe(true);
+    });
+
+    // Ronda 2 (N-L1): «Directivas» es el tipo de norma también en plural.
+    it('no toma «las Directivas» por el cargo directivo', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un profesor nombrado?',
+          'Conforme a las Directivas aprobadas, la remuneración mensual del personal nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+    });
+
     // M-2: un cargo de otra oración no describe la cifra.
     it('no excluye por un cargo mencionado fuera de la oración del importe', () => {
       expect(
@@ -336,6 +358,39 @@ describe('withInheritedSalaryFactors', () => {
         ]),
       ).condition,
     ).toBe('contratado');
+  });
+
+  // Ronda 2 (N-H1): la jornada, el vínculo y la escala son de la persona que
+  // los declaró; un seguimiento que cambia de cargo no los hereda.
+  it('un cambio de cargo no hereda la jornada ni el vínculo del cargo anterior', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y un director?', [
+        '¿Cuánto gana un docente contratado de 30 horas en la escala 2?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: null,
+      isSalaryQuestion: true,
+      jornadaHours: null,
+      role: 'directivo',
+      scale: null,
+    });
+  });
+
+  it('un cambio de vínculo conserva la jornada y descarta la escala', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y si soy contratado?', [
+        '¿Cuánto gana un docente nombrado de 30 horas en la escala 2?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'contratado',
+      jornadaHours: 30,
+      role: 'docente',
+      scale: null,
+    });
   });
 
   it('el más reciente de los turnos previos prevalece', () => {
