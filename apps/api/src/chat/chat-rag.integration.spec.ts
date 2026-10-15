@@ -740,4 +740,103 @@ describe('ChatService + RagService integration', () => {
       replyRole: 'assistant',
     });
   });
+
+  // CR-08 / OBS-007 y QA-UI-05: pedir el enlace del documento exacto terminaba
+  // en «no puedo proporcionar enlaces» aunque la misma respuesta mostraba una
+  // cita enlazable. Ahora responde la ruta determinista, sin proveedor: nombre
+  // del documento, página física real y referencia [n] que baja a la fuente.
+  it('responde el enlace exacto con documento y página sin consultar al modelo', async () => {
+    const events = await collect(service, {
+      question:
+        'Dame el enlace del documento exacto donde aparece la remuneración mensual del docente.',
+    });
+
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    expect(message).toContain('«Norma de remuneraciones del sector docente»');
+    expect(message).toContain('la página 3');
+    expect(message).toContain('[1]');
+    expect(message).toContain('«Ver»');
+    expect(message).not.toContain('no puedo');
+
+    const sources = events.find((event) => event.type === 'sources')?.data
+      .sources;
+    expect(sources).toEqual([
+      expect.objectContaining({ pageStart: 3, rank: 1 }),
+    ]);
+    // El enlace lo genera la aplicación junto a la fuente persistida: sobrevive
+    // a recargar el historial.
+    expect(history.completions[0]?.sources).toEqual([
+      expect.objectContaining({ chunkId: remunerationPage3.chunkId }),
+    ]);
+    expect(history.completions[0]).toMatchObject({
+      qualitySignals: [],
+      replyRole: 'assistant',
+      unansweredReason: null,
+    });
+    expect(answers.inputs).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({
+      data: { provider: 'rule' },
+      type: 'done',
+    });
+  });
+
+  // CR-08 / OBS-012: la unidad disponible de un PDF es la página; la respuesta
+  // no puede inventar un minuto.
+  it('aclara que un PDF se ubica por página cuando se pide un minuto', async () => {
+    const events = await collect(service, {
+      question:
+        '¿En qué minuto del documento se menciona la remuneración mensual del docente?',
+    });
+
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    expect(message).toContain('por página, no por minuto');
+    expect(message).toContain('la página 3');
+    expect(message).not.toMatch(/\bminuto\s*\d/iu);
+    expect(message).not.toMatch(/\d{1,2}:\d{2}/u);
+    expect(answers.inputs).toHaveLength(0);
+  });
+
+  // El seguimiento real reportado fue «Dame el enlace.» dentro de la
+  // conversación: sin nombrar el documento, la conversación es el referente.
+  it('resuelve «dame el enlace» como seguimiento de la conversación', async () => {
+    const first = await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+    });
+    const conversationId = first.find((event) => event.type === 'conversation')
+      ?.data.conversationId;
+
+    const events = await collect(service, {
+      conversationId,
+      question: 'Dame el enlace de la licencia.',
+    });
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+
+    expect(message).toContain('«Norma de licencias»');
+    expect(message).toContain('la página 1');
+    // Solo el primer turno llegó al modelo: el pedido del enlace es determinista.
+    expect(answers.inputs).toHaveLength(1);
+  });
+
+  // Control de falsedad: una pregunta de contenido que menciona el documento
+  // sigue respondiéndose con la evidencia y sus citas, no con una lista de
+  // archivos.
+  it('no intercepta la pregunta de contenido que menciona el documento', async () => {
+    const events = await collect(service, {
+      question: '¿Qué dice el documento sobre la licencia por salud?',
+    });
+
+    expect(answers.inputs).toHaveLength(1);
+    expect(events.find((event) => event.type === 'token')?.data.text).toContain(
+      '[1]',
+    );
+  });
 });
