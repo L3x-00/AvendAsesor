@@ -218,18 +218,23 @@ function scalesIn(text: string): string[] {
  */
 const YEAR_PATTERN =
   /(?<!\d\s*-\s*)(?<!s\/\.?\s*)\b(?:19|20)\d{2}\b(?![.,]\d)(?!\s*-\s*\d)/gu;
-/** Año de una fecha («20 de marzo de 2025»): fecha de emisión, no período. */
-const CALENDAR_DATE_BEFORE_YEAR = /\b\d{1,2}\s+de\s+[a-z]+\s+de\s*$/u;
+/**
+ * Año de una fecha («20 de marzo de 2025», «1.° de marzo del 2025»): en la
+ * evidencia es la fecha de emisión o de publicación, no el período de la cifra.
+ * En la consulta, en cambio, «al 31 de diciembre de 2024» sí fija el período.
+ */
+const CALENDAR_DATE_BEFORE_YEAR =
+  /\b\d{1,2}\s*[°º.]*\s+de\s+[a-z]+\s+del?\s*$/u;
 const RANGE_ANCHOR_BEFORE_YEAR =
   /\b(?:desde|hasta|partir de|partir del)\b(?:\s+[^\s.!?]+){0,6}\s*$/u;
 
-function yearsIn(text: string): number[] {
+function yearsIn(text: string, skipCalendarDates = false): number[] {
   const years: number[] = [];
   for (const match of text.matchAll(YEAR_PATTERN)) {
     const before = text.slice(0, match.index);
     if (
       RANGE_ANCHOR_BEFORE_YEAR.test(before) ||
-      CALENDAR_DATE_BEFORE_YEAR.test(before)
+      (skipCalendarDates && CALENDAR_DATE_BEFORE_YEAR.test(before))
     ) {
       continue;
     }
@@ -306,12 +311,57 @@ export interface SalaryQuestionProfile {
   year: number | null;
 }
 
+const EMPTY_SALARY_PROFILE: SalaryQuestionProfile = {
+  asksSpecialAllocation: false,
+  condition: null,
+  isSalaryQuestion: false,
+  jornadaHours: null,
+  role: null,
+  scale: null,
+  year: null,
+};
+
+/**
+ * Suma un turno al perfil acumulado de la conversación. Lo que el turno declara
+ * manda. Jornada, vínculo y escala pertenecen a la persona que los declaró: si
+ * cambia de cargo («¿y un director?») no se le atribuyen los del anterior, y si
+ * cambia de vínculo tampoco su escala. Como se aplica turno a turno, un cambio
+ * ocurrido en un turno intermedio también corta lo declarado antes.
+ */
+function mergeSalaryTurn(
+  accumulated: SalaryQuestionProfile,
+  turn: SalaryQuestionProfile,
+): SalaryQuestionProfile {
+  const roleChanged =
+    turn.role !== null &&
+    accumulated.role !== null &&
+    turn.role !== accumulated.role;
+  const conditionChanged =
+    turn.condition !== null &&
+    accumulated.condition !== null &&
+    turn.condition !== accumulated.condition;
+  return {
+    asksSpecialAllocation: turn.isSalaryQuestion
+      ? turn.asksSpecialAllocation
+      : accumulated.asksSpecialAllocation,
+    condition: turn.condition ?? (roleChanged ? null : accumulated.condition),
+    isSalaryQuestion: accumulated.isSalaryQuestion || turn.isSalaryQuestion,
+    jornadaHours:
+      turn.jornadaHours ?? (roleChanged ? null : accumulated.jornadaHours),
+    role: turn.role ?? accumulated.role,
+    scale:
+      turn.scale ??
+      (roleChanged || conditionChanged ? null : accumulated.scale),
+    year: turn.year ?? accumulated.year,
+  };
+}
+
 /**
  * La respuesta a una aclaración («Sector público», «30 horas») o un seguimiento
  * («¿y para 40 horas?») no repite la consulta salarial. Devuelve la consulta
  * con los factores que declararon los turnos previos y que el turno actual no
  * declara, escritos de forma canónica para que el mismo lector los recupere. Lo
- * que dice el turno actual manda; entre los previos, el más reciente.
+ * que dice el turno actual manda; los turnos previos se suman en orden.
  */
 export function withInheritedSalaryFactors(
   question: string,
@@ -319,52 +369,27 @@ export function withInheritedSalaryFactors(
 ): string {
   if (!priorQuestions.length) return question;
   const current = salaryQuestionProfile(question);
-  const prior = [...priorQuestions]
-    .reverse()
-    .map((turn) => salaryQuestionProfile(turn));
-  if (
-    !current.isSalaryQuestion &&
-    !prior.some((turn) => turn.isSalaryQuestion)
-  ) {
-    return question;
-  }
+  const accumulated = [...priorQuestions, question]
+    .map((turn) => salaryQuestionProfile(turn))
+    .reduce(mergeSalaryTurn, EMPTY_SALARY_PROFILE);
+  if (!accumulated.isSalaryQuestion) return question;
 
-  const inherited = <T>(pick: (profile: SalaryQuestionProfile) => T | null) =>
-    prior.map(pick).find((value): value is T => value !== null) ?? null;
-  // Jornada, vínculo y escala pertenecen al cargo y al vínculo de la consulta
-  // previa: si la persona cambia de cargo («¿y un director?»), no se le
-  // atribuyen los de otro; si cambia de vínculo, tampoco su escala.
-  const priorRole = inherited((p) => p.role);
-  const priorCondition = inherited((p) => p.condition);
-  const roleChanged =
-    current.role !== null && priorRole !== null && current.role !== priorRole;
-  const conditionChanged =
-    current.condition !== null &&
-    priorCondition !== null &&
-    current.condition !== priorCondition;
-  const hours =
-    current.jornadaHours === null && !roleChanged
-      ? inherited((p) => p.jornadaHours)
-      : null;
-  const condition =
-    current.condition === null && !roleChanged ? priorCondition : null;
-  const role = current.role === null ? priorRole : null;
-  const scale =
-    current.scale === null && !roleChanged && !conditionChanged
-      ? inherited((p) => p.scale)
-      : null;
-  const year = current.year === null ? inherited((p) => p.year) : null;
   const fragments = [
     !current.isSalaryQuestion ? 'remuneración' : null,
-    !current.isSalaryQuestion &&
-    prior.some((turn) => turn.asksSpecialAllocation)
+    !current.isSalaryQuestion && accumulated.asksSpecialAllocation
       ? 'asignación'
       : null,
-    hours === null ? null : `jornada de ${hours} horas`,
-    condition,
-    role,
-    scale === null ? null : `escala ${scale}`,
-    year === null ? null : `en ${year}`,
+    current.jornadaHours === null && accumulated.jornadaHours !== null
+      ? `jornada de ${accumulated.jornadaHours} horas`
+      : null,
+    current.condition === null ? accumulated.condition : null,
+    current.role === null ? accumulated.role : null,
+    current.scale === null && accumulated.scale !== null
+      ? `escala ${accumulated.scale}`
+      : null,
+    current.year === null && accumulated.year !== null
+      ? `en ${accumulated.year}`
+      : null,
   ].filter((fragment): fragment is string => fragment !== null);
 
   // Cada fragmento es su propia oración: un «desde» del turno actual no debe
@@ -437,7 +462,7 @@ function evidenceFactorsIn(text: string): Record<SalaryFactor, string[]> {
     condicion: conditionsIn(text),
     escala: scalesIn(text),
     jornada: evidenceJornadaHoursIn(text).map(String),
-    periodo: yearsIn(text).map(String),
+    periodo: yearsIn(text, true).map(String),
   };
 }
 

@@ -578,7 +578,7 @@ export function inheritedFactorQuestions(
   forceContext: boolean,
 ): string[] {
   if (!priorUserQuestions.length) return [];
-  if (!forceContext && !isEllipticalFollowUp(question)) return [];
+  if (!forceContext && !continuesSalaryThread(question)) return [];
   const turns = priorUserQuestions.filter(
     (prior) => !prior.startsWith('Respuesta anterior:'),
   );
@@ -589,9 +589,27 @@ export function inheritedFactorQuestions(
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     inherited.unshift(turns[index]);
     if (salaryQuestionProfile(turns[index]).isSalaryQuestion) return inherited;
-    if (!isEllipticalFollowUp(turns[index])) return [];
+    if (!continuesSalaryThread(turns[index])) return [];
   }
   return [];
+}
+
+/** En una consulta salarial, estos términos de tema son factores de la cifra. */
+const SALARY_FACTOR_TERMS =
+  /\b(?:jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu;
+
+/**
+ * Un turno sigue el hilo de una consulta salarial cuando es elíptico o cuando
+ * solo nombra un factor de la cifra («Jornada de 30 horas», «Escala 2»): la
+ * aclaración que se le hizo a la persona usa esas mismas palabras. Un turno con
+ * otro tema propio («licencia por enfermedad») lo interrumpe.
+ */
+function continuesSalaryThread(turn: string): boolean {
+  const normalized = normalizeSpanishText(turn).replace(
+    SALARY_FACTOR_TERMS,
+    ' ',
+  );
+  return !hasTopicTerm(normalized) || refersBack(turn);
 }
 
 const ARCHIVED_INTENT_PATTERNS = [

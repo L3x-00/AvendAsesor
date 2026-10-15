@@ -15,6 +15,18 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([salary, 'Sector público']);
   });
 
+  // Ronda 3 (hallazgo 2): la aclaración usa las palabras «jornada» y «escala»;
+  // responderla con ellas no es cambiar de tema.
+  it.each([
+    'Jornada de 30 horas',
+    'Mi carga horaria es de 30 horas',
+    'Escala magisterial 2',
+  ])('«%s» responde a la aclaración y no interrumpe la herencia', (answer) => {
+    expect(
+      inheritedFactorQuestions('Escala 2', [salary, answer], true),
+    ).toEqual([salary, answer]);
+  });
+
   it('solo toma la consulta salarial más reciente', () => {
     expect(
       inheritedFactorQuestions(

@@ -303,6 +303,37 @@ describe('salaryApplicabilityTier', () => {
       ).toBe(true);
     });
 
+    // Ronda 3 (hallazgos 4 y 5): la fecha de la pregunta sí fija el período; la
+    // de la evidencia no. Un año al final de oración y un importe sin decimales.
+    it('la fecha de la pregunta fija el período y la de la evidencia no', () => {
+      expect(
+        salaryQuestionProfile(
+          '¿Cuánto ganaba un docente al 31 de diciembre de 2024?',
+        ).year,
+      ).toBe(2024);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'Publicada el 1.° de marzo del 2025, la remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        ),
+      ).toBe(true);
+    });
+
+    it('un importe sin decimales no es un año, y un año al final de oración sí', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'El importe es de S/ 2050 mensuales para el docente nombrado.',
+        ),
+      ).toBe(true);
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2025?',
+          'La remuneración mensual del docente nombrado es de S/ 3 300,60 para el año 2024. Aplica a todo el país.',
+        ),
+      ).toBe(false);
+    });
+
     // Ronda 2 (N-L1): «Directivas» es el tipo de norma también en plural.
     it('no toma «las Directivas» por el cargo directivo', () => {
       expect(
@@ -375,6 +406,59 @@ describe('withInheritedSalaryFactors', () => {
       jornadaHours: null,
       role: 'directivo',
       scale: null,
+    });
+  });
+
+  // Ronda 3 (hallazgo 1): el reinicio de un turno intermedio corta lo anterior.
+  it('el cambio de cargo de un turno intermedio no se deshace en el siguiente', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y en 2025?', [
+        '¿Cuánto gana un docente contratado de 30 horas en la escala 2?',
+        '¿y un director?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: null,
+      isSalaryQuestion: true,
+      jornadaHours: null,
+      role: 'directivo',
+      scale: null,
+      year: 2025,
+    });
+  });
+
+  it('el cambio de vínculo de un turno intermedio no recupera la escala anterior', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y en 2025?', [
+        '¿Cuánto gana un docente nombrado de 30 horas en la escala 3?',
+        '¿y si soy contratado?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'contratado',
+      jornadaHours: 30,
+      role: 'docente',
+      scale: null,
+      year: 2025,
+    });
+  });
+
+  it('la jornada respondida a una aclaración se suma a lo ya declarado', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('Escala 2', [
+        '¿Cuánto gana un docente nombrado?',
+        'Jornada de 30 horas',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      condition: 'nombrado',
+      isSalaryQuestion: true,
+      jornadaHours: 30,
+      role: 'docente',
+      scale: '2',
     });
   });
 
