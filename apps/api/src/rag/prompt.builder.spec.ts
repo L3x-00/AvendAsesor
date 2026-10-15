@@ -109,6 +109,17 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('página PDF');
   });
 
+  // CR-08 (punto 4): el modelo no puede negar el enlace ni una ubicación que la
+  // interfaz sí ofrece, y debe corregir la unidad equivocada cuando se pide un
+  // minuto de un PDF.
+  it('no permite negar el enlace o la ubicación del documento citado', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('nunca respondas que no puedes proporcionarlo');
+    expect(prompt).toContain('el enlace «Ver» junto a cada fuente');
+    expect(prompt).toContain('un PDF se ubica por página, no por minuto');
+  });
+
   it('separa lo histórico y no presenta un concepto adicional como remuneración', () => {
     const prompt = buildEvidenceSystemPrompt();
 
