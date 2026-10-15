@@ -382,6 +382,8 @@ class InMemoryChatHistoryGateway implements ChatHistoryGateway {
 
 class RecordingAnswerGateway implements AnswerGateway {
   readonly inputs: AnswerGatewayInput[] = [];
+  /** Respuesta que simula el modelo; por defecto, una orientación citada. */
+  answer: string | null = null;
 
   async *generate(input: AnswerGatewayInput): AsyncIterable<string> {
     await Promise.resolve();
@@ -393,6 +395,10 @@ class RecordingAnswerGateway implements AnswerGateway {
         return;
       }
       yield 'Suele corresponder presentar la solicitud ante tu UGEL.';
+      return;
+    }
+    if (this.answer !== null) {
+      yield this.answer;
       return;
     }
     yield `Orientación sustentada en ${input.sources[0]?.documentTitle}. [1]`;
@@ -837,6 +843,48 @@ describe('ChatService + RagService integration', () => {
     expect(answers.inputs).toHaveLength(1);
     expect(events.find((event) => event.type === 'token')?.data.text).toContain(
       '[1]',
+    );
+  });
+
+  // CR-07 (punto 4): la tabla se sostiene solo si cada fila cita una fuente
+  // entregada; la interfaz ya la degrada a texto y el caso queda señalado para
+  // revisión humana.
+  it('acepta la tabla cuyas filas citan la fuente entregada', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      '| Salud | 30 días [1] |',
+      '| Maternidad | 90 días [1] |',
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).not.toContain(
+      'support_partial',
+    );
+  });
+
+  it('señala para revisión la tabla con una fila sin cita', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      '| Salud | 30 días [1] |',
+      '| Maternidad | 90 días |',
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
+      'Maternidad',
     );
   });
 });

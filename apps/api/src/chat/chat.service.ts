@@ -24,6 +24,7 @@ import {
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
+import { unbackedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
@@ -1334,6 +1335,17 @@ export class ChatService {
         qualitySignals.add('support_partial');
         qualityExcerpts.support_partial ??= salaryFinding.excerpt;
       }
+    }
+    // CR-07 (punto 4): una tabla solo se sostiene con una cita válida por fila.
+    // Si alguna fila no cita ninguna fuente entregada, la interfaz la mostrará
+    // como texto y el caso queda señalado para revisión humana.
+    const unbackedRows = unbackedTableRows(
+      finalAnswer,
+      retrieval.sources.length,
+    );
+    if (unbackedRows.length) {
+      qualitySignals.add('support_partial');
+      qualityExcerpts.support_partial ??= unbackedRows[0];
     }
     if (retrieval.topRelevanceScore < this.matchThreshold() + 0.05) {
       qualitySignals.add('low_confidence');
