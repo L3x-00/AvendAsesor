@@ -805,6 +805,120 @@ describe('ChatService', () => {
     expect(clarification.data.message).not.toContain('nombrado o contratado');
   });
 
+  describe('aclaración de una sola condición en la ruta de ambigüedad y de cambio de tema', () => {
+    const causalSources = [
+      {
+        ...source,
+        chunkContent:
+          'La reasignación por salud requiere el informe médico del establecimiento.',
+        chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+        documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+      },
+      {
+        ...source,
+        chunkContent:
+          'La reasignación por emergencia se acredita con la declaratoria correspondiente.',
+        chunkId: 'ec8b56af-6d0c-4fef-881e-7c00907540dd',
+        documentVersionId: 'fc8b56af-6d0c-4fef-881e-7c00907540dd',
+      },
+    ];
+
+    it('en una ambigüedad pide la causal en vez del mensaje genérico', async () => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'ambiguous',
+        modules: [{ id: source.moduleIds[0], name: 'Desplazamientos' }],
+        sources: causalSources,
+        topRelevanceScore: 0.9,
+      });
+
+      const events = await collect(service, {
+        question: '¿Cuáles son los requisitos de la reasignación?',
+      });
+      const clarification = events.find(
+        (event) => event.type === 'clarification',
+      );
+      if (!clarification || clarification.type !== 'clarification') {
+        throw new Error('Expected a clarification event.');
+      }
+
+      expect(clarification.data.message).toContain('causal');
+      expect(clarification.data.message).not.toContain(
+        'identificar el trámite',
+      );
+      expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
+      expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
+      expect(answerGateway.generate).not.toHaveBeenCalled();
+      const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+        [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+      >;
+      expect(completionCalls[0]?.[0].sources).toEqual([]);
+    });
+
+    it('en un cambio de tema pide la causal sin mostrar fuentes ni generar', async () => {
+      ragService.retrieve.mockResolvedValue({
+        kind: 'topic_change',
+        resolvedModule: { id: source.moduleIds[0], name: 'Desplazamientos' },
+        sources: causalSources,
+        topRelevanceScore: 0.9,
+      });
+
+      const events = await collect(service, {
+        question: '¿Cuáles son los requisitos de la reasignación?',
+      });
+
+      expect(events.map((event) => event.type)).not.toContain('sources');
+      const clarification = events.find(
+        (event) => event.type === 'clarification',
+      );
+      if (!clarification || clarification.type !== 'clarification') {
+        throw new Error('Expected a clarification event.');
+      }
+      expect(clarification.data.message).toContain('causal');
+      expect(answerGateway.generate).not.toHaveBeenCalled();
+    });
+
+    // H-3: la respuesta a una aclaración no repite la consulta salarial; el
+    // siguiente dato que decide la cifra se pide con los factores heredados.
+    it('tras responder «Sector público» pide la jornada de la consulta salarial previa', async () => {
+      const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+      historyGateway.getConversationContext.mockResolvedValue({
+        conversationId,
+        messages: [
+          { content: '¿Cuánto gana un profesor en el Perú?', role: 'user' },
+          {
+            content: 'Necesito un solo dato: ¿es del sector público o privado?',
+            role: 'clarification',
+          },
+        ],
+        selectedModuleId: null,
+      });
+      ragService.retrieve.mockResolvedValue({
+        kind: 'evidence',
+        sources: [30, 40].map((hours) => ({
+          ...source,
+          chunkContent: `La remuneración mensual del profesor de jornada de ${hours} horas es de S/ ${hours} 000,00.`,
+          chunkId: `${hours}c8b56af-6d0c-4fef-881e-7c00907540dd`,
+          documentVersionId: `${hours}d8b56af-6d0c-4fef-881e-7c00907540dd`,
+        })),
+        topRelevanceScore: 0.9,
+      });
+
+      const events = await collect(service, {
+        conversationId,
+        question: 'Sector público',
+      });
+      const clarification = events.find(
+        (event) => event.type === 'clarification',
+      );
+      if (!clarification || clarification.type !== 'clarification') {
+        throw new Error('Expected a clarification event.');
+      }
+
+      expect(clarification.data.message).toContain('jornada');
+      expect(answerGateway.generate).not.toHaveBeenCalled();
+    });
+  });
+
   it('streams evidence, then persists real sources only after completion', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',

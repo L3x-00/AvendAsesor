@@ -11,6 +11,7 @@ import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
   isSalarySourceCompatible,
   salaryApplicabilityTier,
+  withInheritedSalaryFactors,
 } from './salary-applicability';
 import { orderSourcesForDelivery } from './temporal-precedence';
 import {
@@ -564,6 +565,24 @@ export function isEllipticalFollowUp(question: string): boolean {
   return !hasTopicTerm(normalized) || refersBack(question);
 }
 
+/**
+ * Consultas previas cuyos factores declarados completan la actual: solo la
+ * respuesta a una aclaración (o un seguimiento elíptico) hereda; una consulta
+ * con tema propio es una pregunta nueva. El extracto de una respuesta anterior
+ * del asistente no es una declaración de la persona.
+ */
+export function inheritedFactorQuestions(
+  question: string,
+  priorUserQuestions: readonly string[],
+  forceContext: boolean,
+): string[] {
+  if (!priorUserQuestions.length) return [];
+  if (!forceContext && !isEllipticalFollowUp(question)) return [];
+  return priorUserQuestions.filter(
+    (prior) => !prior.startsWith('Respuesta anterior:'),
+  );
+}
+
 const ARCHIVED_INTENT_PATTERNS = [
   /\barchivad[oa]s?\b/u,
   /\bantecedentes? historicos? especificos?\b/u,
@@ -633,6 +652,16 @@ export class RagService {
     // tema), y con contexto dentro del módulo de la conversación.
     const globalUsesContext =
       hasPrior && (options.forceContext || isEllipticalFollowUp(question));
+    // Los factores salariales que declararon los turnos previos siguen
+    // vigentes en la respuesta a una aclaración y en un seguimiento.
+    const salaryQuestion = withInheritedSalaryFactors(
+      question,
+      inheritedFactorQuestions(
+        question,
+        priorUserQuestions,
+        Boolean(options.forceContext),
+      ),
+    );
     const contextual = hasPrior
       ? contextualQuery(question, priorUserQuestions)
       : question;
@@ -773,7 +802,7 @@ export class RagService {
           rawGlobalSources
             .map(sanitizeRetrievedEvidence)
             .filter((source): source is RetrievedChunk => Boolean(source)),
-          question,
+          salaryQuestion,
           retrievalScope,
         ),
       ),
@@ -784,7 +813,7 @@ export class RagService {
           rawSelectedSources
             .map(sanitizeRetrievedEvidence)
             .filter((source): source is RetrievedChunk => Boolean(source)),
-          question,
+          salaryQuestion,
           retrievalScope,
         ),
       ),
@@ -806,7 +835,11 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, namedModule.id)
           : [];
         if (namedModule && scopedSources.length) {
-          const sources = relevantSources(scopedSources, matchCount, question);
+          const sources = relevantSources(
+            scopedSources,
+            matchCount,
+            salaryQuestion,
+          );
           return {
             kind: 'evidence',
             resolvedModule: namedModule,
@@ -818,7 +851,7 @@ export class RagService {
         const sources = relevantSources(
           globalRoutingSources,
           matchCount,
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -833,7 +866,7 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, resolvedModule.id)
           : globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'evidence',
@@ -873,7 +906,7 @@ export class RagService {
               currentRoute.resolvedModule.id,
             ),
             matchCount,
-            question,
+            salaryQuestion,
           );
           return {
             kind: 'topic_change',
@@ -890,7 +923,7 @@ export class RagService {
         );
         const competingSources = prepareDelivery(
           uniqueSources(byScoreDescending(competingCandidates)),
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -920,7 +953,7 @@ export class RagService {
           const sources = relevantSources(
             attributableToModule(globalRoutingSources, namedModule.id),
             matchCount,
-            question,
+            salaryQuestion,
           );
           if (sources.length) {
             return {
@@ -935,7 +968,7 @@ export class RagService {
         const sources = relevantSources(
           globalRoutingSources,
           matchCount,
-          question,
+          salaryQuestion,
         );
         return {
           kind: 'ambiguous',
@@ -958,7 +991,7 @@ export class RagService {
           ),
         ]),
         matchCount,
-        question,
+        salaryQuestion,
       );
       const selectedRoot = resolveSelectedRootModule(sources, selectedModuleId);
       return {
@@ -979,7 +1012,7 @@ export class RagService {
       const sources = relevantSources(
         globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'evidence',
@@ -993,7 +1026,7 @@ export class RagService {
       const sources = relevantSources(
         globalRoutingSources,
         matchCount,
-        question,
+        salaryQuestion,
       );
       return {
         kind: 'ambiguous',

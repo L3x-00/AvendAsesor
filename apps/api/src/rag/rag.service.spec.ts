@@ -1336,6 +1336,66 @@ describe('RagService', () => {
     expect(result.sources.map((item) => item.chunkId)).toEqual(['docente-30']);
   });
 
+  describe('factores salariales heredados de la consulta previa', () => {
+    const docente = (hours: number, semanticScore: number) => ({
+      ...source,
+      chunkContent: `La remuneración mensual del docente nombrado con jornada de ${hours} horas es de S/ ${hours},00.`,
+      chunkId: `docente-${hours}`,
+      documentVersionId: `version-docente-${hours}`,
+      semanticScore,
+    });
+
+    // H-3: «De 30 horas» no contiene ningún término salarial; sin heredar la
+    // consulta previa el filtro no se aplicaba a la respuesta de aclaración.
+    it('aplica el filtro a la respuesta de una aclaración', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        'De 30 horas',
+        null,
+        ['¿Cuánto gana un docente nombrado?'],
+        { forceContext: true },
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'docente-30',
+      ]);
+    });
+
+    it('la jornada de la respuesta prevalece sobre la de la consulta previa', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        '¿Y para 40 horas?',
+        null,
+        ['¿Cuánto gana un docente nombrado de 30 horas?'],
+        { forceContext: true },
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'docente-40',
+      ]);
+    });
+
+    it('una consulta con tema propio no hereda los factores de la anterior', async () => {
+      gateway.search.mockResolvedValue([docente(40, 0.9), docente(30, 0.89)]);
+
+      const result = await service.retrieve(
+        '¿Cuál es la remuneración de un docente nombrado?',
+        null,
+        ['¿Cuánto gana un docente nombrado de 30 horas?'],
+      );
+
+      if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+      expect(result.sources.map((item) => item.chunkId).sort()).toEqual([
+        'docente-30',
+        'docente-40',
+      ]);
+    });
+  });
+
   it('ordena la comparación histórica de la más reciente a la más antigua', async () => {
     const byYear = [2018, 2022, 2019].map((issuanceYear) => ({
       ...source,

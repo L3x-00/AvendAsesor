@@ -28,6 +28,7 @@ import {
   assessSalaryAnswerCoverage,
   salaryClarificationFor,
   salaryQuestionProfile,
+  withInheritedSalaryFactors,
 } from '../rag/salary-applicability';
 import { hasTopicTerm } from '../rag/domain-lexicon';
 import {
@@ -41,6 +42,7 @@ import {
 } from '../rag/rag.constants';
 import {
   detectRetrievalScope,
+  inheritedFactorQuestions,
   RagService,
   resolveDetectedSubmodule,
   type ResolvedModule,
@@ -923,15 +925,20 @@ export class ChatService {
           `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
         ]
       : priorUserQuestions;
+    const forceContext =
+      Boolean(lastDocumentAnswer) ||
+      conversationContext.at(-1)?.role === 'clarification';
     const retrieval = await this.ragService.retrieve(
       question,
       selectedModuleId,
       retrievalContext,
-      {
-        forceContext:
-          Boolean(lastDocumentAnswer) ||
-          conversationContext.at(-1)?.role === 'clarification',
-      },
+      { forceContext },
+    );
+    // La respuesta a una aclaración no repite la consulta salarial: el perfil
+    // hereda los factores que la persona ya declaró en los turnos previos.
+    const salaryQuestion = withInheritedSalaryFactors(
+      question,
+      inheritedFactorQuestions(question, priorUserQuestions, forceContext),
     );
 
     if (input.abortSignal?.aborted) return;
@@ -1079,7 +1086,7 @@ export class ChatService {
       // hasta que la persona precise la condición que permite responder.
       const contextualClarification =
         causalClarificationFor(question, retrieval.sources) ??
-        salaryClarificationFor(question, retrieval.sources);
+        salaryClarificationFor(salaryQuestion, retrieval.sources);
       const message =
         contextualClarification?.message ??
         ambiguityMessage(question, retrieval.modules);
@@ -1123,7 +1130,7 @@ export class ChatService {
     if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
       const clarification =
         causalClarificationFor(question, retrieval.sources) ??
-        salaryClarificationFor(question, retrieval.sources);
+        salaryClarificationFor(salaryQuestion, retrieval.sources);
       if (clarification) {
         if (input.abortSignal?.aborted) return;
         const completed = await this.historyGateway.completeTurn({

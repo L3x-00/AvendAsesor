@@ -53,7 +53,10 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
   { role: 'auxiliar de educación', pattern: /\bauxiliar(?:es)?\b/u },
   {
     role: 'directivo',
-    pattern: /\b(?:director|directora|directores|directoras|directiv[oa]s?)\b/u,
+    // «directiva» en singular es el tipo de norma («la presente Directiva»), no
+    // un cargo; el cargo se reconoce en masculino singular y en plural.
+    pattern:
+      /\b(?:director|directora|directores|directoras|directivos?|directivas)\b/u,
   },
   {
     role: 'docente',
@@ -63,7 +66,7 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
 
 const HOURS_PATTERN = /\b(\d{1,2})\)?\s*(?:h|horas)\b/u;
 const HOURS_PATTERN_ALL = new RegExp(HOURS_PATTERN.source, 'gu');
-const SCALE_PATTERN = /\bescala\s*(\d{1,2}|[ivx]{1,4})\b/u;
+const SCALE_PATTERN_ALL = /\bescala\s*(\d{1,2}|[ivx]{1,4})\b/gu;
 
 /**
  * Un plazo no es una jornada: «dentro de las 24 horas», «el plazo de 48 horas»
@@ -186,14 +189,45 @@ function rolesIn(text: string): string[] {
   );
 }
 
+const ROMAN_SCALES: ReadonlyMap<string, string> = new Map([
+  ['i', '1'],
+  ['ii', '2'],
+  ['iii', '3'],
+  ['iv', '4'],
+  ['v', '5'],
+  ['vi', '6'],
+  ['vii', '7'],
+  ['viii', '8'],
+  ['ix', '9'],
+  ['x', '10'],
+]);
+
+/** Todas las escalas nombradas; «escala III» y «escala 3» son la misma. */
 function scalesIn(text: string): string[] {
-  const match = SCALE_PATTERN.exec(text);
-  return match ? [match[1]] : [];
+  return sortedUnique(
+    [...text.matchAll(SCALE_PATTERN_ALL)].map(
+      (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
+    ),
+  );
 }
 
+/**
+ * Año explícito. No cuenta el año que forma parte del número de una norma
+ * («049-2025-EF») ni el que ancla un inicio o un fin («desde 2015», «a partir
+ * del 1 de enero de 2024»): ninguno declara el período que se consulta.
+ */
+const YEAR_PATTERN = /(?<!\d-)\b(?:19|20)\d{2}\b(?!-\d)/gu;
+const RANGE_ANCHOR_BEFORE_YEAR =
+  /\b(?:desde|hasta|partir de|partir del)\b(?:\s+[^\s.!?]+){0,6}\s*$/u;
+
 function yearsIn(text: string): number[] {
-  const years = text.match(/\b(?:19|20)\d{2}\b/gu) ?? [];
-  return years.map(Number);
+  const years: number[] = [];
+  for (const match of text.matchAll(YEAR_PATTERN)) {
+    const before = text.slice(0, match.index);
+    if (RANGE_ANCHOR_BEFORE_YEAR.test(before)) continue;
+    years.push(Number(match[0]));
+  }
+  return years;
 }
 
 function sortedUnique(values: readonly (number | string)[]): string[] {
@@ -264,6 +298,56 @@ export interface SalaryQuestionProfile {
   year: number | null;
 }
 
+/**
+ * La respuesta a una aclaración («Sector público», «30 horas») o un seguimiento
+ * («¿y para 40 horas?») no repite la consulta salarial. Devuelve la consulta
+ * con los factores que declararon los turnos previos y que el turno actual no
+ * declara, escritos de forma canónica para que el mismo lector los recupere. Lo
+ * que dice el turno actual manda; entre los previos, el más reciente.
+ */
+export function withInheritedSalaryFactors(
+  question: string,
+  priorQuestions: readonly string[],
+): string {
+  if (!priorQuestions.length) return question;
+  const current = salaryQuestionProfile(question);
+  const prior = [...priorQuestions]
+    .reverse()
+    .map((turn) => salaryQuestionProfile(turn));
+  if (
+    !current.isSalaryQuestion &&
+    !prior.some((turn) => turn.isSalaryQuestion)
+  ) {
+    return question;
+  }
+
+  const inherited = <T>(pick: (profile: SalaryQuestionProfile) => T | null) =>
+    prior.map(pick).find((value): value is T => value !== null) ?? null;
+  const hours =
+    current.jornadaHours === null ? inherited((p) => p.jornadaHours) : null;
+  const condition =
+    current.condition === null ? inherited((p) => p.condition) : null;
+  const role = current.role === null ? inherited((p) => p.role) : null;
+  const scale = current.scale === null ? inherited((p) => p.scale) : null;
+  const year = current.year === null ? inherited((p) => p.year) : null;
+  const fragments = [
+    !current.isSalaryQuestion ? 'remuneración' : null,
+    !current.isSalaryQuestion &&
+    prior.some((turn) => turn.asksSpecialAllocation)
+      ? 'asignación'
+      : null,
+    hours === null ? null : `jornada de ${hours} horas`,
+    condition,
+    role,
+    scale === null ? null : `escala ${scale}`,
+    year === null ? null : `en ${year}`,
+  ].filter((fragment): fragment is string => fragment !== null);
+
+  // Cada fragmento es su propia oración: un «desde» del turno actual no debe
+  // anclar el año heredado.
+  return fragments.length ? `${question} . ${fragments.join(' . ')}` : question;
+}
+
 /** Factores que la propia consulta ya declara. */
 export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
   const text = normalizeSpanishText(question);
@@ -293,7 +377,7 @@ function salarySourceConflictsWithProfile(
   return FACTOR_ORDER.some((factor) => {
     const expected = declaredFactorValue(profile, factor);
     if (expected === null) return false;
-    const values = factorValuesInSource(source, factor);
+    const values = factorValuesInSource(source, factor, true);
     return values.length > 0 && !values.includes(String(expected));
   });
 }
@@ -389,28 +473,20 @@ function amountSentencesIn(text: string): string[] {
 function factorValuesInSource(
   source: RetrievedChunk,
   factor: SalaryFactor,
+  sentenceOnly = false,
 ): string[] {
   const scoped = amountSentencesIn(source.chunkContent).flatMap(
     (sentence) => evidenceFactorsIn(sentence)[factor],
   );
   if (scoped.length) return sortedUnique(scoped);
+  // Excluir una fuente exige que el factor esté en la propia oración del
+  // importe: un cargo o un año mencionado en otra oración del fragmento no
+  // describe esa cifra.
+  if (sentenceOnly) return [];
 
-  const documentValues = evidenceFactorsIn(
-    normalizeSpanishText(source.chunkContent),
-  )[factor];
-  if (documentValues.length) return sortedUnique(documentValues);
-
-  // Si el fragmento no nombra otro período, el año de emisión verificable de la
-  // versión es el único dato temporal que se compara con una pregunta fechada.
-  if (
-    factor === 'periodo' &&
-    source.issuanceYear !== null &&
-    source.issuanceYear !== undefined
-  ) {
-    return [String(source.issuanceYear)];
-  }
-
-  return [];
+  return sortedUnique(
+    evidenceFactorsIn(normalizeSpanishText(source.chunkContent))[factor],
+  );
 }
 
 function factorValuesInSources(

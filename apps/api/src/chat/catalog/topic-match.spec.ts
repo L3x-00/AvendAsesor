@@ -30,6 +30,21 @@ describe('matchTopicModule', () => {
     ).toBeNull();
   });
 
+  // La tolerancia por distancia de edición se retiró: una palabra válida distinta
+  // no se empareja con un módulo por parecerse a él.
+  it('no empareja palabras distintas por similitud ortográfica', () => {
+    expect(
+      matchTopicModule('ratificacion', [
+        { id: 'rec', name: 'Rectificación', parentModuleId: null },
+      ]),
+    ).toBeNull();
+    expect(
+      matchTopicModule('plazo', [
+        { id: 'plz', name: 'Plazas', parentModuleId: null },
+      ]),
+    ).toBeNull();
+  });
+
   it('a igual coincidencia prefiere el tema principal', () => {
     expect(
       matchTopicModule('remuneraciones', [
