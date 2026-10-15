@@ -108,6 +108,19 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('base normativa');
     expect(prompt).toContain('página PDF');
   });
+
+  it('separa lo histórico y no presenta un concepto adicional como remuneración', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('separados y rotulados como históricos');
+    expect(prompt).toContain('del más reciente al más antiguo');
+    expect(prompt).toContain(
+      'un concepto adicional distinto de la remuneración',
+    );
+    expect(prompt).toContain(
+      'No lo presentes, ni lo sumes, como remuneración general',
+    );
+  });
 });
 
 describe('no-support marker injection', () => {
@@ -179,6 +192,39 @@ describe('buildEvidenceUserPrompt', () => {
 
     expect(prompt).toContain('Ubicación interna: fragmento sin paginación PDF');
     expect(prompt).not.toContain('Páginas físicas del PDF: 1-1 de 1');
+  });
+
+  it('declara el reparto vigente/histórico cuando el turno mezcla ambos grupos', () => {
+    const mixed = buildEvidenceUserPrompt(
+      '¿Cuánto era antes?',
+      [],
+      [
+        source,
+        {
+          ...source,
+          chunkId: 'chunk-historico',
+          documentSituation: 'replaced' as const,
+          documentTitle: 'Norma anterior',
+          documentVersionId: 'version-anterior',
+        },
+      ],
+    );
+
+    expect(mixed).toContain(
+      'Grupos de fuentes: 1 vigente(s) y 1 antecedente(s) histórico(s).',
+    );
+    // El encabezado no altera el orden de las citas [n].
+    expect(mixed.indexOf('FUENTE [1]')).toBeLessThan(
+      mixed.indexOf('FUENTE [2]'),
+    );
+    expect(mixed).toContain('Norma docente');
+    expect(mixed).toContain('Norma anterior');
+  });
+
+  it('no declara grupos cuando todo el material es vigente', () => {
+    const prompt = buildEvidenceUserPrompt('¿Cuál es el plazo?', [], [source]);
+
+    expect(prompt).not.toContain('Grupos de fuentes');
   });
 
   it('removes controls and neutralizes real source-delimiter injection', () => {

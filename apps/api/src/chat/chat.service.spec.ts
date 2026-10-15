@@ -900,6 +900,177 @@ describe('ChatService', () => {
     );
   });
 
+  it('corrige «renumeración» solo para buscar y conserva el texto original en el historial', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Tu remuneración mensual está sustentada. [1]';
+      },
+    });
+
+    await collect(service, { question: '¿Cuánto es mi renumeración mensual?' });
+
+    // La búsqueda usa la palabra corregida…
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuánto es mi remuneración mensual?',
+      null,
+      [],
+      { forceContext: false },
+    );
+    // …y el historial conserva exactamente lo que escribió la persona.
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: '¿Cuánto es mi renumeración mensual?',
+      }),
+    );
+  });
+
+  it('pide la causal de la reasignación con una sola pregunta y sin generar la respuesta', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La reasignación por salud requiere el informe médico del establecimiento.',
+          chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+        {
+          ...source,
+          chunkContent:
+            'La reasignación por emergencia se acredita con la declaratoria correspondiente.',
+          chunkId: 'ec8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'fc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuáles son los requisitos de la reasignación?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain('motivo');
+    expect(clarification.data.message).toContain('salud');
+    expect(clarification.data.message).toContain('emergencia');
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
+    expect(clarification.data.modules).toEqual([]);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualitySignals: [],
+        replyRole: 'clarification',
+        sources: [],
+        unansweredReason: 'ambiguous_request',
+      }),
+    );
+    // La pregunta original queda en el historial para recuperar el contexto.
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: '¿Cuáles son los requisitos de la reasignación?',
+      }),
+    );
+  });
+
+  it('pide la jornada cuando la evidencia vigente tiene dos montos incompatibles', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del docente con jornada de 30 horas es de S/ 3 300,60.',
+          chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del docente con jornada de 40 horas es de S/ 4 400,80.',
+          chunkId: 'ec8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'fc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un docente?',
+    });
+
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain('30');
+    expect(clarification.data.message).toContain('40');
+    expect(
+      events.some(
+        (event) => event.type === 'token' || event.type === 'sources',
+      ),
+    ).toBe(false);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('marca para revisión una respuesta salarial que cita solo un concepto adicional', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'Artículo 5. La remuneración mensual del docente es de S/ 3 300,60.',
+          chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+        {
+          ...source,
+          chunkContent:
+            'Artículo 5. La asignación por tiempo de servicio es de S/ 2 666,80.',
+          chunkId: 'ec8b56af-6d0c-4fef-881e-7c00907540dd',
+          documentVersionId: 'fc8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Tu remuneración mensual es de S/ 2 666,80. [2]';
+      },
+    });
+
+    await collect(service, { question: '¿Cuánto es mi remuneración mensual?' });
+
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    const completion = completionCalls[0]?.[0];
+    expect(completion?.qualitySignals).toContain('support_partial');
+    expect(completion?.qualityExcerpts?.support_partial).toBe(
+      'Tu remuneración mensual es de S/ 2 666,80. [2]',
+    );
+  });
+
   it('persists the real child association when a main module retrieves submodule evidence', async () => {
     const parentModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     ragService.retrieve.mockResolvedValue({

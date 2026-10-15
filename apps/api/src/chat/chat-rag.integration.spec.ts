@@ -25,35 +25,45 @@ const authorization: AuthorizationContext = {
 const LICENSES_MODULE_ID = '00000000-0000-0000-0000-000000000101';
 const CONTRACTS_MODULE_ID = '00000000-0000-0000-0000-000000000102';
 const AUXILIARIES_MODULE_ID = '00000000-0000-0000-0000-000000000103';
+const REMUNERATIONS_MODULE_ID = '00000000-0000-0000-0000-000000000104';
 
 function source(input: {
+  articleReference?: string | null;
   chunkId: string;
   content: string;
   documentId: string;
+  documentSituation?: RetrievedChunk['documentSituation'];
   documentTitle: string;
   documentType?: string;
+  issuanceYear?: number;
   moduleId: string;
   moduleName: string;
+  pageEnd?: number;
+  pageStart?: number;
   resolutionNumber?: string;
   score: number;
   versionId: string;
   versionNumber: number;
 }): RetrievedChunk {
   return {
-    articleReference: 'Artículo 5',
+    articleReference:
+      input.articleReference === undefined
+        ? 'Artículo 5'
+        : input.articleReference,
     chunkContent: input.content,
     chunkId: input.chunkId,
     documentId: input.documentId,
-    documentSituation: 'current',
+    documentSituation: input.documentSituation ?? 'current',
     documentTitle: input.documentTitle,
     documentType: input.documentType ?? null,
     documentVersionId: input.versionId,
+    issuanceYear: input.issuanceYear ?? null,
     lexicalScore: 0.5,
     moduleIds: [input.moduleId],
     moduleNames: [input.moduleName],
     numeralReference: null,
-    pageEnd: 1,
-    pageStart: 1,
+    pageEnd: input.pageEnd ?? 1,
+    pageStart: input.pageStart ?? 1,
     sectionTitle: 'Regla aplicable',
     resolutionNumber: input.resolutionNumber ?? null,
     semanticScore: input.score,
@@ -112,8 +122,90 @@ const exactResolution = source({
   versionNumber: 1,
 });
 
+/**
+ * Tres fragmentos contiguos del mismo archivo (páginas 2, 3 y 4 de la misma
+ * versión): la respuesta debe llevar UNA referencia visible del documento, con
+ * la ubicación real del fragmento conservado, y la cita persistida debe seguir
+ * apuntando a ese fragmento real (el de mayor relevancia, página 3).
+ */
+const remunerationDocument = {
+  documentId: '00000000-0000-0000-0000-000000000306',
+  documentTitle: 'Norma de remuneraciones del sector docente',
+  moduleId: REMUNERATIONS_MODULE_ID,
+  moduleName: 'Remuneraciones',
+  versionId: '00000000-0000-0000-0000-000000000406',
+  versionNumber: 1,
+} as const;
+
+function remunerationChunk(input: {
+  articleReference: string | null;
+  chunkId: string;
+  content: string;
+  page: number;
+  score: number;
+}): RetrievedChunk {
+  return source({
+    ...remunerationDocument,
+    articleReference: input.articleReference,
+    chunkId: input.chunkId,
+    content: input.content,
+    pageEnd: input.page,
+    pageStart: input.page,
+    score: input.score,
+  });
+}
+
+const remunerationPage2 = remunerationChunk({
+  articleReference: null,
+  chunkId: '00000000-0000-0000-0000-000000000206',
+  content:
+    'La remuneración mensual se abona mediante la planilla única de pagos.',
+  page: 2,
+  score: 0.88,
+});
+
+const remunerationPage3 = remunerationChunk({
+  articleReference: 'Artículo 12',
+  chunkId: '00000000-0000-0000-0000-000000000207',
+  content:
+    'Artículo 12.- La remuneración mensual del docente corresponde a su escala y a su jornada.',
+  page: 3,
+  score: 0.93,
+});
+
+const remunerationPage4 = remunerationChunk({
+  articleReference: null,
+  chunkId: '00000000-0000-0000-0000-000000000208',
+  content:
+    'El pago de la remuneración mensual se registra en la planilla del pliego.',
+  page: 4,
+  score: 0.86,
+});
+
+/**
+ * Pie de firma digital: el puntaje más alto del lote, sin contenido normativo.
+ * La sanitización lo descarta antes de consolidar, así que no puede ocupar una
+ * referencia ni desplazar a un fragmento que sí aporta algo.
+ */
+const remunerationSignatureFooter = remunerationChunk({
+  articleReference: null,
+  chunkId: '00000000-0000-0000-0000-000000000209',
+  content:
+    'Documento electrónico firmado digitalmente. Verifique su autenticidad.',
+  page: 90,
+  score: 0.97,
+});
+
 class InMemoryRetrievalGateway implements RetrievalGateway {
-  private sources = [licenseV1, contractV1, auxiliariesV1];
+  private sources = [
+    licenseV1,
+    contractV1,
+    auxiliariesV1,
+    remunerationPage2,
+    remunerationPage3,
+    remunerationPage4,
+    remunerationSignatureFooter,
+  ];
 
   add(sourceToAdd: RetrievedChunk): void {
     this.sources.push(sourceToAdd);
@@ -134,6 +226,13 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
     );
 
     if (input.selectedModuleId) return Promise.resolve(ranked);
+    if (query.includes('remuneraci')) {
+      return Promise.resolve(
+        ranked.filter((item) =>
+          item.moduleIds.includes(REMUNERATIONS_MODULE_ID),
+        ),
+      );
+    }
     if (query.includes('reintegro extraordinario')) {
       return Promise.resolve(ranked.filter((item) => item.versionNumber === 2));
     }
@@ -604,5 +703,41 @@ describe('ChatService + RagService integration', () => {
         moduleId: CONTRACTS_MODULE_ID,
       }),
     ]);
+  });
+
+  it('entrega una referencia por documento y la cita apunta al fragmento real', async () => {
+    const events = await collect(service, {
+      question: '¿Cuánto es la remuneración mensual de un docente?',
+    });
+
+    const sources = events.find((event) => event.type === 'sources')?.data
+      .sources;
+    // Tres fragmentos contiguos del mismo archivo (páginas 2, 3 y 4) son una
+    // sola ubicación: el documento no ocupa tres referencias visibles. El pie
+    // de firma digital, que puntuó más alto, se descarta en la sanitización y
+    // tampoco ocupa plaza.
+    expect(sources).toEqual([
+      expect.objectContaining({
+        documentVersionId: remunerationDocument.versionId,
+        pageEnd: 3,
+        pageStart: 3,
+        rank: 1,
+      }),
+    ]);
+    // La cita [1] persistida es el fragmento real conservado —el de mayor
+    // relevancia, en la página 3—, no una fila fusionada: la ubicación que ve
+    // la persona se puede verificar contra el PDF de esa versión.
+    expect(history.completions[0]?.sources).toEqual([
+      expect.objectContaining({ chunkId: remunerationPage3.chunkId }),
+    ]);
+    expect(events.find((event) => event.type === 'conversation')).toMatchObject(
+      {
+        data: { moduleId: REMUNERATIONS_MODULE_ID },
+      },
+    );
+    expect(history.completions[0]).toMatchObject({
+      qualitySignals: [],
+      replyRole: 'assistant',
+    });
   });
 });
