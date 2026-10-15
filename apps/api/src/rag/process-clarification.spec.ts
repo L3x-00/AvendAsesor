@@ -100,12 +100,14 @@ describe('causalClarificationFor', () => {
     ).toBeNull();
   });
 
-  it('no pregunta cuando la evidencia no se divide por causal', () => {
-    expect(
-      causalClarificationFor('¿Cuáles son los requisitos de la reasignación?', [
-        SALUD,
-      ]),
-    ).toBeNull();
+  it('pide la causal aunque solo llegue una regla especial', () => {
+    const clarification = causalClarificationFor(
+      '¿Cuáles son los requisitos de la reasignación?',
+      [SALUD],
+    );
+
+    expect(clarification?.message).toContain('salud');
+    expect(clarification?.message.match(/\?/gu)).toHaveLength(1);
   });
 
   it('no pregunta en un trámite que no depende de la causal', () => {

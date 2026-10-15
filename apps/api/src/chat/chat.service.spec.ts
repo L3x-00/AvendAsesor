@@ -753,10 +753,11 @@ describe('ChatService', () => {
     if (!clarification || clarification.type !== 'clarification') {
       throw new Error('Expected a clarification event.');
     }
-    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).toContain('identificar el trámite');
     expect(clarification.data.message).toContain('Licencias');
     expect(clarification.data.message).not.toContain(source.chunkContent);
     expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
     expect(clarification.data.modules).toEqual([
       { id: source.moduleIds[0], name: 'Licencias' },
     ]);
@@ -779,6 +780,29 @@ describe('ChatService', () => {
       },
       type: 'done',
     });
+  });
+
+  it('pide un único dato en una ambigüedad salarial sin acumular condiciones', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un profesor en Perú?',
+    });
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+
+    expect(clarification.data.message).toContain('sector público o privado');
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
+    expect(clarification.data.message).not.toContain('nombrado o contratado');
   });
 
   it('streams evidence, then persists real sources only after completion', async () => {
@@ -927,6 +951,24 @@ describe('ChatService', () => {
       expect.objectContaining({
         question: '¿Cuánto es mi renumeración mensual?',
       }),
+    );
+  });
+
+  it('no reescribe un término jurídico válido por similitud con el catálogo', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      question: '¿Cómo solicito la rectificación del acto?',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cómo solicito la rectificación del acto?',
+      null,
+      [],
+      { forceContext: false },
     );
   });
 
@@ -1647,6 +1689,57 @@ describe('ChatService', () => {
         detectedSubmoduleId: newSubmoduleId,
       }),
     );
+  });
+
+  it('pide la causal en la conversación nueva cuando el cambio de módulo solo recupera una regla especial', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'topic_change',
+      resolvedModule: { id: newModuleId, name: 'Reasignación' },
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La reasignación por salud requiere el informe médico del establecimiento.',
+          moduleIds: [newModuleId],
+          moduleNames: ['Reasignación'],
+        },
+      ],
+      topRelevanceScore: 0.92,
+    });
+
+    const events = await collect(service, {
+      conversationId,
+      question: '¿Cuáles son los requisitos de la reasignación?',
+      selectedModuleId: source.moduleIds[0],
+    });
+
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: null,
+        selectedModuleId: newModuleId,
+      }),
+    );
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain('salud');
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   it('moves an ambiguous topic away from the prior selected-module conversation', async () => {

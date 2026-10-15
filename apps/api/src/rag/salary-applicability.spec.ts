@@ -3,6 +3,7 @@ import {
   assessSalaryAnswerCoverage,
   canonicalAmount,
   isGeneralRemunerationSource,
+  isSalarySourceCompatible,
   isSpecialAllocationSource,
   salaryApplicabilityTier,
   salaryClarificationFor,
@@ -87,6 +88,12 @@ describe('salaryQuestionProfile', () => {
     });
   });
 
+  it('reconoce el cargo directivo también en singular', () => {
+    expect(
+      salaryQuestionProfile('¿Cuánto es la asignación de un directivo?').role,
+    ).toBe('directivo');
+  });
+
   it('no confunde una consulta no salarial con una consulta de montos', () => {
     expect(
       salaryQuestionProfile('¿Cuál es el plazo para solicitar una licencia?')
@@ -128,7 +135,7 @@ describe('salaryApplicabilityTier', () => {
     ).toBe(0);
     expect(
       salaryApplicabilityTier('¿Cuánto gana un profesor?', allocation),
-    ).toBe(2);
+    ).toBe(3);
   });
 
   it('prioriza el concepto adicional cuando la persona lo pidió', () => {
@@ -137,8 +144,52 @@ describe('salaryApplicabilityTier', () => {
         '¿Cuánto es la asignación por directivo?',
         allocation,
       ),
+    ).toBe(0);
+    expect(
+      salaryApplicabilityTier('¿Cuánto es la asignación?', general30),
     ).toBe(1);
   });
+
+  it('relega y excluye una cifra que contradice un factor declarado', () => {
+    const director40 = chunk({
+      chunkContent:
+        'La remuneración mensual del director nombrado con jornada de 40 horas es de S/ 4 400,80.',
+      chunkId: 'director-40',
+    });
+    const docente30 = chunk({
+      chunkContent:
+        'La remuneración mensual del docente nombrado con jornada de 30 horas es de S/ 3 300,60.',
+      chunkId: 'docente-30',
+    });
+    const question = '¿Cuánto gana un docente nombrado de 30 horas?';
+
+    expect(salaryApplicabilityTier(question, director40)).toBe(3);
+    expect(isSalarySourceCompatible(question, director40)).toBe(false);
+    expect(salaryApplicabilityTier(question, docente30)).toBe(0);
+    expect(isSalarySourceCompatible(question, docente30)).toBe(true);
+  });
+
+  it.each([
+    [
+      '¿Cuánto gana un docente contratado?',
+      'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
+    ],
+    [
+      '¿Cuánto gana un docente de escala 3?',
+      'La remuneración mensual del docente de escala 2 es de S/ 3 300,60.',
+    ],
+    [
+      '¿Cuánto gana un docente en 2025?',
+      'La remuneración mensual del docente para el año 2024 es de S/ 3 300,60.',
+    ],
+  ])(
+    'descarta una fuente que contradice un factor declarado: %s',
+    (question, content) => {
+      expect(
+        isSalarySourceCompatible(question, chunk({ chunkContent: content })),
+      ).toBe(false);
+    },
+  );
 
   it('no interviene en una consulta que no es salarial', () => {
     expect(salaryApplicabilityTier('¿Cuál es el plazo?', allocation)).toBe(0);
@@ -644,5 +695,29 @@ describe('assessSalaryAnswerCoverage', () => {
         [general30, allocation],
       )?.excerpt,
     ).toContain('S/ 2 666,80');
+  });
+
+  it('marca una asignación citada desde un chunk que también contiene la remuneración general', () => {
+    const mixed = chunk({
+      chunkContent:
+        'La remuneración mensual del docente es de S/ 3 300,60. La asignación especial por función directiva es de S/ 2 666,80.',
+      chunkId: 'mixto',
+    });
+
+    expect(
+      assessSalaryAnswerCoverage(
+        'Tu remuneración mensual es de S/ 2 666,80. [1]',
+        [mixed],
+      )?.excerpt,
+    ).toContain('S/ 2 666,80');
+  });
+
+  it('marca una fuente reemplazada presentada como vigente', () => {
+    expect(
+      assessSalaryAnswerCoverage(
+        'La remuneración vigente es de S/ 2 000,10. [1]',
+        [historicalAmount],
+      )?.excerpt,
+    ).toContain('vigente');
   });
 });

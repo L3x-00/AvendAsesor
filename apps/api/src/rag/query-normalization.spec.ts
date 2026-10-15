@@ -26,6 +26,7 @@ describe('normalizeDomainQuery', () => {
   it.each([
     ['cuanto es mi renumeracion', 'cuanto es mi remuneración'],
     ['las renumeraciones de julio', 'las remuneraciones de julio'],
+    ['las renumreaciones de julio', 'las remuneraciones de julio'],
     ['tengo una licensia por salud', 'tengo una licencia por salud'],
     ['mi nombramineto salió', 'mi nombramiento salió'],
     ['la ratificasion del director', 'la ratificación del director'],
@@ -60,6 +61,13 @@ describe('normalizeDomainQuery', () => {
     );
     expect(normalizeDomainQuery('mi remuneración mensual')).toBe(
       'mi remuneración mensual',
+    );
+    // Términos jurídicos distintos no se convierten por distancia de edición.
+    expect(normalizeDomainQuery('solicito la rectificación del acto')).toBe(
+      'solicito la rectificación del acto',
+    );
+    expect(normalizeDomainQuery('solicito la ratificación del acto')).toBe(
+      'solicito la ratificación del acto',
     );
     expect(normalizeDomainQuery('mis remuneraciones de julio')).toBe(
       'mis remuneraciones de julio',

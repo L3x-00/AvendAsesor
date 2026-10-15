@@ -9,11 +9,10 @@ import { normalizeSpanishText } from './text-normalization';
  * asociaciones) y DESPUÉS de elegir la banda de relevancia.
  *
  * Los fragmentos contiguos o superpuestos del mismo archivo forman una sola
- * ubicación: se conserva el más relevante y solo se añade un vecino de esa
- * misma ubicación si aporta algo material (condición, excepción, requisito o
- * cifra distinta). Una ubicación claramente separada del archivo (otro tramo de
- * páginas) se conserva como segunda referencia, con el tope de referencias por
- * documento. Cada referencia conservada sigue siendo un fragmento real —con su
+ * ubicación: se conserva el más relevante y solo se añade otro fragmento si
+ * aporta algo material (condición, excepción, requisito o cifra distinta). No
+ * hay un tope arbitrario: una tercera condición material no puede perderse solo
+ * por pertenecer al mismo archivo. Cada referencia conservada sigue siendo un fragmento real —con su
  * rango de páginas, su artículo y su identificador— para que la cita [n] siga
  * apuntando a la fuente correcta.
  */
@@ -97,6 +96,16 @@ function markersIn(text: string): string[] {
   return MATERIAL_MARKERS.filter((marker) => text.includes(marker));
 }
 
+/** Cada cláusula con condición, excepción o cifra puede cambiar la respuesta. */
+function materialClausesIn(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/u)
+    .map(normalizedContent)
+    .filter(
+      (clause) => markersIn(clause).length > 0 || hasSubstantiveFigure(clause),
+    );
+}
+
 function normalizedReference(reference: string | null): string {
   return normalizeSpanishText(reference ?? '');
 }
@@ -112,7 +121,21 @@ export function isMateriallyDistinct(
   primary: RetrievedChunk,
   candidate: RetrievedChunk,
 ): boolean {
-  const primaryText = normalizedContent(primary.chunkContent);
+  return contributesMaterialBeyond([primary], candidate);
+}
+
+/**
+ * Comprueba si el candidato añade material que no está cubierto por ninguna de
+ * las referencias ya conservadas. Comparar contra el conjunto evita conservar
+ * un tercer chunk que solo repite por separado lo que otros dos ya dicen.
+ */
+function contributesMaterialBeyond(
+  kept: readonly RetrievedChunk[],
+  candidate: RetrievedChunk,
+): boolean {
+  const primaryText = kept
+    .map((source) => normalizedContent(source.chunkContent))
+    .join('\n');
   const candidateText = normalizedContent(candidate.chunkContent);
 
   for (const marker of markersIn(candidateText)) {
@@ -124,10 +147,19 @@ export function isMateriallyDistinct(
     if (!primaryFigures.has(figure)) return true;
   }
 
-  const primaryReferences = new Set([
-    normalizedReference(primary.articleReference),
-    normalizedReference(primary.numeralReference),
-  ]);
+  // La misma marca («solo», «salvo») puede introducir una condición diferente.
+  // Se compara la cláusula completa para no perder «solo nombrados» porque ya
+  // se conservó «solo contratados».
+  for (const clause of materialClausesIn(candidateText)) {
+    if (!primaryText.includes(clause)) return true;
+  }
+
+  const primaryReferences = new Set(
+    kept.flatMap((source) => [
+      normalizedReference(source.articleReference),
+      normalizedReference(source.numeralReference),
+    ]),
+  );
   for (const reference of [
     candidate.articleReference,
     candidate.numeralReference,
@@ -155,44 +187,6 @@ export function isContiguousLocation(
   );
 }
 
-/**
- * Ubicación contigua de cada fragmento dentro de su documento: los fragmentos
- * de páginas contiguas o superpuestas comparten ubicación. Se recorre el
- * archivo en orden de páginas para que una cadena de fragmentos vecinos
- * (2-3-4-5) forme una sola ubicación y no varias por comparación de a pares.
- */
-function locationIndexByChunk(sources: RetrievedChunk[]): Map<string, number> {
-  const index = new Map<string, number>();
-  const byLocation = [...sources].sort(
-    (left, right) =>
-      left.pageStart - right.pageStart ||
-      left.pageEnd - right.pageEnd ||
-      left.chunkId.localeCompare(right.chunkId),
-  );
-  let run = 0;
-  // Extremo de la ubicación en curso: absorbe fragmentos que solapan o siguen.
-  let current: RetrievedChunk | null = null;
-  for (const source of byLocation) {
-    if (!current || !isContiguousLocation(current, source)) {
-      run += 1;
-      current = source;
-    } else if (source.pageEnd > current.pageEnd) {
-      current = source;
-    }
-    index.set(source.chunkId, run);
-  }
-  return index;
-}
-
-export interface ConsolidationOptions {
-  /**
-   * Máximo de referencias visibles por versión de documento. Dos permite
-   * conservar una segunda ubicación materialmente distinta sin devolver cinco
-   * filas del mismo archivo.
-   */
-  maxSourcesPerDocument?: number;
-}
-
 /** Relevancia primero; ante empate, la ubicación más temprana del archivo. */
 function byRelevanceThenLocation(
   left: RetrievedChunk,
@@ -215,7 +209,19 @@ function byRelevanceThenLocation(
  */
 function hasOwnContent(source: RetrievedChunk): boolean {
   const text = normalizedContent(source.chunkContent);
-  return markersIn(text).length > 0 || hasSubstantiveFigure(text);
+  if (markersIn(text).length > 0 || hasSubstantiveFigure(text)) return true;
+
+  // Un artículo con texto propio también merece ser la referencia principal,
+  // aunque escriba una cifra con palabras. Solo se descartan pies y validadores
+  // que el sanitizador reconoce como boilerplate, no el contenido normativo.
+  const withoutBoilerplate = text
+    .replace(/\bpagina\s+\d+(?:\s+de\s+\d+)?\b/gu, ' ')
+    .replace(/\bdocumento electronico firmado digitalmente\b/gu, ' ')
+    .replace(/\bverifique su autenticidad\b/gu, ' ')
+    .replace(/\bfirma digital(?:mente)?\b/gu, ' ')
+    .replace(/\b\d{1,4}(?:-\d{2,4})*(?:-[a-z]{2,})?\b/gu, ' ')
+    .replace(/[^a-z0-9]+/gu, '');
+  return withoutBoilerplate.length >= 8;
 }
 
 /**
@@ -224,24 +230,20 @@ function hasOwnContent(source: RetrievedChunk): boolean {
  * —caso en que conservarla obligaría a descartar una condición o una cifra—;
  * entonces manda el fragmento con contenido más relevante.
  */
-function primaryReference(
-  ordered: RetrievedChunk[],
-  maxPerDocument: number,
-): RetrievedChunk {
+function primaryReference(ordered: RetrievedChunk[]): RetrievedChunk {
   const first = ordered[0];
   if (!first) throw new Error('RAG_EMPTY_DOCUMENT_GROUP');
   if (hasOwnContent(first)) return first;
   const withContent = ordered.filter(hasOwnContent);
-  return withContent.length >= maxPerDocument ? withContent[0] : first;
+  return withContent[0] ?? first;
 }
 
 /**
  * Devuelve una referencia visible por versión de documento, conservando otra
  * ubicación del mismo archivo solo cuando aporta una condición, excepción,
- * cifra o requisito que la referencia conservada no dice, o cuando se trata de
- * un tramo de páginas claramente separado (máximo dos por documento). Los
- * fragmentos contiguos del mismo archivo se tratan como una misma ubicación: se
- * conserva el más relevante.
+ * cifra o requisito que las referencias conservadas no dicen. Los fragmentos
+ * contiguos sin material nuevo se tratan como una misma ubicación: se conserva
+ * el más relevante.
  *
  * El fragmento material tiene prioridad sobre el tramo separado: un tramo
  * lejano que no añade nada (un anexo o un pie de firma con buen puntaje) no
@@ -257,9 +259,7 @@ function primaryReference(
  */
 export function consolidateDocumentEvidence(
   sources: RetrievedChunk[],
-  options: ConsolidationOptions = {},
 ): RetrievedChunk[] {
-  const maxPerDocument = Math.max(1, options.maxSourcesPerDocument ?? 2);
   const groups = new Map<string, RetrievedChunk[]>();
   for (const source of sources) {
     const group = groups.get(source.documentVersionId);
@@ -271,30 +271,20 @@ export function consolidateDocumentEvidence(
   for (const group of groups.values()) {
     const ordered = [...group].sort(byRelevanceThenLocation);
     if (!ordered.length) continue;
-    const locations = locationIndexByChunk(group);
     // La referencia conservada es, de entrada, la más relevante del archivo; un
     // fragmento sin contenido propio (pie, membrete) cede la plaza si hay
-    // material suficiente, para no perder una condición o una cifra.
-    const primary = primaryReference(ordered, maxPerDocument);
+    // material, para no perder una condición o una cifra.
+    const primary = primaryReference(ordered);
     const kept: RetrievedChunk[] = [primary];
     const pending = ordered.filter((candidate) => candidate !== primary);
-    const sharesKeptLocation = (candidate: RetrievedChunk) =>
-      kept.some(
-        (primary) =>
-          locations.get(primary.chunkId) === locations.get(candidate.chunkId),
-      );
 
-    while (kept.length < maxPerDocument) {
-      // Primero lo materialmente distinto: una condición, excepción, requisito
-      // o cifra que la referencia conservada no dice no puede perderse porque
-      // el archivo tenga además un tramo lejano sin contenido nuevo.
-      const next =
-        pending.find((candidate) =>
-          kept.some((primary) => isMateriallyDistinct(primary, candidate)),
-        ) ??
-        // Después, y solo si no queda nada material, otra ubicación del archivo
-        // (su rango de páginas queda visible y verificable).
-        pending.find((candidate) => !sharesKeptLocation(candidate));
+    while (pending.length) {
+      // Una condición, excepción, requisito o cifra nueva no se pierde por un
+      // límite fijo. Un tramo lejano sin contenido material no abre otra fuente
+      // visible solo por estar en otra página.
+      const next = pending.find((candidate) =>
+        contributesMaterialBeyond(kept, candidate),
+      );
       if (!next) break;
       kept.push(next);
       pending.splice(pending.indexOf(next), 1);

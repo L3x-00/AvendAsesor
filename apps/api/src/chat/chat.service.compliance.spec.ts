@@ -354,7 +354,7 @@ describe('ChatService — lineamientos del cliente', () => {
       'done',
     ]);
     const clarification = events[1] as { data: { message: string } };
-    expect(clarification.data.message).toContain('necesito delimitar tu caso');
+    expect(clarification.data.message).toContain('identificar el trámite');
     expect(clarification.data.message).not.toContain(source.chunkContent);
     expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
     expect(completion()?.sources).toEqual([]);
@@ -406,10 +406,9 @@ describe('ChatService — lineamientos del cliente', () => {
       'No sería responsable darte una cifra única',
     );
     expect(clarification.data.message).toContain('sector público o privado');
-    expect(clarification.data.message).toContain('nombrado o contratado');
-    expect(clarification.data.message).toContain('jornada, escala o cargo');
-    expect(clarification.data.message).toContain('tipo de institución');
-    expect(clarification.data.message).toContain('año o norma');
+    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
+    expect(clarification.data.message).not.toContain('nombrado o contratado');
+    expect(clarification.data.message).not.toContain('jornada, escala o cargo');
     expect(clarification.data.message).toContain(
       'Contratación y desplazamientos',
     );

@@ -53,7 +53,7 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
   { role: 'auxiliar de educación', pattern: /\bauxiliar(?:es)?\b/u },
   {
     role: 'directivo',
-    pattern: /\b(?:director|directora|directores|directoras|directiv[oa]s)\b/u,
+    pattern: /\b(?:director|directora|directores|directoras|directiv[oa]s?)\b/u,
   },
   {
     role: 'docente',
@@ -219,9 +219,15 @@ export function salaryApplicabilityTier(
 ): number {
   const profile = salaryQuestionProfile(question);
   if (!profile.isSalaryQuestion) return 0;
+  if (salarySourceConflictsWithProfile(profile, source)) return 3;
+  if (profile.asksSpecialAllocation) {
+    if (isSpecialAllocationSource(source)) return 0;
+    if (isGeneralRemunerationSource(source)) return 1;
+    return 2;
+  }
   if (isGeneralRemunerationSource(source)) return 0;
   if (isSpecialAllocationSource(source)) {
-    return profile.asksSpecialAllocation ? 1 : 2;
+    return 2;
   }
   return 1;
 }
@@ -270,6 +276,42 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
     scale: scalesIn(text)[0] ?? null,
     year: yearsIn(text)[0] ?? null,
   };
+}
+
+/**
+ * Una fuente contradice un factor solo cuando el factor aparece expresamente
+ * junto a una cifra comparable. La ausencia del dato no autoriza a inventar
+ * incompatibilidad; en cambio, «40 horas» no puede competir por una consulta
+ * explícita de «30 horas».
+ */
+function salarySourceConflictsWithProfile(
+  profile: SalaryQuestionProfile,
+  source: RetrievedChunk,
+): boolean {
+  if (!hasAmount(source.chunkContent)) return false;
+
+  return FACTOR_ORDER.some((factor) => {
+    const expected = declaredFactorValue(profile, factor);
+    if (expected === null) return false;
+    const values = factorValuesInSource(source, factor);
+    return values.length > 0 && !values.includes(String(expected));
+  });
+}
+
+/**
+ * Compatibilidad para el filtro previo al ranking. Así una fuente que expresa
+ * una jornada, cargo, vínculo, escala o período distinto no puede desplazar a
+ * la aplicable por una similitud semántica más alta.
+ */
+export function isSalarySourceCompatible(
+  question: string,
+  source: RetrievedChunk,
+): boolean {
+  const profile = salaryQuestionProfile(question);
+  return (
+    !profile.isSalaryQuestion ||
+    !salarySourceConflictsWithProfile(profile, source)
+  );
 }
 
 export interface SalaryEvidenceProfile {
@@ -351,9 +393,24 @@ function factorValuesInSource(
   const scoped = amountSentencesIn(source.chunkContent).flatMap(
     (sentence) => evidenceFactorsIn(sentence)[factor],
   );
-  return scoped.length
-    ? scoped
-    : evidenceFactorsIn(normalizeSpanishText(source.chunkContent))[factor];
+  if (scoped.length) return sortedUnique(scoped);
+
+  const documentValues = evidenceFactorsIn(
+    normalizeSpanishText(source.chunkContent),
+  )[factor];
+  if (documentValues.length) return sortedUnique(documentValues);
+
+  // Si el fragmento no nombra otro período, el año de emisión verificable de la
+  // versión es el único dato temporal que se compara con una pregunta fechada.
+  if (
+    factor === 'periodo' &&
+    source.issuanceYear !== null &&
+    source.issuanceYear !== undefined
+  ) {
+    return [String(source.issuanceYear)];
+  }
+
+  return [];
 }
 
 function factorValuesInSources(
@@ -538,6 +595,35 @@ function presentsAllocationAsSalary(sentence: string): boolean {
     );
 }
 
+const CURRENT_SALARY_CLAIM = /\b(?:vigente|actual|actualmente|hoy)\b/u;
+
+function citedSourcesForSentence(
+  sentence: string,
+  sources: RetrievedChunk[],
+): RetrievedChunk[] {
+  return citedIndexes(sentence)
+    .map((index) => sources[index - 1])
+    .filter((source): source is RetrievedChunk => Boolean(source));
+}
+
+function matchingAmounts(sentence: string): Set<string> {
+  return new Set(amountsIn(sentence).map(canonicalAmount));
+}
+
+function sourceSupportsAmountAs(
+  source: RetrievedChunk,
+  amounts: ReadonlySet<string>,
+  terms: RegExp,
+): boolean {
+  if (!amounts.size) return false;
+  return sentencesIn(source.chunkContent).some((sourceSentence) => {
+    if (!terms.test(sourceSentence)) return false;
+    return amountsIn(sourceSentence)
+      .map(canonicalAmount)
+      .some((amount) => amounts.has(amount));
+  });
+}
+
 /** Sólo citas: la cita de cierre pertenece a la oración anterior. */
 const CITATION_TAIL = new RegExp(
   `^(?:\\s*(?:${CITATION_GROUP.source}))+\\s*$`,
@@ -577,17 +663,34 @@ export function assessSalaryAnswerCoverage(
   sources: RetrievedChunk[],
 ): SalaryAnswerFinding | null {
   const generalSources = sources.filter(isGeneralRemunerationSource);
-  if (!generalSources.length) return null;
-
-  const generalChunks = new Set(generalSources.map((source) => source.chunkId));
   for (const sentence of amountSentences(answer)) {
-    if (!presentsAllocationAsSalary(sentence)) continue;
-    const cited = citedIndexes(sentence)
-      .map((index) => sources[index - 1])
-      .filter((source): source is RetrievedChunk => Boolean(source));
+    const cited = citedSourcesForSentence(sentence, sources);
     if (!cited.length) continue;
-    if (cited.some((source) => generalChunks.has(source.chunkId))) continue;
-    return { excerpt: sentence.slice(0, 2_000) };
+
+    // Un documento reemplazado nunca se presenta como regla vigente. No basta
+    // con que el fragmento use la palabra «remuneración»: su situación
+    // verificable debe respaldar la vigencia afirmada.
+    if (
+      CURRENT_SALARY_CLAIM.test(normalizeSpanishText(sentence)) &&
+      cited.every((source) => source.documentSituation !== 'current')
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+
+    if (!generalSources.length || !presentsAllocationAsSalary(sentence)) {
+      continue;
+    }
+
+    const amounts = matchingAmounts(sentence);
+    const citedAllocation = cited.some((source) =>
+      sourceSupportsAmountAs(source, amounts, SPECIAL_ALLOCATION_TERMS),
+    );
+    const citedGeneral = cited.some((source) =>
+      sourceSupportsAmountAs(source, amounts, GENERAL_REMUNERATION_TERMS),
+    );
+    if (citedAllocation && !citedGeneral) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
   }
 
   return null;

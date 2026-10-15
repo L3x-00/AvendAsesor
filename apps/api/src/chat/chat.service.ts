@@ -15,12 +15,7 @@ import {
   type ModuleOverview,
 } from './catalog/chat-catalog.service';
 import type { AvailableDocument } from './catalog/chat-catalog.types';
-import {
-  buildVocabulary,
-  correctDomainTypos,
-  detectOverviewRequest,
-  matchTopicModule,
-} from './catalog/topic-match';
+import { detectOverviewRequest, matchTopicModule } from './catalog/topic-match';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
@@ -560,11 +555,8 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
       : '';
     return [
       'No sería responsable darte una cifra única para todos los docentes del Perú sin confirmar tu situación.',
-      'Primero, indícame si trabajas en el sector público o privado.',
-      'Si trabajas en el sector público, necesito saber además si eres docente nombrado o contratado, tu jornada, escala o cargo y el período que deseas consultar.',
-      'Si trabajas en el sector privado, indícame el tipo de institución, tu jornada y el período que deseas revisar.',
       context,
-      'Si conoces el año o norma aplicable, inclúyelos; con esos datos podré darte una respuesta precisa y sustentada.',
+      'Para ubicar la regla que corresponde, necesito un solo dato: ¿tu consulta es del sector público o privado?',
     ]
       .join(' ')
       .replace(/\s{2,}/gu, ' ')
@@ -575,10 +567,9 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
     ? `La búsqueda encontró información relacionada con ${foundTopics}.`
     : '';
   return [
-    'Para orientarte con precisión, necesito delimitar tu caso antes de elegir una respuesta.',
+    'Para orientarte con precisión necesito identificar el trámite antes de elegir una respuesta.',
     context,
-    'Para no atribuirte una regla que podría corresponder a otra situación, necesito conocer el trámite, tu condición laboral y el documento o período que deseas revisar.',
-    'Indícame qué situación concreta tienes y, si corresponde, el trámite, año o norma que deseas consultar; así podré darte una respuesta sustentada.',
+    '¿Qué trámite o proceso concreto deseas consultar?',
   ]
     .join(' ')
     .replace(/\s{2,}/gu, ' ')
@@ -641,10 +632,6 @@ const MODULES_CACHE_MS = 2 * 60 * 1000;
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
-  private vocabularyCache: {
-    expiresAt: number;
-    value: Map<string, string>;
-  } | null = null;
   private modulesCache: {
     expiresAt: number;
     promise: Promise<ActiveChatModule[]>;
@@ -787,10 +774,10 @@ export class ChatService {
     // enruta `classifyTurnIntent` a `domain`, que sigue el flujo evidence-only
     // de abajo. No crear conversación por "hola"/"gracias" cumple el lineamiento
     // de historial.
-    // Errores de escritura contra el vocabulario de temas y documentos
-    // («renumeración» → «remuneración»). Se usa para entender y buscar; en
-    // el historial queda lo que la persona escribió.
-    const question = await this.correctedQuestion(input.question);
+    // Correcciones explícitas y verificadas («renumeración» →
+    // «remuneración»). Se usan para entender y buscar; en el historial queda
+    // exactamente lo que la persona escribió.
+    const question = this.correctedQuestion(input.question);
     const intent = classifyTurnIntent(question, {
       inConversation: Boolean(input.conversationId),
     });
@@ -1030,7 +1017,12 @@ export class ChatService {
       // La ambigüedad identifica rutas posibles, pero no demuestra que alguno
       // de sus extractos sea aplicable al caso. No se muestran citas ni fuentes
       // hasta que la persona precise la condición que permite responder.
-      const message = ambiguityMessage(question, retrieval.modules);
+      const contextualClarification =
+        causalClarificationFor(question, retrieval.sources) ??
+        salaryClarificationFor(question, retrieval.sources);
+      const message =
+        contextualClarification?.message ??
+        ambiguityMessage(question, retrieval.modules);
       if (input.abortSignal?.aborted) return;
       const completed = await this.historyGateway.completeTurn({
         answer: message,
@@ -1068,7 +1060,7 @@ export class ChatService {
     // de una reasignación o el factor que decide entre dos cifras vigentes. En
     // ese caso se pide una sola precisión (sin mostrar cifras ni fuentes) en vez
     // de responder con un subconjunto como si fuera la regla general.
-    if (retrieval.kind === 'evidence') {
+    if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
       const clarification =
         causalClarificationFor(question, retrieval.sources) ??
         salaryClarificationFor(question, retrieval.sources);
@@ -1564,32 +1556,11 @@ export class ChatService {
     return promise;
   }
 
-  private async correctedQuestion(question: string): Promise<string> {
-    try {
-      if (
-        !this.vocabularyCache ||
-        this.vocabularyCache.expiresAt <= Date.now()
-      ) {
-        const [modules, documents] = await Promise.all([
-          this.cachedModules(),
-          this.catalogService?.availableDocuments() ?? Promise.resolve([]),
-        ]);
-        this.vocabularyCache = {
-          expiresAt: Date.now() + MODULES_CACHE_MS,
-          value: buildVocabulary([
-            ...modules.map((module) => module.name),
-            ...documents.map((document) => document.title),
-          ]),
-        };
-      }
-      return normalizeDomainQuery(
-        correctDomainTypos(question, this.vocabularyCache.value),
-      );
-    } catch {
-      // Sin vocabulario se entiende la pregunta tal como vino, salvo las
-      // abreviaturas y errores frecuentes del ámbito.
-      return normalizeDomainQuery(question);
-    }
+  private correctedQuestion(question: string): string {
+    // Solo aplica sustituciones completas y explícitamente verificadas. No se
+    // infiere una corrección a partir de títulos o módulos dinámicos: una
+    // palabra jurídica válida no debe convertirse en otra por similitud.
+    return normalizeDomainQuery(question);
   }
 
   /**

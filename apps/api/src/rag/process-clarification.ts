@@ -61,7 +61,9 @@ export function causalsInEvidence(sources: RetrievedChunk[]): string[] {
  * demuestra que el trámite se resuelve por causales distintas. Devuelve null
  * cuando la consulta ya nombra su causal, cuando identifica expresamente una
  * norma —entonces corresponde responderla con esa norma, no pedir la causal— o
- * cuando la evidencia no se divide por causales.
+ * cuando la evidencia no identifica ninguna causal. Incluso una sola causal
+ * especial («por salud») no se presenta como la regla general: sin el motivo
+ * de la persona corresponde pedirlo de forma breve.
  */
 export function causalClarificationFor(
   question: string,
@@ -80,7 +82,7 @@ export function causalClarificationFor(
   }
 
   const labels = causalsInEvidence(sources);
-  if (labels.length < 2) return null;
+  if (!labels.length) return null;
 
   return {
     message: `Los requisitos de la reasignación cambian según el motivo. Para darte la respuesta que corresponde a tu caso, ¿cuál es la causal: ${labels.join(', ')} u otra?`,

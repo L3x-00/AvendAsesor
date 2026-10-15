@@ -8,7 +8,10 @@ import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
-import { salaryApplicabilityTier } from './salary-applicability';
+import {
+  isSalarySourceCompatible,
+  salaryApplicabilityTier,
+} from './salary-applicability';
 import { orderSourcesForDelivery } from './temporal-precedence';
 import {
   exactDocumentReferencesIn,
@@ -232,6 +235,28 @@ function uniqueSources(sources: RetrievedChunk[]): RetrievedChunk[] {
     if (!repeated) kept.push({ source, text });
   }
   return kept.map((item) => item.source);
+}
+
+/**
+ * La situación documental y los factores explícitos de una consulta salarial
+ * se aplican antes de comparar puntajes. Una similitud alta no vuelve vigente a
+ * una fuente reemplazada ni hace aplicable una cifra de otra jornada, cargo,
+ * condición, escala o período.
+ */
+function sourcesEligibleForQuestion(
+  sources: RetrievedChunk[],
+  question: string,
+  retrievalScope: RetrievalScope,
+): RetrievedChunk[] {
+  return sources.filter((source) => {
+    if (
+      retrievalScope === 'current' &&
+      source.documentSituation !== 'current'
+    ) {
+      return false;
+    }
+    return isSalarySourceCompatible(question, source);
+  });
 }
 
 /** Fuentes a no más de `margin` del mejor puntaje, en su orden original. */
@@ -744,16 +769,24 @@ export class RagService {
     // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
     const globalRoutingSources = sourcesWithoutVersionDuplicates(
       byScoreDescending(
-        rawGlobalSources
-          .map(sanitizeRetrievedEvidence)
-          .filter((source): source is RetrievedChunk => Boolean(source)),
+        sourcesEligibleForQuestion(
+          rawGlobalSources
+            .map(sanitizeRetrievedEvidence)
+            .filter((source): source is RetrievedChunk => Boolean(source)),
+          question,
+          retrievalScope,
+        ),
       ),
     );
     const selectedRoutingSources = sourcesWithoutVersionDuplicates(
       byScoreDescending(
-        rawSelectedSources
-          .map(sanitizeRetrievedEvidence)
-          .filter((source): source is RetrievedChunk => Boolean(source)),
+        sourcesEligibleForQuestion(
+          rawSelectedSources
+            .map(sanitizeRetrievedEvidence)
+            .filter((source): source is RetrievedChunk => Boolean(source)),
+          question,
+          retrievalScope,
+        ),
       ),
     );
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {

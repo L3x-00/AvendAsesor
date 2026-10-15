@@ -1256,7 +1256,7 @@ describe('RagService', () => {
     expect(result.sources[0]).toMatchObject({ pageEnd: 3, pageStart: 3 });
   });
 
-  it('prioriza la remuneración general vigente sobre la asignación especial y el antecedente', async () => {
+  it('excluye el antecedente de una consulta salarial actual', async () => {
     const historica = {
       ...source,
       chunkContent:
@@ -1298,13 +1298,42 @@ describe('RagService', () => {
     if (result.kind !== 'evidence') throw new Error('Expected evidence.');
 
     // La remuneración general vigente encabeza la respuesta; la asignación
-    // especial no la sustituye y el antecedente no compite con la regla actual.
+    // especial no la sustituye y el antecedente ni siquiera llega a competir.
     expect(result.sources.map((item) => item.chunkId)).toEqual([
       'remuneracion-vigente',
       'asignacion-especial',
-      'remuneracion-historica',
     ]);
-    expect(result.sources.at(-1)?.documentSituation).toBe('replaced');
+    expect(result.sources).not.toContainEqual(
+      expect.objectContaining({ documentSituation: 'replaced' }),
+    );
+  });
+
+  it('descarta antes de la banda de similitud la cifra salarial incompatible', async () => {
+    const director40 = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del director nombrado con jornada de 40 horas es de S/ 4 400,80.',
+      chunkId: 'director-40',
+      documentVersionId: 'version-director-40',
+      semanticScore: 0.99,
+    };
+    const docente30 = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del docente nombrado con jornada de 30 horas es de S/ 3 300,60.',
+      chunkId: 'docente-30',
+      documentVersionId: 'version-docente-30',
+      semanticScore: 0.8,
+    };
+    gateway.search.mockResolvedValue([director40, docente30]);
+
+    const result = await service.retrieve(
+      '¿Cuánto gana un docente nombrado de 30 horas?',
+      null,
+    );
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+    expect(result.sources.map((item) => item.chunkId)).toEqual(['docente-30']);
   });
 
   it('ordena la comparación histórica de la más reciente a la más antigua', async () => {
