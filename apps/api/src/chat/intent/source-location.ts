@@ -77,19 +77,37 @@ const CONTENT_ASK =
  * «El enlace entre A y B» es una relación conceptual, no un archivo: en una
  * conversación, la palabra «enlace» no basta para pedir un documento.
  */
-const FIGURATIVE_LINK = /\benlaces?\s+entre\b/u;
+const FIGURATIVE_LINK = /\benlaces?\b(?:\s+\w+){0,3}\s+entre\b/u;
+
+/** El pedido de un catálogo lo resuelve su propio carril, no esta ruta. */
+const CATALOG_NOUN = /\b(?:catalogo|catalogos|listado|inventario)\b/u;
+
+/**
+ * Materias de contenido (montos, plazos, procedimientos, trámites): si el turno
+ * gira sobre una de ellas y no nombra el documento, la persona quiere el dato y
+ * no una lista de archivos. Un pedido con sujeto propio no es un seguimiento.
+ */
+const CONTENT_SUBJECT =
+  /\b(?:requisito|requisitos|monto|montos|plazo|plazos|procedimiento|procedimientos|paso|pasos|cronograma|cronogramas|calendario|fecha|fechas|remuneracion|remuneraciones|sueldo|sueldos|haberes|pago|pagos|deposito|depositan|depositar|bono|bonos|asignacion|asignaciones|gratificacion|gratificaciones|aguinaldo|porcentaje|porcentajes|presupuesto|escala|escalas|tope|topes|constancia|constancias|certificado|certificados|boleta|boletas|expediente|expedientes|tramite|tramites|nombramiento|encargatura|reasignacion|reintegro|vacaciones)\b/u;
+
+/**
+ * «La página del portal», «la sección de la plataforma»: navegación web, no la
+ * página física de un PDF. Tampoco es un seguimiento de la conversación.
+ */
+const WEB_PLACE_NOUN =
+  /\b(?:portal|portales|plataforma|plataformas|pagina web|paginas web|sitio web|sitios web|web|intranet|aplicativo|aplicativos|aula virtual|seccion|secciones|apartado|apartados|pestana|pestanas|formulario|formularios)\b/u;
 
 function asksMinuteUnit(normalized: string, inConversation: boolean): boolean {
   if (!MINUTE_NOUN.test(normalized)) return false;
   if (!MINUTE_FRAME.test(normalized)) return false;
-  if (
-    !inConversation &&
-    !DOCUMENT_NOUN.test(normalized) &&
-    !NORM_CODE.test(normalized)
-  ) {
-    return false;
-  }
-  return !DURATION_CONTEXT.test(normalized);
+  if (DURATION_CONTEXT.test(normalized)) return false;
+  // «…se publica el cronograma en el portal?» es una pregunta de web, no la
+  // ubicación física del PDF.
+  if (WEB_PLACE_NOUN.test(normalized)) return false;
+  // Anclado al documento («…del documento se menciona el incremento?») sí es la
+  // marca de ubicación; sin ancla, un sujeto de contenido la descarta.
+  if (DOCUMENT_NOUN.test(normalized) || NORM_CODE.test(normalized)) return true;
+  return inConversation && !CONTENT_SUBJECT.test(normalized);
 }
 
 /**
@@ -110,6 +128,7 @@ export function sourceLocationRequestIn(
   if (!/\p{L}/u.test(normalized)) return null;
   if (CONTENT_ASK.test(normalized)) return null;
   if (FIGURATIVE_LINK.test(normalized)) return null;
+  if (CATALOG_NOUN.test(normalized)) return null;
   // «¿en qué página del portal del MINEDU…?» pide un destino web, no la página
   // de un PDF: lo resuelve el carril de portales oficiales o el RAG con citas.
   if (
@@ -121,7 +140,13 @@ export function sourceLocationRequestIn(
 
   const mentionsDocument =
     DOCUMENT_NOUN.test(normalized) || NORM_CODE.test(normalized);
-  const refersToDocument = mentionsDocument || inConversation;
+  // Un seguimiento de la conversación no vuelve a nombrar el documento, pero
+  // tampoco puede traer su propio tema: «¿dónde veo la sección de trámites?» o
+  // «¿en qué página está el requisito?» piden contenido o navegación web.
+  const hasOwnSubject =
+    CONTENT_SUBJECT.test(normalized) || WEB_PLACE_NOUN.test(normalized);
+  const refersToDocument =
+    mentionsDocument || (inConversation && !hasOwnSubject);
   const asksLink = LOCATION_NOUN.test(normalized) && refersToDocument;
   const asksPlace =
     refersToDocument &&
@@ -197,25 +222,48 @@ function articleNote(source: RetrievedChunk): string {
 }
 
 /**
+ * Rango físico del fragmento. Un metadato incompleto no puede convertirse en la
+ * página «null»: sin números, la ubicación se declara desconocida.
+ */
+function pageRange(
+  source: RetrievedChunk,
+): { from: number; to: number } | null {
+  const from = typeof source.pageStart === 'number' ? source.pageStart : null;
+  const to = typeof source.pageEnd === 'number' ? source.pageEnd : null;
+  const start = from ?? to;
+  if (start === null) return null;
+  return { from: start, to: to ?? start };
+}
+
+/**
  * Ubicación con la unidad real del archivo: página física del PDF (con el total
  * cuando se conoce) o fragmento interno si la versión no tiene paginación PDF.
  */
 function locationPhrase(source: RetrievedChunk): string {
   if (!isPdf(source)) return 'un fragmento interno, sin paginación PDF';
 
+  const range = pageRange(source);
+  if (!range) {
+    return source.pdfPageCount
+      ? `un fragmento del PDF de ${source.pdfPageCount} páginas, sin página declarada`
+      : 'un fragmento del PDF, sin página declarada';
+  }
   const pages =
-    source.pageStart === source.pageEnd
-      ? `la página ${source.pageStart}`
-      : `las páginas ${source.pageStart}–${source.pageEnd}`;
+    range.from === range.to
+      ? `la página ${range.from}`
+      : `las páginas ${range.from}–${range.to}`;
   return source.pdfPageCount
     ? `${pages} de ${source.pdfPageCount}`
     : `${pages} del PDF`;
 }
 
 function singleOpenInstruction(source: RetrievedChunk): string {
-  return isPdf(source)
-    ? `Ábrela con el enlace «Ver» de tus referencias: se abrirá en la página ${source.pageStart}.`
-    : 'Ábrela con el enlace «Ver» de tus referencias.';
+  if (!isPdf(source)) return 'Ábrela con el enlace «Ver» de tus referencias.';
+
+  const range = pageRange(source);
+  return range
+    ? `Ábrela con el enlace «Ver» de tus referencias: se abrirá en la página ${range.from}.`
+    : 'Ábrela con el enlace «Ver» de tus referencias: se abrirá al inicio del PDF.';
 }
 
 function minuteNotice(hasPdf: boolean): string {
@@ -256,11 +304,16 @@ export function sourceLocationMessage(
     );
   });
   const tail = remaining
-    ? ` En tus referencias hay ${remaining} documento${remaining === 1 ? '' : 's'} más.`
+    ? ` En tus referencias hay ${remaining} fuente${remaining === 1 ? '' : 's'} más.`
     : '';
+  // Solo se promete la página cuando todas las referencias enumeradas la tienen:
+  // no todos los fragmentos declaran paginación.
+  const allLocated = listed.every(
+    (source) => !isPdf(source) || pageRange(source) !== null,
+  );
   return (
     `${notice}Estas son las referencias disponibles para tu consulta: ` +
     `${items.join('; ')}.${tail} Ábrelas con el enlace «Ver» de cada fuente en ` +
-    `tus referencias${hasPdf ? ': se abrirán en la primera página indicada.' : '.'}`
+    `tus referencias${hasPdf && allLocated ? ': se abrirán en la primera página indicada.' : '.'}`
   );
 }

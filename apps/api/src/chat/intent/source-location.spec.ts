@@ -168,6 +168,56 @@ describe('sourceLocationRequestIn', () => {
         },
       ),
     ).toBeNull();
+    expect(
+      sourceLocationRequestIn(
+        '¿Qué enlace hay entre el contrato y el sueldo?',
+        {
+          inConversation: true,
+        },
+      ),
+    ).toBeNull();
+  });
+
+  // Revisión cruzada (ronda 2): el ensanchamiento del seguimiento no puede
+  // secuestrar la navegación web ni una pregunta de contenido con sujeto propio.
+  it.each([
+    '¿Dónde está la página del portal?',
+    '¿Dónde está la página del portal de trámites?',
+    '¿Dónde está la página para descargar la constancia?',
+    '¿En qué parte de la plataforma veo mis boletas?',
+    '¿Dónde veo la sección de trámites?',
+    '¿En qué apartado del portal presento la solicitud?',
+    '¿En qué sección de la página web está el formulario?',
+    '¿En qué página está el requisito de capacitación?',
+    '¿Cuál es el enlace del catálogo de documentos?',
+  ])(
+    'no intercepta el pedido ajeno a la ubicación del documento: %s',
+    (question) => {
+      expect(
+        sourceLocationRequestIn(question, { inConversation: true }),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    '¿En qué minuto me depositan la remuneración?',
+    '¿En qué minuto se publica el cronograma en el portal?',
+  ])(
+    'no confunde una pregunta de contenido con el minuto del documento: %s',
+    (question) => {
+      expect(
+        sourceLocationRequestIn(question, { inConversation: true }),
+      ).toBeNull();
+    },
+  );
+
+  it('sigue reconociendo el minuto cuando sí se ancla al documento', () => {
+    expect(
+      sourceLocationRequestIn(
+        '¿En qué minuto del documento se menciona el incremento?',
+        { inConversation: true },
+      ),
+    ).toEqual({ asksMinute: true });
   });
 });
 
@@ -293,7 +343,34 @@ describe('sourceLocationMessage', () => {
 
     expect(message).toContain('[4]');
     expect(message).not.toContain('[5]');
-    expect(message).toContain('2 documentos más');
+    expect(message).toContain('2 fuentes más');
+  });
+
+  // Revisión cruzada (ronda 2): un metadato incompleto no puede escribirse como
+  // «la página null»; la ubicación se declara desconocida y no se promete página.
+  it('no escribe «null» cuando el fragmento no declara página', () => {
+    const message = sourceLocationMessage({
+      asksMinute: false,
+      sources: [chunk({ pageEnd: null as never, pageStart: null as never })],
+    });
+
+    expect(message).not.toContain('null');
+    expect(message).toContain('sin página declarada');
+    expect(message).toContain('se abrirá al inicio del PDF');
+  });
+
+  // Varias referencias de la misma versión no son «documentos más»: se cuentan
+  // como fuentes, que es lo que la interfaz muestra en cada fila.
+  it('cuenta las referencias restantes sin llamarlas documentos nuevos', () => {
+    const message = sourceLocationMessage({
+      asksMinute: false,
+      sources: [1, 2, 3, 4, 5, 6].map((index) =>
+        chunk({ chunkId: `chunk-${index}`, documentVersionId: 'version-1' }),
+      ),
+    });
+
+    expect(message).not.toMatch(/documentos? más/u);
+    expect(message).toContain('2 fuentes más');
   });
 
   it('sin fuentes no inventa una respuesta', () => {
