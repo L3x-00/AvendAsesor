@@ -482,6 +482,48 @@ describe("ChatDownloads", () => {
     );
   });
 
+  it("lista las descargas del documento más nuevo al más antiguo, con los que no tienen año al final", () => {
+    const withYear = (
+      title: string,
+      rank: number,
+      issuanceYear: number | null,
+      versionSuffix = String(rank),
+    ) => ({
+      ...base,
+      documentTitle: title,
+      documentVersionId: `33333333-3333-4333-8333-33333333333${versionSuffix}`,
+      id: `11111111-1111-4111-8111-11111111111${rank}`,
+      issuanceYear,
+      rank,
+    });
+    render(
+      <ChatDownloads
+        sources={[
+          // El orden de entrada es el de relevancia, no el cronológico.
+          withYear("Norma 2017", 1, 2017),
+          withYear("Norma 2025", 2, 2025),
+          withYear("Norma sin año", 3, null),
+          withYear("Norma 2022 A", 4, 2022),
+          withYear("Norma 2022 B", 5, 2022),
+          // Otro fragmento del documento 2025: no duplica la fila.
+          withYear("Norma 2025", 6, 2025, "2"),
+        ]}
+      />,
+    );
+
+    const titles = within(screen.getByRole("list"))
+      .getAllByRole("listitem")
+      .map((item) => within(item).getByRole("strong").textContent);
+
+    expect(titles).toEqual([
+      "Norma 2025",
+      "Norma 2022 A",
+      "Norma 2022 B",
+      "Norma 2017",
+      "Norma sin año",
+    ]);
+  });
+
   it("conserva dos documentos homónimos cuando sus versiones son distintas", () => {
     render(
       <ChatDownloads

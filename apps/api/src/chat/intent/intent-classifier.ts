@@ -41,7 +41,11 @@ export type SocialSubtype =
   | 'document_catalog'
   | 'official_sites';
 
-export type OutOfScopeSubtype = 'out_of_domain' | 'system_limit';
+export type OutOfScopeSubtype =
+  | 'out_of_domain'
+  | 'system_limit'
+  // Pedido sobre claves o credenciales: la respuesta indica cómo restablecerlas.
+  | 'credentials_help';
 
 /**
  * Unión discriminada por `lane`: si `lane` es `social`, `subtype` es un
@@ -361,6 +365,10 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(?:muestra|muestrame|revela|revelame|dime|ensename|explicame|imprime|repite|repiteme|cual es|que dice|comparte) (?:tu |el |tus |los )?(?:prompt|system prompt|prompt del sistema|instrucciones internas|reglas internas|configuracion interna|configuracion del sistema)\b/u,
   /\b(?:tus (?:instrucciones|reglas|directrices) (?:internas|del sistema|de sistema)|las (?:instrucciones|reglas|directrices) (?:del sistema|de sistema))\b/u,
   /\b(?:que|cual) (?:modelo|version|llm|ia) (?:de (?:ia|lenguaje) )?(?:usas|utilizas|eres|hay detras|esta detras)\b/u,
+  // Cómo está construida o configurada la plataforma. Anclado al final: «¿cómo
+  // está configurada la plataforma SIAGIE?» nombra otro sistema y es del ámbito.
+  /\bcomo (?:esta|fue|esta siendo) (?:configurad|programad|construid|desarrollad|implementad|hech)[oa] (?:la |el |este |esta )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
+  /\b(?:que|cual) (?:tecnologia|stack|framework|lenguaje|base de datos) (?:usa|utiliza|usan|utilizan|emplea|emplean) (?:la |el |este |esta |tu )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
   /\beres (?:un )?(?:gpt|chatgpt|gemini|claude|modelo de lenguaje|llm)\b/u,
   // Secretos y detalles técnicos
   /\b(?:api key|clave de api|api token|token de api|access token|service role|service_role)\b/u,
@@ -390,6 +398,34 @@ function isSystemProbing(normalized: string): boolean {
     SYSTEM_PROBING_PATTERNS.some((pattern) => pattern.test(normalized)) ||
     (IMPERSONATION.test(normalized) && SENSITIVE_REQUEST.test(normalized))
   );
+}
+
+/**
+ * El mensaje trata de claves o credenciales de acceso. Solo entonces la
+ * respuesta menciona cómo restablecerlas; «clave de API» es un secreto del
+ * sistema, no la contraseña de la persona.
+ */
+const CREDENTIAL_WORDS =
+  /\b(?:contrasenas?|passwords?|credenciales?|claves?)\b/u;
+const API_KEY_PHRASE = /\bclaves? de api\b/gu;
+
+function hasCredentialIntent(normalized: string): boolean {
+  return CREDENTIAL_WORDS.test(normalized.replace(API_KEY_PHRASE, ' '));
+}
+
+/**
+ * Pedido de recuperar la propia clave y nada más («olvidé mi contraseña»,
+ * «¿cómo restablezco mi clave?»). Lista cerrada y anclada (fail-closed): si el
+ * mensaje nombra otro sistema o añade otra consulta («olvidé mi contraseña del
+ * SIAGIE», «… y quiero saber los requisitos») sigue al RAG. El nombre del
+ * asistente ya viene recortado por `withoutCourtesy` («de AVEND ASESOR» deja
+ * un «de» final).
+ */
+const CREDENTIAL_RECOVERY =
+  /^(?:(?:yo )?(?:ya )?(?:olvide|perdi|no recuerdo|no me acuerdo de|no puedo recordar)|(?:(?:como|donde|quiero|necesito|deseo|quisiera|puedo|podria|debo|hago para) )*(?:recuperar|restablecer|cambiar|resetear|reiniciar|recupero|restablezco|cambio|reseteo|reinicio)) (?:mi |la |mis |el )?(?:contrasenas?|claves?|passwords?|credenciales)(?: de (?:acceso|ingreso))?(?: (?:de|a|en)(?: (?:la|esta) plataforma| este (?:chat|sistema|asistente)| mi cuenta)?)?$/u;
+
+function isCredentialRecovery(normalized: string): boolean {
+  return CREDENTIAL_RECOVERY.test(withoutCourtesy(normalized));
 }
 
 function stripped(value: string, ...patterns: RegExp[]): string {
@@ -600,7 +636,15 @@ export function classifyTurnIntent(
   // Antes de cualquier señal: un intento de manipulación o de extraer
   // información interna se declina con un límite amable, sin pasar al RAG.
   if (isSystemProbing(normalized)) {
-    return { lane: 'out_of_scope', subtype: 'system_limit' };
+    return {
+      lane: 'out_of_scope',
+      subtype: hasCredentialIntent(normalized)
+        ? 'credentials_help'
+        : 'system_limit',
+    };
+  }
+  if (isCredentialRecovery(normalized)) {
+    return { lane: 'out_of_scope', subtype: 'credentials_help' };
   }
 
   // Antes de la señal fuerte de dominio: «MINEDU» y «UGEL» lo son, pero pedir

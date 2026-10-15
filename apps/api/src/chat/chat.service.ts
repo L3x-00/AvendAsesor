@@ -1714,11 +1714,31 @@ export class ChatService {
     });
   }
 
+  /**
+   * Temas raíz que se pueden consultar hoy: activos y con al menos un
+   * documento aprobado e indexado (el catálogo ya exige vigencia, módulo activo
+   * y versión indexada, igual que la búsqueda del RAG). Un módulo activo sin
+   * corpus existe, pero no se anuncia: ofrecerlo promete una respuesta que
+   * luego no tiene sustento. Si no se puede comprobar (sin catálogo o con la
+   * base caída) no se anuncia ninguno: es mejor omitir la lista que prometer.
+   */
   private async activeTopics(): Promise<ResolvedModule[] | undefined> {
+    if (!this.catalogService) return undefined;
     try {
-      const modules = await this.historyGateway.listActiveModules();
+      const [modules, documents] = await Promise.all([
+        this.historyGateway.listActiveModules(),
+        this.catalogService.availableDocuments(),
+      ]);
+      // `moduleIds` incluye el módulo enlazado y su padre: un documento de un
+      // subtema da corpus al tema raíz.
+      const withCorpus = new Set(
+        documents.flatMap((document) => document.moduleIds),
+      );
       return modules
-        .filter((module) => module.parentModuleId === null)
+        .filter(
+          (module) =>
+            module.parentModuleId === null && withCorpus.has(module.id),
+        )
         .sort((left, right) => left.sortOrder - right.sortOrder)
         .map(({ id, name }) => ({ id, name }));
     } catch {

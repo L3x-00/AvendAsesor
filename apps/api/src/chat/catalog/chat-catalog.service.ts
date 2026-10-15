@@ -446,7 +446,7 @@ export class ChatCatalogService {
         message:
           allDocuments.length > 0
             ? 'No encontré archivos disponibles que coincidan con ese pedido en el tema actual. Puedes indicarme el nombre o tipo de documento, o quitar el filtro del tema y volver a intentarlo.'
-            : 'Aún estoy preparándome con los documentos oficiales de este tema. Cuéntame igual tu consulta: buscaré en todos los documentos disponibles y, si no encuentro respaldo, te lo diré con claridad para que puedas verificarlo con tu UGEL, tu DRE o el MINEDU.',
+            : 'Aún estoy preparándome con los documentos oficiales de este tema. Cuéntame igual tu consulta: buscaré en todos los documentos disponibles y, si no encuentro respaldo, te lo diré con claridad.',
         suggestions: [],
       };
     }
@@ -472,8 +472,16 @@ export class ChatCatalogService {
 
     const count = documents.length;
     const intro = `¡Claro! Hoy puedo responderte con ${count === 1 ? 'este documento' : `estos ${count} documentos`}, organizados por tema:`;
+    // Los documentos ya llegan del más nuevo al más antiguo; los temas siguen
+    // el mismo criterio (el que trae el documento más reciente va primero) y
+    // solo se desempata por nombre. Un orden alfabético intercalaría años.
     const sections = [...byTopic.entries()]
-      .sort(([left], [right]) => left.localeCompare(right, 'es'))
+      .sort(([leftTopic, leftItems], [rightTopic, rightItems]) => {
+        const byYear =
+          (rightItems[0]?.issuanceYear ?? Number.NEGATIVE_INFINITY) -
+          (leftItems[0]?.issuanceYear ?? Number.NEGATIVE_INFINITY);
+        return byYear || leftTopic.localeCompare(rightTopic, 'es');
+      })
       .map(
         ([topic, items]) =>
           `**${topic}**\n${items.map((item) => documentLine(item)).join('\n')}`,
