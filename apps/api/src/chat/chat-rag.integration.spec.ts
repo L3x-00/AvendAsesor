@@ -887,4 +887,29 @@ describe('ChatService + RagService integration', () => {
       'Maternidad',
     );
   });
+
+  // Revisión cruzada: con más filas de las que el contrato permite, la web
+  // rechaza la tabla entera y ninguna fila se pinta como grilla; el caso queda
+  // señalado para revisión aunque todas las filas citen una fuente.
+  it('señala para revisión la tabla que excede el tope de filas', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      ...Array.from(
+        { length: 7 },
+        (_value, index) => `| Motivo ${index + 1} | ${index + 1}0 días [1] |`,
+      ),
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
+      'Motivo 7',
+    );
+  });
 });

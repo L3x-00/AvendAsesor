@@ -24,7 +24,7 @@ import {
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
-import { unbackedTableRows } from '../rag/answer-tables';
+import { unsupportedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
@@ -1337,15 +1337,16 @@ export class ChatService {
       }
     }
     // CR-07 (punto 4): una tabla solo se sostiene con una cita válida por fila.
-    // Si alguna fila no cita ninguna fuente entregada, la interfaz la mostrará
-    // como texto y el caso queda señalado para revisión humana.
-    const unbackedRows = unbackedTableRows(
+    // Si alguna fila no cita ninguna fuente entregada —o si la tabla excede el
+    // tope de filas y no se pintará entera—, la interfaz la mostrará como texto
+    // y el caso queda señalado para revisión humana.
+    const unsupportedRows = unsupportedTableRows(
       finalAnswer,
       retrieval.sources.length,
     );
-    if (unbackedRows.length) {
+    if (unsupportedRows.length) {
       qualitySignals.add('support_partial');
-      qualityExcerpts.support_partial ??= unbackedRows[0];
+      qualityExcerpts.support_partial ??= unsupportedRows[0];
     }
     if (retrieval.topRelevanceScore < this.matchThreshold() + 0.05) {
       qualitySignals.add('low_confidence');

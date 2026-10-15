@@ -53,7 +53,7 @@ const PAGE_OR_PLACE =
   /\b(?:pagina|paginas|parte|partes|ubicacion|apartado|acapite|seccion)\b/u;
 const PLACE_FRAME = /\b(?:en que|en cual|en cuales|donde|de que)\b/u;
 const OPEN_ASK =
-  /\b(?:abre|abreme|abrir|abrirme|abro|descarga|descargar|descargarme|baja|bajar|bajarme|visualiza|visualizar|ver)\b/u;
+  /\b(?:abre|abreme|abrir|abrirme|abro|descarga|descargar|descargarme|baja|bajar|bajarme|visualiza|visualizar|ver|pasa|pasame|pasas|pasarme|muestra|muestrame|mostrar|mostrarme|envia|enviame|enviar|enviarme|manda|mandame|mandar|mandarme|comparte|comparteme|compartir|compartirme|facilita|facilitame|facilitar|facilitarme)\b/u;
 /** Referencia definida al archivo («ese documento», «la norma», «el PDF»). */
 const DEFINITE_DOCUMENT =
   /\b(?:el|la|los|las|ese|esa|esos|esas|este|esta|estos|estas|dicho|dicha|mismo|misma|un|una)\s+(?:documento|documentos|norma|normas|resolucion|resoluciones|pdf|fuente|fuentes|archivo|archivos|anexo|anexos|informe|informes|planilla|contrato|directiva|decreto|ley|reglamento|memorandum|oficio|acta|cronograma)\b/u;
@@ -73,10 +73,20 @@ const DURATION_CONTEXT =
 const CONTENT_ASK =
   /\b(?:que dice|que dicen|que establece|que establecen|que indica|que indican|que senala|que senalan|que menciona|que mencionan|que contiene|que requisitos|cuanto|cuanta|cuantos|cuantas|cual es el monto|cuales son los requisitos|cuando|como se calcula|como se solicita|como se tramita|que procedimiento|por que|explicame|explica|resume|resumen|detalla|de que trata)\b/u;
 
-function asksMinuteUnit(normalized: string): boolean {
+/**
+ * «El enlace entre A y B» es una relación conceptual, no un archivo: en una
+ * conversación, la palabra «enlace» no basta para pedir un documento.
+ */
+const FIGURATIVE_LINK = /\benlaces?\s+entre\b/u;
+
+function asksMinuteUnit(normalized: string, inConversation: boolean): boolean {
   if (!MINUTE_NOUN.test(normalized)) return false;
   if (!MINUTE_FRAME.test(normalized)) return false;
-  if (!DOCUMENT_NOUN.test(normalized) && !NORM_CODE.test(normalized)) {
+  if (
+    !inConversation &&
+    !DOCUMENT_NOUN.test(normalized) &&
+    !NORM_CODE.test(normalized)
+  ) {
     return false;
   }
   return !DURATION_CONTEXT.test(normalized);
@@ -94,10 +104,12 @@ export function sourceLocationRequestIn(
 ): SourceLocationRequest | null {
   const normalized = normalizeSpanishText(question);
   if (!normalized) return null;
+  const inConversation = options.inConversation === true;
 
-  if (asksMinuteUnit(normalized)) return { asksMinute: true };
+  if (asksMinuteUnit(normalized, inConversation)) return { asksMinute: true };
   if (!/\p{L}/u.test(normalized)) return null;
   if (CONTENT_ASK.test(normalized)) return null;
+  if (FIGURATIVE_LINK.test(normalized)) return null;
   // «¿en qué página del portal del MINEDU…?» pide un destino web, no la página
   // de un PDF: lo resuelve el carril de portales oficiales o el RAG con citas.
   if (
@@ -109,15 +121,14 @@ export function sourceLocationRequestIn(
 
   const mentionsDocument =
     DOCUMENT_NOUN.test(normalized) || NORM_CODE.test(normalized);
-  const asksLink =
-    LOCATION_NOUN.test(normalized) &&
-    (mentionsDocument || options.inConversation === true);
+  const refersToDocument = mentionsDocument || inConversation;
+  const asksLink = LOCATION_NOUN.test(normalized) && refersToDocument;
   const asksPlace =
-    mentionsDocument &&
+    refersToDocument &&
     PLACE_FRAME.test(normalized) &&
     PAGE_OR_PLACE.test(normalized);
   const asksToOpen =
-    mentionsDocument &&
+    refersToDocument &&
     OPEN_ASK.test(normalized) &&
     DEFINITE_DOCUMENT.test(normalized);
 

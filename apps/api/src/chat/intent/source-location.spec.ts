@@ -128,6 +128,47 @@ describe('sourceLocationRequestIn', () => {
       sourceLocationRequestIn('¿Me das el enlace del MINEDU y de la UGEL?'),
     ).toBeNull();
   });
+
+  // Revisión cruzada (auditoría independiente, 2026-10-15): los seguimientos
+  // reales no repiten el nombre del documento y usan verbos de pedido que la
+  // primera versión no reconocía.
+  it.each([
+    'Pásame el PDF.',
+    'Envíame el documento por favor.',
+    'Muéstrame el documento completo.',
+    '¿En qué página está?',
+    'Dame el enlace.',
+  ])('reconoce el seguimiento sin nombrar el documento: %s', (question) => {
+    expect(sourceLocationRequestIn(question, { inConversation: true })).toEqual(
+      { asksMinute: false },
+    );
+  });
+
+  it('reconoce el seguimiento del minuto sin nombrar el documento', () => {
+    expect(
+      sourceLocationRequestIn('¿Y en qué minuto?', { inConversation: true }),
+    ).toEqual({ asksMinute: true });
+    expect(sourceLocationRequestIn('¿En qué minuto?')).toBeNull();
+  });
+
+  it('reconoce el pedido del PDF que sí nombra la norma', () => {
+    expect(
+      sourceLocationRequestIn('Pásame el PDF del DS N.° 049-2025-EF.'),
+    ).toEqual({ asksMinute: false });
+  });
+
+  // Revisión cruzada: «el enlace entre A y B» es una relación conceptual, no un
+  // archivo; la palabra suelta no basta dentro de una conversación.
+  it('no intercepta el enlace figurado entre dos conceptos', () => {
+    expect(
+      sourceLocationRequestIn(
+        '¿Cuál es el enlace entre la asignación y el bono?',
+        {
+          inConversation: true,
+        },
+      ),
+    ).toBeNull();
+  });
 });
 
 describe('sourceLocationMessage', () => {
