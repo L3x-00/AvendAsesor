@@ -29,7 +29,7 @@ interface CatalogDocumentVersionRow {
   id: string;
   mime_type: string;
   original_file_name: string;
-  page_count: number;
+  page_count: number | null;
 }
 
 interface CatalogDocumentModuleRow {

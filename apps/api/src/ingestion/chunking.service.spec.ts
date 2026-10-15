@@ -28,20 +28,23 @@ describe('ChunkingService', () => {
     expect(chunks.some((chunk) => chunk.pageStart === 2)).toBe(true);
   });
 
-  it('captures a numeral and literal as a single precise subreference', () => {
-    const [chunk] = service.chunk([
+  it('captures a numeral and literal as a precise subreference', () => {
+    const chunks = service.chunk([
       {
         pageNumber: 14,
         text: 'Sección III. Requisitos\n\n2.1. Condiciones\n\nLiteral a) Haber prestado servicios en el nivel inicial.',
       },
     ]);
 
-    expect(chunk).toMatchObject({
+    const literal = chunks.find(
+      (chunk) => chunk.numeralReference === '2.1 · Literal a)',
+    );
+    expect(literal).toMatchObject({
       numeralReference: '2.1 · Literal a)',
       pageEnd: 14,
       pageStart: 14,
     });
-    expect(chunk.sectionTitle).toMatch(/^Sección III/u);
+    expect(literal?.sectionTitle).toMatch(/^Sección III/u);
   });
 
   it('removes null bytes and skips empty page fragments', () => {
@@ -241,7 +244,7 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     for (const chunk of withSentence) expect(chunk.pageStart).toBe(1);
   });
 
-  it('usa la primera oración del tramo nuevo como sustento cuando no hay rótulo', () => {
+  it('no presenta una pregunta descriptiva como título estructural', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
@@ -255,13 +258,10 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     const target = chunks.at(-1);
 
     expect(target?.chunkContent).toContain('¿Cuáles son los requisitos');
-    // No toma el arrastre del chunk anterior: solo el tramo nuevo.
-    expect(target?.sectionTitle).toBe(
-      '¿Cuáles son los requisitos para postular?',
-    );
+    expect(target?.sectionTitle).toBeUndefined();
   });
 
-  it('da a todas las ventanas de un párrafo largo el mismo sustento', () => {
+  it('no inventa un título para las ventanas de un párrafo largo', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
@@ -274,7 +274,7 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
 
     expect(windows.length).toBeGreaterThan(1);
     for (const chunk of windows) {
-      expect(chunk.sectionTitle).toBe('¿Qué documentos se presentan?');
+      expect(chunk.sectionTitle).toBeUndefined();
     }
   });
 
@@ -289,7 +289,7 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     }
   });
 
-  it('ignora fragmentos iniciales cortos y usa la siguiente oración completa', () => {
+  it('no convierte una oración normativa en título de sección', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
@@ -297,12 +297,25 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       },
     ]);
 
-    expect(chunks[0].sectionTitle).toBe(
-      'La presente norma entra en vigencia al día siguiente de su publicación.',
-    );
+    expect(chunks[0].sectionTitle).toBeUndefined();
+    expect(chunks[0].articleReference).toBeUndefined();
   });
 
-  it('omite sellos de validación y usa el primer contenido documental útil', () => {
+  it.each([
+    'Artículo 3.- Modifíquese el artículo 2.',
+    'Artículo 4.- Apruébase el reglamento adjunto.',
+    'Artículo 5.- Dispóngase su publicación inmediata.',
+    'Artículo 6.- La remuneración mensual es de S/ 2 666.',
+    'Artículo 7.- El profesor percibe S/ 3 000.',
+    'Artículo 8.- La asignación corresponde al cargo docente.',
+  ])('no convierte la disposición «%s» en subtítulo', (text) => {
+    const [chunk] = service.chunk([{ pageNumber: 1, text }]);
+
+    expect(chunk.articleReference).toMatch(/^Artículo/u);
+    expect(chunk.sectionTitle).toBeUndefined();
+  });
+
+  it('no convierte sellos ni contenido corrido en título de sección', () => {
     const [chunk] = service.chunk([
       {
         pageNumber: 2,
@@ -314,12 +327,10 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       },
     ]);
 
-    expect(chunk.sectionTitle).toBe(
-      'La evaluación del expediente considera la formación académica y la experiencia laboral.',
-    );
+    expect(chunk.sectionTitle).toBeUndefined();
   });
 
-  it('supera un corte breve como «puntos.» y conserva el siguiente aspecto útil', () => {
+  it('no usa una oración posterior a un corte como ubicación estructural', () => {
     const [chunk] = service.chunk([
       {
         pageNumber: 4,
@@ -327,12 +338,10 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       },
     ]);
 
-    expect(chunk.sectionTitle).toBe(
-      'La experiencia laboral se acredita por cada mes de trabajo realizado.',
-    );
+    expect(chunk.sectionTitle).toBeUndefined();
   });
 
-  it('no toma un decimal menor que uno como numeral de la norma', () => {
+  it('no toma números mencionados dentro del texto como numeral de la norma', () => {
     const [chunk] = service.chunk([
       {
         pageNumber: 1,
@@ -340,7 +349,99 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       },
     ]);
 
-    expect(chunk.numeralReference).toBe('2.4');
+    expect(chunk.numeralReference).toBeUndefined();
+  });
+
+  it('no atribuye texto previo al artículo que aparece después en el documento', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: [
+          'El docente coordinador de ONDEC percibe la asignación indicada para su cargo.',
+          'Artículo 3.- Implementación de la medida por las entidades responsables.',
+        ].join('\n\n'),
+      },
+    ]);
+
+    const ondec = chunks.find((chunk) => chunk.chunkContent.includes('ONDEC'));
+    const article = chunks.find((chunk) =>
+      chunk.chunkContent.startsWith('Artículo 3.-'),
+    );
+
+    expect(ondec?.articleReference).toBeUndefined();
+    expect(ondec?.sectionTitle).toBeUndefined();
+    expect(article?.articleReference).toBe('Artículo 3.-');
+  });
+
+  it('propaga un encabezado estructural real sin usar frases vecinas', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 7,
+        text: [
+          'CAPÍTULO II',
+          'Condiciones aplicables a la jornada laboral del personal docente.',
+        ].join('\n\n'),
+      },
+    ]);
+
+    expect(chunk.sectionTitle).toBe('CAPÍTULO II');
+    expect(chunk.articleReference).toBeUndefined();
+  });
+
+  it('no confunde cabeceras editoriales ni siglas aisladas con secciones', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 1,
+        text: [
+          'NORMAS LEGALES',
+          'ONDEC',
+          'La asignación corresponde a los cargos descritos en la norma.',
+        ].join('\n\n'),
+      },
+    ]);
+
+    expect(chunk.sectionTitle).toBeUndefined();
+  });
+
+  it('no confunde un importe en mayúsculas con un subtítulo', () => {
+    const [chunk] = service.chunk([
+      {
+        pageNumber: 1,
+        text: [
+          'DOS MIL SEISCIENTOS SESENTA Y SEIS SOLES',
+          'La remuneración corresponde al supuesto descrito por la norma.',
+        ].join('\n\n'),
+      },
+    ]);
+
+    expect(chunk.sectionTitle).toBeUndefined();
+  });
+
+  it('separa el primer literal del texto general del artículo', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 3,
+        text: [
+          'Artículo 3. Requisitos para la asignación',
+          'La asignación se entrega al personal que cumple estas condiciones.',
+          'a) Acreditar vínculo laboral vigente.',
+        ].join('\n\n'),
+      },
+    ]);
+
+    const general = chunks.find((chunk) =>
+      chunk.chunkContent.includes('se entrega al personal'),
+    );
+    const literal = chunks.find((chunk) =>
+      chunk.chunkContent.startsWith('a) Acreditar'),
+    );
+    expect(general?.numeralReference).toBeUndefined();
+    expect(general?.chunkContent).not.toContain('a) Acreditar');
+    expect(literal).toMatchObject({
+      articleReference: 'Artículo 3.',
+      numeralReference: 'Literal a)',
+      sectionTitle: 'Requisitos para la asignación',
+    });
   });
 
   it('never leaves broken multi-token characters at window edges', () => {
@@ -356,7 +457,7 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     }
   });
 
-  it('keeps an article heading with its long body instead of the previous chunk', () => {
+  it('keeps the article identity without propagating a sentence-like subtitle', () => {
     const chunks = service.chunk([
       {
         pageNumber: 1,
@@ -381,8 +482,9 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     );
     expect(article14.length).toBeGreaterThan(1);
     for (const chunk of article14) {
-      expect(chunk.chunkContent.startsWith('Artículo 14.')).toBe(true);
+      expect(chunk.chunkContent.startsWith('Artículo 14.')).toBe(false);
       expect(chunk.articleReference).toBe('Artículo 14.');
+      expect(chunk.sectionTitle).toBeUndefined();
       expect(chunk.tokenCount).toBeLessThanOrEqual(800);
     }
   });
@@ -441,9 +543,12 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       'Artículo 2.- Dejar sin efecto la Resolución Viceministerial N° 123-2020-MINEDU.',
       false,
     ],
+    ['Artículo 3.- Modifíquese el artículo 2.', false],
+    ['Artículo 4.- Apruébase el reglamento adjunto.', false],
+    ['Artículo 5.- Dispóngase su publicación inmediata.', false],
     ['DISPOSICIONES COMPLEMENTARIAS FINALES', true],
     ['ANEXOS', true],
-    ['Artículo 5. Bienestar docente.', true],
+    ['Artículo 5. Bienestar docente.', false],
     ['Artículo 14°.- Requisitos para la reasignación por salud:', true],
   ])(
     'prefixes «%s» to the windows of the following long body: %s',

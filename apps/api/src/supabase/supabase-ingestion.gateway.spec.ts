@@ -99,7 +99,7 @@ describe('SupabaseIngestionGatewayAdapter', () => {
     await expect(
       gateway.downloadPdf(job.storageBucket, job.storagePath),
     ).resolves.toEqual(Buffer.from('%PDF'));
-    await gateway.complete(job);
+    await gateway.complete(job, 2);
     await gateway.fail(job, 'INGESTION_FAILED', 'failure', true);
 
     expect(rpc).toHaveBeenCalledWith(
@@ -112,7 +112,10 @@ describe('SupabaseIngestionGatewayAdapter', () => {
     );
     expect(rpc).toHaveBeenCalledWith(
       'complete_document_ingestion_job',
-      expect.objectContaining({ p_lease_token: job.leaseToken }),
+      expect.objectContaining({
+        p_lease_token: job.leaseToken,
+        p_verified_pdf_page_count: 2,
+      }),
     );
     expect(rpc).toHaveBeenCalledWith(
       'fail_document_ingestion_job',

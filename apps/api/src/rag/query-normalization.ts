@@ -8,6 +8,11 @@ const ABBREVIATIONS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
   { pattern: /\brm\b/giu, replacement: 'resolución ministerial' },
   { pattern: /\brd\b/giu, replacement: 'resolución directoral' },
   { pattern: /\brv\b/giu, replacement: 'resolución viceministerial' },
+  { pattern: /\brvm\b/giu, replacement: 'resolución viceministerial' },
+  {
+    pattern: /\brsg\b/giu,
+    replacement: 'resolución de secretaría general',
+  },
   { pattern: /\bds\b/giu, replacement: 'decreto supremo' },
   { pattern: /\bdl\b/giu, replacement: 'decreto legislativo' },
   { pattern: /\bmemo\b/giu, replacement: 'memorándum' },

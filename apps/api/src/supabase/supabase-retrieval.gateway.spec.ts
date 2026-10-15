@@ -11,6 +11,38 @@ const input = {
   selectedModuleId: null,
 };
 
+const row = {
+  article_reference: null,
+  chunk_content: 'Texto',
+  chunk_id: 'chunk',
+  document_id: 'document',
+  document_situation: 'replaced',
+  document_title: 'Norma',
+  document_type: 'RESOLUCION_MINISTERIAL',
+  document_version_id: 'version',
+  issuance_year: 2024,
+  lexical_score: 0.4,
+  mime_type: 'application/pdf',
+  module_associations: [
+    {
+      rootModuleId: 'module',
+      rootModuleName: 'Módulo',
+      submoduleId: 'submodule',
+      submoduleName: 'Submódulo',
+    },
+  ],
+  module_ids: ['module'],
+  module_names: ['Módulo'],
+  numeral_reference: null,
+  page_end: 2,
+  pdf_page_count: 17,
+  page_start: 1,
+  resolution_number: 'RM-123-2024-MINEDU',
+  section_title: null,
+  semantic_score: 0.9,
+  version_number: 1,
+} as const;
+
 describe('SupabaseRetrievalGatewayAdapter', () => {
   it('fails closed when no server client is configured', async () => {
     await expect(
@@ -20,39 +52,7 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
 
   it('calls the protected hybrid search RPC and maps only its contract', async () => {
     const rpc = jest.fn().mockResolvedValue({
-      data: [
-        {
-          article_reference: null,
-          chunk_content: 'Texto',
-          chunk_id: 'chunk',
-          document_id: 'document',
-          document_situation: 'replaced',
-          document_title: 'Norma',
-          document_type: 'RESOLUCION_MINISTERIAL',
-          document_version_id: 'version',
-          issuance_year: 2024,
-          lexical_score: 0.4,
-          mime_type: 'application/pdf',
-          module_associations: [
-            {
-              rootModuleId: 'module',
-              rootModuleName: 'Módulo',
-              submoduleId: 'submodule',
-              submoduleName: 'Submódulo',
-            },
-          ],
-          module_ids: ['module'],
-          module_names: ['Módulo'],
-          numeral_reference: null,
-          page_end: 2,
-          pdf_page_count: 17,
-          page_start: 1,
-          resolution_number: 'RM-123-2024-MINEDU',
-          section_title: null,
-          semantic_score: 0.9,
-          version_number: 1,
-        },
-      ],
+      data: [row],
       error: null,
     });
     const gateway = new SupabaseRetrievalGatewayAdapter({
@@ -83,6 +83,30 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
       'search_document_chunks_with_consultation_context',
       expect.objectContaining({
         p_query_text: input.query,
+        p_retrieval_scope: 'historical',
+      }),
+    );
+  });
+
+  it('uses the exact-reference RPC without a semantic substitute', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [row], error: null });
+    const gateway = new SupabaseRetrievalGatewayAdapter({
+      rpc,
+    } as unknown as SupabaseServerClient);
+
+    await expect(
+      gateway.searchExactReferences({
+        embedding: input.embedding,
+        matchCount: 10,
+        query: 'resolución ministerial 123-2024-MINEDU',
+        referenceKeys: ['1232024MINEDU'],
+        retrievalScope: 'historical',
+      }),
+    ).resolves.toEqual([expect.objectContaining({ documentId: 'document' })]);
+    expect(rpc).toHaveBeenCalledWith(
+      'search_document_chunks_by_exact_references',
+      expect.objectContaining({
+        p_reference_keys: ['1232024MINEDU'],
         p_retrieval_scope: 'historical',
       }),
     );

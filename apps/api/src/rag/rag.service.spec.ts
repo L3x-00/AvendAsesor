@@ -30,7 +30,7 @@ const source = {
 
 describe('RagService', () => {
   let embeddings: { embed: jest.Mock };
-  let gateway: { search: jest.Mock };
+  let gateway: { search: jest.Mock; searchExactReferences: jest.Mock };
   let service: RagService;
 
   beforeEach(() => {
@@ -43,7 +43,10 @@ describe('RagService', () => {
           ),
         ),
     };
-    gateway = { search: jest.fn() };
+    gateway = {
+      search: jest.fn(),
+      searchExactReferences: jest.fn(),
+    };
     service = new RagService(embeddings, gateway, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
     } as never);
@@ -54,6 +57,166 @@ describe('RagService', () => {
     await expect(
       service.retrieve('¿Qué establece la norma?', null),
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('retrieves an explicitly named norm only through the exact route', async () => {
+    const exactSource = {
+      ...source,
+      documentTitle: 'Norma de registro y control de asistencia',
+      documentType: 'OTRO',
+      resolutionNumber: 'RSG N.° 326-2017-MINEDU',
+    };
+    gateway.searchExactReferences.mockResolvedValue([exactSource]);
+
+    await expect(
+      service.retrieve(
+        'Según la RSG N.° 326-2017-MINEDU, ¿cómo se controla la asistencia?',
+        null,
+      ),
+    ).resolves.toEqual({
+      kind: 'evidence',
+      resolvedModule: { id: 'module-a', name: 'Módulo A' },
+      sources: [exactSource],
+      topRelevanceScore: 0.9,
+    });
+    expect(gateway.search).not.toHaveBeenCalled();
+    expect(gateway.searchExactReferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceKeys: ['RSG:3262017MINEDU'],
+        retrievalScope: 'historical',
+      }),
+    );
+  });
+
+  it('keeps dotted legal abbreviations on the exact route', async () => {
+    const exactSource = {
+      ...source,
+      documentTitle: 'Decreto Supremo N.° 305-2017-EF',
+      documentType: 'DECRETO_SUPREMO',
+      resolutionNumber: '305-2017-EF',
+    };
+    gateway.searchExactReferences.mockResolvedValue([exactSource]);
+
+    const result = await service.retrieve(
+      '¿Qué dispone el D. S. N.° 305-2017-EF?',
+      null,
+    );
+
+    expect(result).toMatchObject({ kind: 'evidence' });
+    expect(gateway.search).not.toHaveBeenCalled();
+    expect(gateway.searchExactReferences).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceKeys: ['DS:3052017EF'] }),
+    );
+  });
+
+  it('inherits the exact norm for an elliptical follow-up', async () => {
+    const exactSource = {
+      ...source,
+      documentTitle: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
+      documentType: 'OTRO',
+      resolutionNumber: 'RSG N.° 326-2017-MINEDU',
+    };
+    gateway.searchExactReferences.mockResolvedValue([exactSource]);
+
+    const result = await service.retrieve('¿Y qué dice el artículo 3?', null, [
+      '¿Qué dispone la RSG 326-2017-MINEDU?',
+    ]);
+
+    expect(result).toMatchObject({ kind: 'evidence' });
+    expect(gateway.search).not.toHaveBeenCalled();
+    expect(gateway.searchExactReferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        referenceKeys: ['RSG:3262017MINEDU'],
+        retrievalScope: 'historical',
+      }),
+    );
+  });
+
+  it('fails closed before retrieval when a sector-sensitive reference is incomplete', async () => {
+    const result = await service.retrieve('¿Qué dispone el DS 074-2019?', null);
+
+    expect(result).toMatchObject({
+      incompleteExactReferences: [
+        expect.objectContaining({ display: 'DS N.° 074-2019' }),
+      ],
+      kind: 'no_evidence',
+    });
+    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(gateway.searchExactReferences).not.toHaveBeenCalled();
+    expect(gateway.search).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the explicitly named norm is not available', async () => {
+    gateway.searchExactReferences.mockResolvedValue([]);
+
+    await expect(
+      service.retrieve(
+        '¿Qué indica la RSG N.° 121-2018-MINEDU sobre la planilla?',
+        null,
+      ),
+    ).resolves.toEqual({
+      kind: 'no_evidence',
+      missingExactReferences: [
+        expect.objectContaining({ key: '1212018MINEDU' }),
+      ],
+      topRelevanceScore: null,
+    });
+    expect(gateway.search).not.toHaveBeenCalled();
+  });
+
+  it('rejects a semantically similar source returned for another norm', async () => {
+    gateway.searchExactReferences.mockResolvedValue([
+      {
+        ...source,
+        documentTitle: 'Proceso administrativo disciplinario',
+        documentType: 'RESOLUCION_MINISTERIAL',
+        resolutionNumber: '123-2017-MINEDU',
+      },
+    ]);
+
+    const result = await service.retrieve(
+      'Según la RSG 326-2017-MINEDU, ¿cómo se controla la asistencia?',
+      null,
+    );
+
+    expect(result).toMatchObject({
+      kind: 'no_evidence',
+      missingExactReferences: [{ key: '3262017MINEDU' }],
+    });
+  });
+
+  it('does not answer a multi-norm request when one exact document is absent', async () => {
+    gateway.searchExactReferences.mockResolvedValue([
+      {
+        ...source,
+        documentTitle: 'Decreto Supremo N.° 305-2017-EF',
+        documentType: 'DECRETO_SUPREMO',
+        resolutionNumber: '305-2017-EF',
+      },
+    ]);
+
+    const result = await service.retrieve(
+      'Compara el DS 305-2017-EF y el DS 306-2017-EF.',
+      null,
+    );
+
+    expect(result).toMatchObject({
+      kind: 'no_evidence',
+      missingExactReferences: [{ key: '3062017EF' }],
+    });
+  });
+
+  it('fails closed for an exact query when the gateway lacks the new capability', async () => {
+    const legacyService = new RagService(embeddings, { search: jest.fn() }, {
+      get: jest.fn(() => 0.7),
+    } as never);
+
+    await expect(
+      legacyService.retrieve('¿Qué dispone el DS 074-2019-EF?', null),
+    ).resolves.toMatchObject({
+      kind: 'no_evidence',
+      missingExactReferences: [{ key: '0742019EF' }],
+    });
   });
 
   it('descarta evidencia recuperada que pertenece únicamente a otro sector', async () => {

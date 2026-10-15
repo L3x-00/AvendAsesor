@@ -10,9 +10,9 @@ select col_type_is(
   'public', 'chat_message_sources', 'pdf_page_count', 'integer',
   'The physical PDF page count uses an integer'
 );
-select col_not_null(
+select col_is_null(
   'public', 'chat_message_sources', 'pdf_page_count',
-  'Every persisted citation records the total physical pages'
+  'A citation can omit the total until the physical PDF count is verified'
 );
 select ok(
   exists (
@@ -24,10 +24,16 @@ select ok(
   ),
   'The named page-count check constrains the expected column and upper bound'
 );
-select is(
-  (select count(*) from public.chat_message_sources where pdf_page_count is null),
-  0::bigint,
-  'The migration backfill leaves no historical citation without a page total'
+select ok(
+  not exists (
+    select 1
+    from public.chat_message_sources as source
+    join public.document_versions as version
+      on version.id = source.document_version_id
+    where version.mime_type <> 'application/pdf'
+      and source.pdf_page_count is not null
+  ),
+  'Non-PDF citations never claim a physical PDF page total'
 );
 select ok(
   pg_catalog.pg_get_function_result(

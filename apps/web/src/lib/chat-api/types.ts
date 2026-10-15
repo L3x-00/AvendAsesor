@@ -32,8 +32,8 @@ export const chatSourceSchema = z.object({
   numeralReference: z.string().max(255).nullable(),
   pageEnd: z.number().int().min(1).max(300),
   pageStart: z.number().int().min(1).max(300),
-  /** Total de páginas físicas del archivo; ausente en conversaciones antiguas. */
-  pdfPageCount: z.number().int().min(1).max(300).optional(),
+  /** Total físico verificado; nulo/ausente cuando todavía no se pudo contar. */
+  pdfPageCount: z.number().int().min(1).max(300).nullable().optional(),
   rank: z.number().int().min(1).max(20),
   relevanceScore: z.number().min(0).max(1),
   relatedModuleName: z.string().max(255).nullable().optional(),
@@ -67,7 +67,7 @@ export const chatCatalogDocumentSchema = z.object({
   issuanceYear: z.number().int().nullable(),
   mimeType: z.string().min(1).max(255),
   originalFileName: z.string().min(1).max(500),
-  pageCount: z.number().int().min(1).max(300),
+  pageCount: z.number().int().min(1).max(300).nullable(),
   resolutionNumber: z.string().max(255).nullable(),
   title: z.string().min(1).max(1_000),
   versionId: z.string().uuid(),

@@ -8,6 +8,11 @@ import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
+  exactDocumentReferencesIn,
+  type ExactDocumentReference,
+  sourceMatchesExactDocumentReference,
+} from './legal-reference';
+import {
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_QUERY_TEXT_MAX_CHARS,
   RAG_ROUTING_SCORE_MARGIN,
@@ -28,7 +33,14 @@ export interface ResolvedModule {
 }
 
 export type RetrievalResult =
-  | { kind: 'no_evidence'; topRelevanceScore: null }
+  | {
+      kind: 'no_evidence';
+      /** Referencias nombradas que aún no identifican una norma de forma unívoca. */
+      incompleteExactReferences?: ExactDocumentReference[];
+      /** Normas nombradas que no tienen evidencia aprobada utilizable. */
+      missingExactReferences?: ExactDocumentReference[];
+      topRelevanceScore: null;
+    }
   | {
       kind: 'ambiguous';
       modules: ResolvedModule[];
@@ -552,7 +564,7 @@ export class RagService {
     priorUserQuestions: string[] = [],
     options: { forceContext?: boolean } = {},
   ): Promise<RetrievalResult> {
-    const retrievalScope = detectRetrievalScope(question);
+    const directReferences = exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
     // Un seguimiento elíptico (o la respuesta a una aclaración, que completa la
     // pregunta pendiente) se busca con las consultas previas en TODAS las
@@ -565,6 +577,32 @@ export class RagService {
     const contextual = hasPrior
       ? contextualQuery(question, priorUserQuestions)
       : question;
+    const inheritedReferences =
+      !directReferences.length && globalUsesContext
+        ? ([...priorUserQuestions]
+            .reverse()
+            .map(exactDocumentReferencesIn)
+            .find((references) => references.length > 0) ?? [])
+        : [];
+    const documentReferences = directReferences.length
+      ? directReferences
+      : inheritedReferences;
+    const incompleteExactReferences = documentReferences.filter(
+      (reference) => !reference.complete,
+    );
+    if (incompleteExactReferences.length) {
+      return {
+        incompleteExactReferences,
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      };
+    }
+    const exactReferences = documentReferences.filter(
+      (reference) => reference.complete,
+    );
+    const retrievalScope = detectRetrievalScope(
+      inheritedReferences.length ? contextual : question,
+    );
     const globalQuery = globalUsesContext ? contextual : question;
     const selectedQuery = hasPrior ? contextual : question;
     const queries =
@@ -597,24 +635,79 @@ export class RagService {
         RAG_DEFAULT_MATCH_THRESHOLD,
       retrievalScope,
     };
-    const globalSearch = this.gateway.search({
-      ...searchBase,
-      embedding: globalEmbedding,
-      query: globalQuery,
-      selectedModuleId: null,
-    });
-    const selectedSearch = selectedModuleId
-      ? this.gateway.search({
-          ...searchBase,
-          embedding: selectedEmbedding,
-          query: selectedQuery,
-          selectedModuleId,
+    let rawGlobalSources: RetrievedChunk[];
+    let rawSelectedSources: RetrievedChunk[];
+    if (exactReferences.length) {
+      // Sin una ruta exacta nunca se degrada a similitud: un doble antiguo o
+      // una migración ausente debe producir «sin evidencia», no una norma
+      // parecida que aparente responder el número solicitado.
+      if (!this.gateway.searchExactReferences) {
+        return {
+          kind: 'no_evidence',
+          missingExactReferences: exactReferences,
+          topRelevanceScore: null,
+        };
+      }
+      const exactCandidates = (
+        await this.gateway.searchExactReferences({
+          embedding: globalEmbedding,
+          matchCount: searchBase.matchCount,
+          query: globalQuery,
+          referenceKeys: exactReferences.map(
+            (reference) => reference.lookupKey,
+          ),
+          retrievalScope,
         })
-      : Promise.resolve<RetrievedChunk[]>([]);
-    const [rawGlobalSources, rawSelectedSources] = await Promise.all([
-      globalSearch,
-      selectedSearch,
-    ]);
+      )
+        .map(sanitizeRetrievedEvidence)
+        .filter((source): source is RetrievedChunk => Boolean(source))
+        .filter((source) =>
+          exactReferences.some((reference) =>
+            sourceMatchesExactDocumentReference(source, reference),
+          ),
+        );
+      const missingExactReferences = exactReferences.filter(
+        (reference) =>
+          !exactCandidates.some((source) =>
+            sourceMatchesExactDocumentReference(source, reference),
+          ),
+      );
+      if (missingExactReferences.length) {
+        return {
+          kind: 'no_evidence',
+          missingExactReferences,
+          topRelevanceScore: null,
+        };
+      }
+      rawGlobalSources = exactCandidates;
+      rawSelectedSources = selectedModuleId
+        ? exactCandidates.filter((source) =>
+            sourceIncludesContext(source, selectedModuleId),
+          )
+        : [];
+    } else {
+      const globalSearch = this.gateway.search({
+        ...searchBase,
+        embedding: globalEmbedding,
+        query: globalQuery,
+        selectedModuleId: null,
+      });
+      const selectedSearch = selectedModuleId
+        ? this.gateway.search({
+            ...searchBase,
+            embedding: selectedEmbedding,
+            query: selectedQuery,
+            selectedModuleId,
+          })
+        : Promise.resolve<RetrievedChunk[]>([]);
+      [rawGlobalSources, rawSelectedSources] = await Promise.all([
+        globalSearch,
+        selectedSearch,
+      ]);
+    }
+    // La ruta conserva las asociaciones de todos los documentos pertinentes.
+    // La deduplicación interdocumental ocurre solo al armar las fuentes que se
+    // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
     const globalRoutingSources = sourcesWithoutVersionDuplicates(
       byScoreDescending(
         rawGlobalSources

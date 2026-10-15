@@ -254,6 +254,11 @@ describe('ChatService — lineamientos del cliente', () => {
         replyRole: 'no_evidence',
         sources: [],
       });
+      expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+      expect(events.at(-1)).toMatchObject({
+        data: { provider: 'rule' },
+        type: 'done',
+      });
     });
 
     it('una respuesta que cita no se confunde con una negativa', async () => {
@@ -762,7 +767,7 @@ describe('ChatService — lineamientos del cliente', () => {
       );
     });
 
-    it('una negativa larga sin citas ya mostrada se reemplaza por «sin evidencia»', async () => {
+    it('una negativa larga sin citas nunca se muestra antes de «sin evidencia»', async () => {
       ragService.retrieve.mockResolvedValue({
         kind: 'evidence',
         resolvedModule: { id: MODULE_ID, name: 'Licencias' },
@@ -778,11 +783,19 @@ describe('ChatService — lineamientos del cliente', () => {
 
       const events = await collect();
 
-      expect(events.map((event) => event.type)).toContain('token');
-      expect(events.at(-2)?.type).toBe('no_evidence');
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'no_evidence',
+        'done',
+      ]);
       expect(completion()).toMatchObject({
         replyRole: 'no_evidence',
         sources: [],
+      });
+      expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+      expect(events.at(-1)).toMatchObject({
+        data: { provider: 'rule' },
+        type: 'done',
       });
     });
 

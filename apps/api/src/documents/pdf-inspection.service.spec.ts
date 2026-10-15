@@ -98,7 +98,7 @@ describe('PdfInspectionService', () => {
       format: 'docx',
       mimeType:
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      pageCount: 1,
+      pageCount: null,
     });
 
     const doc = Buffer.concat([
@@ -110,7 +110,7 @@ describe('PdfInspectionService', () => {
     ).resolves.toMatchObject({
       format: 'doc',
       mimeType: 'application/msword',
-      pageCount: 1,
+      pageCount: null,
     });
 
     const md = Buffer.from('# Título\nContenido del documento');
@@ -119,7 +119,7 @@ describe('PdfInspectionService', () => {
     ).resolves.toMatchObject({
       format: 'md',
       mimeType: 'text/markdown',
-      pageCount: 1,
+      pageCount: null,
     });
   });
 
@@ -147,7 +147,7 @@ describe('PdfInspectionService', () => {
     expect(result).toMatchObject({
       format: 'pdf',
       mimeType: 'application/pdf',
-      pageCount: 1,
+      pageCount: null,
       sizeBytes: largePdf.length,
     });
     // El PDF grande no se analiza: el parser nunca se invoca.

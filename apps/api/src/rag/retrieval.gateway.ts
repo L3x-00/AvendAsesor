@@ -49,4 +49,15 @@ export interface RetrievalGateway {
     retrievalScope: RetrievalScope;
     selectedModuleId: string | null;
   }): Promise<RetrievedChunk[]>;
+  /**
+   * Búsqueda acotada a las normas que la persona identificó expresamente. Si
+   * no está disponible en un doble antiguo, el servicio debe fallar cerrado.
+   */
+  searchExactReferences?(input: {
+    embedding: number[];
+    matchCount: number;
+    query: string;
+    referenceKeys: string[];
+    retrievalScope: RetrievalScope;
+  }): Promise<RetrievedChunk[]>;
 }

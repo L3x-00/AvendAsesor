@@ -9,6 +9,8 @@ import {
   RAG_TRUNCATION_NOTE,
   evaluateAnswerCitationQuality,
   evaluateAnswerCitationQualityDetails,
+  incompleteExactReferencesMessage,
+  missingExactReferencesMessage,
   noEvidenceMessage,
   type ChatStreamEvent,
 } from './chat.service';
@@ -150,9 +152,7 @@ describe('ChatService', () => {
         type: 'done',
       },
     ]);
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'advisory', sources: [] }),
-    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         replyRole: 'no_evidence',
@@ -162,7 +162,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('un pedido ajeno recibe una respuesta amable que lo menciona, sin la marca', async () => {
+  it('un pedido aparentemente ajeno usa una plantilla segura sin consultar al modelo', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -175,41 +175,27 @@ describe('ChatService', () => {
       })(),
     );
 
-    // El clasificador no lo reconoce como ajeno: lo decide el asesor.
+    // El clasificador no lo reconoce como ajeno. La ruta sin evidencia no
+    // permite que el modelo complete una respuesta factual sin fuentes.
     const events = await collect(service, {
       question: '¿Qué opinas del arroz chaufa con harto sillao?',
     });
 
     const reply = events.find((event) => event.type === 'no_evidence');
     expect(reply?.data.message).toBe(
-      'Me parece divertido que quieras preparar un arroz chaufa, pero mi objetivo es orientarte en temas del ámbito educativo.',
+      buildConversationalReply('unrelated_no_evidence'),
     );
     expect(events.at(-1)).toMatchObject({
-      data: { provider: 'openai' },
+      data: { provider: 'rule' },
       type: 'done',
     });
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ qualitySignals: [], replyRole: 'no_evidence' }),
     );
   });
 
-  it.each([
-    [
-      'una marca al final se descarta y el texto pasa los filtros de orientación',
-      'Suele corresponder presentar la solicitud ante tu UGEL. [[FUERA_DE_AMBITO]]',
-      /^Suele corresponder presentar la solicitud ante tu UGEL\.\n\nSugerencias:/u,
-    ],
-    [
-      'un texto forzado tras la marca con cifras cae a la plantilla',
-      '[[FUERA_DE_AMBITO]] Claro: tu plazo es de 5 días y la multa de 300 soles.',
-      /^¡Qué buena pregunta!/u,
-    ],
-    [
-      'una variante de la marca con tilde también se reconoce',
-      '[[FUERA_DE_ÁMBITO]] Qué rico suena eso, pero mi objetivo es orientarte en temas educativos.',
-      /^Qué rico suena eso/u,
-    ],
-  ])('%s', async (_label, generated, expected) => {
+  it('ignora cualquier respuesta preparada por el proveedor en no_evidence', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -217,7 +203,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue(
       (async function* () {
         await Promise.resolve();
-        yield generated;
+        yield 'Según el artículo 49, tienes 5 días. [1]';
       })(),
     );
 
@@ -226,8 +212,11 @@ describe('ChatService', () => {
     });
 
     const reply = events.find((event) => event.type === 'no_evidence');
-    expect(reply?.data.message).toMatch(expected);
-    expect(reply?.data.message).not.toMatch(/FUERA_DE/u);
+    expect(reply?.data.message).toBe(
+      buildConversationalReply('unrelated_no_evidence'),
+    );
+    expect(reply?.data.message).not.toContain('artículo 49');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   it('un pedido ajeno detectado por el clasificador recibe la respuesta amable sin turno', async () => {
@@ -272,7 +261,7 @@ describe('ChatService', () => {
     ]);
   });
 
-  it('sin sustento y consulta del ámbito ofrece orientación general sin citas', async () => {
+  it('sin sustento responde de forma determinística y no genera hechos', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -291,19 +280,13 @@ describe('ChatService', () => {
       'no_evidence',
       'done',
     ]);
-    const advisory = events[1] as { data: { message: string } };
-    expect(advisory.data.message).not.toContain('Orientación general');
-    expect(advisory.data.message).toMatch(
-      /^Suele corresponder presentar la solicitud/u,
-    );
-    expect(advisory.data.message).toContain('Sugerencias:');
-    expect(advisory.data.message).not.toMatch(/\[\d+\]/u);
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'advisory', sources: [] }),
-    );
+    const noEvidence = events[1] as { data: { message: string } };
+    expect(noEvidence.data.message).toBe(noEvidenceMessage('current'));
+    expect(noEvidence.data.message).not.toContain('mesa de partes');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        qualitySignals: ['support_insufficient'],
+        qualitySignals: [],
         replyRole: 'no_evidence',
         sources: [],
         unansweredReason: 'insufficient_evidence',
@@ -311,7 +294,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('si la orientación general falla, responde el mensaje de sin evidencia', async () => {
+  it('no invoca al proveedor cuando falta evidencia', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -330,9 +313,10 @@ describe('ChatService', () => {
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ replyRole: 'no_evidence' }),
     );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
-  it('rechaza cifras y citas inventadas en la orientación sin fuentes', async () => {
+  it('no permite cifras ni citas preparadas por el proveedor sin fuentes', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
       topRelevanceScore: null,
@@ -351,6 +335,63 @@ describe('ChatService', () => {
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ replyRole: 'no_evidence', sources: [] }),
     );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('explica sin sustituir cuando falta una norma nombrada exactamente', async () => {
+    const missing = [
+      { display: 'RSG N.° 326-2017-MINEDU', key: '3262017MINEDU' },
+    ];
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      missingExactReferences: missing,
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Qué dispone la RSG N.° 326-2017-MINEDU?',
+    });
+
+    const reply = events.find((event) => event.type === 'no_evidence');
+    expect(reply?.data.message).toBe(missingExactReferencesMessage(missing));
+    expect(reply?.data.message).toContain('no usaré documentos parecidos');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({
+      data: { provider: 'rule' },
+      type: 'done',
+    });
+  });
+
+  it('pide completar una referencia normativa sin consultar al proveedor', async () => {
+    const incomplete = [
+      {
+        complete: false,
+        display: 'DS N.° 074-2019',
+        documentType: 'DECRETO_SUPREMO',
+        key: '0742019',
+        lookupKey: 'DS:0742019',
+      },
+    ];
+    ragService.retrieve.mockResolvedValue({
+      incompleteExactReferences: incomplete,
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: '¿Qué dispone el DS 074-2019?',
+    });
+
+    const reply = events.find((event) => event.type === 'no_evidence');
+    expect(reply?.data.message).toBe(
+      incompleteExactReferencesMessage(incomplete),
+    );
+    expect(reply?.data.message).toContain('año y la entidad emisora');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({
+      data: { provider: 'rule' },
+      type: 'done',
+    });
   });
 
   it('no divulga el inventario de documentos cuando falta evidencia', async () => {

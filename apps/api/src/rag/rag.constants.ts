@@ -16,13 +16,6 @@ export const MAX_RAG_ANSWER_TOKENS = 1_500;
 export const MAX_RAG_ADVISORY_TOKENS = 600;
 export const MAX_RAG_ADVISORY_CHARS = 4_000;
 /**
- * Cierre determinista de la orientación general: verificación oficial. La
- * respuesta ya no abre con «Orientación general (sin cita de norma):», que
- * restaba confianza (PO, 2026-10-01); la web enlaza MINEDU, UGEL y DRE.
- */
-export const RAG_ADVISORY_CLOSING =
-  'Sugerencias: verifica esta orientación en el portal oficial del MINEDU y consulta con tu UGEL o DRE antes de decidir.';
-/**
  * El modelo abre con esta marca una respuesta amable a un pedido ajeno al
  * ámbito o que busca información interna; el texto que sigue se muestra.
  */

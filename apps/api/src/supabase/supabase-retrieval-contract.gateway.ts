@@ -1,4 +1,7 @@
-import { RETRIEVAL_RPC_NAME } from '../rag/retrieval.constants';
+import {
+  EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+  RETRIEVAL_RPC_NAME,
+} from '../rag/retrieval.constants';
 import type { SupabaseServerClient } from './supabase.server-client';
 
 export type RetrievalContractStatus =
@@ -59,29 +62,49 @@ export class SupabaseRetrievalContractGatewayAdapter implements RetrievalContrac
     embedding[0] = 1;
 
     try {
-      const { error } = await (client as unknown as ProbeableClient)
-        .rpc(RETRIEVAL_RPC_NAME, {
-          p_query_embedding: embedding,
-          p_query_text: 'probe',
-          p_selected_module_id: null,
-          p_match_threshold: 1,
-          p_match_count: 1,
-          p_retrieval_scope: 'current',
-        })
-        .abortSignal(AbortSignal.timeout(5_000));
+      const contracts = [
+        {
+          args: {
+            p_match_count: 1,
+            p_match_threshold: 1,
+            p_query_embedding: embedding,
+            p_query_text: 'probe',
+            p_retrieval_scope: 'current',
+            p_selected_module_id: null,
+          },
+          name: RETRIEVAL_RPC_NAME,
+        },
+        {
+          args: {
+            p_match_count: 1,
+            p_query_embedding: embedding,
+            p_query_text: 'probe',
+            p_reference_keys: ['LEY:99999999'],
+            p_retrieval_scope: 'current',
+          },
+          name: EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+        },
+      ] as const;
 
-      if (!error) {
-        return { ok: true };
+      for (const contract of contracts) {
+        const { error } = await (client as unknown as ProbeableClient)
+          .rpc(contract.name, contract.args)
+          .abortSignal(AbortSignal.timeout(5_000));
+        if (!error) continue;
+
+        const probeError = error as ProbeError;
+        const missing =
+          (probeError.code !== undefined &&
+            MISSING_CODES.has(probeError.code)) ||
+          MISSING_MESSAGE.test(probeError.message ?? '');
+        return {
+          ok: false,
+          reason: missing ? 'missing' : 'error',
+          message: `${contract.name}: ${probeError.message ?? 'error de retrieval'}`,
+        };
       }
-      const probeError = error as ProbeError;
-      const missing =
-        (probeError.code !== undefined && MISSING_CODES.has(probeError.code)) ||
-        MISSING_MESSAGE.test(probeError.message ?? '');
-      return {
-        ok: false,
-        reason: missing ? 'missing' : 'error',
-        message: probeError.message ?? 'error de retrieval',
-      };
+
+      return { ok: true };
     } catch (error) {
       return {
         ok: false,

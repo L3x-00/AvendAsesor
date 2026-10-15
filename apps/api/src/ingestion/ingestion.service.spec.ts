@@ -104,6 +104,10 @@ describe('IngestionService', () => {
           2,
         ),
       },
+      {
+        pageNumber: 2,
+        text: 'Segunda página con texto suficiente para indexar.',
+      },
     ]);
     chunking.chunk.mockReturnValue([chunk]);
     embeddings.embed.mockResolvedValue([vector()]);
@@ -117,7 +121,7 @@ describe('IngestionService', () => {
     expect(insertedChunk.documentVersionId).toBe(job.documentVersionId);
     expect(insertedChunk.embedding).toHaveLength(1536);
     expect(gateway.refreshLease).toHaveBeenCalledWith(job, 300);
-    expect(gateway.complete).toHaveBeenCalledWith(job);
+    expect(gateway.complete).toHaveBeenCalledWith(job, 2);
   });
 
   it('extracts a docx via mammoth without touching the PDF path', async () => {
@@ -135,7 +139,7 @@ describe('IngestionService', () => {
     expect(chunking.chunk).toHaveBeenCalledWith([
       { pageNumber: 1, text: 'Texto del documento Word.' },
     ]);
-    expect(gateway.complete).toHaveBeenCalledWith(job);
+    expect(gateway.complete).toHaveBeenCalledWith(job, null);
   });
 
   it('extracts a markdown file as plain text', async () => {
@@ -153,6 +157,7 @@ describe('IngestionService', () => {
     expect(chunking.chunk).toHaveBeenCalledWith([
       { pageNumber: 1, text: '# Título\n\nCuerpo normativo.' },
     ]);
+    expect(gateway.complete).toHaveBeenCalledWith(job, null);
   });
 
   it('rejects a legacy .doc (OLE2) as an unsupported format', async () => {
@@ -253,6 +258,30 @@ describe('IngestionService', () => {
     for (const call of pdf.render.mock.calls as Array<[Buffer, number[]]>) {
       expect(call[1].length).toBeLessThanOrEqual(5);
     }
+  });
+
+  it('rejects a PDF over the page limit before OCR and embeddings', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    pdf.extract.mockResolvedValue(
+      Array.from({ length: 301 }, (_, index) => ({
+        pageNumber: index + 1,
+        text: ' ',
+      })),
+    );
+
+    await expect(service.processNext()).resolves.toBe(false);
+
+    expect(pdf.render).not.toHaveBeenCalled();
+    expect(ocr.withWorker).not.toHaveBeenCalled();
+    expect(chunking.chunk).not.toHaveBeenCalled();
+    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_FAILED',
+      'INGESTION_DOCUMENT_TOO_LARGE',
+      true,
+    );
   });
 
   it('records empty parsed content as a retryable failure', async () => {

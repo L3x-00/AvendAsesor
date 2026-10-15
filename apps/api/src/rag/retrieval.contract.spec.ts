@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
+  EXACT_REFERENCE_RETRIEVAL_RPC_ARG_NAMES,
+  EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
   RETRIEVAL_RPC_ARG_NAMES,
   RETRIEVAL_RPC_NAME,
 } from './retrieval.constants';
@@ -46,6 +48,16 @@ describe('contrato de la RPC de retrieval (M7)', () => {
     // La dimensión del embedding es parte del contrato: el gateway envía un
     // number[] de 1536; un cambio de modelo que altere la dimensión rompería el
     // runtime aunque los nombres de argumentos no cambien.
+    expect(params).toMatch(/vector\s*\(\s*1536\s*\)/i);
+  });
+
+  it('la búsqueda exacta tiene un contrato migrado y vector de 1536 dimensiones', () => {
+    const params = latestFunctionParamBlock(EXACT_REFERENCE_RETRIEVAL_RPC_NAME);
+
+    expect(params).not.toBeNull();
+    for (const argument of EXACT_REFERENCE_RETRIEVAL_RPC_ARG_NAMES) {
+      expect(params).toContain(argument);
+    }
     expect(params).toMatch(/vector\s*\(\s*1536\s*\)/i);
   });
 });

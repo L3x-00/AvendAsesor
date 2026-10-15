@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { SUPABASE_RETRIEVAL_CONTRACT_GATEWAY } from '../supabase/supabase.constants';
 import type { RetrievalContractGateway } from '../supabase/supabase-retrieval-contract.gateway';
-import { RETRIEVAL_RPC_NAME } from './retrieval.constants';
+import {
+  EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
+  RETRIEVAL_RPC_NAME,
+} from './retrieval.constants';
 
 /**
  * Fail-fast de arranque (M7): al bootear, verifica que la RPC de retrieval del
@@ -29,13 +32,15 @@ export class RetrievalContractProbe implements OnApplicationBootstrap {
     const status = await this.gateway.probe();
 
     if (status.ok) {
-      this.logger.log(`Retrieval RPC contract OK (${RETRIEVAL_RPC_NAME}).`);
+      this.logger.log(
+        `Retrieval RPC contracts OK (${RETRIEVAL_RPC_NAME}, ${EXACT_REFERENCE_RETRIEVAL_RPC_NAME}).`,
+      );
       return;
     }
 
     if (status.reason === 'missing') {
       this.logger.error(
-        `RAG retrieval RPC "${RETRIEVAL_RPC_NAME}" is missing or its signature ` +
+        `A required RAG retrieval RPC (${RETRIEVAL_RPC_NAME}, ${EXACT_REFERENCE_RETRIEVAL_RPC_NAME}) is missing or its signature ` +
           `changed (migration/code mismatch). Chat queries will fail with 503 ` +
           `until the migration that defines it is applied. Detail: ${status.message}`,
       );
