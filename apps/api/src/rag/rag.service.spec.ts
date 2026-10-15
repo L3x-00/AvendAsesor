@@ -27,6 +27,18 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([salary, answer]);
   });
 
+  // Ronda 4 (M1): sin valor, «jornada» o «escala magisterial» son otro tema.
+  it.each([
+    '¿Cuál es la jornada laboral de un auxiliar?',
+    '¿Qué es la escala magisterial?',
+    '¿Cuál es la carga horaria de aula en el colegio?',
+  ])('«%s» es otra pregunta y no hereda factores', (other) => {
+    expect(inheritedFactorQuestions(other, [salary], false)).toEqual([]);
+    expect(
+      inheritedFactorQuestions('¿y en secundaria?', [salary, other], false),
+    ).toEqual([]);
+  });
+
   it('solo toma la consulta salarial más reciente', () => {
     expect(
       inheritedFactorQuestions(

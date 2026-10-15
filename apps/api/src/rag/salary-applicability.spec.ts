@@ -334,6 +334,39 @@ describe('salaryApplicabilityTier', () => {
       ).toBe(false);
     });
 
+    // Ronda 4 (M2): una fecha de un hecho personal no fija el período; solo la
+    // que marca un punto en el tiempo.
+    it('la fecha de ingreso de la persona no es el período consultado', () => {
+      expect(
+        salaryQuestionProfile(
+          'Ingresé a la carrera el 15 de marzo de 2015, ¿cuál es mi remuneración?',
+        ).year,
+      ).toBeNull();
+      expect(
+        salaryQuestionProfile(
+          '¿Cuál era la remuneración vigente al 31 de diciembre de 2024?',
+        ).year,
+      ).toBe(2024);
+    });
+
+    // Ronda 4 (L2): solo los meses reales delimitan una fecha.
+    it('un número y «de» antes de una palabra que no es mes no es una fecha', () => {
+      expect(
+        compatible(
+          '¿Cuánto gana un docente nombrado en 2026?',
+          'La remuneración mensual del docente nombrado, tramo 2 de vigencia del 2025, es de S/ 3 300,60.',
+        ),
+      ).toBe(false);
+    });
+
+    // Ronda 4 (M3): la escala respondida con las palabras de la aclaración.
+    it.each([
+      ['Escala magisterial 2', '2'],
+      ['Escala remunerativa III', '3'],
+    ])('lee la escala de «%s»', (answer, scale) => {
+      expect(salaryQuestionProfile(answer).scale).toBe(scale);
+    });
+
     // Ronda 2 (N-L1): «Directivas» es el tipo de norma también en plural.
     it('no toma «las Directivas» por el cargo directivo', () => {
       expect(
@@ -459,6 +492,23 @@ describe('withInheritedSalaryFactors', () => {
       jornadaHours: 30,
       role: 'docente',
       scale: '2',
+    });
+  });
+
+  // Ronda 4 (M4): el concepto adicional pedido en un turno intermedio que no
+  // usa un término salarial sigue pidiéndose en el turno siguiente.
+  it('conserva el concepto adicional pedido en un turno intermedio', () => {
+    const profile = salaryQuestionProfile(
+      withInheritedSalaryFactors('¿y para 30 horas?', [
+        '¿Cuánto gana un docente nombrado?',
+        '¿Y la compensación por tiempo de servicios?',
+      ]),
+    );
+
+    expect(profile).toMatchObject({
+      asksSpecialAllocation: true,
+      isSalaryQuestion: true,
+      jornadaHours: 30,
     });
   });
 

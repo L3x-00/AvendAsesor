@@ -66,7 +66,8 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
 
 const HOURS_PATTERN = /\b(\d{1,2})\)?\s*(?:h|horas)\b/u;
 const HOURS_PATTERN_ALL = new RegExp(HOURS_PATTERN.source, 'gu');
-const SCALE_PATTERN_ALL = /\bescala\s*(\d{1,2}|[ivx]{1,4})\b/gu;
+const SCALE_PATTERN_ALL =
+  /\bescala\s*(?:magisterial\s+|remunerativa\s+)?(\d{1,2}|[ivx]{1,4})\b/gu;
 
 /**
  * Un plazo no es una jornada: «dentro de las 24 horas», «el plazo de 48 horas»
@@ -223,20 +224,37 @@ const YEAR_PATTERN =
  * evidencia es la fecha de emisión o de publicación, no el período de la cifra.
  * En la consulta, en cambio, «al 31 de diciembre de 2024» sí fija el período.
  */
-const CALENDAR_DATE_BEFORE_YEAR =
-  /\b\d{1,2}\s*[°º.]*\s+de\s+[a-z]+\s+del?\s*$/u;
+const MONTHS =
+  'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre';
+const CALENDAR_DATE_BEFORE_YEAR = new RegExp(
+  `\\b\\d{1,2}\\s*[°º.]*\\s+de\\s+(?:${MONTHS})\\s+del?\\s*$`,
+  'u',
+);
+/** «al 31 de diciembre de 2024»: una fecha que sí fija el período consultado. */
+const POINT_IN_TIME_DATE_BEFORE_YEAR = new RegExp(
+  `\\b(?:al|vigente al|a la fecha del?)\\s+\\d{1,2}\\s*[°º.]*\\s+de\\s+(?:${MONTHS})\\s+del?\\s*$`,
+  'u',
+);
 const RANGE_ANCHOR_BEFORE_YEAR =
   /\b(?:desde|hasta|partir de|partir del)\b(?:\s+[^\s.!?]+){0,6}\s*$/u;
 
-function yearsIn(text: string, skipCalendarDates = false): number[] {
+/**
+ * Años explícitos de un texto. En la evidencia ninguna fecha calendario cuenta.
+ * En la consulta solo la cuenta la que fija un punto en el tiempo («al 31 de
+ * diciembre de 2024»): «ingresé el 15 de marzo de 2015» es un hecho personal.
+ */
+function yearsIn(
+  text: string,
+  source: 'evidence' | 'question' = 'question',
+): number[] {
   const years: number[] = [];
   for (const match of text.matchAll(YEAR_PATTERN)) {
     const before = text.slice(0, match.index);
-    if (
-      RANGE_ANCHOR_BEFORE_YEAR.test(before) ||
-      (skipCalendarDates && CALENDAR_DATE_BEFORE_YEAR.test(before))
-    ) {
-      continue;
+    if (RANGE_ANCHOR_BEFORE_YEAR.test(before)) continue;
+    if (CALENDAR_DATE_BEFORE_YEAR.test(before)) {
+      const fixesPeriod =
+        source === 'question' && POINT_IN_TIME_DATE_BEFORE_YEAR.test(before);
+      if (!fixesPeriod) continue;
     }
     years.push(Number(match[0]));
   }
@@ -341,9 +359,12 @@ function mergeSalaryTurn(
     accumulated.condition !== null &&
     turn.condition !== accumulated.condition;
   return {
-    asksSpecialAllocation: turn.isSalaryQuestion
-      ? turn.asksSpecialAllocation
-      : accumulated.asksSpecialAllocation,
+    // Un turno que pide un concepto adicional («¿y la compensación por…?») lo
+    // fija aunque no use un término salarial; uno que no dice nada lo conserva.
+    asksSpecialAllocation:
+      turn.isSalaryQuestion || turn.asksSpecialAllocation
+        ? turn.asksSpecialAllocation
+        : accumulated.asksSpecialAllocation,
     condition: turn.condition ?? (roleChanged ? null : accumulated.condition),
     isSalaryQuestion: accumulated.isSalaryQuestion || turn.isSalaryQuestion,
     jornadaHours:
@@ -462,7 +483,7 @@ function evidenceFactorsIn(text: string): Record<SalaryFactor, string[]> {
     condicion: conditionsIn(text),
     escala: scalesIn(text),
     jornada: evidenceJornadaHoursIn(text).map(String),
-    periodo: yearsIn(text, true).map(String),
+    periodo: yearsIn(text, 'evidence').map(String),
   };
 }
 

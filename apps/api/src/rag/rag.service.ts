@@ -605,11 +605,20 @@ const SALARY_FACTOR_TERMS =
  * otro tema propio («licencia por enfermedad») lo interrumpe.
  */
 function continuesSalaryThread(turn: string): boolean {
-  const normalized = normalizeSpanishText(turn).replace(
-    SALARY_FACTOR_TERMS,
-    ' ',
+  // Solo es un factor de la cifra cuando trae su valor («jornada de 30 horas»,
+  // «escala magisterial 2»); «¿cuál es la jornada laboral de un auxiliar?» es
+  // otra pregunta.
+  const profile = salaryQuestionProfile(turn);
+  const declaresFactor =
+    profile.jornadaHours !== null || profile.scale !== null;
+  const normalized = normalizeSpanishText(turn);
+  return (
+    !hasTopicTerm(
+      declaresFactor
+        ? normalized.replace(SALARY_FACTOR_TERMS, ' ')
+        : normalized,
+    ) || refersBack(turn)
   );
-  return !hasTopicTerm(normalized) || refersBack(turn);
 }
 
 const ARCHIVED_INTENT_PATTERNS = [
