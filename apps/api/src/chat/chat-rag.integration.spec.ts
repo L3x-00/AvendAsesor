@@ -382,6 +382,8 @@ class InMemoryChatHistoryGateway implements ChatHistoryGateway {
 
 class RecordingAnswerGateway implements AnswerGateway {
   readonly inputs: AnswerGatewayInput[] = [];
+  /** Respuesta que simula el modelo; por defecto, una orientación citada. */
+  answer: string | null = null;
 
   async *generate(input: AnswerGatewayInput): AsyncIterable<string> {
     await Promise.resolve();
@@ -393,6 +395,10 @@ class RecordingAnswerGateway implements AnswerGateway {
         return;
       }
       yield 'Suele corresponder presentar la solicitud ante tu UGEL.';
+      return;
+    }
+    if (this.answer !== null) {
+      yield this.answer;
       return;
     }
     yield `Orientación sustentada en ${input.sources[0]?.documentTitle}. [1]`;
@@ -740,5 +746,171 @@ describe('ChatService + RagService integration', () => {
       qualitySignals: [],
       replyRole: 'assistant',
     });
+  });
+
+  // CR-08 / OBS-007 y QA-UI-05: pedir el enlace del documento exacto terminaba
+  // en «no puedo proporcionar enlaces» aunque la misma respuesta mostraba una
+  // cita enlazable. Ahora responde la ruta determinista, sin proveedor: nombre
+  // del documento, página física real y referencia [n] que baja a la fuente.
+  it('responde el enlace exacto con documento y página sin consultar al modelo', async () => {
+    const events = await collect(service, {
+      question:
+        'Dame el enlace del documento exacto donde aparece la remuneración mensual del docente.',
+    });
+
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    expect(message).toContain('«Norma de remuneraciones del sector docente»');
+    expect(message).toContain('la página 3');
+    expect(message).toContain('[1]');
+    expect(message).toContain('«Ver»');
+    expect(message).not.toContain('no puedo');
+
+    const sources = events.find((event) => event.type === 'sources')?.data
+      .sources;
+    expect(sources).toEqual([
+      expect.objectContaining({ pageStart: 3, rank: 1 }),
+    ]);
+    // El enlace lo genera la aplicación junto a la fuente persistida: sobrevive
+    // a recargar el historial.
+    expect(history.completions[0]?.sources).toEqual([
+      expect.objectContaining({ chunkId: remunerationPage3.chunkId }),
+    ]);
+    expect(history.completions[0]).toMatchObject({
+      qualitySignals: [],
+      replyRole: 'assistant',
+      unansweredReason: null,
+    });
+    expect(answers.inputs).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({
+      data: { provider: 'rule' },
+      type: 'done',
+    });
+  });
+
+  // CR-08 / OBS-012: la unidad disponible de un PDF es la página; la respuesta
+  // no puede inventar un minuto.
+  it('aclara que un PDF se ubica por página cuando se pide un minuto', async () => {
+    const events = await collect(service, {
+      question:
+        '¿En qué minuto del documento se menciona la remuneración mensual del docente?',
+    });
+
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    expect(message).toContain('por página, no por minuto');
+    expect(message).toContain('la página 3');
+    expect(message).not.toMatch(/\bminuto\s*\d/iu);
+    expect(message).not.toMatch(/\d{1,2}:\d{2}/u);
+    expect(answers.inputs).toHaveLength(0);
+  });
+
+  // El seguimiento real reportado fue «Dame el enlace.» dentro de la
+  // conversación: sin nombrar el documento, la conversación es el referente.
+  it('resuelve «dame el enlace» como seguimiento de la conversación', async () => {
+    const first = await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+    });
+    const conversationId = first.find((event) => event.type === 'conversation')
+      ?.data.conversationId;
+
+    const events = await collect(service, {
+      conversationId,
+      question: 'Dame el enlace de la licencia.',
+    });
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+
+    expect(message).toContain('«Norma de licencias»');
+    expect(message).toContain('la página 1');
+    // Solo el primer turno llegó al modelo: el pedido del enlace es determinista.
+    expect(answers.inputs).toHaveLength(1);
+  });
+
+  // Control de falsedad: una pregunta de contenido que menciona el documento
+  // sigue respondiéndose con la evidencia y sus citas, no con una lista de
+  // archivos.
+  it('no intercepta la pregunta de contenido que menciona el documento', async () => {
+    const events = await collect(service, {
+      question: '¿Qué dice el documento sobre la licencia por salud?',
+    });
+
+    expect(answers.inputs).toHaveLength(1);
+    expect(events.find((event) => event.type === 'token')?.data.text).toContain(
+      '[1]',
+    );
+  });
+
+  // CR-07 (punto 4): la tabla se sostiene solo si cada fila cita una fuente
+  // entregada; la interfaz ya la degrada a texto y el caso queda señalado para
+  // revisión humana.
+  it('acepta la tabla cuyas filas citan la fuente entregada', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      '| Salud | 30 días [1] |',
+      '| Maternidad | 90 días [1] |',
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).not.toContain(
+      'support_partial',
+    );
+  });
+
+  it('señala para revisión la tabla con una fila sin cita', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      '| Salud | 30 días [1] |',
+      '| Maternidad | 90 días |',
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
+      'Maternidad',
+    );
+  });
+
+  // Revisión cruzada: con más filas de las que el contrato permite, la web
+  // rechaza la tabla entera y ninguna fila se pinta como grilla; el caso queda
+  // señalado para revisión aunque todas las filas citen una fuente.
+  it('señala para revisión la tabla que excede el tope de filas', async () => {
+    answers.answer = [
+      'Estos son los plazos [1]:',
+      '',
+      '| Motivo | Duración |',
+      '| --- | --- |',
+      ...Array.from(
+        { length: 7 },
+        (_value, index) => `| Motivo ${index + 1} | ${index + 1}0 días [1] |`,
+      ),
+    ].join('\n');
+
+    await collect(service, {
+      question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
+    });
+
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
+      'Motivo 7',
+    );
   });
 });

@@ -19,6 +19,7 @@ import { detectOverviewRequest, matchTopicModule } from './catalog/topic-match';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
+import { unsupportedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
@@ -87,6 +88,10 @@ import {
   isTopiclessQuestion,
 } from './intent/intent-classifier';
 import { officialSitesIn } from './intent/official-sites';
+import {
+  sourceLocationMessage,
+  sourceLocationRequestIn,
+} from './intent/source-location';
 import { normalizeSpanishText } from '../rag/text-normalization';
 
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
@@ -985,6 +990,61 @@ export class ChatService {
 
     if (input.abortSignal?.aborted) return;
 
+    // CR-08 (punto 4): «dame el enlace», «¿en qué página…?», «¿en qué minuto…?».
+    // Se responde de forma determinista —sin invocar al proveedor— con la
+    // identidad, la página física y la referencia enlazable de las fuentes ya
+    // recuperadas: el modelo negaba una capacidad que la interfaz sí ofrece
+    // (OBS-007) y una pregunta por «minuto» de un PDF no se corregía (OBS-012).
+    // Corre antes de las aclaraciones: quien pide dónde está el documento no
+    // está preguntando un monto ni una causal.
+    if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
+      const locationRequest = sourceLocationRequestIn(question, {
+        inConversation: continuesConversation,
+      });
+      if (locationRequest) {
+        const citations = toCitationBundle(
+          retrieval.sources,
+          selectedModuleId,
+          relatedModule,
+          relatedSubmodule,
+        );
+        const message = sourceLocationMessage({
+          asksMinute: locationRequest.asksMinute,
+          sources: retrieval.sources,
+        });
+        if (message) {
+          if (input.abortSignal?.aborted) return;
+          const completed = await this.historyGateway.completeTurn({
+            answer: message,
+            conversationId: turn.conversationId,
+            faqMemory,
+            detectedModuleId: relatedModule?.id ?? null,
+            detectedSubmoduleId: relatedSubmodule?.id ?? null,
+            qualitySignals: [],
+            replyRole: 'assistant',
+            retrievalScope,
+            sources: citations.inputs,
+            topRelevanceScore: retrieval.topRelevanceScore,
+            unansweredReason: null,
+            userId: input.authorization.userId,
+            userMessageId: turn.userMessageId,
+          });
+          yield { data: { sources: citations.sources }, type: 'sources' };
+          yield { data: { text: message }, type: 'token' };
+          yield {
+            data: {
+              conversationId: turn.conversationId,
+              inReplyToMessageId: turn.userMessageId,
+              messageId: completed.answerMessageId,
+              provider: 'rule',
+            },
+            type: 'done',
+          };
+          return;
+        }
+      }
+    }
+
     if (retrieval.kind === 'no_evidence') {
       // Sin sustento no se consulta al modelo: cualquier orientación factual
       // sin fuentes sería indistinguible de una alucinación. Para una norma
@@ -1267,6 +1327,18 @@ export class ChatService {
         qualitySignals.add('support_partial');
         qualityExcerpts.support_partial ??= salaryFinding.excerpt;
       }
+    }
+    // CR-07 (punto 4): una tabla solo se sostiene con una cita válida por fila.
+    // Si alguna fila no cita ninguna fuente entregada —o si la tabla excede el
+    // tope de filas y no se pintará entera—, la interfaz la mostrará como texto
+    // y el caso queda señalado para revisión humana.
+    const unsupportedRows = unsupportedTableRows(
+      finalAnswer,
+      retrieval.sources.length,
+    );
+    if (unsupportedRows.length) {
+      qualitySignals.add('support_partial');
+      qualityExcerpts.support_partial ??= unsupportedRows[0];
     }
     if (retrieval.topRelevanceScore < this.matchThreshold() + 0.05) {
       qualitySignals.add('low_confidence');
