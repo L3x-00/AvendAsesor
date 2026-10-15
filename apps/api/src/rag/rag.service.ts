@@ -6,7 +6,10 @@ import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
 import { refersBack } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
+import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
+import { salaryApplicabilityTier } from './salary-applicability';
+import { orderSourcesForDelivery } from './temporal-precedence';
 import {
   exactDocumentReferencesIn,
   type ExactDocumentReference,
@@ -241,14 +244,45 @@ function withinScoreMargin(
   return sources.filter((source) => source.semanticScore >= best - margin);
 }
 
-/** Evidencia que se entrega: sin duplicados, dentro de la banda y acotada. */
+/**
+ * Consolida la evidencia por documento y la ordena con precedencia temporal
+ * determinista. Un documento no debe ocupar varias referencias por fragmentos
+ * contiguos y la situación documental pesa más que el año.
+ */
+function prepareDelivery(
+  sources: RetrievedChunk[],
+  question?: string,
+): RetrievedChunk[] {
+  return orderSourcesForDelivery(
+    consolidateDocumentEvidence(sources),
+    question
+      ? {
+          applicability: (source: RetrievedChunk) =>
+            salaryApplicabilityTier(question, source),
+        }
+      : {},
+  );
+}
+
+/**
+ * Evidencia que se entrega al modelo y al usuario: dentro de la banda de
+ * relevancia, consolidada por documento (una referencia visible por versión,
+ * salvo que otra ubicación aporte algo materialmente distinto) y en orden
+ * determinista con precedencia temporal. `question` aporta la aplicabilidad al
+ * concepto consultado: en una consulta salarial, la remuneración general
+ * vigente precede a una asignación especial.
+ */
 function relevantSources(
   sources: RetrievedChunk[],
   limit: number,
+  question?: string,
 ): RetrievedChunk[] {
-  const eligible = withinScoreMargin(
-    uniqueSources(byScoreDescending(sources)),
-    RAG_SOURCE_SCORE_MARGIN,
+  const eligible = prepareDelivery(
+    withinScoreMargin(
+      uniqueSources(byScoreDescending(sources)),
+      RAG_SOURCE_SCORE_MARGIN,
+    ),
+    question,
   );
   const distinctDocuments = new Set(
     eligible.map((source) => source.documentVersionId),
@@ -739,7 +773,7 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, namedModule.id)
           : [];
         if (namedModule && scopedSources.length) {
-          const sources = relevantSources(scopedSources, matchCount);
+          const sources = relevantSources(scopedSources, matchCount, question);
           return {
             kind: 'evidence',
             resolvedModule: namedModule,
@@ -748,7 +782,11 @@ export class RagService {
           };
         }
 
-        const sources = relevantSources(globalRoutingSources, matchCount);
+        const sources = relevantSources(
+          globalRoutingSources,
+          matchCount,
+          question,
+        );
         return {
           kind: 'ambiguous',
           modules: route.modules,
@@ -762,6 +800,7 @@ export class RagService {
           ? attributableToModule(globalRoutingSources, resolvedModule.id)
           : globalRoutingSources,
         matchCount,
+        question,
       );
       return {
         kind: 'evidence',
@@ -801,6 +840,7 @@ export class RagService {
               currentRoute.resolvedModule.id,
             ),
             matchCount,
+            question,
           );
           return {
             kind: 'topic_change',
@@ -815,8 +855,9 @@ export class RagService {
           withinScoreMargin(globalRoutingSources, RAG_SOURCE_SCORE_MARGIN),
           withinScoreMargin(selectedRoutingSources, RAG_SOURCE_SCORE_MARGIN),
         );
-        const competingSources = uniqueSources(
-          byScoreDescending(competingCandidates),
+        const competingSources = prepareDelivery(
+          uniqueSources(byScoreDescending(competingCandidates)),
+          question,
         );
         return {
           kind: 'ambiguous',
@@ -834,7 +875,35 @@ export class RagService {
           sourceIncludesContext(source, selectedModuleId),
         )
       ) {
-        const sources = relevantSources(globalRoutingSources, matchCount);
+        // La consulta puede nombrar el proceso de otro módulo aunque la
+        // conversación esté abierta en uno distinto: si nombra uno de los
+        // módulos en conflicto, ese es el tema y no corresponde pedir una
+        // aclaración (OBS-014).
+        const namedModule = disambiguateRouteByQuestion(
+          question,
+          currentRoute.modules,
+        );
+        if (namedModule) {
+          const sources = relevantSources(
+            attributableToModule(globalRoutingSources, namedModule.id),
+            matchCount,
+            question,
+          );
+          if (sources.length) {
+            return {
+              kind: 'topic_change',
+              resolvedModule: namedModule,
+              sources,
+              topRelevanceScore: topScore(sources),
+            };
+          }
+        }
+
+        const sources = relevantSources(
+          globalRoutingSources,
+          matchCount,
+          question,
+        );
         return {
           kind: 'ambiguous',
           modules: currentRoute.modules,
@@ -856,6 +925,7 @@ export class RagService {
           ),
         ]),
         matchCount,
+        question,
       );
       const selectedRoot = resolveSelectedRootModule(sources, selectedModuleId);
       return {
@@ -873,7 +943,11 @@ export class RagService {
       currentRoute?.kind === 'resolved' &&
       currentRoute.resolvedModule?.id === selectedModuleId
     ) {
-      const sources = relevantSources(globalRoutingSources, matchCount);
+      const sources = relevantSources(
+        globalRoutingSources,
+        matchCount,
+        question,
+      );
       return {
         kind: 'evidence',
         resolvedModule: currentRoute.resolvedModule,
@@ -883,7 +957,11 @@ export class RagService {
     }
 
     if (globalRoutingSources.length) {
-      const sources = relevantSources(globalRoutingSources, matchCount);
+      const sources = relevantSources(
+        globalRoutingSources,
+        matchCount,
+        question,
+      );
       return {
         kind: 'ambiguous',
         modules: currentRoute?.modules ?? [],

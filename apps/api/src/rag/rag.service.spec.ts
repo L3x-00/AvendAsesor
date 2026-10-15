@@ -267,10 +267,13 @@ describe('RagService', () => {
       source,
       {
         ...source,
-        chunkId: 'chunk-b',
         chunkContent: 'Artículo 1. Contenido chunk-b.',
+        chunkId: 'chunk-b',
+        documentId: 'document-b',
+        documentVersionId: 'version-b',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
+        semanticScore: 0.88,
       },
     ];
     gateway.search.mockResolvedValue(sources);
@@ -664,9 +667,15 @@ describe('RagService', () => {
   it('ignores a low-scoring tail source from another module when routing (no false clarification)', async () => {
     // Datos reales: 3 fragmentos del documento de destitución (0.665–0.595) y
     // uno de otro módulo a 0.52 pedían aclaración en «¿y cuál es el plazo?».
+    // Un fragmento contiguo del mismo documento no vuelve a ocupar una
+    // referencia: se conserva el mejor y solo se añade otra ubicación si aporta
+    // algo material (aquí, el plazo de la segunda destitución).
     const main = [0.665, 0.665, 0.595].map((semanticScore, index) => ({
       ...source,
-      chunkContent: `Artículo 1. Destitución ${index}.`,
+      chunkContent:
+        index === 2
+          ? 'Artículo 1. Destitución 2: abandono de cargo por 3 días.'
+          : `Artículo 1. Destitución ${index}: falta grave reiterada.`,
       chunkId: `main-${index}`,
       semanticScore,
     }));
@@ -686,7 +695,7 @@ describe('RagService', () => {
     ).resolves.toEqual({
       kind: 'evidence',
       resolvedModule: { id: 'module-a', name: 'Módulo A' },
-      sources: main,
+      sources: [main[0], main[2]],
       topRelevanceScore: 0.665,
     });
   });
@@ -712,7 +721,13 @@ describe('RagService', () => {
     gateway.search.mockResolvedValue([
       source,
       { ...source, chunkId: 'duplicate' },
-      { ...source, chunkContent: 'Otro contenido.', chunkId: 'other' },
+      {
+        ...source,
+        chunkContent: 'Otro contenido.',
+        chunkId: 'other',
+        documentId: 'other-document',
+        documentVersionId: 'other-version',
+      },
     ]);
 
     const result = await service.retrieve('Consulta', null);
@@ -893,6 +908,8 @@ describe('RagService', () => {
         ...source,
         chunkContent: `Fragmento ${index}.`,
         chunkId: `band-${index}`,
+        documentId: `document-${index}`,
+        documentVersionId: `version-${index}`,
         semanticScore,
       })),
     );
@@ -939,12 +956,16 @@ describe('RagService', () => {
       ...source,
       chunkContent: 'Reasignación.',
       chunkId: 'r',
+      documentId: 'document-r',
+      documentVersionId: 'version-r',
       semanticScore: 0.7,
     };
     const permuta = {
       ...source,
       chunkContent: 'Permuta.',
       chunkId: 'p',
+      documentId: 'document-p',
+      documentVersionId: 'version-p',
       semanticScore: 0.72,
     };
     gateway.search.mockImplementation(
@@ -994,8 +1015,10 @@ describe('RagService', () => {
   it('clarifies instead of auto-switching when both modules have competing evidence', async () => {
     const switchedSource = {
       ...source,
-      chunkId: 'chunk-b',
       chunkContent: 'Artículo 1. Contenido chunk-b.',
+      chunkId: 'chunk-b',
+      documentId: 'document-b',
+      documentVersionId: 'version-b',
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95,
@@ -1068,6 +1091,8 @@ describe('RagService', () => {
       ...source,
       chunkId: `global-${index}`,
       chunkContent: `Contenido global-${index}.`,
+      documentId: `global-document-${index}`,
+      documentVersionId: `global-version-${index}`,
       moduleIds: ['module-b'],
       moduleNames: ['Módulo B'],
       semanticScore: 0.95 - index / 1_000,
@@ -1076,6 +1101,8 @@ describe('RagService', () => {
       ...source,
       chunkId: `selected-${index}`,
       chunkContent: `Contenido selected-${index}.`,
+      documentId: `selected-document-${index}`,
+      documentVersionId: `selected-version-${index}`,
       semanticScore: 0.9 - index / 1_000,
     }));
     gateway.search.mockImplementation(
@@ -1105,15 +1132,19 @@ describe('RagService', () => {
     const globalSources = [
       {
         ...source,
-        chunkId: 'chunk-b',
         chunkContent: 'Artículo 1. Contenido chunk-b.',
+        chunkId: 'chunk-b',
+        documentId: 'document-b',
+        documentVersionId: 'version-b',
         moduleIds: ['module-b'],
         moduleNames: ['Módulo B'],
       },
       {
         ...source,
-        chunkId: 'chunk-c',
         chunkContent: 'Artículo 1. Contenido chunk-c.',
+        chunkId: 'chunk-c',
+        documentId: 'document-c',
+        documentVersionId: 'version-c',
         moduleIds: ['module-c'],
         moduleNames: ['Módulo C'],
       },
@@ -1195,6 +1226,196 @@ describe('RagService', () => {
       );
     },
   );
+
+  it('entrega una sola referencia por documento cuando el fragmento contiguo no aporta nada nuevo', async () => {
+    // OBS-009/OBS-017: dos fragmentos contiguos del mismo archivo no deben
+    // ocupar dos referencias visibles.
+    gateway.search.mockResolvedValue([
+      {
+        ...source,
+        chunkContent: 'Artículo 1. La licencia se solicita por mesa de partes.',
+        chunkId: 'chunk-a',
+        pageEnd: 3,
+        pageStart: 3,
+      },
+      {
+        ...source,
+        chunkContent: 'Artículo 1. Presenta tu solicitud por mesa de partes.',
+        chunkId: 'chunk-b',
+        pageEnd: 4,
+        pageStart: 4,
+      },
+    ]);
+
+    const result = await service.retrieve('¿Cómo solicito una licencia?', null);
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    expect(result.sources.map((item) => item.chunkId)).toEqual(['chunk-a']);
+    // La referencia conservada mantiene su propia página: la cita [1] sigue
+    // siendo verificable y no se fusionan rangos.
+    expect(result.sources[0]).toMatchObject({ pageEnd: 3, pageStart: 3 });
+  });
+
+  it('prioriza la remuneración general vigente sobre la asignación especial y el antecedente', async () => {
+    const historica = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del docente era de S/ 2 000,00. [texto histórico]',
+      chunkId: 'remuneracion-historica',
+      documentSituation: 'replaced' as const,
+      documentVersionId: 'version-historica',
+      issuanceYear: 2018,
+      pageEnd: 8,
+      pageStart: 8,
+      semanticScore: 0.99,
+    };
+    const especial = {
+      ...source,
+      chunkContent:
+        'La asignación por tiempo de servicio es de S/ 2 666,80 para el personal nombrado.',
+      chunkId: 'asignacion-especial',
+      documentVersionId: 'version-especial',
+      pageEnd: 4,
+      pageStart: 4,
+      semanticScore: 0.95,
+    };
+    const vigente = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del docente con jornada de 30 horas es de S/ 3 300,60.',
+      chunkId: 'remuneracion-vigente',
+      documentVersionId: 'version-vigente',
+      pageEnd: 6,
+      pageStart: 6,
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([historica, especial, vigente]);
+
+    const result = await service.retrieve(
+      '¿Cuánto es mi remuneración mensual?',
+      null,
+    );
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    // La remuneración general vigente encabeza la respuesta; la asignación
+    // especial no la sustituye y el antecedente no compite con la regla actual.
+    expect(result.sources.map((item) => item.chunkId)).toEqual([
+      'remuneracion-vigente',
+      'asignacion-especial',
+      'remuneracion-historica',
+    ]);
+    expect(result.sources.at(-1)?.documentSituation).toBe('replaced');
+  });
+
+  it('ordena la comparación histórica de la más reciente a la más antigua', async () => {
+    const byYear = [2018, 2022, 2019].map((issuanceYear) => ({
+      ...source,
+      chunkContent: `Remuneración mensual del año ${issuanceYear} para docentes.`,
+      chunkId: `remuneracion-${issuanceYear}`,
+      documentSituation: 'replaced' as const,
+      documentVersionId: `version-${issuanceYear}`,
+      issuanceYear,
+    }));
+    gateway.search.mockResolvedValue(byYear);
+
+    const result = await service.retrieve(
+      '¿Cómo cambió la remuneración docente entre 2018 y 2022?',
+      null,
+    );
+    if (result.kind !== 'evidence') throw new Error('Expected evidence.');
+
+    expect(gateway.search).toHaveBeenCalledWith(
+      expect.objectContaining({ retrievalScope: 'historical' }),
+    );
+    expect(result.sources.map((item) => item.issuanceYear)).toEqual([
+      2022, 2019, 2018,
+    ]);
+  });
+
+  it('no pide aclaración cuando la consulta nombra la norma de auxiliares 2026', async () => {
+    const auxiliares = {
+      ...source,
+      chunkContent:
+        'Artículo 1. Norma que regula a los auxiliares de educación 2026.',
+      chunkId: 'chunk-auxiliares',
+      documentId: 'document-auxiliares',
+      documentVersionId: 'version-auxiliares',
+      moduleIds: ['module-auxiliares'],
+      moduleNames: ['Auxiliar de educación'],
+      semanticScore: 0.72,
+    };
+    const contratacion = {
+      ...source,
+      chunkContent: 'Artículo 1. Cronograma de la contratación docente.',
+      chunkId: 'chunk-contratacion',
+      documentId: 'document-contratacion',
+      documentVersionId: 'version-contratacion',
+      moduleIds: ['module-contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.7,
+    };
+    gateway.search.mockResolvedValue([auxiliares, contratacion]);
+
+    // OBS-014: la consulta nombra su tema; pedir precisión sería un falso
+    // positivo aunque otro módulo compita dentro del margen.
+    await expect(
+      service.retrieve(
+        '¿Quién aprueba la norma de auxiliares de educación 2026?',
+        null,
+      ),
+    ).resolves.toEqual({
+      kind: 'evidence',
+      resolvedModule: {
+        id: 'module-auxiliares',
+        name: 'Auxiliar de educación',
+      },
+      sources: [auxiliares],
+      topRelevanceScore: 0.72,
+    });
+  });
+
+  it('redirige al módulo nombrado en la consulta aunque la conversación esté en otro', async () => {
+    const auxiliares = {
+      ...source,
+      chunkContent:
+        'Artículo 1. Norma que regula a los auxiliares de educación 2026.',
+      chunkId: 'chunk-auxiliares',
+      documentId: 'document-auxiliares',
+      documentVersionId: 'version-auxiliares',
+      moduleIds: ['module-auxiliares'],
+      moduleNames: ['Auxiliar de educación'],
+      semanticScore: 0.72,
+    };
+    const padrones = {
+      ...source,
+      chunkContent: 'Artículo 1. Padrón de instituciones educativas.',
+      chunkId: 'chunk-padrones',
+      documentId: 'document-padrones',
+      documentVersionId: 'version-padrones',
+      moduleIds: ['module-padrones'],
+      moduleNames: ['Padrones y estadística'],
+      semanticScore: 0.7,
+    };
+    gateway.search.mockImplementation(
+      (input: { selectedModuleId: string | null }) =>
+        Promise.resolve(input.selectedModuleId ? [] : [auxiliares, padrones]),
+    );
+
+    const result = await service.retrieve(
+      '¿Quién aprueba la norma de auxiliares de educación 2026?',
+      'module-docente',
+      ['Consulta anterior del módulo docente'],
+    );
+
+    expect(result).toMatchObject({
+      kind: 'topic_change',
+      resolvedModule: {
+        id: 'module-auxiliares',
+        name: 'Auxiliar de educación',
+      },
+      sources: [auxiliares],
+    });
+  });
 
   it('rejects malformed query embeddings before database search', async () => {
     embeddings.embed.mockResolvedValue([[0.1]]);

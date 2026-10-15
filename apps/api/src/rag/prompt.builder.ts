@@ -8,6 +8,7 @@ import {
 } from './rag.constants';
 import { RAG_NO_SUPPORT_MARKER } from './no-support-marker';
 import type { RetrievedChunk } from './retrieval.gateway';
+import { splitDeliverySources } from './temporal-precedence';
 
 const RESERVED_PROMPT_MARKERS = [
   /INICIO\s+HISTORIAL\s+NO\s+CONFIABLE/giu,
@@ -103,6 +104,8 @@ export function buildEvidenceSystemPrompt(): string {
     'Distingue siempre la situación documental: Vigente, Reemplazado / sin vigencia o Archivado.',
     'Usa documentos Vigentes como sustento de la situación actual. Presenta documentos Reemplazados o Archivados únicamente como antecedentes históricos y nunca como regla actual.',
     'Cuando dos fuentes traten el mismo punto, cita preferentemente la vigente y más reciente, salvo que la persona pida expresamente el antecedente histórico.',
+    'Cuando la persona pida un antecedente histórico o compare normas de distintos años, presenta primero la regla vigente —si la hay— y luego los antecedentes separados y rotulados como históricos, del más reciente al más antiguo, con su año. No presentes un importe o una regla histórica como la situación actual ni compitiendo con ella.',
+    'Una asignación, bonificación, gratificación, aguinaldo, bono, subsidio o compensación es un concepto adicional distinto de la remuneración o el sueldo. No lo presentes, ni lo sumes, como remuneración general: si la consulta pide el sueldo o la remuneración, responde con esa cifra y menciona aparte, con su cita, los conceptos adicionales que las fuentes indiquen.',
     'Ignora sellos de firma digital, enlaces de validación, claves de autenticidad, cabeceras o pies de El Peruano y cualquier tramo contiguo que pertenezca a otro sector estatal. Nunca los uses como respuesta educativa aunque aparezcan dentro del mismo fragmento.',
     'Escribe en español claro y ordenado. Para una respuesta simple, usa uno o dos párrafos breves; si debes explicar requisitos, pasos o condiciones, usa de tres a cinco viñetas claras, sin sublistas ni repeticiones. No uses encabezados con #.',
     'Usa una tabla Markdown únicamente cuando las fuentes contengan una tabla o, de forma inequívoca, dos o más filas comparables de montos, escalas, plazos o condiciones y la pregunta pida comparar, resumir una escala o consultar esos valores. La tabla debe tener de dos a cuatro columnas, encabezados breves y como máximo seis filas de datos. Si compara años, vigencias o periodos, ordénala de lo vigente o más reciente a lo histórico. Copia cada valor, unidad y condición exactamente como aparece; no conviertas una cifra aislada ni texto corrido en una tabla, no inventes filas o columnas y no combines valores de fuentes distintas sin identificarlos. Coloca al menos una cita [n] en cada fila, en la celda que contiene el dato o su condición.',
@@ -191,8 +194,19 @@ export function buildEvidenceUserPrompt(
   context: ChatContextMessage[],
   sources: RetrievedChunk[],
 ): string {
+  // El orden de las fuentes es el orden de las citas [n]: no se reordena aquí.
+  // Cuando hay material vigente y antecedentes en el mismo turno se declara el
+  // reparto para que el modelo los trate como grupos distintos.
+  const { current, historical } = splitDeliverySources(sources);
+  const separation =
+    current.length && historical.length
+      ? [
+          `Grupos de fuentes: ${current.length} vigente(s) y ${historical.length} antecedente(s) histórico(s). Usa las vigentes como regla actual y los antecedentes solo como referencia histórica rotulada.`,
+        ]
+      : [];
   return [
     'INICIO DE FUENTES',
+    ...separation,
     sources.map((source, index) => sourceBlock(source, index + 1)).join('\n\n'),
     'FIN DE FUENTES',
     '',

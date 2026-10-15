@@ -26,7 +26,13 @@ import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
+import { causalClarificationFor } from '../rag/process-clarification';
 import { normalizeDomainQuery } from '../rag/query-normalization';
+import {
+  assessSalaryAnswerCoverage,
+  salaryClarificationFor,
+  salaryQuestionProfile,
+} from '../rag/salary-applicability';
 import { hasTopicTerm } from '../rag/domain-lexicon';
 import {
   MAX_CHAT_CONTEXT_CHARS,
@@ -1057,6 +1063,49 @@ export class ChatService {
       return;
     }
 
+    // El turno tiene evidencia, pero puede depender de un dato que la persona no
+    // dio y que la propia evidencia demuestra que cambia el resultado: la causal
+    // de una reasignación o el factor que decide entre dos cifras vigentes. En
+    // ese caso se pide una sola precisión (sin mostrar cifras ni fuentes) en vez
+    // de responder con un subconjunto como si fuera la regla general.
+    if (retrieval.kind === 'evidence') {
+      const clarification =
+        causalClarificationFor(question, retrieval.sources) ??
+        salaryClarificationFor(question, retrieval.sources);
+      if (clarification) {
+        if (input.abortSignal?.aborted) return;
+        const completed = await this.historyGateway.completeTurn({
+          answer: clarification.message,
+          conversationId: turn.conversationId,
+          faqMemory,
+          detectedModuleId: null,
+          detectedSubmoduleId: null,
+          qualitySignals: [],
+          replyRole: 'clarification',
+          retrievalScope,
+          sources: [],
+          topRelevanceScore: retrieval.topRelevanceScore,
+          unansweredReason: 'ambiguous_request',
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        yield {
+          data: { message: clarification.message, modules: [] },
+          type: 'clarification',
+        };
+        yield {
+          data: {
+            conversationId: turn.conversationId,
+            inReplyToMessageId: turn.userMessageId,
+            messageId: completed.answerMessageId,
+            provider: 'rule',
+          },
+          type: 'done',
+        };
+        return;
+      }
+    }
+
     const citations = toCitationBundle(
       retrieval.sources,
       selectedModuleId,
@@ -1205,8 +1254,28 @@ export class ChatService {
         : normalizedAnswer,
       retrieval.sources,
     );
+    const qualityExcerpts: Partial<Record<CitationQualitySignal, string>> = {
+      ...citationQuality.excerpts,
+    };
     const qualitySignals = new Set<string>(citationQuality.signals);
     if (marker.partialSupport) qualitySignals.add('support_partial');
+    // Una respuesta salarial que presente un importe como sueldo o remuneración
+    // citando solo un concepto adicional (asignación, bono, gratificación) se
+    // marca para revisión humana: pudo tomar una cifra que no es la general.
+    const salaryProfile = salaryQuestionProfile(question);
+    if (
+      salaryProfile.isSalaryQuestion &&
+      !salaryProfile.asksSpecialAllocation
+    ) {
+      const salaryFinding = assessSalaryAnswerCoverage(
+        finalAnswer,
+        retrieval.sources,
+      );
+      if (salaryFinding) {
+        qualitySignals.add('support_partial');
+        qualityExcerpts.support_partial ??= salaryFinding.excerpt;
+      }
+    }
     if (retrieval.topRelevanceScore < this.matchThreshold() + 0.05) {
       qualitySignals.add('low_confidence');
     }
@@ -1217,7 +1286,7 @@ export class ChatService {
       faqMemory,
       detectedModuleId: relatedModule?.id ?? null,
       detectedSubmoduleId: relatedSubmodule?.id ?? null,
-      qualityExcerpts: citationQuality.excerpts,
+      qualityExcerpts,
       qualitySignals: [...qualitySignals],
       replyRole: 'assistant',
       retrievalScope,
