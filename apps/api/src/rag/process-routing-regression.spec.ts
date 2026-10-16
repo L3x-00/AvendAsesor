@@ -51,6 +51,8 @@ describe('OBS-005/014/015 — regresiones de proceso explícito', () => {
     for (const question of [
       'Abre el documento de remuneraciones con la tabla.',
       'Muéstrame el documento que contiene la tabla de remuneraciones',
+      'Abre el documento con una tabla de remuneraciones.',
+      'Muéstrame el documento que contiene una tabla de remuneraciones.',
     ])
       expect(sourceLocationRequestIn(question)).toEqual({ asksMinute: false });
   });
@@ -100,6 +102,13 @@ describe('OBS-005/014/015 — regresiones de proceso explícito', () => {
     expect(
       disambiguateRouteByQuestion(
         'Compara contratación docente versus contratación de auxiliares',
+        [contract, auxiliary],
+        sources,
+      ),
+    ).toBeNull();
+    expect(
+      disambiguateRouteByQuestion(
+        'Compara requisitos de reasignación y auxiliar de educación',
         [contract, auxiliary],
         sources,
       ),

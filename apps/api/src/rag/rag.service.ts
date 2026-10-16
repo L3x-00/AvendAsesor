@@ -473,6 +473,7 @@ export function disambiguateRouteByQuestion(
       .sort((left, right) => right.hits - left.hits);
   // Los nombres de raíz conservan su precedencia. Una palabra genérica de un
   // submódulo vecino no borra un proceso ya explícito («contrato docente»).
+  if (comparison && score(true).length > 1) return null;
   for (const includeSubmodules of [false, true]) {
     const scored = score(includeSubmodules);
     if (comparison && scored.length > 1) return null;

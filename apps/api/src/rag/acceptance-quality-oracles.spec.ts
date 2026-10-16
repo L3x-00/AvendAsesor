@@ -1,6 +1,7 @@
 import {
   assessStability,
   citationsPointToKnownSources,
+  corpusSnapshotKey,
   decideVerdict,
   integrityIssues,
   isCausalClarification,
@@ -8,7 +9,7 @@ import {
   markdownTables,
   noEvidenceIsSafe,
   pdfMinuteRequestIsCorrect,
-  salary2025TableIsCorrect,
+  salary2025TableMatchesControl,
   tableRowsAreNewestFirst,
   tableRowsHaveKnownCitations,
   type CorpusSnapshot,
@@ -71,6 +72,21 @@ const salaryTable = (amount = '3 300,60', rank = '1') =>
   });
 
 describe('oráculos de calidad — contramuestras OBS-020', () => {
+  it('detecta cambios de corpus durante campaña sin confundir orden o timestamp', () => {
+    expect(
+      corpusSnapshotKey({
+        ...corpus,
+        capturedAt: 'otro instante',
+        activeRootModules: [...corpus.activeRootModules].reverse(),
+      }),
+    ).toBe(corpusSnapshotKey(corpus));
+    expect(
+      corpusSnapshotKey({
+        ...corpus,
+        documents: corpus.documents.map((doc) => ({ ...doc, pageCount: 100 })),
+      }),
+    ).not.toBe(corpusSnapshotKey(corpus));
+  });
   it('no aprueba texto factual después de una negativa correcta (OBS-001)', () => {
     expect(noEvidenceIsSafe(denied())).toBe(true);
     expect(
@@ -186,10 +202,10 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
     expect(tableRowsHaveKnownCitations(turn({ answer }))).toBe(false);
   });
   it('el monto correcto requiere decimales exactos y la fuente aplicable (OBS-002/011)', () => {
-    expect(salary2025TableIsCorrect(salaryTable())).toBe(true);
-    expect(salary2025TableIsCorrect(salaryTable('3300.60'))).toBe(true);
-    expect(salary2025TableIsCorrect(salaryTable('3,300.60'))).toBe(true);
-    expect(salary2025TableIsCorrect(salaryTable('3.300,60'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable())).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3300.60'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3,300.60'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3.300,60'))).toBe(true);
     for (const amount of [
       '3 300',
       '3 300,00',
@@ -200,16 +216,16 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       '−3300.60',
       '3300.60 o 2000 soles',
     ]) {
-      expect(salary2025TableIsCorrect(salaryTable(amount))).toBe(false);
+      expect(salary2025TableMatchesControl(salaryTable(amount))).toBe(false);
     }
     expect(
-      salary2025TableIsCorrect({
+      salary2025TableMatchesControl({
         ...salaryTable(),
         sources: [{ ...source, issuanceYear: 2023 }],
       }),
     ).toBe(false);
     expect(
-      salary2025TableIsCorrect({
+      salary2025TableMatchesControl({
         ...salaryTable(),
         answer: salaryTable().answer.replace(
           'S/ 3 300,60',
@@ -229,7 +245,32 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       ),
       valid.answer.replace('| 2025 | 30 horas |', '| 2025 | 40 |'),
     ])
-      expect(salary2025TableIsCorrect({ ...valid, answer })).toBe(false);
+      expect(salary2025TableMatchesControl({ ...valid, answer })).toBe(false);
+  });
+  it('ninguna coincidencia técnica certifica prosa salarial abierta ni sus repeticiones', () => {
+    for (const answer of [
+      salaryTable().answer,
+      salaryTable().answer + '\nTu jornada aplicable es de 36 horas.',
+      salaryTable().answer + '\nTu jornada aplicable es de 40 h.',
+      salaryTable().answer +
+        '\nEl monto corresponde a los profesores nombrados.',
+      salaryTable().answer.replace('| 2025 |', '| 2024 |'),
+      salaryTable().answer.replace(
+        'Docente contratado',
+        'Directora contratada',
+      ),
+    ]) {
+      for (const id of ['O03', 'O03-R2'])
+        expect(
+          decideVerdict({
+            id,
+            turns: [turn({ answer })],
+            corpus,
+            pass: true,
+            otherwise: 'FALLA',
+          }).verdict,
+        ).toBe('REQUIERE_REVISION');
+    }
   });
   it('la presentación exige la clasificación de grilla real, además de citas conocidas', () => {
     expect(
@@ -384,6 +425,15 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
     ).toBe(false);
   });
   it('rechaza casos sin turnos, turnos vacíos y rangos de cita inválidos', () => {
+    expect(
+      integrityIssues(
+        turn({ answer: 'Hola.', events: ['conversational'], sources: [] }),
+        corpus,
+      ),
+    ).toEqual([]);
+    expect(integrityIssues(turn({ events: ['token'] }), corpus)).not.toEqual(
+      [],
+    );
     expect(
       decideVerdict({
         id: 'C01',

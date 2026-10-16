@@ -36,6 +36,25 @@ export interface CorpusSnapshot {
   documents: AvailableDocument[];
   activeRootModules: string[];
 }
+/** Ignora el orden y la hora; conserva los metadatos que cambian el sustento. */
+export function corpusSnapshotKey(corpus: CorpusSnapshot): string {
+  return JSON.stringify({
+    modules: [...corpus.activeRootModules].sort(),
+    documents: corpus.documents
+      .map((document) => ({
+        id: document.id,
+        version: document.versionId,
+        title: document.title,
+        type: document.documentType,
+        number: document.resolutionNumber,
+        year: document.issuanceYear,
+        mime: document.mimeType,
+        pages: document.pageCount,
+        modules: [...document.moduleIds].sort(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  });
+}
 
 export const citationRanksIn = (text: string): Set<number> =>
   new Set(citedIndexes(text));
@@ -161,7 +180,12 @@ export function integrityIssues(
   corpus: CorpusSnapshot,
 ): string[] {
   const issues: string[] = [];
-  if (!turn.answer.trim() || !turn.events.includes('done'))
+  const completed =
+    turn.events.includes('done') ||
+    (turn.events.length === 1 &&
+      turn.events[0] === 'conversational' &&
+      !turn.sources.length);
+  if (!turn.answer.trim() || !completed)
     issues.push('Respuesta vacía o sin finalización.');
   if (turn.error || turn.events.includes('technical_error'))
     issues.push('Fallo técnico; no se interpreta como falta de corpus.');
@@ -295,8 +319,12 @@ function moneyValues(text: string): string[] {
   });
 }
 
-/** Dato de control contrastado con DS 049-2025-EF, página 3: contratado/30h/2025. */
-export function salary2025TableIsCorrect(turn: QualityTurn): boolean {
+/**
+ * Coincidencia técnica con el control DS049/p3/3300.60, no verdad jurídica.
+ * Texto abierto puede cambiar el alcance fuera de la tabla: O03 requiere
+ * contraste humano aunque coincidan número, formato, página y citas.
+ */
+export function salary2025TableMatchesControl(turn: QualityTurn): boolean {
   if (!tableRowsHaveKnownCitations(turn)) return false;
   const sourceByRank = new Map(
     turn.sources.map((source) => [source.rank, source]),
@@ -440,8 +468,16 @@ export function decideVerdict(input: {
   // Un corpus existente + recuperación fallida es FALLA, nunca «falta corpus».
   const otherwise =
     input.otherwise === 'REQUIERE_CORPUS' ? 'FALLA' : input.otherwise;
+  // Ninguna combinación de regex certifica toda la aplicabilidad de prosa
+  // abierta ni que un enlace abra el PDF. El resultado técnico positivo deja
+  // estos casos pendientes de revisión; tampoco sus repeticiones se aprueban.
+  const manualRequired = ['O03', 'O04', 'C18', 'C19'].includes(baseId);
   return {
-    verdict: input.pass ? 'PASA' : otherwise,
+    verdict: input.pass
+      ? manualRequired
+        ? 'REQUIERE_REVISION'
+        : 'PASA'
+      : otherwise,
     issues:
       !input.pass && input.otherwise === 'REQUIERE_CORPUS'
         ? [

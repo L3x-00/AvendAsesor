@@ -46,6 +46,7 @@ import {
   assessStability,
   citationRanksIn,
   citationsPointToKnownSources,
+  corpusSnapshotKey,
   decideVerdict,
   isCausalClarification,
   isSalaryClarification,
@@ -53,7 +54,7 @@ import {
   noEvidenceIsSafe,
   pdfMinuteRequestIsCorrect,
   salaryDocumentLocationIsCorrect,
-  salary2025TableIsCorrect,
+  salary2025TableMatchesControl,
   tableRowsAreNewestFirst,
   tableRowsHaveKnownCitations,
   type CorpusSnapshot,
@@ -1157,7 +1158,7 @@ async function main(): Promise<void> {
       source.relatedModuleName === 'Remuneraciones',
   );
   const o03MentionsExpectedAmount =
-    salaryControl.verified && salary2025TableIsCorrect(o03);
+    salaryControl.verified && salary2025TableMatchesControl(o03);
   const o03TablePass =
     tableRowsHaveKnownCitations(o03) &&
     citationsPointToKnownSources(o03) &&
@@ -1268,7 +1269,7 @@ async function main(): Promise<void> {
       const response = await ask(original.question);
       const pass =
         id === 'O03'
-          ? salaryControl.verified && salary2025TableIsCorrect(response)
+          ? salaryControl.verified && salary2025TableMatchesControl(response)
           : id === 'O04'
             ? salaryDocumentLocationIsCorrect(response)
             : pdfMinuteRequestIsCorrect(response);
@@ -1283,6 +1284,16 @@ async function main(): Promise<void> {
     }
   }
   const stability = assessStability(results);
+  const modulesAfter = await modulesGateway.listActiveModules();
+  const corpusAfter: CorpusSnapshot = {
+    capturedAt: new Date().toISOString(),
+    documents: await catalogGateway.listAvailableDocuments(),
+    activeRootModules: modulesAfter
+      .filter((module) => !module.parentModuleId)
+      .map((module) => module.name),
+  };
+  const corpusUnchanged =
+    corpusSnapshotKey(corpus) === corpusSnapshotKey(corpusAfter);
   const summary = results.reduce<Record<string, number>>(
     (totals, item) => ({
       ...totals,
@@ -1296,7 +1307,7 @@ async function main(): Promise<void> {
     results.some((result) => result.verdict === 'FALLA') ||
     stability.some((item) => !item.stable)
       ? 'FAILED'
-      : results.some((result) => result.verdict !== 'PASA')
+      : !corpusUnchanged || results.some((result) => result.verdict !== 'PASA')
         ? 'INCOMPLETE'
         : 'PASSED';
   writeFileSync(
@@ -1305,6 +1316,8 @@ async function main(): Promise<void> {
       {
         metadata,
         corpus,
+        corpusAfter,
+        corpusUnchanged,
         results,
         summary,
         stability,
@@ -1319,7 +1332,7 @@ async function main(): Promise<void> {
   writeFileSync(
     `${out}.md`,
     [
-      '# Validación integral del Hito 3 — oráculos de calidad v2',
+      '# Validación integral del Hito 3 — oráculos de calidad v3',
       '',
       'Revisión: ' +
         metadata.gitRevision +
@@ -1331,6 +1344,7 @@ async function main(): Promise<void> {
         corpus.documents.length +
         ' documentos · Historial en memoria · Sin escrituras de corpus.',
       'Estabilidad: ' + JSON.stringify(stability),
+      'Inventario elegible sin cambios durante la campaña: ' + corpusUnchanged,
       '',
       `Resumen: ${Object.entries(summary)
         .map(([verdict, count]) => `${verdict} ${count}`)
