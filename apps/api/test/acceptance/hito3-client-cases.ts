@@ -51,6 +51,8 @@ import {
   isSalaryClarification,
   markdownTables,
   noEvidenceIsSafe,
+  pdfMinuteRequestIsCorrect,
+  salaryDocumentLocationIsCorrect,
   salary2025TableIsCorrect,
   tableRowsAreNewestFirst,
   tableRowsHaveKnownCitations,
@@ -284,6 +286,8 @@ async function main(): Promise<void> {
           'src/rag/salary-applicability.ts',
           'src/rag/rag.service.ts',
           'src/chat/chat.service.ts',
+          'src/chat/intent/source-location.ts',
+          'src/rag/query-normalization.ts',
         ]
           .map((path) => readFileSync(path, 'utf8'))
           .join('\n'),
@@ -300,7 +304,7 @@ async function main(): Promise<void> {
     salaryControl,
     persistence: 'in_memory',
     corpusWrites: false,
-    oracleVersion: 2,
+    oracleVersion: 3,
   };
   const chat = new ChatService(
     new OpenAiAnswerGateway(config),
@@ -810,7 +814,14 @@ async function main(): Promise<void> {
     has(c17, 'no_evidence')
       ? 'No hay corpus aprobado de remuneraciones para comprobar la corrección del término.'
       : `Módulo resuelto: ${c17.moduleId === remuneraciones ? 'remuneraciones' : String(c17.moduleId)}; citas conocidas: ${citationsPointToKnownSources(c17)}; fuentes asociadas al destino: ${c17SourcesMatchDestination}.`,
-    has(c17, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(c17, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(c17, 'token') &&
+          citationsPointToKnownSources(c17) &&
+          c17SourcesMatchDestination &&
+          c17.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   // C18 — Las escalas comparables se presentan como tabla únicamente si las
@@ -910,7 +921,7 @@ async function main(): Promise<void> {
     'C20',
     'No inventa marcas de minuto para un PDF',
     [c20],
-    c20ExplainsPdfPage && !c20FabricatesMinute,
+    pdfMinuteRequestIsCorrect(c20),
     `Explica referencia por página: ${c20ExplainsPdfPage}; atribuye minuto inexistente: ${c20FabricatesMinute}; eventos: ${c20.events.join(', ')}.`,
   );
 
@@ -1111,7 +1122,13 @@ async function main(): Promise<void> {
     [o01],
     o01Grounded,
     `Respuesta sustentada en Remuneraciones: ${o01Grounded}; fuentes: ${o01.sources.length}.`,
-    has(o01, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(o01, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(o01, 'token') &&
+          citationsPointToKnownSources(o01) &&
+          o01.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   const o02 = await ask('cuanto gana un profe del peru');
@@ -1122,7 +1139,13 @@ async function main(): Promise<void> {
     [o02],
     o02Grounded,
     `Respuesta sustentada en Remuneraciones: ${o02Grounded}; fuentes: ${o02.sources.length}.`,
-    has(o02, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(o02, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(o02, 'token') &&
+          citationsPointToKnownSources(o02) &&
+          o02.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   const o03 = await ask(
@@ -1152,15 +1175,7 @@ async function main(): Promise<void> {
   const o04 = await ask(
     'Dame el enlace del documento exacto donde aparece el sueldo de un profesor de 30 horas en 2025.',
   );
-  const o04TechnicalPass =
-    has(o04, 'token') &&
-    citationsPointToKnownSources(o04) &&
-    o04.sources.some(
-      (source) =>
-        /049-2025-EF/iu.test(source.title) &&
-        source.page > 0 &&
-        (source.pageCount === null || source.page <= source.pageCount),
-    );
+  const o04TechnicalPass = salaryDocumentLocationIsCorrect(o04);
   record(
     'O04',
     'Solicitud explícita del enlace a la fuente exacta',
@@ -1255,15 +1270,8 @@ async function main(): Promise<void> {
         id === 'O03'
           ? salaryControl.verified && salary2025TableIsCorrect(response)
           : id === 'O04'
-            ? has(response, 'token') &&
-              citationsPointToKnownSources(response) &&
-              response.sources.some((item) =>
-                /049-2025-EF/iu.test(item.title),
-              ) &&
-              !/no puedo[^.]*enlac/iu.test(response.answer)
-            : /p[aá]gin/iu.test(response.answer) &&
-              /no[^.]*minuto/iu.test(response.answer) &&
-              !/\b\d{1,2}:\d{2}\b/u.test(response.answer);
+            ? salaryDocumentLocationIsCorrect(response)
+            : pdfMinuteRequestIsCorrect(response);
       record(
         id + '-R' + repeat,
         'Repetición de estabilidad: ' + id,

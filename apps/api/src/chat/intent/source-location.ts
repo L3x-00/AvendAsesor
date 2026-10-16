@@ -126,7 +126,21 @@ export function sourceLocationRequestIn(
 
   if (asksMinuteUnit(normalized, inConversation)) return { asksMinute: true };
   if (!/\p{L}/u.test(normalized)) return null;
-  if (CONTENT_ASK.test(normalized)) return null;
+  if (
+    CONTENT_ASK.test(normalized) &&
+    !/\b(?:muestra|muestrame|abre|abreme) (?:el|la) (?:documento|pdf|archivo) que contiene\b/u.test(
+      normalized,
+    )
+  )
+    return null;
+  // «Muéstrame en una tabla ... de los documentos» pide contenido comparado,
+  // no abrir los documentos. Un pedido explícito de enlaces sigue su ruta.
+  if (
+    /\b(?:en (?:una )?|una )tabla\b/u.test(normalized) &&
+    CONTENT_SUBJECT.test(normalized) &&
+    !LOCATION_NOUN.test(normalized)
+  )
+    return null;
   if (FIGURATIVE_LINK.test(normalized)) return null;
   if (CATALOG_NOUN.test(normalized)) return null;
   // «¿en qué página del portal del MINEDU…?» pide un destino web, no la página

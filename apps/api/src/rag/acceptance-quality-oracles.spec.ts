@@ -7,6 +7,7 @@ import {
   isSalaryClarification,
   markdownTables,
   noEvidenceIsSafe,
+  pdfMinuteRequestIsCorrect,
   salary2025TableIsCorrect,
   tableRowsAreNewestFirst,
   tableRowsHaveKnownCitations,
@@ -94,6 +95,15 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       question: 'RSG 326-2017-MINEDU',
     };
     expect(noEvidenceIsSafe(exact)).toBe(true);
+    expect(
+      noEvidenceIsSafe({ ...exact, answer: message.replace('RSG ', 'DS ') }),
+    ).toBe(false);
+    expect(
+      noEvidenceIsSafe({
+        ...exact,
+        question: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
+      }),
+    ).toBe(true);
     expect(
       noEvidenceIsSafe({ ...exact, question: 'RSG 121-2018-MINEDU' }),
     ).toBe(false);
@@ -186,6 +196,9 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       '2 000,10',
       '2 666,80',
       '3 300,60 o 2 000,10',
+      '-3300.60',
+      '−3300.60',
+      '3300.60 o 2000 soles',
     ]) {
       expect(salary2025TableIsCorrect(salaryTable(amount))).toBe(false);
     }
@@ -205,6 +218,34 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       }),
     ).toBe(false);
   });
+  it('el monto de control no absuelve prosa contradictoria ni factores de otra persona', () => {
+    const valid = salaryTable();
+    for (const answer of [
+      valid.answer + '\nEl sueldo es S/ 2000,10.',
+      valid.answer + '\nTu sueldo es 2000 soles.',
+      valid.answer.replace(
+        '| 2025 | 30 horas |',
+        '| Auxiliar nombrado 2025 | 40 horas |',
+      ),
+      valid.answer.replace('| 2025 | 30 horas |', '| 2025 | 40 |'),
+    ])
+      expect(salary2025TableIsCorrect({ ...valid, answer })).toBe(false);
+  });
+  it('la presentación exige la clasificación de grilla real, además de citas conocidas', () => {
+    expect(
+      tableRowsHaveKnownCitations({
+        ...salaryTable('3300.60', '1, 2'),
+        sources: [source, { ...source, rank: 2 }],
+      }),
+    ).toBe(false);
+    expect(
+      tableRowsHaveKnownCitations({
+        ...salaryTable(),
+        answer: salaryTable().answer.replace('[1]', '[1][2]'),
+        sources: [source, { ...source, rank: 2 }],
+      }),
+    ).toBe(true);
+  });
   it('página final y total deben ser coherentes incluso si el inicio parece válido (OBS-008)', () => {
     expect(integrityIssues(turn(), corpus)).toEqual([]);
     expect(
@@ -222,13 +263,40 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
         turn({ sources: [{ ...source, pageCount: null }] }),
         corpus,
       ),
-    ).toEqual([]);
+    ).toEqual(expect.arrayContaining([expect.stringContaining('canónico')]));
     expect(
       integrityIssues(
         turn({ sources: [{ ...source, pageCount: Number.NaN }] }),
         corpus,
       ),
-    ).toHaveLength(1);
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Paginación incoherente'),
+      ]),
+    );
+  });
+  it('contrasta identidad, año, MIME y total con el documento canónico', () => {
+    for (const changed of [
+      { title: 'Decreto Supremo N.° 036-2023-EF' },
+      { issuanceYear: 2023 },
+      { mimeType: 'text/plain' },
+      { page: 99, pageEnd: 99, pageCount: 100 },
+    ])
+      expect(
+        integrityIssues(turn({ sources: [{ ...source, ...changed }] }), corpus),
+      ).toEqual(expect.arrayContaining([expect.stringContaining('canónico')]));
+    expect(
+      integrityIssues(
+        turn({
+          sources: [{ ...source, page: 99, pageEnd: 99, pageCount: null }],
+        }),
+        corpus,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Paginación incoherente'),
+      ]),
+    );
   });
   it('no acepta una versión ajena al inventario aunque el título sea igual', () => {
     expect(
@@ -307,6 +375,43 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
         answer: 'S/ 3300,60. ¿Tu consulta es del sector público o privado?',
       }),
     ).toBe(false);
+    expect(
+      isSalaryClarification({
+        ...clarification,
+        answer:
+          'El sueldo del sector público es de 9000 soles al mes. ¿Cuál es tu jornada?',
+      }),
+    ).toBe(false);
+  });
+  it('rechaza casos sin turnos, turnos vacíos y rangos de cita inválidos', () => {
+    expect(
+      decideVerdict({
+        id: 'C01',
+        turns: [],
+        corpus,
+        pass: true,
+        otherwise: 'FALLA',
+      }).verdict,
+    ).toBe('FALLA');
+    expect(integrityIssues(turn({ answer: '' }), corpus)).not.toEqual([]);
+    expect(
+      integrityIssues(turn({ sources: [{ ...source, rank: 0 }] }), corpus),
+    ).not.toEqual([]);
+  });
+  it('usa un único contrato de página y minuto sin aceptar una mención vacía', () => {
+    expect(
+      pdfMinuteRequestIsCorrect(
+        turn({ answer: 'El documento PDF usa páginas como referencia' }),
+      ),
+    ).toBe(false);
+    expect(
+      pdfMinuteRequestIsCorrect(
+        turn({
+          answer:
+            'Los documentos PDF se ubican por página, no por minuto: no puedo darte una marca de minuto.',
+        }),
+      ),
+    ).toBe(true);
   });
   it('la estabilidad mide resultado y fuentes, sin exigir redacción idéntica (OBS-020)', () => {
     const first = {
@@ -317,7 +422,12 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
     const repeated = {
       ...first,
       id: 'O03-R2',
-      turns: [{ ...salaryTable(), answer: 'Otra redacción [1]' }],
+      turns: [
+        {
+          ...salaryTable(),
+          answer: salaryTable().answer + '\nOtra redacción.',
+        },
+      ],
     };
     expect(assessStability([first, repeated])[0]).toMatchObject({
       stable: true,
@@ -326,6 +436,21 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
     });
     expect(
       assessStability([first, { ...repeated, verdict: 'FALLA' }])[0].stable,
+    ).toBe(false);
+    expect(
+      assessStability([
+        first,
+        { ...repeated, turns: [salaryTable('2000,10')] },
+      ])[0].stable,
+    ).toBe(false);
+    expect(
+      assessStability([
+        first,
+        {
+          ...repeated,
+          turns: [{ ...salaryTable(), sources: [{ ...source, page: 2 }] }],
+        },
+      ])[0].stable,
     ).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import {
   markdownTableAt,
+  classifyTableAt,
   type MarkdownTableBlock,
 } from '../../../web/src/components/chat/chat-response-tables';
 import type { AvailableDocument } from '../../src/chat/catalog/chat-catalog.types';
@@ -57,8 +58,14 @@ export function markdownTables(answer: string): MarkdownTableBlock[] {
 export function tableRowsHaveKnownCitations(turn: QualityTurn): boolean {
   const tables = markdownTables(turn.answer);
   const known = new Set(turn.sources.map((source) => source.rank));
+  const lines = turn.answer.replace(/\r/gu, '').split('\n');
+  const visibleGrids = lines.flatMap((_, index) => {
+    const classified = classifyTableAt(lines, index, [...known]);
+    return classified?.asGrid ? [classified] : [];
+  });
   return (
     tables.length === 1 &&
+    visibleGrids.length === 1 &&
     tables[0].rows.length > 0 &&
     tables[0].rows.every((row) => {
       const ranks = citationRanksIn(row.join(' '));
@@ -94,6 +101,25 @@ const NO_EVIDENCE =
   'Por ahora no encontré información suficiente para orientarte bien sobre esto. Cuéntame el trámite, tu cargo y qué necesitas resolver para buscar una respuesta más precisa.';
 const HISTORICAL_NOTICE =
   ' Si tu consulta se refiere a una norma anterior o a un antecedente histórico, indícamelo y con gusto lo reviso.';
+const NORM_TYPES: Record<string, string> = {
+  'resolucion de secretaria general': 'rsg',
+  'resolucion viceministerial': 'rvm',
+  'resolucion ministerial': 'rm',
+  'resolucion directoral': 'rd',
+  'decreto supremo': 'ds',
+  'decreto legislativo': 'dl',
+};
+function normalize(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+function normIdentities(value: string): string[] {
+  const pattern =
+    /\b(resolucion de secretaria general|resolucion viceministerial|resolucion ministerial|resolucion directoral|decreto supremo|decreto legislativo|rsg|rvm|rm|rd|ds|dl|ley|directiva)\s+(?:n[.°º\s]*)?(\d+(?:\s*-\s*(?:\d+|[a-z]+))*)\b/gu;
+  return [...normalize(value).matchAll(pattern)].map(
+    (match) =>
+      `${NORM_TYPES[match[1]] ?? match[1]}:${match[2].replace(/\s/gu, '')}`,
+  );
+}
 export function noEvidenceIsSafe(turn: QualityTurn): boolean {
   if (!turn.events.includes('no_evidence')) return true;
   if (
@@ -118,19 +144,12 @@ export function noEvidenceIsSafe(turn: QualityTurn): boolean {
   if (!turn.answer.startsWith(prefix) || !turn.answer.endsWith(suffix))
     return false;
   const identity = turn.answer.slice(prefix.length, -suffix.length);
-  const normalize = (value: string) =>
-    value
-      .normalize('NFD')
-      .replace(/\p{M}/gu, '')
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]/gu, '');
   // La negativa puede repetir una identidad explícita; no completar su título.
-  const tokens = identity.match(/\d+(?:-\d+)*(?:-[A-Z]+)?/gu) ?? [];
+  const identities = normIdentities(identity);
+  const requested = normIdentities(turn.question);
   return (
-    tokens.length > 0 &&
-    tokens.every((token) =>
-      normalize(turn.question).includes(normalize(token)),
-    ) &&
+    identities.length > 0 &&
+    identities.every((item) => requested.includes(item)) &&
     /^(?:(?:RSG|RVM|RM|RD|DS|DL|Ley|Directiva|Decreto Supremo|Decreto Legislativo|Resolución (?:Ministerial|Viceministerial|Directoral|de Secretaría General))\s+(?:N[.°º\s]*)?\d[\dA-Z\s-]*(?:, | y )?)+$/u.test(
       identity,
     )
@@ -142,6 +161,8 @@ export function integrityIssues(
   corpus: CorpusSnapshot,
 ): string[] {
   const issues: string[] = [];
+  if (!turn.answer.trim() || !turn.events.includes('done'))
+    issues.push('Respuesta vacía o sin finalización.');
   if (turn.error || turn.events.includes('technical_error'))
     issues.push('Fallo técnico; no se interpreta como falta de corpus.');
   if (turn.events.includes('token') && !turn.sources.length)
@@ -155,6 +176,8 @@ export function integrityIssues(
   if (citationRanksIn(turn.answer).size && !citationsPointToKnownSources(turn))
     issues.push('La respuesta contiene una cita inexistente.');
   const ranks = turn.sources.map((source) => source.rank);
+  if (ranks.some((rank) => !Number.isInteger(rank) || rank < 1))
+    issues.push('Número de cita inválido.');
   if (new Set(ranks).size !== ranks.length)
     issues.push('Rangos de cita repetidos.');
   for (const source of turn.sources) {
@@ -168,14 +191,27 @@ export function integrityIssues(
         `Fuente [${source.rank}] ajena al inventario elegible previo.`,
       );
     if (
-      source.mimeType === 'application/pdf' &&
-      (!Number.isInteger(source.page) ||
-        !Number.isInteger(source.pageEnd) ||
-        source.page < 1 ||
-        source.pageEnd < source.page ||
-        (source.pageCount !== null &&
-          (!Number.isInteger(source.pageCount) ||
-            source.pageCount < source.pageEnd)))
+      document &&
+      (source.title !== document.title ||
+        source.issuanceYear !== document.issuanceYear ||
+        source.mimeType !== document.mimeType ||
+        source.pageCount !== document.pageCount)
+    )
+      issues.push(
+        `Metadatos de [${source.rank}] difieren del inventario canónico.`,
+      );
+    if (
+      (source.mimeType === 'application/pdf' &&
+        (!Number.isInteger(source.page) ||
+          !Number.isInteger(source.pageEnd) ||
+          source.page < 1 ||
+          source.pageEnd < source.page ||
+          (source.pageCount !== null &&
+            (!Number.isInteger(source.pageCount) ||
+              source.pageCount < source.pageEnd)))) ||
+      (document?.mimeType === 'application/pdf' &&
+        document.pageCount !== null &&
+        source.pageEnd > document.pageCount)
     )
       issues.push(`Paginación incoherente en [${source.rank}].`);
     if (
@@ -209,16 +245,54 @@ export function isCausalClarification(turn: QualityTurn): boolean {
   );
 }
 export function isSalaryClarification(turn: QualityTurn): boolean {
+  // Contrato determinista: ninguna prosa factual antes o después de la pregunta.
+  const text = normalize(turn.answer);
+  const root =
+    '(?:remuneraciones|contratacion y desplazamientos|auxiliar de educacion|licencias y permisos|ley y reglamento|cargos y plazas|evaluacion docente)';
+  const ambiguityPrefix = new RegExp(
+    `^no seria responsable darte una cifra unica para todos los docentes del peru sin confirmar tu situacion\\. (?:la busqueda encontro informacion en (?:el tema ${root}|los temas ${root}(?:, ${root})* y ${root}), pero eso no permite atribuirte una cifra o una norma sin conocer tu caso\\. )?`,
+    'u',
+  );
+  const question = text
+    .replace(ambiguityPrefix, '')
+    .replace(
+      /^para ubicar la regla que corresponde, necesito un solo dato: /u,
+      '',
+    )
+    .replace(/^para darte la cifra correcta necesito un solo dato: /u, '')
+    .replace(
+      / con eso te indico el monto vigente que te corresponde y su alcance\.$/u,
+      '',
+    );
+  const allowed =
+    /^¿(?:tu consulta es del sector publico o privado|tu jornada es de \d{1,2} o de \d{1,2} horas|cuantas horas de jornada laboras|tu vinculo es (?:nombrado o contratado|contratado o nombrado)|a que cargo corresponde tu consulta(?:: (?:docente|auxiliar|directivo)(?: o (?:docente|auxiliar|directivo))*)?|en que escala de la carrera magisterial te encuentras|de que ano es el monto que consultas: (?:19|20)\d{2} o (?:19|20)\d{2}|de que ano o periodo es el monto que consultas)\?$/u;
   return (
     turn.events.includes('clarification') &&
     !turn.events.includes('token') &&
     !turn.sources.length &&
-    /sector|cargo|jornada|condici[oó]n|escala|per[ií]odo|año/iu.test(
-      turn.answer,
-    ) &&
-    !/s\/|\d[.,]\d{2}/iu.test(turn.answer) &&
-    (turn.answer.match(/\?/gu) ?? []).length === 1
+    allowed.test(question)
   );
+}
+
+/** Moneda explícita (también enteros) y decimales; conservar el signo. */
+function moneyValues(text: string): string[] {
+  const pattern =
+    /(?:s\/\.?\s*|(?<![\p{L}\p{N}]))([+\-−]?\s*\d+(?:[ .,]\d{3})*(?:[,.]\d{2})?)(?:\s*soles\b)?/giu;
+  return [...text.matchAll(pattern)].flatMap((match) => {
+    if (
+      !/^s\//iu.test(match[0]) &&
+      !/soles\b/iu.test(match[0]) &&
+      !/[,.]\d{2}$/u.test(match[1])
+    )
+      return [];
+    const raw = match[1].replace(/\s/gu, '');
+    const decimal = /[,.](\d{2})$/u.exec(raw);
+    return [
+      decimal
+        ? raw.slice(0, decimal.index).replace(/[.,]/gu, '') + '.' + decimal[1]
+        : raw.replace(/[.,]/gu, ''),
+    ];
+  });
 }
 
 /** Dato de control contrastado con DS 049-2025-EF, página 3: contratado/30h/2025. */
@@ -228,20 +302,30 @@ export function salary2025TableIsCorrect(turn: QualityTurn): boolean {
     turn.sources.map((source) => [source.rank, source]),
   );
   const rows = markdownTables(turn.answer)[0].rows;
+  const allText = normalize(turn.answer);
+  const amounts = moneyValues(turn.answer);
+  // Control de una consulta personal concreta, no de una escala general: el
+  // importe correcto en una fila no absuelve otra cifra o cargo en la prosa.
+  if (
+    !/\b(?:docente|profesor)\b/u.test(allText) ||
+    !/\bcontratad[oa]\b/u.test(allText) ||
+    /\b(?:auxiliar|nombrad[oa]|director|directivo)\b/u.test(allText) ||
+    /\b(?:20|24|25|40)\s*horas\b/u.test(allText) ||
+    !amounts.length ||
+    amounts.some((amount) => amount !== '3300.60')
+  )
+    return false;
   return (
     rows.length > 0 &&
     rows.every((row) => {
       const text = row.join(' ');
-      const amounts =
-        text.match(/(?<![\p{L}\p{N}])\d+(?:[ .,]\d{3})*[,.]\d{2}(?!\d)/gu) ??
-        [];
-      const normalizedAmounts = amounts.map(
-        (amount) =>
-          amount.slice(0, -3).replace(/[ .,]/gu, '') + '.' + amount.slice(-2),
-      );
+      const normalizedAmounts = moneyValues(text);
       return (
         normalizedAmounts.length > 0 &&
         normalizedAmounts.every((amount) => amount === '3300.60') &&
+        row.some((cell) =>
+          /^(?:\*\*)?30(?:\s*horas)?(?:\*\*)?$/iu.test(cell),
+        ) &&
         !/\bno\b|hist[oó]ric|antecedente/iu.test(text) &&
         [...citationRanksIn(text)].some((rank) => {
           const source = sourceByRank.get(rank);
@@ -288,6 +372,31 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
     O04: { title: /049-2025-EF/iu },
     E03: { title: /074-2019-EF/iu },
   };
+/** Mismo evaluador en la primera corrida y todas sus repeticiones. */
+export function pdfMinuteRequestIsCorrect(turn: QualityTurn): boolean {
+  return (
+    /(?:pdf|documento).{0,100}p[aá]gin|p[aá]gin.{0,100}(?:pdf|documento)/iu.test(
+      turn.answer,
+    ) &&
+    /(?:no (?:existe|corresponde|puedo|se usa)|no hay|no por minuto).{0,80}minuto|no por minuto/iu.test(
+      turn.answer,
+    ) &&
+    !/\b\d{1,2}:\d{2}\b|\b(?:minuto|segundo)\s*\d+\b/iu.test(turn.answer)
+  );
+}
+export function salaryDocumentLocationIsCorrect(turn: QualityTurn): boolean {
+  return (
+    turn.events.includes('token') &&
+    citationsPointToKnownSources(turn) &&
+    turn.sources.some(
+      (source) =>
+        /049-2025-EF/iu.test(source.title) &&
+        source.page <= 3 &&
+        source.pageEnd >= 3,
+    ) &&
+    !/no puedo[^.]*enlac/iu.test(turn.answer)
+  );
+}
 export function decideVerdict(input: {
   id: string;
   turns: QualityTurn[];
@@ -298,6 +407,7 @@ export function decideVerdict(input: {
   const issues = input.turns.flatMap((turn) =>
     integrityIssues(turn, input.corpus),
   );
+  if (!input.turns.length) issues.push('Caso sin turnos ejecutados.');
   if (issues.length) return { verdict: 'FALLA', issues };
   const baseId = input.id.replace(/-R\d+$/u, '');
   const rule = CORPUS_RULES[baseId];
@@ -360,13 +470,22 @@ export function assessStability(
               ['token', 'no_evidence', 'clarification'].includes(event),
             ),
           ),
-          versions: run.turns.map((turn) =>
-            [
+          facts: run.turns.map((turn) => ({
+            amounts: [...new Set(moneyValues(turn.answer))].sort(),
+            sources: [
               ...new Set(
-                turn.sources.map((source) => source.documentVersionId),
+                turn.sources.map((source) =>
+                  JSON.stringify([
+                    source.documentVersionId,
+                    source.page,
+                    source.pageEnd,
+                    source.articleReference,
+                    source.numeralReference,
+                  ]),
+                ),
               ),
             ].sort(),
-          ),
+          })),
         }),
       );
       return {
