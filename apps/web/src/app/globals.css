@@ -1132,11 +1132,39 @@ textarea[aria-invalid="true"]:focus,
 /* Tablas breves emitidas por el RAG: datos comparables, no una cuadrícula
    decorativa. El contenedor conserva el ancho del chat y permite revisar las
    columnas en un teléfono sin reducir el texto por debajo de 16 px. */
-.avend-chat-table-scroll {
+.avend-chat-table-block {
   margin: 0 0 0.875rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.avend-chat-table-block:last-child {
+  margin-bottom: 0;
+}
+
+/* En un teléfono la sangría bajo el avatar (2.375 rem) le quita a la tabla casi
+   una columna: se alinea con el borde del mensaje para usar todo el ancho. */
+@media (max-width: 40rem) {
+  .avend-chat-table-block {
+    margin-inline-start: -2.375rem;
+    max-width: calc(100% + 2.375rem);
+    width: calc(100% + 2.375rem);
+  }
+}
+
+.avend-chat-table-scroll {
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
+}
+
+/* Se muestra solo si la tabla no cabe (ver ChatTable): quien no sabe que debe
+   deslizar no tiene por qué descubrirlo por una barra fina. Sin animación. */
+.avend-chat-table-hint {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.375rem 0 0;
 }
 
 .avend-chat-table-scroll:focus-visible {
@@ -1149,7 +1177,9 @@ textarea[aria-invalid="true"]:focus,
   border-collapse: collapse;
   font-size: 1rem;
   line-height: 1.5;
-  min-width: 34rem;
+  /* Un ancho mínimo por columna: una tabla de dos columnas cabe en un teléfono
+     sin desplazarse; la de cuatro conserva 34 rem y se desplaza dentro. */
+  min-width: calc(var(--avend-table-columns, 4) * 8.5rem);
   text-align: left;
   width: 100%;
 }
@@ -1170,10 +1200,6 @@ textarea[aria-invalid="true"]:focus,
 
 .avend-chat-table tbody tr:last-child td {
   border-bottom: 0;
-}
-
-.avend-chat-table-scroll:last-child {
-  margin-bottom: 0;
 }
 
 .avend-chat-message-content strong {

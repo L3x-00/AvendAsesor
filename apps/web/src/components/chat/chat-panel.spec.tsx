@@ -1162,7 +1162,7 @@ describe("ChatPanel", () => {
     );
 
     const table = screen.getByRole("table", {
-      name: "Tabla de la respuesta 1",
+      name: "Tabla de la respuesta 1: 2 columnas (Cargo y Remuneración mensual) y 2 filas.",
     });
     expect(within(table).getByRole("columnheader", { name: "Cargo" })).toBeVisible();
     expect(

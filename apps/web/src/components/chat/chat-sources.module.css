@@ -132,7 +132,7 @@
   border-radius: 999px;
   color: var(--avend-navy);
   display: inline-flex;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 700;
   height: 1.75rem;
   justify-content: center;
@@ -275,6 +275,13 @@
     font-weight: 600;
   }
 
+  /* Todo el contenido de la celda va en la columna de valores, uno bajo otro:
+     sin esto, el segundo dato caía en la columna estrecha de la etiqueta y
+     partía palabras como «Remuneracio-nes». */
+  .table td > * {
+    grid-column: 2;
+  }
+
   .mobileCellLabel {
     clip: rect(0 0 0 0);
     clip-path: inset(50%);
@@ -317,14 +324,14 @@
 
 .downloadsHeading h2 {
   color: var(--avend-navy);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   line-height: 1.4;
   margin: 0;
 }
 
 .downloadsHeading p {
   color: var(--avend-text-muted);
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.4;
   margin: 0.0625rem 0 0;
 }
@@ -362,14 +369,14 @@
 
 .downloadList strong {
   color: var(--avend-text);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   line-height: 1.4;
 }
 
 .downloadList small {
   color: var(--avend-text-muted);
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -515,7 +522,7 @@
 
 .toggleCopy span {
   color: var(--avend-text-muted);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 500;
   line-height: 1.35;
 }
