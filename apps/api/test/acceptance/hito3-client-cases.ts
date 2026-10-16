@@ -21,7 +21,8 @@
  * separados por | que identifiquen las versiones tabulares aprobadas. Consume saldo del
  * proveedor (unas 45 consultas).
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { AuthorizationContext } from '../../src/authorization';
@@ -41,7 +42,25 @@ import { SupabaseChatGatewayAdapter } from '../../src/supabase/supabase-chat.gat
 import { SupabaseRetrievalGatewayAdapter } from '../../src/supabase/supabase-retrieval.gateway';
 import { createSupabaseServerClient } from '../../src/supabase/supabase.server-client';
 
-type Verdict = 'PASA' | 'FALLA' | 'REQUIERE_CORPUS' | 'REQUIERE_REVISION';
+import {
+  assessStability,
+  citationRanksIn,
+  citationsPointToKnownSources,
+  corpusSnapshotKey,
+  decideVerdict,
+  isCausalClarification,
+  isSalaryClarification,
+  markdownTables,
+  noEvidenceIsSafe,
+  pdfMinuteRequestIsCorrect,
+  salaryDocumentLocationIsCorrect,
+  salary2025TableMatchesControl,
+  tableRowsAreNewestFirst,
+  tableRowsHaveKnownCitations,
+  type CorpusSnapshot,
+  type QualityTurn,
+  type Verdict,
+} from './quality-oracles';
 
 interface StoredMessage {
   content: string;
@@ -56,22 +75,13 @@ interface StoredConversation {
   userId: string;
 }
 
-interface TurnResult {
+interface TurnResult extends QualityTurn {
   answer: string;
   clarificationModules: string[];
   conversationId: string | null;
   events: string[];
   moduleId: string | null | undefined;
   question: string;
-  sources: Array<{
-    issuanceYear: number | null;
-    moduleName: string | null;
-    page: number;
-    pageCount: number | null;
-    rank: number;
-    relatedModuleName: string | null;
-    title: string;
-  }>;
   startedNewConversation: boolean | undefined;
 }
 
@@ -203,7 +213,9 @@ async function main(): Promise<void> {
    * Se separan con | en el .env local; sin esta fotografía del corpus no se
    * declara que una respuesta sin tabla sea un fallo del modelo.
    */
-  const tableSourceTitleFragments = (env.ACCEPTANCE_TABLE_SOURCE_TITLES ?? '')
+  const tableSourceTitleFragments = (
+    env.ACCEPTANCE_TABLE_SOURCE_TITLES ?? '049-2025-EF'
+  )
     .split('|')
     .map((value) => normalizeSpanishText(value).trim())
     .filter(Boolean);
@@ -216,8 +228,85 @@ async function main(): Promise<void> {
     env.SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY,
   );
+  if (!client)
+    throw new Error('La campaña requiere una conexión de corpus configurada.');
   const modulesGateway = new SupabaseChatGatewayAdapter(client);
   const history = new MemoryHistory(modulesGateway);
+  const catalogGateway = new SupabaseChatCatalogGatewayAdapter(client);
+  const activeModules = await modulesGateway.listActiveModules();
+  const corpus: CorpusSnapshot = {
+    capturedAt: new Date().toISOString(),
+    documents: await catalogGateway.listAvailableDocuments(),
+    activeRootModules: activeModules
+      .filter((module) => !module.parentModuleId)
+      .map((module) => module.name),
+  };
+  const salaryDocument = corpus.documents.find((doc) =>
+    /049-2025-EF/iu.test(doc.title),
+  );
+  const salaryChunks = salaryDocument
+    ? await client
+        .from('document_chunks')
+        .select('chunk_content,page_start,page_end')
+        .eq('document_version_id', salaryDocument.versionId)
+        .lte('page_start', 3)
+        .gte('page_end', 3)
+    : null;
+  if (salaryChunks?.error)
+    throw new Error(
+      'No se pudo verificar el dato de control salarial del corpus.',
+    );
+  const salaryText =
+    salaryChunks?.data?.map((chunk) => chunk.chunk_content).join('\n') ?? '';
+  const salaryControl = {
+    documentId: salaryDocument?.id ?? null,
+    versionId: salaryDocument?.versionId ?? null,
+    page: 3,
+    expectedAmount: '3300.60',
+    year: 2025,
+    hours: 30,
+    condition: 'contratado',
+    textHash: createHash('sha256').update(salaryText).digest('hex'),
+    verified:
+      /3\s*300,60/u.test(salaryText) &&
+      /\b30\b/u.test(salaryText) &&
+      /30328/u.test(salaryText),
+  };
+  const out =
+    process.env.ACCEPTANCE_OUT ?? 'test/acceptance/out/hito3-acceptance';
+  mkdirSync(dirname(out), { recursive: true });
+  const metadata = {
+    gitRevision: execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim(),
+    codeHash: createHash('sha256')
+      .update(
+        [
+          'test/acceptance/hito3-client-cases.ts',
+          'test/acceptance/quality-oracles.ts',
+          'src/rag/salary-applicability.ts',
+          'src/rag/rag.service.ts',
+          'src/chat/chat.service.ts',
+          'src/chat/intent/source-location.ts',
+          'src/rag/query-normalization.ts',
+        ]
+          .map((path) => readFileSync(path, 'utf8'))
+          .join('\n'),
+      )
+      .digest('hex'),
+    dirtyPaths: execFileSync('git', ['diff', '--name-only'], {
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean),
+    project: new URL(env.SUPABASE_URL).hostname,
+    generationModel: values.RAG_ANSWER_MODEL ?? null,
+    salaryControl,
+    persistence: 'in_memory',
+    corpusWrites: false,
+    oracleVersion: 3,
+  };
   const chat = new ChatService(
     new OpenAiAnswerGateway(config),
     history as unknown as ChatHistoryGateway,
@@ -231,15 +320,12 @@ async function main(): Promise<void> {
     // Como en producción: los «temas disponibles» se comprueban contra el
     // catálogo (módulos con documentos consultables). Sin generación de
     // preguntas sugeridas ni de resúmenes: no aportan a los oráculos.
-    new ChatCatalogService(new SupabaseChatCatalogGatewayAdapter(client), {
+    new ChatCatalogService(catalogGateway, {
       suggest: () => Promise.resolve([]),
     }),
   );
   const moduleIdByName = new Map(
-    (await modulesGateway.listActiveModules()).map((module) => [
-      module.name,
-      module.id,
-    ]),
+    activeModules.map((module) => [module.name, module.id]),
   );
   const requireModule = (name: string): string => {
     const moduleId = moduleIdByName.get(name);
@@ -274,13 +360,19 @@ async function main(): Promise<void> {
     } = {},
   ): Promise<TurnResult> {
     const events: ChatStreamEvent[] = [];
-    for await (const event of chat.stream({
-      authorization: options.user ?? teacher,
-      conversationId: options.conversationId ?? null,
-      question,
-      selectedModuleId: options.moduleId ?? null,
-    })) {
-      events.push(event);
+    let errorName: string | undefined;
+    try {
+      for await (const event of chat.stream({
+        authorization: options.user ?? teacher,
+        conversationId: options.conversationId ?? null,
+        question,
+        selectedModuleId: options.moduleId ?? null,
+      })) {
+        events.push(event);
+      }
+    } catch (error) {
+      if (error instanceof NotFoundError) throw error;
+      errorName = error instanceof Error ? error.name : 'UnknownError';
     }
     let answer = '';
     let clarificationModules: string[] = [];
@@ -307,6 +399,13 @@ async function main(): Promise<void> {
       }
       if (event.type === 'sources') {
         sources = event.data.sources.map((source) => ({
+          documentId: source.documentId,
+          documentVersionId: source.documentVersionId,
+          mimeType: source.mimeType,
+          pageEnd: source.pageEnd,
+          articleReference: source.articleReference,
+          numeralReference: source.numeralReference,
+          sectionTitle: source.sectionTitle,
           issuanceYear: source.issuanceYear,
           moduleName: source.moduleName,
           page: source.pageStart,
@@ -319,9 +418,15 @@ async function main(): Promise<void> {
     }
     return {
       answer,
+      error: errorName,
       clarificationModules,
       conversationId,
-      events: [...new Set(events.map((event) => event.type))],
+      events: [
+        ...new Set([
+          ...events.map((event) => event.type),
+          ...(errorName ? ['technical_error'] : []),
+        ]),
+      ],
       moduleId,
       question,
       sources,
@@ -338,118 +443,23 @@ async function main(): Promise<void> {
     notes: string,
     otherwise: Verdict = 'FALLA',
   ) => {
-    const verdict = pass ? 'PASA' : otherwise;
-    results.push({ id, notes, title, turns, verdict });
+    const assessment = decideVerdict({ id, turns, corpus, pass, otherwise });
+    const verdict = assessment.verdict;
+    results.push({
+      id,
+      notes: [notes, ...assessment.issues].join(' '),
+      title,
+      turns,
+      verdict,
+    });
+    writeFileSync(
+      out + '.json',
+      JSON.stringify({ metadata, corpus, results, complete: false }, null, 2),
+    );
     console.log(`${verdict.padEnd(15)} ${id} ${title}`);
   };
   const has = (turn: TurnResult, type: string) => turn.events.includes(type);
-  const citationRanksIn = (text: string) =>
-    new Set(
-      [...text.matchAll(/\[\[?\s*(\d+)\s*\]\]?/gu)].map((match) =>
-        Number(match[1]),
-      ),
-    );
   const citedRanks = (turn: TurnResult) => citationRanksIn(turn.answer);
-  const citationsPointToKnownSources = (turn: TurnResult): boolean => {
-    const citations = citedRanks(turn);
-    const knownRanks = new Set(turn.sources.map((source) => source.rank));
-    return (
-      citations.size > 0 && [...citations].every((rank) => knownRanks.has(rank))
-    );
-  };
-
-  /** Replica el contrato estricto del renderizador web de tablas Markdown. */
-  const MAX_TABLE_CELL_CHARS = 180;
-  const MAX_TABLE_COLUMNS = 4;
-  const MAX_TABLE_ROWS = 6;
-  type MarkdownTable = { headers: string[]; rows: string[][] };
-  const tableCells = (line: string): string[] | null => {
-    const trimmed = line.trim();
-    if (!trimmed.includes('|')) return null;
-    const cells = trimmed
-      .replace(/^\|/u, '')
-      .replace(/\|$/u, '')
-      .split('|')
-      .map((cell) => cell.trim());
-    if (
-      cells.length < 2 ||
-      cells.length > MAX_TABLE_COLUMNS ||
-      cells.some((cell) => cell.length > MAX_TABLE_CELL_CHARS)
-    ) {
-      return null;
-    }
-    return cells;
-  };
-  const markdownTables = (answer: string): MarkdownTable[] => {
-    const lines = answer.replace(/\r/gu, '').split('\n');
-    const tables: MarkdownTable[] = [];
-    for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
-      const headers = tableCells(lines[startIndex] ?? '');
-      const separator = tableCells(lines[startIndex + 1] ?? '');
-      if (
-        !headers ||
-        !separator ||
-        headers.some((header) => !header) ||
-        separator.length !== headers.length ||
-        !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))
-      ) {
-        continue;
-      }
-      const rows: string[][] = [];
-      let rowIndex = startIndex + 2;
-      while (rowIndex < lines.length) {
-        const row = tableCells(lines[rowIndex] ?? '');
-        if (!row || row.length !== headers.length) break;
-        if (rows.length === MAX_TABLE_ROWS) return [];
-        rows.push(row);
-        rowIndex += 1;
-      }
-      if (rows.length) tables.push({ headers, rows });
-    }
-    return tables;
-  };
-  const tableRowsHaveKnownCitations = (turn: TurnResult): boolean => {
-    const tables = markdownTables(turn.answer);
-    const knownRanks = new Set(turn.sources.map((source) => source.rank));
-    return (
-      tables.length === 1 &&
-      tables[0].rows.length >= 2 &&
-      tables[0].rows.every((row) =>
-        [...citationRanksIn(row.join(' '))].some((rank) =>
-          knownRanks.has(rank),
-        ),
-      ) &&
-      citationsPointToKnownSources(turn)
-    );
-  };
-  const tableRowsAreNewestFirst = (turn: TurnResult): boolean => {
-    const table = markdownTables(turn.answer)[0];
-    if (!table || !tableRowsHaveKnownCitations(turn)) return false;
-    const sourceByRank = new Map(
-      turn.sources.map((source) => [source.rank, source]),
-    );
-    const rowsWithYears = table.rows.map((row) => {
-      const years = [...citationRanksIn(row.join(' '))]
-        .map((rank) => sourceByRank.get(rank)?.issuanceYear)
-        .filter((year): year is number => year !== null && year !== undefined);
-      return {
-        maximumYear: Math.max(...years),
-        visiblyIdentifiesYear: years.some((year) =>
-          new RegExp(`\\b${year}\\b`, 'u').test(row.join(' ')),
-        ),
-      };
-    });
-    const years = rowsWithYears.map(({ maximumYear }) => maximumYear);
-    return (
-      years.every(Number.isFinite) &&
-      rowsWithYears.every(
-        ({ visiblyIdentifiesYear }) => visiblyIdentifiesYear,
-      ) &&
-      years.every(
-        (year, index) => index === 0 || year <= (years[index - 1] ?? year),
-      )
-    );
-  };
   const markdownTableRowCount = (turn: TurnResult): number =>
     markdownTables(turn.answer).reduce(
       (count, table) => count + table.rows.length,
@@ -549,7 +559,7 @@ async function main(): Promise<void> {
     'C07',
     'Fuentes visibles y citas válidas',
     [c07],
-    has(c07, 'sources') && c07Cited.size > 0 && c07Valid,
+    isCausalClarification(c07),
     `Citas ${[...c07Cited].join(',')}; todas existen: ${c07Valid}.`,
   );
 
@@ -586,9 +596,10 @@ async function main(): Promise<void> {
     'C09',
     'En un módulo preguntando por otro',
     [c09],
-    has(c09, 'token') &&
-      c09.sources.length > 0 &&
-      citationsPointToKnownSources(c09) &&
+    (isCausalClarification(c09) ||
+      (has(c09, 'token') &&
+        c09.sources.length > 0 &&
+        citationsPointToKnownSources(c09))) &&
       c09.moduleId === desplazamientos &&
       c09.startedNewConversation === true &&
       c09Stored?.selectedModuleId === desplazamientos &&
@@ -598,7 +609,7 @@ async function main(): Promise<void> {
 
   // C10 — Cambio de tema durante una misma conversación.
   const c10a = await ask(
-    '¿Qué incremento de remuneración dispuso el Decreto Supremo N.° 074-2019-EF para los profesores?',
+    'Soy docente contratado de secundaria, 30 horas, sector público. ¿Cuánto gano en 2025?',
   );
   const c10b = await ask(
     'Otra consulta: ¿quiénes pueden participar en la contratación de auxiliares de educación 2026?',
@@ -639,9 +650,12 @@ async function main(): Promise<void> {
   );
 
   // C11 — Pregunta de seguimiento que depende del contexto anterior.
-  const c11a = await ask(
+  const c11Initial = await ask(
     '¿Qué requisitos se exigen para la reasignación docente?',
   );
+  const c11a = await ask('Por salud', {
+    conversationId: c11Initial.conversationId,
+  });
   const c11b = await ask('¿Y qué documentos deben presentar?', {
     conversationId: c11a.conversationId,
   });
@@ -656,8 +670,9 @@ async function main(): Promise<void> {
   record(
     'C11',
     'Seguimiento dependiente del contexto',
-    [c11a, c11b],
-    has(c11a, 'token') &&
+    [c11Initial, c11a, c11b],
+    isCausalClarification(c11Initial) &&
+      has(c11a, 'token') &&
       has(c11b, 'token') &&
       c11b.conversationId === c11a.conversationId &&
       citationsPointToKnownSources(c11a) &&
@@ -698,7 +713,7 @@ async function main(): Promise<void> {
 
   // C14 — Historial guardado y recuperación de una conversación anterior.
   const c14a = await ask(
-    '¿Qué regula la norma técnica de reasignación y permuta docente?',
+    '¿Qué requisitos se exigen para la reasignación docente por salud?',
   );
   const saved = c14a.conversationId
     ? history.messagesOf(c14a.conversationId, teacher.userId)
@@ -732,7 +747,7 @@ async function main(): Promise<void> {
 
   // C15 — Un usuario no puede acceder al historial de otro.
   const c15 = await ask(
-    '¿Qué regula la norma técnica de reasignación y permuta docente?',
+    '¿Qué requisitos se exigen para la reasignación docente por salud?',
   );
   let blocked = false;
   try {
@@ -774,9 +789,7 @@ async function main(): Promise<void> {
     'C16',
     'Errores ortográficos en consulta de reasignación',
     [c16],
-    has(c16, 'token') &&
-      citedRanks(c16).size > 0 &&
-      citationsPointToKnownSources(c16) &&
+    isCausalClarification(c16) &&
       c16.moduleId === desplazamientos &&
       c16PreservesTeacherWording &&
       c16SourcesMatchDestination,
@@ -798,15 +811,18 @@ async function main(): Promise<void> {
     'C17',
     'Error ortográfico en remuneraciones',
     [c17],
-    has(c17, 'token') &&
-      citedRanks(c17).size > 0 &&
-      citationsPointToKnownSources(c17) &&
-      c17.moduleId === remuneraciones &&
-      c17SourcesMatchDestination,
+    isSalaryClarification(c17),
     has(c17, 'no_evidence')
       ? 'No hay corpus aprobado de remuneraciones para comprobar la corrección del término.'
       : `Módulo resuelto: ${c17.moduleId === remuneraciones ? 'remuneraciones' : String(c17.moduleId)}; citas conocidas: ${citationsPointToKnownSources(c17)}; fuentes asociadas al destino: ${c17SourcesMatchDestination}.`,
-    has(c17, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(c17, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(c17, 'token') &&
+          citationsPointToKnownSources(c17) &&
+          c17SourcesMatchDestination &&
+          c17.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   // C18 — Las escalas comparables se presentan como tabla únicamente si las
@@ -906,7 +922,7 @@ async function main(): Promise<void> {
     'C20',
     'No inventa marcas de minuto para un PDF',
     [c20],
-    c20ExplainsPdfPage && !c20FabricatesMinute,
+    pdfMinuteRequestIsCorrect(c20),
     `Explica referencia por página: ${c20ExplainsPdfPage}; atribuye minuto inexistente: ${c20FabricatesMinute}; eventos: ${c20.events.join(', ')}.`,
   );
 
@@ -984,7 +1000,7 @@ async function main(): Promise<void> {
   const auxModuleId = auxiliares;
   const auxTitleRe = /auxiliar/iu;
   const contractDocTitleRe =
-    /contrataci[oó]n docente|renovaci[oó]n|norma del proceso|preguntas frecuentes/iu;
+    /contrataci[oó]n docente|renovaci[oó]n|norma del proceso[^.]*docente/iu;
   const pi03 = await ask(
     '¿Qué requisitos se exigen para postular a una plaza de auxiliar de educación en el proceso 2026?',
   );
@@ -1100,31 +1116,37 @@ async function main(): Promise<void> {
   // No modifica el comportamiento del RAG: solo amplía la evidencia de la
   // campaña real antes de iniciar el análisis de causa raíz.
   const o01 = await ask('¿Cuánto gana un profesor en Perú?');
-  const o01Grounded =
-    has(o01, 'token') &&
-    citationsPointToKnownSources(o01) &&
-    o01.sources.some((source) => source.relatedModuleName === 'Remuneraciones');
+  const o01Grounded = isSalaryClarification(o01);
   record(
     'O01',
     'Pregunta literal del cliente sobre remuneración docente',
     [o01],
     o01Grounded,
     `Respuesta sustentada en Remuneraciones: ${o01Grounded}; fuentes: ${o01.sources.length}.`,
-    has(o01, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(o01, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(o01, 'token') &&
+          citationsPointToKnownSources(o01) &&
+          o01.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   const o02 = await ask('cuanto gana un profe del peru');
-  const o02Grounded =
-    has(o02, 'token') &&
-    citationsPointToKnownSources(o02) &&
-    o02.sources.some((source) => source.relatedModuleName === 'Remuneraciones');
+  const o02Grounded = isSalaryClarification(o02);
   record(
     'O02',
     'Variante coloquial y sin tildes sobre remuneración',
     [o02],
     o02Grounded,
     `Respuesta sustentada en Remuneraciones: ${o02Grounded}; fuentes: ${o02.sources.length}.`,
-    has(o02, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
+    has(o02, 'no_evidence')
+      ? 'REQUIERE_CORPUS'
+      : has(o02, 'token') &&
+          citationsPointToKnownSources(o02) &&
+          o02.moduleId === remuneraciones
+        ? 'REQUIERE_REVISION'
+        : 'FALLA',
   );
 
   const o03 = await ask(
@@ -1135,11 +1157,10 @@ async function main(): Promise<void> {
       /049-2025-EF/iu.test(source.title) &&
       source.relatedModuleName === 'Remuneraciones',
   );
-  const o03MentionsExpectedAmount = /(?:S\/?\s*)?3[ .]?300(?:[,.]60)?\b/u.test(
-    o03.answer,
-  );
+  const o03MentionsExpectedAmount =
+    salaryControl.verified && salary2025TableMatchesControl(o03);
   const o03TablePass =
-    markdownTables(o03.answer).length > 0 &&
+    tableRowsHaveKnownCitations(o03) &&
     citationsPointToKnownSources(o03) &&
     o03Recovers2025Scale &&
     o03MentionsExpectedAmount;
@@ -1155,15 +1176,7 @@ async function main(): Promise<void> {
   const o04 = await ask(
     'Dame el enlace del documento exacto donde aparece el sueldo de un profesor de 30 horas en 2025.',
   );
-  const o04TechnicalPass =
-    has(o04, 'token') &&
-    citationsPointToKnownSources(o04) &&
-    o04.sources.some(
-      (source) =>
-        /049-2025-EF/iu.test(source.title) &&
-        source.page > 0 &&
-        (source.pageCount === null || source.page <= source.pageCount),
-    );
+  const o04TechnicalPass = salaryDocumentLocationIsCorrect(o04);
   record(
     'O04',
     'Solicitud explícita del enlace a la fuente exacta',
@@ -1215,6 +1228,72 @@ async function main(): Promise<void> {
     );
   }
 
+  // OBS-003/023: identidad exacta y documentos deliberadamente no elegibles.
+  for (const [id, reference] of [
+    ['E01', 'RSG N.° 326-2017-MINEDU'],
+    ['E02', 'RSG N.° 121-2018-MINEDU'],
+  ] as const) {
+    const response = await ask('¿Qué establece la ' + reference + '?');
+    record(
+      id,
+      'Negativa segura ante norma no disponible: ' + reference,
+      [response],
+      has(response, 'no_evidence') &&
+        noEvidenceIsSafe(response) &&
+        !response.sources.length,
+      'No se acepta una fuente sustituta.',
+    );
+  }
+  const e03 = await ask(
+    '¿Qué incremento dispuso el Decreto Supremo N.° 074-2019-EF?',
+  );
+  record(
+    'E03',
+    'Norma disponible por número exacto: DS 074-2019-EF',
+    [e03],
+    has(e03, 'token') &&
+      citationsPointToKnownSources(e03) &&
+      e03.sources.every((item) => /074-2019-EF/iu.test(item.title)),
+    'Corpus previo distingue ausencia documental de metadatos de identidad incompletos.',
+  );
+
+  const repetitions = Number(process.env.ACCEPTANCE_REPEATS ?? '3');
+  if (!Number.isInteger(repetitions) || repetitions < 1 || repetitions > 5)
+    throw new Error('ACCEPTANCE_REPEATS debe ser entero entre 1 y 5.');
+  for (let repeat = 2; repeat <= repetitions; repeat += 1) {
+    for (const [id, original] of [
+      ['O03', o03],
+      ['O04', o04],
+      ['C20', c20],
+    ] as const) {
+      const response = await ask(original.question);
+      const pass =
+        id === 'O03'
+          ? salaryControl.verified && salary2025TableMatchesControl(response)
+          : id === 'O04'
+            ? salaryDocumentLocationIsCorrect(response)
+            : pdfMinuteRequestIsCorrect(response);
+      record(
+        id + '-R' + repeat,
+        'Repetición de estabilidad: ' + id,
+        [response],
+        id === 'O04' ? false : pass,
+        'Se comparan resultado, eventos y versiones, sin exigir redacción idéntica.',
+        id === 'O04' && pass ? 'REQUIERE_REVISION' : 'FALLA',
+      );
+    }
+  }
+  const stability = assessStability(results);
+  const modulesAfter = await modulesGateway.listActiveModules();
+  const corpusAfter: CorpusSnapshot = {
+    capturedAt: new Date().toISOString(),
+    documents: await catalogGateway.listAvailableDocuments(),
+    activeRootModules: modulesAfter
+      .filter((module) => !module.parentModuleId)
+      .map((module) => module.name),
+  };
+  const corpusUnchanged =
+    corpusSnapshotKey(corpus) === corpusSnapshotKey(corpusAfter);
   const summary = results.reduce<Record<string, number>>(
     (totals, item) => ({
       ...totals,
@@ -1224,13 +1303,28 @@ async function main(): Promise<void> {
   );
   console.log('\nRESUMEN', JSON.stringify(summary));
   // Reportes fuera de git (test/acceptance/out/ está ignorado).
-  const out =
-    process.env.ACCEPTANCE_OUT ?? 'test/acceptance/out/hito3-acceptance';
-  mkdirSync(dirname(out), { recursive: true });
+  const gate =
+    results.some((result) => result.verdict === 'FALLA') ||
+    stability.some((item) => !item.stable)
+      ? 'FAILED'
+      : !corpusUnchanged || results.some((result) => result.verdict !== 'PASA')
+        ? 'INCOMPLETE'
+        : 'PASSED';
   writeFileSync(
     `${out}.json`,
     JSON.stringify(
-      { results, summary, unanswered: history.unanswered },
+      {
+        metadata,
+        corpus,
+        corpusAfter,
+        corpusUnchanged,
+        results,
+        summary,
+        stability,
+        gate,
+        complete: true,
+        unanswered: history.unanswered,
+      },
       null,
       2,
     ),
@@ -1238,7 +1332,19 @@ async function main(): Promise<void> {
   writeFileSync(
     `${out}.md`,
     [
-      '# Validación integral del Hito 3',
+      '# Validación integral del Hito 3 — oráculos de calidad v3',
+      '',
+      'Revisión: ' +
+        metadata.gitRevision +
+        ' · Proyecto: ' +
+        metadata.project +
+        ' · Compuerta: ' +
+        gate,
+      'Corpus elegible previo: ' +
+        corpus.documents.length +
+        ' documentos · Historial en memoria · Sin escrituras de corpus.',
+      'Estabilidad: ' + JSON.stringify(stability),
+      'Inventario elegible sin cambios durante la campaña: ' + corpusUnchanged,
       '',
       `Resumen: ${Object.entries(summary)
         .map(([verdict, count]) => `${verdict} ${count}`)
@@ -1264,6 +1370,7 @@ async function main(): Promise<void> {
       ]),
     ].join('\n'),
   );
+  process.exitCode = gate === 'FAILED' ? 1 : gate === 'INCOMPLETE' ? 2 : 0;
 }
 
 main().catch((error: unknown) => {

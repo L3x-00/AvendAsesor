@@ -57,6 +57,10 @@ const OPEN_ASK =
 /** Referencia definida al archivo («ese documento», «la norma», «el PDF»). */
 const DEFINITE_DOCUMENT =
   /\b(?:el|la|los|las|ese|esa|esos|esas|este|esta|estos|estas|dicho|dicha|mismo|misma|un|una)\s+(?:documento|documentos|norma|normas|resolucion|resoluciones|pdf|fuente|fuentes|archivo|archivos|anexo|anexos|informe|informes|planilla|contrato|directiva|decreto|ley|reglamento|memorandum|oficio|acta|cronograma)\b/u;
+const OPEN_FILE_FRAME = new RegExp(
+  `${OPEN_ASK.source}\\s+${DEFINITE_DOCUMENT.source}`,
+  'u',
+);
 
 const MINUTE_NOUN = /\bminutos?\b/u;
 const MINUTE_FRAME =
@@ -126,7 +130,22 @@ export function sourceLocationRequestIn(
 
   if (asksMinuteUnit(normalized, inConversation)) return { asksMinute: true };
   if (!/\p{L}/u.test(normalized)) return null;
-  if (CONTENT_ASK.test(normalized)) return null;
+  if (
+    CONTENT_ASK.test(normalized) &&
+    !/\b(?:muestra|muestrame|abre|abreme) (?:el|la) (?:documento|pdf|archivo) que contiene\b/u.test(
+      normalized,
+    )
+  )
+    return null;
+  // «Muéstrame en una tabla ... de los documentos» pide contenido comparado,
+  // no abrir los documentos. Un pedido explícito de enlaces sigue su ruta.
+  if (
+    /\b(?:en (?:una )?|una )tabla\b/u.test(normalized) &&
+    CONTENT_SUBJECT.test(normalized) &&
+    !OPEN_FILE_FRAME.test(normalized) &&
+    !LOCATION_NOUN.test(normalized)
+  )
+    return null;
   if (FIGURATIVE_LINK.test(normalized)) return null;
   if (CATALOG_NOUN.test(normalized)) return null;
   // «¿en qué página del portal del MINEDU…?» pide un destino web, no la página

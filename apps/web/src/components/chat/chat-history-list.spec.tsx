@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Component, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -185,14 +185,23 @@ describe("ChatHistoryList", () => {
         .closest("li"),
     ).toHaveFocus();
 
-    pending.resolve({ status: "removed" });
+    // La respuesta simulada del servidor también debe vaciar los efectos de
+    // React: ver el portal en el DOM no garantiza que su efecto de foco corrió.
+    await act(async () => pending.resolve({ status: "removed" }));
 
     const dialog = await screen.findByRole("dialog", { name: REMOVED_TITLE });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleDescription(
       "«Licencias por salud» ya no aparece en tu historial.",
     );
-    expect(within(dialog).getByRole("button", { name: "Aceptar" })).toHaveFocus();
+    // El foco entra en «Aceptar» en un efecto posterior al montaje del portal:
+    // se espera a que ocurra (mismo patrón que las demás pruebas de foco del
+    // proyecto) en vez de depender del momento exacto del efecto.
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: "Aceptar" }),
+      ).toHaveFocus(),
+    );
     // Una sola operación del router y nunca la pantalla de error.
     expect(refresh).toHaveBeenCalledOnce();
     expect(replace).not.toHaveBeenCalled();

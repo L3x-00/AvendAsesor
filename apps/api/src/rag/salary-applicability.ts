@@ -31,6 +31,9 @@ const AMOUNT_PATTERN_ALL = new RegExp(AMOUNT_PATTERN.source, 'gu');
 
 const SALARY_TERMS =
   /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gana|ganan|ganaria|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
+/** «Ganar un concurso» no pregunta un importe; «cuánto debería ganar» sí. */
+const SALARY_AMOUNT_QUESTION =
+  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b/u;
 
 const SPECIAL_ALLOCATION_TERMS =
   /\b(?:asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?|sepelio|bono(?:s)?|compensacion(?:es)?)\b/u;
@@ -424,7 +427,8 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
   return {
     asksSpecialAllocation: SPECIAL_ALLOCATION_REQUEST.test(text),
     condition: conditionsIn(text)[0] ?? null,
-    isSalaryQuestion: SALARY_TERMS.test(text),
+    isSalaryQuestion:
+      SALARY_TERMS.test(text) || SALARY_AMOUNT_QUESTION.test(text),
     jornadaHours: hoursIn(text)[0] ?? null,
     role: rolesIn(text)[0] ?? null,
     scale: scalesIn(text)[0] ?? null,

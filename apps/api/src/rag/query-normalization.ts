@@ -29,6 +29,9 @@ const ABBREVIATIONS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
  * tilde porque la comparación usa `normalizeSpanishText`.
  */
 const COMMON_WORD_TYPOS: ReadonlyMap<string, string> = new Map([
+  ['reasingnacion', 'reasignación'],
+  ['reasingnaciones', 'reasignaciones'],
+  ['rekisitos', 'requisitos'],
   ['renumeracion', 'remuneración'],
   ['renumeraciones', 'remuneraciones'],
   ['renumreacion', 'remuneración'],
