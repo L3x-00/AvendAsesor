@@ -371,6 +371,20 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
         corpus,
       ),
     ).toEqual(expect.arrayContaining([expect.stringContaining('Cabecera')]));
+    expect(
+      integrityIssues(
+        turn({
+          sources: [
+            {
+              ...source,
+              sectionTitle:
+                'La integridad del documento y la autoría de las firmas pueden ser verificadas en el validador.',
+            },
+          ],
+        }),
+        corpus,
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringContaining('Cabecera')]));
   });
   it('el orden temporal no puede usar años ausentes o una fila antigua primero (OBS-010)', () => {
     const old = { ...source, rank: 2, issuanceYear: 2023 };

@@ -248,7 +248,7 @@ export function integrityIssues(
       );
     if (
       source.sectionTitle &&
-      /^(?:\d+\s+)?(?:normas\s+l\s*egales|el peruano\b|documento electr[oó]nico firmado)/iu.test(
+      /^(?:\d+\s+)?(?:normas\s+l\s*egales|el peruano\b|documento electr[oó]nico firmado|la integridad del documento y la autor[ií]a|esta es una copia aut[eé]ntica imprimible|firmado digitalmente por)/iu.test(
         source.sectionTitle,
       )
     )
