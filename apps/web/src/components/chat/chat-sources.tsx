@@ -489,49 +489,48 @@ export function ChatSources({
       </button>
 
       <div
-        aria-hidden={!isOpen}
-        aria-labelledby={toggleId}
-        className={styles.disclosurePanel}
-        data-open={isOpen ? "true" : "false"}
-        id={contentId}
-        inert={!isOpen}
-        role="region"
-      >
-        <div className={styles.disclosurePanelInner}>
-          <header className={styles.heading}>
-            <div>
-              <h2>Referencias</h2>
-              <p>
-                {hasCitations
-                  ? "Documentos citados en la respuesta. Toca un número [n] del texto para ir a su fuente."
-                  : "Documentos consultados para esta respuesta."}
-              </p>
-            </div>
-          </header>
-
-          <SourceTable
-            caption="Fuentes documentales, ubicación y descarga"
-            messageId={messageId}
-            sources={primary}
-          />
-
-          {others.length ? (
-            <details className={styles.others}>
-              <summary>
-                Otros fragmentos revisados, no citados en la respuesta (
-                {others.length})
-              </summary>
-              <SourceTable
-                caption="Fragmentos revisados no citados"
-                messageId={messageId}
-                sources={others}
-              />
-            </details>
-          ) : null}
-
-          <ChatDownloads sources={sources} />
-        </div>
+  aria-hidden={!isOpen}
+  aria-labelledby={toggleId}
+  className={styles.disclosurePanel}
+  data-open={isOpen ? "true" : "false"}
+  id={contentId}
+  inert={!isOpen}
+  role="region"
+>
+  <div className={styles.disclosurePanelInner}>
+    <header className={styles.heading}>
+      <div>
+        <h2>Referencias</h2>
+        <p className={styles.sourceHint}>
+          {hasCitations
+            ? "Toca [1], [2] para ver la fuente."
+            : "Fuentes consultadas."}
+        </p>
       </div>
+    </header>
+
+    <SourceTable
+      caption="Fuentes documentales, ubicación y descarga"
+      messageId={messageId}
+      sources={primary}
+    />
+
+    {others.length ? (
+      <details className={styles.others}>
+        <summary>
+          Otros fragmentos revisados ({others.length})
+        </summary>
+        <SourceTable
+          caption="Fragmentos revisados no citados"
+          messageId={messageId}
+          sources={others}
+        />
+      </details>
+    ) : null}
+
+    <ChatDownloads sources={sources} />
+  </div>
+</div>
     </section>
   );
 }
