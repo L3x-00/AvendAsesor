@@ -2,6 +2,10 @@ export const DOCUMENT_TYPE_OPTIONS = [
   { label: "Resolución Ministerial", value: "RESOLUCION_MINISTERIAL" },
   { label: "Resolución Viceministerial", value: "RESOLUCION_VICEMINISTERIAL" },
   { label: "Resolución Directoral", value: "RESOLUCION_DIRECTORAL" },
+  {
+    label: "Resolución de Secretaría General",
+    value: "RESOLUCION_SECRETARIA_GENERAL",
+  },
   { label: "Decreto Supremo", value: "DECRETO_SUPREMO" },
   { label: "Decreto Legislativo", value: "DECRETO_LEGISLATIVO" },
   { label: "Ley", value: "LEY" },
@@ -28,6 +32,7 @@ export const NORMATIVE_DOCUMENT_TYPE_VALUES: ReadonlySet<string> = new Set([
   "REGLAMENTO",
   "RESOLUCION_DIRECTORAL",
   "RESOLUCION_MINISTERIAL",
+  "RESOLUCION_SECRETARIA_GENERAL",
   "RESOLUCION_VICEMINISTERIAL",
 ]);
 

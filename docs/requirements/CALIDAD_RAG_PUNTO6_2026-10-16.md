@@ -142,7 +142,31 @@ credenciales ni los enlaces firmados.
    el carril determinista actual no cubre esa variante y pide sector.
 4. E03 y rechazo exacto de DS049: metadatos de identidad incompletos. Coordinar
    con TSK-0094 causa B y TSK-0091; ninguna corrección de datos o reindexación
-   se ejecutó desde esta rama.
+   se ejecutó desde esta rama. **Nota 2026-10-16 (TSK-0096, autorizado por el
+   PO):** la causa se ataca en dos frentes ya implementados y verificados en
+   rama: (a) la compuerta exacta acepta el número que el título declara cuando
+   el campo registrado está vacío, con el número registrado como autoridad y el
+   tipo gobernado obligatorio (ADR-0026); (b) el catálogo incorpora
+   `RESOLUCION_SECRETARIA_GENERAL` y las dos RSG se retipan y numeran por la vía
+   auditable (ADR-0025). El despliegue de datos y migraciones es una operación
+   aparte, con ensayo en seco y autorización del PO. Esto **no** levanta el
+   bloqueo de aceptación de este punto: la campaña real sigue siendo la que
+   decide. **Revisión independiente 2026-10-16:** la primera versión fue
+   rechazada con un hallazgo alto reproducible (una norma que menciona a otra
+   del mismo tipo respondía por la mencionada, y un documento sin tipo declarado
+   respondía por una RSG difundida). Corregido: solo cuenta la primera
+   declaración de ese código en el título, `OTRO` no responde por una RSG, la
+   etiqueta de Secretaría General se busca en el número registrado y en el
+   título con tildes normalizadas, y el vector de búsqueda de la biblioteca
+   incluye el tipo nuevo. Los contraejemplos quedaron fijados en pgTAP y en las
+   pruebas unitarias; los límites que siguen sin cubrirse (ceros a la izquierda,
+   guion largo, «Núm.», un título que solo menciona otra norma del mismo código
+   sin evidencia propia y la variante «mención primero, número propio después»)
+   están documentados en ADR-0026. Los tres primeros se comportan igual en las dos
+   capas; solo los ceros a la izquierda entran a la compuerta exacta y responden
+   «sin evidencia», mientras que el guion largo y «Núm.» no se detectan como
+   referencia y siguen la ruta temática. La lista completa de límites vive en
+   ADR-0026 §Límites conocidos.
 5. C05 y PI-01: módulos requeridos sin corpus preparado y respuestas con hechos
    desde otros documentos. Contrastarlas contra el corpus antes de aceptarlas;
    no esconderlas como «REQUIERE_CORPUS» después de responder.

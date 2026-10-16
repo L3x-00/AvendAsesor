@@ -72,10 +72,8 @@ const DOCUMENT_PREFIX: Readonly<
   },
   'resolucion de secretaria general': {
     display: 'Resolución de Secretaría General',
-    // El catálogo actual no tiene un código propio para RSG: la gobernanza la
-    // conserva como OTRO. La identidad se completa con el prefijo del título o
-    // número registrado, sin ampliar ahora el esquema editorial.
-    documentType: 'OTRO',
+    // La RSG tiene tipo propio desde ADR-0025 y `OTRO` ya no responde por ella.
+    documentType: 'RESOLUCION_SECRETARIA_GENERAL',
     lookupCode: 'RSG',
   },
   'resolucion viceministerial': {
@@ -90,7 +88,7 @@ const DOCUMENT_PREFIX: Readonly<
   },
   rsg: {
     display: 'RSG',
-    documentType: 'OTRO',
+    documentType: 'RESOLUCION_SECRETARIA_GENERAL',
     lookupCode: 'RSG',
   },
   rvm: {
@@ -130,11 +128,54 @@ function normalizedRegisteredNumber(
   return normalized.replace(/^N(?:RO|UMERO)?/u, '');
 }
 
-/** Referencias explícitas y acotadas que la persona nombró en su pregunta. */
-export function exactDocumentReferencesIn(
-  question: string,
+/**
+ * Tipos gobernados que pueden responder por cada código de referencia. Espejo
+ * de `private.document_types_for_reference_code` en la base: la RSG tiene tipo
+ * propio (ADR-0025) y `OTRO` no responde por ella, porque un documento sin tipo
+ * declarado que menciona una RSG no es la RSG.
+ */
+const REFERENCE_LOOKUP_TYPES: Readonly<Record<string, readonly string[]>> = {
+  DIRECTIVA: ['DIRECTIVA'],
+  DL: ['DECRETO_LEGISLATIVO'],
+  DS: ['DECRETO_SUPREMO'],
+  LEY: ['LEY'],
+  RD: ['RESOLUCION_DIRECTORAL'],
+  RM: ['RESOLUCION_MINISTERIAL'],
+  RSG: ['RESOLUCION_SECRETARIA_GENERAL'],
+  RVM: ['RESOLUCION_VICEMINISTERIAL'],
+};
+
+/** Número registrado comparable; `null` cuando el campo está vacío. */
+function registeredNumberKey(
+  source: Pick<RetrievedChunk, 'resolutionNumber'>,
+  reference: ExactDocumentReference,
+): string | null {
+  if (!source.resolutionNumber?.trim()) return null;
+  const key = normalizedRegisteredNumber(source.resolutionNumber, reference);
+  return key.length ? key : null;
+}
+
+/** La RSG solo responde con la etiqueta explícita de Secretaría General. */
+function declaresSecretariaGeneral(
+  source: Pick<RetrievedChunk, 'documentTitle' | 'resolutionNumber'>,
+): boolean {
+  const labeledIdentity = normalizeDocumentReferenceKey(
+    `${source.resolutionNumber ?? ''} ${source.documentTitle ?? ''}`,
+  );
+  return (
+    labeledIdentity.includes('RSG') ||
+    labeledIdentity.includes('RESOLUCIONDESECRETARIAGENERAL')
+  );
+}
+
+/** Tope de referencias que una pregunta puede nombrar antes de acotarla. */
+const MAX_QUESTION_REFERENCES = 5;
+
+function documentReferencesIn(
+  text: string,
+  limit: number | null,
 ): ExactDocumentReference[] {
-  const normalized = normalizeSpanishText(question)
+  const normalized = normalizeSpanishText(text)
     // En textos jurídicos son habituales «R.S.G.», «D. S.» o «R. M.».
     // Compactarlos aquí evita que una puntuación editorial desactive la ruta
     // exacta y haga caer la consulta a similitud semántica.
@@ -167,7 +208,17 @@ export function exactDocumentReferencesIn(
     });
   }
 
-  return [...found.values()].slice(0, 5);
+  const references = [...found.values()];
+  // El texto acotado es la pregunta; sin tope se lee el título de un documento,
+  // que declara todas las referencias que necesite sin disparar búsquedas.
+  return limit === null ? references : references.slice(0, limit);
+}
+
+/** Referencias explícitas y acotadas que la persona nombró en su pregunta. */
+export function exactDocumentReferencesIn(
+  question: string,
+): ExactDocumentReference[] {
+  return documentReferencesIn(question, MAX_QUESTION_REFERENCES);
 }
 
 /** Defensa adicional: ninguna fuente parecida sustituye la norma nombrada. */
@@ -178,21 +229,25 @@ export function sourceMatchesExactDocumentReference(
   >,
   reference: ExactDocumentReference,
 ): boolean {
-  if (source.documentType !== reference.documentType) return false;
-  if (reference.lookupKey.startsWith('RSG:')) {
-    const labeledIdentity = normalizeDocumentReferenceKey(
-      `${source.resolutionNumber ?? ''} ${source.documentTitle}`,
-    );
-    if (
-      !labeledIdentity.includes('RSG') &&
-      !labeledIdentity.includes('RESOLUCIONDESECRETARIAGENERAL')
-    ) {
-      return false;
-    }
+  const lookupCode = reference.lookupKey.split(':', 1)[0] ?? '';
+  const acceptedTypes = REFERENCE_LOOKUP_TYPES[lookupCode];
+  if (!acceptedTypes) return false;
+  if (!source.documentType || !acceptedTypes.includes(source.documentType)) {
+    return false;
   }
-  const registeredNumber = source.resolutionNumber?.trim();
-  if (!registeredNumber) return false;
-  return (
-    normalizedRegisteredNumber(registeredNumber, reference) === reference.key
-  );
+  if (lookupCode === 'RSG' && !declaresSecretariaGeneral(source)) return false;
+  const registeredNumber = registeredNumberKey(source, reference);
+  // El número registrado manda: si existe y no coincide, el título no puede
+  // sustituirlo (evita que una norma que menciona a otra responda por ella).
+  if (registeredNumber) return registeredNumber === reference.key;
+  // Sin número registrado la identidad puede estar declarada en el título, con
+  // la misma exigencia de etiqueta y número que una pregunta. Solo cuenta la
+  // identidad propia: la PRIMERA declaración de ese código en el título. Una
+  // norma que menciona a otra —«que modifica la Resolución Ministerial N.°
+  // 123-2018-MINEDU»— no responde por la mencionada.
+  const declaredOwnIdentity = documentReferencesIn(
+    source.documentTitle ?? '',
+    null,
+  ).find((declared) => declared.lookupKey.split(':', 1)[0] === lookupCode);
+  return declaredOwnIdentity?.lookupKey === reference.lookupKey;
 }

@@ -113,7 +113,7 @@ const exactResolution = source({
   content: 'La norma contiene una regla comprobable para el caso consultado.',
   documentId: '00000000-0000-0000-0000-000000000305',
   documentTitle: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
-  documentType: 'OTRO',
+  documentType: 'RESOLUCION_SECRETARIA_GENERAL',
   moduleId: CONTRACTS_MODULE_ID,
   moduleName: 'Contrato docente',
   resolutionNumber: '326-2017-MINEDU',
@@ -269,7 +269,9 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
           const [code, identifier] = lookupKey.split(':');
           if (!identifier) return false;
           const expectedType =
-            code === 'RSG' ? 'OTRO' : 'UNUSED_IN_THIS_INTEGRATION_DOUBLE';
+            code === 'RSG'
+              ? 'RESOLUCION_SECRETARIA_GENERAL'
+              : 'UNUSED_IN_THIS_INTEGRATION_DOUBLE';
           const identity = normalize(
             `${item.resolutionNumber ?? ''} ${item.documentTitle}`,
           );

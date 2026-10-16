@@ -65,6 +65,7 @@ const NORMATIVE_DOCUMENT_TYPES = new Set([
   'REGLAMENTO',
   'RESOLUCION_DIRECTORAL',
   'RESOLUCION_MINISTERIAL',
+  'RESOLUCION_SECRETARIA_GENERAL',
   'RESOLUCION_VICEMINISTERIAL',
 ]);
 
@@ -85,6 +86,7 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   REGLAMENTO: 'Reglamento',
   RESOLUCION_DIRECTORAL: 'Resolución Directoral',
   RESOLUCION_MINISTERIAL: 'Resolución Ministerial',
+  RESOLUCION_SECRETARIA_GENERAL: 'Resolución de Secretaría General',
   RESOLUCION_VICEMINISTERIAL: 'Resolución Viceministerial',
 };
 

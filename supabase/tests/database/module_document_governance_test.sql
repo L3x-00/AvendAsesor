@@ -1,6 +1,6 @@
 begin;
 
-select plan(67);
+select plan(69);
 
 select has_type('public', 'document_approval_status', 'Technical approval has a constrained type');
 select has_type('public', 'document_archive_reason', 'Archive reasons have a constrained type');
@@ -809,6 +809,74 @@ select throws_ok(
   'P0001',
   'Document audit events are append-only',
   'Document history cannot be rewritten'
+);
+-- Alineación de la lista gobernada con los catálogos de API y panel: si una
+-- capa agrega o quita un tipo, esta prueba (o la unitaria equivalente) falla.
+select ok(
+  (
+    with definition as (
+      select pg_catalog.pg_get_constraintdef(oid) as text
+      from pg_catalog.pg_constraint
+      where conname = 'documents_governed_type_check'
+    )
+    select
+      (
+        select count(*)
+        from definition
+        cross join lateral pg_catalog.regexp_matches(
+          definition.text, '''[A-Z_]+''', 'g'
+        )
+      ) = 19
+      and (
+        select pg_catalog.bool_and(
+          definition.text like '%''' || expected.code || '''%'
+        )
+        from definition
+        cross join pg_catalog.unnest(array[
+          'RESOLUCION_MINISTERIAL', 'RESOLUCION_VICEMINISTERIAL',
+          'RESOLUCION_DIRECTORAL', 'RESOLUCION_SECRETARIA_GENERAL',
+          'DECRETO_SUPREMO', 'DECRETO_LEGISLATIVO',
+          'LEY', 'REGLAMENTO', 'DIRECTIVA', 'NORMA_TECNICA', 'OFICIO',
+          'MEMORANDUM', 'COMUNICADO', 'CRONOGRAMA', 'ANEXO',
+          'PREGUNTAS_FRECUENTES', 'INFORME', 'INFOGRAFIA', 'OTRO'
+        ]) as expected(code)
+      )
+  ),
+  'The governed type list keeps exactly the codes the API and the panel offer'
+);
+-- El vector de búsqueda de la biblioteca también enumera los tipos gobernados:
+-- si se agrega un tipo sin su rama, buscar por el nombre del tipo no encontrará
+-- el documento. Se exige una rama por tipo de biblioteca; `PREGUNTAS_FRECUENTES`
+-- no vive en la biblioteca (memoria de FAQ) y queda fuera de esta comprobación.
+select ok(
+  (
+    select
+      pg_catalog.bool_and(
+        pg_catalog.pg_get_expr(
+          default_value.adbin,
+          default_value.adrelid
+        ) like '%' || expected.code || '%'
+        and pg_catalog.pg_get_expr(
+          default_value.adbin,
+          default_value.adrelid
+        ) like '%Resolucion de Secretaria General%'
+      )
+    from pg_catalog.pg_attrdef as default_value
+    join pg_catalog.pg_attribute as attribute
+      on attribute.attrelid = default_value.adrelid
+      and attribute.attnum = default_value.adnum
+    cross join pg_catalog.unnest(array[
+      'RESOLUCION_MINISTERIAL', 'RESOLUCION_VICEMINISTERIAL',
+      'RESOLUCION_DIRECTORAL', 'RESOLUCION_SECRETARIA_GENERAL',
+      'DECRETO_SUPREMO', 'DECRETO_LEGISLATIVO',
+      'LEY', 'REGLAMENTO', 'DIRECTIVA', 'NORMA_TECNICA', 'OFICIO',
+      'MEMORANDUM', 'COMUNICADO', 'CRONOGRAMA', 'ANEXO',
+      'INFORME', 'INFOGRAFIA', 'OTRO'
+    ]) as expected(code)
+    where default_value.adrelid = 'public.documents'::regclass
+      and attribute.attname = 'governed_metadata_search_vector'
+  ),
+  'The library search vector keeps a branch for every governed library type'
 );
 
 select * from finish();
