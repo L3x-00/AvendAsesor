@@ -190,7 +190,9 @@ describe('legal document references', () => {
     const ownIdentity = exactDocumentReferencesIn(
       '¿Qué modifica la RM 789-2020-MINEDU?',
     )[0];
-    if (!mentioned || !ownIdentity) throw new Error('Expected exact references.');
+    if (!mentioned || !ownIdentity) {
+      throw new Error('Expected exact references.');
+    }
 
     const modifyingResolution = {
       documentTitle:
