@@ -42,8 +42,8 @@ import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
 import { ChatCatalogDownloads } from "./chat-catalog-downloads";
 import {
-  markdownTableAt,
-  tableRowsCiteKnownSources,
+  classifyTableAt,
+  markdownTableRowsAsText,
 } from "./chat-response-tables";
 import { ChatTable } from "./chat-table";
 import { SubmoduleFolder } from "./submodule-folder";
@@ -453,29 +453,47 @@ function renderRichContent(
       flushList();
       inSuggestions = true;
     }
-    const markdownTable = citations?.sources.length
-      ? markdownTableAt(lines, lineIndex)
-      : null;
-    const tableRowsAreCited = markdownTable
-      ? tableRowsCiteKnownSources(
-          markdownTable,
-          citations?.sources.map((source) => source.rank) ?? [],
-        )
-      : false;
-    if (markdownTable && tableRowsAreCited) {
+    const classifiedTable = classifyTableAt(
+      lines,
+      lineIndex,
+      citations?.sources.map((source) => source.rank) ?? [],
+    );
+    if (classifiedTable) {
+      const { asGrid, table } = classifiedTable;
       flushParagraph();
       flushList();
-      renderedTables += 1;
-      blocks.push(
-        renderMarkdownTable(
-          markdownTable.headers,
-          markdownTable.rows,
-          renderedTables,
-          citations,
-          { entities: inSuggestions, urls: officialUrls },
-        ),
-      );
-      lineIndex = markdownTable.endIndex;
+      if (asGrid) {
+        renderedTables += 1;
+        blocks.push(
+          renderMarkdownTable(
+            table.headers,
+            table.rows,
+            renderedTables,
+            citations,
+            { entities: inSuggestions, urls: officialUrls },
+          ),
+        );
+      } else {
+        // Sin cita por fila (o fuera de los topes de la grilla) no se presenta
+        // como tabla sustentada, pero las barras Markdown unidas en un párrafo
+        // no se pueden leer: una línea por fila.
+        const rowTexts = markdownTableRowsAsText(table);
+        if (rowTexts.length > 0) {
+          blocks.push(
+            <ul className="avend-chat-list" key={`table-text-${blocks.length}`}>
+              {rowTexts.map((text, index) => (
+                <li key={`${index}-${text}`}>
+                  {renderInline(text, citations, {
+                    entities: inSuggestions,
+                    urls: officialUrls,
+                  })}
+                </li>
+              ))}
+            </ul>,
+          );
+        }
+      }
+      lineIndex = table.endIndex;
       continue;
     }
     if (!line) {

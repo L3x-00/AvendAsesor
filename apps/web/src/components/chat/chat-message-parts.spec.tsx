@@ -25,13 +25,24 @@ describe("plainAnswerText", () => {
     ).toBe("Cargo\tRemuneración\nDocente coordinador\tS/ 2 666,80");
   });
 
-  it("does not turn an uncited Markdown grid into a table when copying", () => {
+  it("copies an uncited Markdown grid row by row, not as a table or raw bars", () => {
+    const copied = plainAnswerText(
+      "| Cargo | Remuneración |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 |",
+      [1],
+    );
+
+    expect(copied).toBe("Cargo: Docente coordinador; Remuneración: S/ 2 666,80");
+    expect(copied).not.toContain("|");
+    expect(copied).not.toContain("\t");
+  });
+
+  it("copies a one-row table cited on the following line as a tabbed grid, like the screen", () => {
     expect(
       plainAnswerText(
-        "| Cargo | Remuneración |\n| --- | ---: |\n| Docente coordinador | S/ 2 666,80 |",
+        "| Nivel | Monto |\n| --- | ---: |\n| Secundaria | S/ 3 300,60 |\n\nEl valor está en el artículo 3. [1]",
         [1],
       ),
-    ).toContain("| --- | ---: |");
+    ).toBe("Nivel\tMonto\nSecundaria\tS/ 3 300,60\n\nEl valor está en el artículo 3.");
   });
 });
 

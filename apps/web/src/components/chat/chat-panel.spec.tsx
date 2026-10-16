@@ -1182,6 +1182,163 @@ describe("ChatPanel", () => {
     ).toHaveAttribute("tabindex", "0");
   });
 
+  it("renders a one-row table when its immediately following evidence sentence cites the source", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "| Modalidad | Nivel | Jornada laboral | Remuneración mensual |\n| --- | --- | --- | ---: |\n| Educación Básica Regular - EBR | Secundaria | 30 horas | S/ 3 300,60 |\n\nEsta información se encuentra en el artículo 3, numeral 2.2. [1]",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Tabla de la respuesta 1: 4 columnas (Modalidad, Nivel, Jornada laboral y Remuneración mensual) y 1 fila.",
+    });
+    expect(table).toHaveTextContent("Educación Básica Regular - EBR");
+    expect(table).toHaveTextContent("S/ 3 300,60");
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/^\| Modalidad/u)).not.toBeInTheDocument();
+  });
+
+  it("renders the nine-row, five-column pay scale as a table instead of raw bars", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: [
+                "Aquí tienes una tabla informativa sobre las remuneraciones mensuales:",
+                "",
+                "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) | Cita |",
+                "|-------------------|---------------|-----------------|---------------------------|-------|",
+                "| Educación Básica Regular - EBR | Inicial | 30 | 3,300.60 | [1] |",
+                "| | Primaria | 30 | 3,300.60 | [1] |",
+                "| | Secundaria | 30 | 3,300.60 | [1] |",
+                "| Educación Básica Especial - EBE | Inicial | 30 | 3,300.60 | [1] |",
+                "| | Primaria | 30 | 3,300.60 | [1] |",
+                "| Educación Básica Alternativa - EBA | Inicial / Intermedio | 30 | 3,300.60 | [1] |",
+                "| | Avanzado | 30 | 3,300.60 | [1] |",
+                "| Educación Técnico Productiva - ETP | Básico y Medio | 30 | 3,300.60 | [1] |",
+                "| Profesor Coordinador PRONOEI | - | - | 4,400.80 | [1] |",
+                "",
+                "Los docentes contratados perciben una remuneración proporcional.",
+              ].join("\n"),
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Tabla de la respuesta 1: 5 columnas (Modalidad / Forma, Nivel / Ciclo, Jornada laboral, Remuneración mensual (S/) y Cita) y 9 filas.",
+    });
+    expect(within(table).getAllByRole("row")).toHaveLength(10);
+    expect(table).toHaveTextContent("Profesor Coordinador PRONOEI");
+    expect(table).toHaveTextContent("4,400.80");
+    expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Los docentes contratados perciben una remuneración proporcional."),
+    ).toBeVisible();
+  });
+
+  it("reads an uncited Markdown table row by row instead of showing raw bars", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "| Cargo | Jornada | Remuneración |\n| --- | --- | ---: |\n| Docente coordinador | 30 | S/ 2 666,80 |\n| Director encargado | - | S/ 3 000,00 |",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Cargo: Docente coordinador; Jornada: 30; Remuneración: S/ 2 666,80"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Cargo: Director encargado; Remuneración: S/ 3 000,00"),
+    ).toBeVisible();
+  });
+
+  it("keeps the group of a merged first cell when a row lacks a known citation", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "| Modalidad | Nivel | Monto |\n| --- | --- | --- |\n| EBR | Inicial | 3,300.60 [1] |\n| | Primaria | 3,300.60 |\n| | Secundaria | 3,300.60 [7] |",
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Modalidad: EBR; Nivel: Primaria; Monto: 3,300.60"),
+    ).toBeVisible();
+  });
+
+  it("reads a table beyond the grid limits row by row instead of showing raw bars", () => {
+    const rows = Array.from(
+      { length: 14 },
+      (_, index) => `| Nivel ${index + 1} | S/ ${3000 + index} [1] |`,
+    );
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: ["| Nivel | Monto |", "| --- | --- |", ...rows].join(
+                "\n",
+              ),
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/^Nivel: Nivel 14; Monto: S\/ 3013/u),
+    ).toBeVisible();
+  });
+
   it("keeps a sentence with a vertical bar as regular text", () => {
     render(
       <ChatPanel

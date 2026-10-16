@@ -2,10 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CITATION_TOKEN } from "./chat-sources";
-import {
-  markdownTablesToPlainText,
-  tableRowsCiteKnownSources,
-} from "./chat-response-tables";
+import { markdownTablesToPlainText } from "./chat-response-tables";
 
 /** Marca circular del asistente junto a su nombre, como en los chats de IA. */
 export function AssistantAvatar() {
@@ -29,7 +26,7 @@ export function plainAnswerText(
 ): string {
   const textWithSupportedTables = markdownTablesToPlainText(
     content,
-    (table) => tableRowsCiteKnownSources(table, sourceRanks),
+    sourceRanks,
   );
   const withoutCitations = textWithSupportedTables
     .split(CITATION_TOKEN)

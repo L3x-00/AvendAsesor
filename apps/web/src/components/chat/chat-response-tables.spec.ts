@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyTableAt,
   markdownTableAt,
+  markdownTableRowsAsText,
   markdownTablesToPlainText,
+  singleRowTableHasAdjacentKnownCitation,
   tableRowsCiteKnownSources,
 } from "./chat-response-tables";
 
@@ -27,13 +30,49 @@ describe("markdownTableAt", () => {
     expect(markdownTableAt(["A | B es una frase normal."], 0)).toBeNull();
   });
 
-  it("does not accept a grid that exceeds the six-row response limit", () => {
-    const lines = [
+  it("does not accept a grid beyond the presentation row limit", () => {
+    const lines = (rows: number) => [
       "| Columna A | Columna B |",
       "| --- | --- |",
-      ...Array.from({ length: 7 }, (_, index) => `| ${index} | ${index} |`),
+      ...Array.from({ length: rows }, (_, index) => `| ${index} | ${index} |`),
     ];
-    expect(markdownTableAt(lines, 0)).toBeNull();
+    expect(markdownTableAt(lines(13), 0)).toBeNull();
+  });
+
+  it("accepts the nine-row, five-column scale the model emits for teacher pay", () => {
+    const lines = [
+      "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) | Cita |",
+      "|---|---|---|---|---|",
+      "| Educación Básica Regular - EBR | Inicial | 30 | 3,300.60 | [1] |",
+      "| | Primaria | 30 | 3,300.60 | [1] |",
+      "| | Secundaria | 30 | 3,300.60 | [1] |",
+      "| Educación Básica Especial - EBE | Inicial | 30 | 3,300.60 | [1] |",
+      "| | Primaria | 30 | 3,300.60 | [1] |",
+      "| Educación Básica Alternativa - EBA | Inicial / Intermedio | 30 | 3,300.60 | [1] |",
+      "| | Avanzado | 30 | 3,300.60 | [1] |",
+      "| Educación Técnico Productiva - ETP | Básico y Medio | 30 | 3,300.60 | [1] |",
+      "| Profesor Coordinador PRONOEI | - | - | 4,400.80 | [1] |",
+    ];
+    const table = markdownTableAt(lines, 0);
+
+    expect(table?.headers).toHaveLength(5);
+    expect(table?.rows).toHaveLength(9);
+    expect(table?.rows[1]).toEqual(["", "Primaria", "30", "3,300.60", "[1]"]);
+    expect(tableRowsCiteKnownSources(table!, [1])).toBe(true);
+  });
+
+  it("does not accept a grid with more columns than the presentation limit", () => {
+    const wide = Array.from({ length: 7 }, (_, index) => `C${index}`);
+    expect(
+      markdownTableAt(
+        [
+          `| ${wide.join(" | ")} |`,
+          `| ${wide.map(() => "---").join(" | ")} |`,
+          `| ${wide.join(" | ")} |`,
+        ],
+        0,
+      ),
+    ).toBeNull();
   });
 
   it("requires every rendered row to cite one of the message sources", () => {
@@ -50,14 +89,168 @@ describe("markdownTableAt", () => {
     expect(tableRowsCiteKnownSources(table!, [1, 2])).toBe(true);
     expect(tableRowsCiteKnownSources(table!, [1])).toBe(false);
   });
+
+  it("permite una sola fila cuando la primera explicación posterior cita una fuente conocida", () => {
+    const lines = [
+      "| Nivel | Remuneración mensual |",
+      "| --- | ---: |",
+      "| Secundaria | S/ 3 300,60 |",
+      "",
+      "El valor aparece en el artículo 3, numeral 2.2. [1]",
+    ];
+    const table = markdownTableAt(lines, 0);
+
+    expect(table).not.toBeNull();
+    expect(singleRowTableHasAdjacentKnownCitation(lines, table!, [1])).toBe(
+      true,
+    );
+    expect(singleRowTableHasAdjacentKnownCitation(lines, table!, [2])).toBe(
+      false,
+    );
+  });
+
+  it("no relaja la evidencia fila por fila para tablas de varias filas", () => {
+    const lines = [
+      "| Nivel | Remuneración mensual |",
+      "| --- | ---: |",
+      "| Primaria | S/ 3 300,60 |",
+      "| Secundaria | S/ 3 300,60 |",
+      "El valor aparece en el artículo 3. [1]",
+    ];
+    const table = markdownTableAt(lines, 0);
+
+    expect(table).not.toBeNull();
+    expect(singleRowTableHasAdjacentKnownCitation(lines, table!, [1])).toBe(
+      false,
+    );
+  });
+
+  it("no busca una cita más allá de la primera explicación posterior", () => {
+    const lines = [
+      "| Nivel | Remuneración mensual |",
+      "| --- | ---: |",
+      "| Secundaria | S/ 3 300,60 |",
+      "",
+      "La norma distingue esta remuneración de otras asignaciones.",
+      "La referencia se encuentra en el artículo 3. [1]",
+    ];
+    const table = markdownTableAt(lines, 0);
+
+    expect(table).not.toBeNull();
+    expect(singleRowTableHasAdjacentKnownCitation(lines, table!, [1])).toBe(
+      false,
+    );
+  });
 });
 
 describe("markdownTablesToPlainText", () => {
   it("preserves normal prose and turns only recognized tables into rows", () => {
     expect(
       markdownTablesToPlainText(
-        "Antes\n| Cargo | Monto |\n| --- | --- |\n| Docente | S/ 2 666,80 |\nDespués",
+        "Antes\n| Cargo | Monto |\n| --- | --- |\n| Docente | S/ 2 666,80 [1] |\nDespués",
+        [1],
       ),
-    ).toBe("Antes\nCargo\tMonto\nDocente\tS/ 2 666,80\nDespués");
+    ).toBe("Antes\nCargo\tMonto\nDocente\tS/ 2 666,80 [1]\nDespués");
+  });
+
+  it("copia por filas legibles la tabla que no es grilla, sin barras ni guiones", () => {
+    expect(
+      markdownTablesToPlainText(
+        "| Cargo | Monto |\n| --- | --- |\n| Docente | S/ 2 666,80 |",
+        [1],
+      ),
+    ).toBe("Cargo: Docente; Monto: S/ 2 666,80");
+  });
+});
+
+describe("markdownTableRowsAsText", () => {
+  it("lee cada fila como «Encabezado: valor» y omite celdas vacías o con guion", () => {
+    const table = markdownTableAt(
+      [
+        "| Nivel | Jornada | Monto |",
+        "| --- | --- | --- |",
+        "| Primaria | 30 | S/ 3 300,60 [1] |",
+        "| Coordinador | - | S/ 4 400,80 [1] |",
+        "| | | |",
+      ],
+      0,
+    );
+
+    expect(markdownTableRowsAsText(table!)).toEqual([
+      "Nivel: Primaria; Jornada: 30; Monto: S/ 3 300,60 [1]",
+      "Nivel: Coordinador; Monto: S/ 4 400,80 [1]",
+    ]);
+  });
+});
+
+describe("classifyTableAt", () => {
+  const header = ["| Nivel | Monto |", "| --- | ---: |"];
+
+  it("es grilla solo si cada fila cita una fuente del mensaje", () => {
+    const cited = [...header, "| A | 1 [1] |", "| B | 2 [1] |"];
+    const mixed = [...header, "| A | 1 [1] |", "| B | 2 |"];
+    const foreign = [...header, "| A | 1 [7] |"];
+
+    expect(classifyTableAt(cited, 0, [1])?.asGrid).toBe(true);
+    expect(classifyTableAt(mixed, 0, [1])?.asGrid).toBe(false);
+    expect(classifyTableAt(foreign, 0, [1])?.asGrid).toBe(false);
+    expect(classifyTableAt(cited, 0, [])?.asGrid).toBe(false);
+  });
+
+  it("acepta exactamente seis columnas y doce filas como grilla", () => {
+    const names = ["A", "B", "C", "D", "E", "F"];
+    const row = (n: number) => `| ${names.map(() => `${n} [1]`).join(" | ")} |`;
+    const lines = (rows: number) => [
+      `| ${names.join(" | ")} |`,
+      `| ${names.map(() => "---").join(" | ")} |`,
+      ...Array.from({ length: rows }, (_, index) => row(index)),
+    ];
+
+    expect(classifyTableAt(lines(12), 0, [1])?.asGrid).toBe(true);
+    expect(classifyTableAt(lines(13), 0, [1])).toMatchObject({
+      asGrid: false,
+      table: { endIndex: 15 },
+    });
+  });
+
+  it("lee por filas, completa, la tabla con una celda demasiado larga para la grilla", () => {
+    const lines = [
+      ...header,
+      "| A | 1 [1] |",
+      `| B | ${"x".repeat(200)} [1] |`,
+      "| C | 3 [1] |",
+    ];
+    const classified = classifyTableAt(lines, 0, [1]);
+
+    expect(classified?.asGrid).toBe(false);
+    expect(classified?.table.rows).toHaveLength(3);
+    expect(classified?.table.endIndex).toBe(5);
+  });
+
+  it("no toma por tabla una frase con barras ni una línea suelta", () => {
+    expect(classifyTableAt(["A | B es una frase normal."], 0, [1])).toBeNull();
+  });
+});
+
+describe("markdownTableRowsAsText con celdas combinadas", () => {
+  it("una primera celda vacía continúa el grupo de la fila anterior", () => {
+    const table = markdownTableAt(
+      [
+        "| Modalidad | Nivel | Monto |",
+        "| --- | --- | --- |",
+        "| EBR | Inicial | 3,300.60 |",
+        "| | Primaria | 3,300.60 |",
+        "| EBE | Inicial | 3,300.60 |",
+        "| | - | 3,300.60 |",
+      ],
+      0,
+    );
+
+    expect(markdownTableRowsAsText(table!)).toEqual([
+      "Modalidad: EBR; Nivel: Inicial; Monto: 3,300.60",
+      "Modalidad: EBR; Nivel: Primaria; Monto: 3,300.60",
+      "Modalidad: EBE; Nivel: Inicial; Monto: 3,300.60",
+      "Modalidad: EBE; Monto: 3,300.60",
+    ]);
   });
 });
