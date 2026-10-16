@@ -114,6 +114,15 @@ describe('OBS-005/014/015 — regresiones de proceso explícito', () => {
       ),
     ).toBeNull();
   });
+  it('comparar años del mismo proceso no añade un proceso vecino por una palabra compartida', () => {
+    expect(
+      disambiguateRouteByQuestion(
+        'Compara requisitos de contratación docente 2025 y 2026',
+        [contract, auxiliary],
+        sources,
+      ),
+    ).toEqual(contract);
+  });
   it('normaliza solo la falta concreta demostrada por la campaña', () => {
     const original =
       'Ola, kiero saver los rekisitos para reasingnacion docente';

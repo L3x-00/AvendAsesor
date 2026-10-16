@@ -450,9 +450,8 @@ export function disambiguateRouteByQuestion(
   );
   const score = (includeSubmodules: boolean) =>
     modules
-      .map((module) => ({
-        module,
-        hits: [
+      .map((module) => {
+        const matchedTokens = [
           ...new Set(
             [
               module.name,
@@ -467,13 +466,27 @@ export function disambiguateRouteByQuestion(
           ),
         ].filter((token) =>
           questionMentionsModuleToken(normalizedQuestion, token),
-        ).length,
-      }))
+        );
+        return { module, matchedTokens, hits: matchedTokens.length };
+      })
       .filter((entry) => entry.hits > 0)
       .sort((left, right) => right.hits - left.hits);
   // Los nombres de raíz conservan su precedencia. Una palabra genérica de un
   // submódulo vecino no borra un proceso ya explícito («contrato docente»).
-  if (comparison && score(true).length > 1) return null;
+  if (comparison) {
+    const candidates = score(true);
+    const distinctive = candidates.filter((candidate) =>
+      candidate.matchedTokens.some(
+        (token) =>
+          !candidates.some(
+            (other) =>
+              other.module.id !== candidate.module.id &&
+              other.matchedTokens.includes(token),
+          ),
+      ),
+    );
+    if (distinctive.length > 1) return null;
+  }
   for (const includeSubmodules of [false, true]) {
     const scored = score(includeSubmodules);
     if (comparison && scored.length > 1) return null;
