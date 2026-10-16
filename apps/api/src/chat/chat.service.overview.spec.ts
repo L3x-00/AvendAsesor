@@ -77,7 +77,6 @@ function setup(
       .mockResolvedValue([
         { title: 'Aprueban Padrones de Instituciones Educativas' },
       ]),
-    coverageSummary: jest.fn().mockResolvedValue(null),
     moduleOverview: jest.fn().mockResolvedValue(overview()),
     reply: jest.fn(),
     ...catalogOverrides,

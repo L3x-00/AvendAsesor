@@ -399,16 +399,13 @@ describe('ChatService', () => {
       kind: 'no_evidence',
       topRelevanceScore: null,
     });
-    const coverageSummary = jest
-      .fn()
-      .mockResolvedValue('Por ahora mis documentos cubren: Remuneraciones.');
     const withCatalog = new ChatService(
       answerGateway,
       historyGateway,
       ragService as never,
       configService as never,
       faqMemoryService as never,
-      { coverageSummary } as never,
+      undefined,
     );
     const messageOf = async () => {
       const event = (
@@ -426,7 +423,6 @@ describe('ChatService', () => {
     const withCoverage = await messageOf();
     expect(withCoverage).toContain('antecedente');
     expect(withCoverage).not.toContain('Remuneraciones');
-    expect(coverageSummary).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ answer: withCoverage }),
     );

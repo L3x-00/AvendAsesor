@@ -69,7 +69,6 @@ function setup(
   const catalogService = {
     availableDocuments:
       options.availableDocuments ?? jest.fn().mockResolvedValue(documents),
-    coverageSummary: jest.fn().mockResolvedValue(null),
     moduleOverview: jest.fn(),
     reply: jest.fn(),
   };
