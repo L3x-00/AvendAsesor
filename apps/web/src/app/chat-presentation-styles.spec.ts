@@ -52,9 +52,32 @@ describe("contratos de presentación del chat en teléfono", () => {
 
     expect(body).toMatch(/overflow-x:\s*auto/u);
     expect(body).toMatch(/max-width:\s*100%/u);
+    expect(body).toMatch(/border:\s*1px solid var\(--avend-border\)/u);
+    expect(body).toMatch(/border-radius:\s*0\.75rem/u);
     expect(
       ruleBody(globalStyles, ".avend-chat-table-scroll:focus-visible"),
     ).toMatch(/outline:\s*3px solid/u);
+  });
+
+  it("las celdas conservan separadores y el texto base de 16 px", () => {
+    const table = ruleBody(globalStyles, ".avend-chat-table");
+
+    expect(remValue(table)).toBeGreaterThanOrEqual(1);
+    expect(globalStyles).toMatch(
+      /\.avend-chat-table th:not\(:last-child\),\s*\.avend-chat-table td:not\(:last-child\)\s*\{\s*border-right:\s*1px solid var\(--avend-border\)/u,
+    );
+  });
+
+  it("una columna corta no se parte letra a letra ni deja bandas vacías junto al marco", () => {
+    const cells = ruleBody(globalStyles, ".avend-chat-table td");
+
+    // `anywhere` reduce el ancho mínimo de la columna a una letra («Cit / a»).
+    expect(cells).toMatch(/overflow-wrap:\s*break-word/u);
+    expect(cells).not.toMatch(/overflow-wrap:\s*anywhere/u);
+    // `stable both-edges` reserva una banda a cada lado del marco en escritorio.
+    expect(ruleBody(globalStyles, ".avend-chat-table-scroll")).not.toMatch(
+      /scrollbar-gutter/u,
+    );
   });
 
   it("en el teléfono la tabla recupera la sangría del avatar", () => {

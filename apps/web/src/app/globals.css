@@ -1153,6 +1153,10 @@ textarea[aria-invalid="true"]:focus,
 }
 
 .avend-chat-table-scroll {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(13 27 61 / 8%);
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -1168,13 +1172,14 @@ textarea[aria-invalid="true"]:focus,
 }
 
 .avend-chat-table-scroll:focus-visible {
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
 
 .avend-chat-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 1rem;
   line-height: 1.5;
   /* Un ancho mínimo por columna: una tabla de dos columnas cabe en un teléfono
@@ -1187,15 +1192,26 @@ textarea[aria-invalid="true"]:focus,
 .avend-chat-table th,
 .avend-chat-table td {
   border-bottom: 1px solid var(--avend-border);
-  overflow-wrap: anywhere;
+  /* `break-word` y no `anywhere`: con `anywhere` el ancho mínimo de la columna
+     es una letra y una columna corta («Cita») se partía en «Cit / a». */
+  overflow-wrap: break-word;
   padding: 0.625rem 0.75rem;
   vertical-align: top;
+}
+
+.avend-chat-table th:not(:last-child),
+.avend-chat-table td:not(:last-child) {
+  border-right: 1px solid var(--avend-border);
 }
 
 .avend-chat-table th {
   background: var(--avend-soft-blue);
   color: var(--avend-navy);
   font-weight: 700;
+}
+
+.avend-chat-table tbody tr:nth-child(even) td {
+  background: var(--avend-surface-muted);
 }
 
 .avend-chat-table tbody tr:last-child td {
