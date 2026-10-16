@@ -145,7 +145,10 @@ export function officialSitesIn(normalized: string): OfficialSite[] {
   );
 }
 
-/** Respuesta con los enlaces oficiales pedidos (enlaces en formato Markdown). */
+/**
+ * Respuesta con los enlaces oficiales pedidos (enlaces en formato Markdown).
+ * Solo responde al pedido: sin cierre genérico detrás (OBS-016).
+ */
 export function buildOfficialSitesReply(
   sites: readonly OfficialSite[],
 ): string {
@@ -158,7 +161,5 @@ export function buildOfficialSitesReply(
       : 'Claro, aquí tienes los enlaces oficiales:',
     '',
     ...items,
-    '',
-    'Si buscas un trámite o una norma en particular, cuéntame cuál y te oriento con los documentos disponibles.',
   ].join('\n');
 }

@@ -1511,7 +1511,9 @@ export class ChatService {
       }
     }
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
-    // Si el catálogo falla, se responde con los temas (texto determinista).
+    // Si el catálogo falla, se responde sin lista de temas (texto determinista):
+    // los temas se comprueban contra ese mismo catálogo, que acaba de fallar.
+    let catalogFailed = false;
     if (
       (kind === 'catalog' || kind === 'document_catalog') &&
       this.catalogService
@@ -1532,8 +1534,9 @@ export class ChatService {
           type: 'conversational',
         };
       } catch (error) {
+        catalogFailed = true;
         this.logger.warn(
-          `Catálogo no disponible; se responde con los temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
+          `Catálogo no disponible; se responde sin la lista de temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
         );
       }
     }
@@ -1551,10 +1554,11 @@ export class ChatService {
       };
     }
     const topics =
-      kind === 'capabilities' ||
-      kind === 'ask_announcement' ||
-      kind === 'catalog' ||
-      kind === 'document_catalog'
+      !catalogFailed &&
+      (kind === 'capabilities' ||
+        kind === 'ask_announcement' ||
+        kind === 'catalog' ||
+        kind === 'document_catalog')
         ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {
@@ -1714,11 +1718,31 @@ export class ChatService {
     });
   }
 
+  /**
+   * Temas raíz que se pueden consultar hoy: activos y con al menos un
+   * documento aprobado e indexado (el catálogo ya exige vigencia, módulo activo
+   * y versión indexada, igual que la búsqueda del RAG). Un módulo activo sin
+   * corpus existe, pero no se anuncia: ofrecerlo promete una respuesta que
+   * luego no tiene sustento. Si no se puede comprobar (sin catálogo o con la
+   * base caída) no se anuncia ninguno: es mejor omitir la lista que prometer.
+   */
   private async activeTopics(): Promise<ResolvedModule[] | undefined> {
+    if (!this.catalogService) return undefined;
     try {
-      const modules = await this.historyGateway.listActiveModules();
+      const [modules, documents] = await Promise.all([
+        this.cachedModules(),
+        this.catalogService.availableDocuments(),
+      ]);
+      // `moduleIds` incluye el módulo enlazado y su padre: un documento de un
+      // subtema da corpus al tema raíz.
+      const withCorpus = new Set(
+        documents.flatMap((document) => document.moduleIds),
+      );
       return modules
-        .filter((module) => module.parentModuleId === null)
+        .filter(
+          (module) =>
+            module.parentModuleId === null && withCorpus.has(module.id),
+        )
         .sort((left, right) => left.sortOrder - right.sortOrder)
         .map(({ id, name }) => ({ id, name }));
     } catch {

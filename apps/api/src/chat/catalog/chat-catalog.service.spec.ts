@@ -79,6 +79,60 @@ describe('ChatCatalogService', () => {
     );
   });
 
+  it('ordena también las secciones por tema desde la que trae el documento más reciente', async () => {
+    const { service: catalog } = service([
+      document({
+        id: 'alfa-2017',
+        issuanceYear: 2017,
+        moduleNames: ['Alfa'],
+        title: 'Alfa 2017',
+      }),
+      document({
+        id: 'zeta-2025',
+        issuanceYear: 2025,
+        moduleNames: ['Zeta'],
+        title: 'Zeta 2025',
+      }),
+      document({
+        id: 'norte-sin-fecha',
+        issuanceYear: null,
+        moduleNames: ['Norte'],
+        title: 'Norte sin fecha',
+      }),
+      document({
+        id: 'beta-2017',
+        issuanceYear: 2017,
+        moduleNames: ['Beta'],
+        title: 'Beta 2017',
+      }),
+    ]);
+
+    const { message } = await catalog.reply();
+    const order = ['Zeta', 'Alfa', 'Beta', 'Norte'].map((topic) =>
+      message.indexOf(`**${topic}**`),
+    );
+
+    // Zeta (2025) primero; Alfa y Beta empatan en 2017 y van por nombre; el
+    // tema sin fecha va al final. Dentro de cada tema ya viene lo más nuevo.
+    expect(order.every((position) => position >= 0)).toBe(true);
+    expect([...order].sort((left, right) => left - right)).toEqual(order);
+  });
+
+  it('dentro de un tema lista primero el documento más nuevo y deja el que no tiene año al final', async () => {
+    const { service: catalog } = service([
+      document({ id: 'sin-anio', issuanceYear: null, title: 'Sin año' }),
+      document({ id: 'viejo', issuanceYear: 2012, title: 'Viejo' }),
+      document({ id: 'nuevo', issuanceYear: 2025, title: 'Nuevo' }),
+    ]);
+
+    const { message } = await catalog.reply();
+
+    expect(message.indexOf('- Nuevo')).toBeLessThan(message.indexOf('- Viejo'));
+    expect(message.indexOf('- Viejo')).toBeLessThan(
+      message.indexOf('- Sin año'),
+    );
+  });
+
   it('usa título e identificador como desempate estable dentro del mismo año', () => {
     expect(
       newestDocumentsFirst([

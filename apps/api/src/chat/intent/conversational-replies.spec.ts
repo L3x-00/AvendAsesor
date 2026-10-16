@@ -10,6 +10,7 @@ describe('buildConversationalReply', () => {
     'capabilities',
     'out_of_domain',
     'system_limit',
+    'credentials_help',
     'unrelated_no_evidence',
   ] as const)(
     'devuelve una respuesta no vacía y SIN citas de fuentes para "%s"',
@@ -80,6 +81,20 @@ describe('buildConversationalReply', () => {
 
     expect(reply).toContain('no puedo compartir información interna');
     expect(reply).toContain('ámbito educativo');
+    expect(reply.toLowerCase()).not.toContain('prompt');
+  });
+
+  it('el límite del sistema no menciona contraseñas si la consulta no trata de credenciales', () => {
+    const reply = buildConversationalReply('system_limit');
+
+    expect(reply).not.toMatch(/contrase|clave|superadministrador|restablec/iu);
+  });
+
+  it('la ayuda de credenciales indica cómo restablecerlas sin revelar nada interno', () => {
+    const reply = buildConversationalReply('credentials_help');
+
+    expect(reply).toContain('superadministrador de AVEND ASESOR');
+    expect(reply).toContain('restablecer');
     expect(reply.toLowerCase()).not.toContain('prompt');
   });
 });

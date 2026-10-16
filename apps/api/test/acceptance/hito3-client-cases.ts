@@ -29,12 +29,14 @@ import type {
   ChatHistoryGateway,
   ChatReplyRole,
 } from '../../src/chat/chat-history.gateway';
+import { ChatCatalogService } from '../../src/chat/catalog/chat-catalog.service';
 import { ChatService, type ChatStreamEvent } from '../../src/chat/chat.service';
 import { validateEnvironment } from '../../src/config/environment.validation';
 import { OpenAiEmbeddingsGateway } from '../../src/ingestion/openai-embeddings.gateway';
 import { OpenAiAnswerGateway } from '../../src/rag/openai-answer.gateway';
 import { RagService } from '../../src/rag/rag.service';
 import { normalizeSpanishText } from '../../src/rag/text-normalization';
+import { SupabaseChatCatalogGatewayAdapter } from '../../src/supabase/supabase-chat-catalog.gateway';
 import { SupabaseChatGatewayAdapter } from '../../src/supabase/supabase-chat.gateway';
 import { SupabaseRetrievalGatewayAdapter } from '../../src/supabase/supabase-retrieval.gateway';
 import { createSupabaseServerClient } from '../../src/supabase/supabase.server-client';
@@ -226,6 +228,12 @@ async function main(): Promise<void> {
     ),
     config,
     { prepare: () => null } as never,
+    // Como en producción: los «temas disponibles» se comprueban contra el
+    // catálogo (módulos con documentos consultables). Sin generación de
+    // preguntas sugeridas ni de resúmenes: no aportan a los oráculos.
+    new ChatCatalogService(new SupabaseChatCatalogGatewayAdapter(client), {
+      suggest: () => Promise.resolve([]),
+    }),
   );
   const moduleIdByName = new Map(
     (await modulesGateway.listActiveModules()).map((module) => [

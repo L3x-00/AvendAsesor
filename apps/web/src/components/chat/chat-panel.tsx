@@ -45,6 +45,7 @@ import {
   markdownTableAt,
   tableRowsCiteKnownSources,
 } from "./chat-response-tables";
+import { ChatTable } from "./chat-table";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
@@ -387,39 +388,14 @@ function renderMarkdownTable(
   citations: CitationContext | undefined,
   links: { entities: boolean; urls: boolean },
 ): ReactNode {
-  const label = `Tabla de la respuesta ${tableIndex}`;
   return (
-    <div
-      aria-label={`${label}. Desplázate horizontalmente si es necesario.`}
-      className="avend-chat-table-scroll"
+    <ChatTable
+      headers={headers}
+      index={tableIndex}
       key={`table-${tableIndex}`}
-      role="region"
-      tabIndex={0}
-    >
-      <table aria-label={label} className="avend-chat-table">
-        <caption className="avend-visually-hidden">{label}</caption>
-        <thead>
-          <tr>
-            {headers.map((header, index) => (
-              <th key={`${index}-${header}`} scope="col">
-                {renderInline(header, citations, links)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={`${rowIndex}-${row.join("|")}`}>
-              {row.map((cell, columnIndex) => (
-                <td key={`${columnIndex}-${cell}`}>
-                  {renderInline(cell, citations, links)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      renderCell={(text) => renderInline(text, citations, links)}
+      rows={rows}
+    />
   );
 }
 

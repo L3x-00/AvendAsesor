@@ -101,6 +101,26 @@ describe('ChatCatalogService — panorama de un tema', () => {
     );
   });
 
+  it('deja al final al documento sin año y mantiene el orden al caer al tema principal', async () => {
+    const { catalog } = withSummaries([
+      document({ id: 'sin-anio', issuanceYear: null, moduleIds: ['rem'] }),
+      document({ id: 'old', issuanceYear: 2017, moduleIds: ['rem'] }),
+      document({ id: 'new', issuanceYear: 2025, moduleIds: ['rem'] }),
+    ]);
+
+    const overview = await catalog.moduleOverview({
+      module: escala,
+      parent: remuneraciones,
+    });
+
+    expect(overview.scope).toBe('parent');
+    expect(overview.documents.map((item) => item.id)).toEqual([
+      'new',
+      'old',
+      'sin-anio',
+    ]);
+  });
+
   it('lista los documentos del tema con un resumen generado del texto', async () => {
     const { catalog, catalogGateway, summarize } = withSummaries([
       padrones,

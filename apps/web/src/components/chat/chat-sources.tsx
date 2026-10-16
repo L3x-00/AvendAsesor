@@ -332,9 +332,22 @@ function SourceTable({
   );
 }
 
+/**
+ * Del documento más nuevo al más antiguo; sin año al final. El orden de
+ * entrada es el de relevancia, y `sort` es estable, así que los documentos del
+ * mismo año conservan ese orden.
+ */
+function newestSourcesFirst(sources: ChatSource[]): ChatSource[] {
+  return [...sources].sort(
+    (left, right) =>
+      (right.issuanceYear ?? Number.NEGATIVE_INFINITY) -
+        (left.issuanceYear ?? Number.NEGATIVE_INFINITY) || 0,
+  );
+}
+
 /** Archivos visibles de la respuesta, separados de las citas y sin duplicados. */
 export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
-  const documents = uniqueDocuments(sources);
+  const documents = newestSourcesFirst(uniqueDocuments(sources));
   if (!documents.length) return null;
 
   return (

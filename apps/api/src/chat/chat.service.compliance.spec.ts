@@ -72,6 +72,25 @@ describe('ChatService — lineamientos del cliente', () => {
     return events;
   }
 
+  /**
+   * Servicio con catálogo: «temas disponibles» solo anuncia los módulos raíz con
+   * al menos un documento consultable (aquí `a`, por su subtema `s`, y `b`).
+   */
+  function withCorpus(): ChatService {
+    return new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      { get: jest.fn().mockReturnValue(undefined) } as never,
+      { prepare: jest.fn().mockReturnValue(null) } as never,
+      {
+        availableDocuments: jest
+          .fn()
+          .mockResolvedValue([{ moduleIds: ['s', 'a'] }, { moduleIds: ['b'] }]),
+      } as never,
+    );
+  }
+
   function completion() {
     const calls = historyGateway.completeTurn.mock.calls as Array<
       [Parameters<ChatHistoryGateway['completeTurn']>[0]]
@@ -603,6 +622,7 @@ describe('ChatService — lineamientos del cliente', () => {
 
   describe('puntos 5 y 12: consulta sin tema que requiere precisión', () => {
     it('pide el trámite con los temas reales como opciones y guarda la aclaración', async () => {
+      service = withCorpus();
       const events = await collect({ question: '¿Cuáles son los requisitos?' });
 
       expect(ragService.retrieve).not.toHaveBeenCalled();
@@ -814,6 +834,7 @@ describe('ChatService — lineamientos del cliente', () => {
 
   describe('punto 2: charla y capacidades', () => {
     it('«¿qué puedes hacer?» lista los temas raíz reales, en su orden', async () => {
+      service = withCorpus();
       const events = await collect({ question: '¿Qué puedes hacer?' });
 
       expect(events).toHaveLength(1);
@@ -827,11 +848,17 @@ describe('ChatService — lineamientos del cliente', () => {
     });
 
     it('si la lista de temas falla, igual responde sin ellos', async () => {
+      // Con catálogo, para que `listActiveModules` llegue a ejecutarse.
+      service = withCorpus();
       historyGateway.listActiveModules.mockRejectedValue(new Error('down'));
 
       const events = await collect({ question: '¿Qué puedes hacer?' });
 
       expect(events[0]?.type).toBe('conversational');
+      expect(historyGateway.listActiveModules).toHaveBeenCalled();
+      expect(
+        (events[0] as { data: { message: string } }).data.message,
+      ).not.toContain('Hoy puedes consultarme');
     });
 
     it.each([

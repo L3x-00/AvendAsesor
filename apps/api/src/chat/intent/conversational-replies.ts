@@ -31,7 +31,7 @@ export interface ConversationalReplyOptions {
   officialSites?: readonly OfficialSite[];
   /** Rol de la persona que consulta: ajusta el saludo sin prometer nada nuevo. */
   role?: 'docente' | 'admin' | 'superadmin';
-  /** Temas (módulos raíz activos) que hoy se pueden consultar. */
+  /** Temas (módulos raíz con al menos un documento consultable) de hoy. */
   topics?: readonly string[];
 }
 
@@ -91,7 +91,9 @@ export function buildConversationalReply(
     case 'out_of_domain':
       return `¡Qué buena pregunta! Me encantaría ayudarte con eso, pero mi objetivo es orientarte en temas del ámbito educativo peruano. ${SCOPE_SENTENCE} ¿Hay algo de eso en lo que pueda ayudarte hoy?`;
     case 'system_limit':
-      return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si olvidaste tu contraseña, pide al superadministrador de AVEND ASESOR un enlace para restablecerla. Y si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
+      return 'Con gusto te ayudo con tus consultas del ámbito educativo, pero no puedo compartir información interna de la plataforma ni cómo está configurada. Si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
+    case 'credentials_help':
+      return 'Con gusto te ayudo con tus consultas del ámbito educativo. Si olvidaste tu contraseña, pide al superadministrador de AVEND ASESOR un enlace para restablecerla; yo no puedo ver ni compartir claves ni información interna de la plataforma. Y si me cuentas qué trámite o situación necesitas resolver, te oriento con los documentos disponibles.';
     case 'unrelated_no_evidence':
       return `Me parece interesante tu consulta, pero mi objetivo es orientarte en temas del ámbito educativo: ${SCOPE_SENTENCE.charAt(0).toLowerCase()}${SCOPE_SENTENCE.slice(1)} Si tu consulta va por ahí, cuéntame un poco más sobre el trámite o tu situación laboral y te ayudo con gusto.`;
   }
