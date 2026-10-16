@@ -1241,6 +1241,19 @@
   outline-offset: 2px;
 }
 
+/* Acción con texto («Preparar ficha de orientación») junto al icono de copiar:
+   misma discreción que él, con el rótulo visible porque el icono solo no dice
+   qué abre. Mantiene los 44 px de alto táctil de `.avend-chat-action`. */
+.avend-chat-action--text {
+  padding: 0 0.75rem 0 0.625rem;
+  text-align: left;
+  text-decoration: none;
+}
+
+.avend-chat-action--text:hover {
+  color: var(--avend-accent-strong);
+}
+
 /* ---------- Cuadro de escritura fijo al pie ---------- */
 .avend-chat-composer {
   background: linear-gradient(

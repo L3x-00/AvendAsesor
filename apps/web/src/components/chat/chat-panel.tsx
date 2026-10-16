@@ -44,7 +44,9 @@ import { ChatCatalogDownloads } from "./chat-catalog-downloads";
 import {
   classifyTableAt,
   columnAlignments,
+  hasCitationColumn,
   markdownTableRowsAsText,
+  withoutCitationColumns,
   type MarkdownTableBlock,
 } from "./chat-response-tables";
 import { ChatTable } from "./chat-table";
@@ -54,6 +56,7 @@ import {
   ChatSources,
   citationRanks,
   citedSourceRanks,
+  singleCitedSource,
   sourceAnchorId,
   sourceCitationLabel,
 } from "./chat-sources";
@@ -117,6 +120,10 @@ export function canPrepareOrientation(
     message.sources.length > 0,
   );
 }
+
+/** Aviso de la ficha de orientación: tooltip y descripción para lectores de pantalla. */
+const ORIENTATION_HINT =
+  "Se abrirá una vista previa editable solo en sus datos de presentación.";
 
 /** Marca de inicio de un turno (fuera del render: lo llama el envío). */
 function turnStartedAt(): number {
@@ -247,6 +254,12 @@ function resolveActiveParentId(
 }
 
 interface CitationContext {
+  /**
+   * Todas las citas del texto apuntan a este único documento: no se repiten en
+   * cada párrafo, viñeta o fila, se muestran una vez como «Fuente» (bajo la
+   * tabla o al final). Ver `singleCitedSource`.
+   */
+  consolidated?: ChatSource;
   messageId: string;
   sources: ChatSource[];
 }
@@ -283,30 +296,53 @@ function revealSource(targetId: string) {
  * punto 8): el usuario ve de dónde sale cada afirmación sin buscarla. Se
  * omiten los índices inexistentes de respuestas antiguas.
  */
+function citationLink(
+  citations: CitationContext,
+  rank: number,
+  key: string,
+): ReactNode {
+  const source = citations.sources.find((item) => item.rank === rank);
+  if (!source) return null;
+  return (
+    <a
+      aria-label={`Ver fuente ${rank}: ${source.documentTitle}`}
+      className="avend-chat-citation"
+      href={`#${sourceAnchorId(citations.messageId, rank)}`}
+      key={key}
+      onClick={(event) => {
+        event.preventDefault();
+        revealSource(sourceAnchorId(citations.messageId, rank));
+      }}
+    >
+      {sourceCitationLabel(source)}
+    </a>
+  );
+}
+
+/**
+ * Texto sin sus marcas de cita [n] (la fuente única se muestra aparte) y sin el
+ * espacio que dejan antes de la puntuación.
+ */
+function withoutInlineCitations(text: string): string {
+  return text
+    .split(CITATION_TOKEN)
+    .map((part, index) =>
+      index % 2 === 1 && citationRanks(part).length ? "" : part,
+    )
+    .join("")
+    .replace(/[ \t]+([.,;:])/gu, "$1")
+    .replace(/[ \t]{2,}/gu, " ");
+}
+
 function linkCitations(
   text: string,
   citations: CitationContext | undefined,
   keyPrefix: string,
 ): ReactNode[] {
   if (!citations?.sources.length) return [text];
-  const link = (rank: number, key: string) => {
-    const source = citations.sources.find((item) => item.rank === rank);
-    if (!source) return null;
-    return (
-      <a
-        aria-label={`Ver fuente ${rank}: ${source.documentTitle}`}
-        className="avend-chat-citation"
-        href={`#${sourceAnchorId(citations.messageId, rank)}`}
-        key={key}
-        onClick={(event) => {
-          event.preventDefault();
-          revealSource(sourceAnchorId(citations.messageId, rank));
-        }}
-      >
-        {sourceCitationLabel(source)}
-      </a>
-    );
-  };
+  if (citations.consolidated) return [withoutInlineCitations(text)];
+  const link = (rank: number, key: string) =>
+    citationLink(citations, rank, key);
   // También corrige las citas agrupadas de conversaciones ya guardadas.
   return text.split(CITATION_TOKEN).map((part, index) => {
     const ranks = index % 2 === 1 ? citationRanks(part) : [];
@@ -413,10 +449,24 @@ function renderRichContent(
   let listOrdered = false;
   let inSuggestions = false;
   let renderedTables = 0;
+  // Dónde cae la nota de fuente única: justo bajo la última tabla o, si no hay
+  // tablas, al final de la respuesta (`blocks.length` al terminar).
+  let sourceNoteAt: number | undefined;
+
+  /**
+   * Con fuente única las citas salen del texto (se muestran aparte) y un
+   * párrafo o viñeta que solo las traía se omite (`undefined`).
+   */
+  function bodyText(text: string): string | undefined {
+    if (!citations?.consolidated) return text;
+    return withoutInlineCitations(text).trim() || undefined;
+  }
 
   function flushParagraph() {
     if (paragraphLines.length === 0) return;
-    const paragraph = paragraphLines.join(" ");
+    const paragraph = bodyText(paragraphLines.join(" "));
+    paragraphLines = [];
+    if (paragraph === undefined) return;
     blocks.push(
       <p className="avend-chat-paragraph" key={`paragraph-${blocks.length}`}>
         {renderInline(paragraph, citations, {
@@ -425,15 +475,19 @@ function renderRichContent(
         })}
       </p>,
     );
-    paragraphLines = [];
   }
 
   function flushList() {
     if (listItems.length === 0) return;
     const List = listOrdered ? "ol" : "ul";
+    const visibleItems = listItems
+      .map(bodyText)
+      .filter((item): item is string => item !== undefined);
+    listItems = [];
+    if (visibleItems.length === 0) return;
     blocks.push(
       <List className="avend-chat-list" key={`list-${blocks.length}`}>
-        {listItems.map((item, index) => (
+        {visibleItems.map((item, index) => (
           <li key={`${index}-${item}`}>
             {renderInline(item, citations, {
               entities: inSuggestions,
@@ -443,7 +497,6 @@ function renderRichContent(
         ))}
       </List>,
     );
-    listItems = [];
   }
 
   const lines = content.split(/\r?\n/);
@@ -461,13 +514,24 @@ function renderRichContent(
       citations?.sources.map((source) => source.rank) ?? [],
     );
     if (classifiedTable) {
-      const { asGrid, table } = classifiedTable;
+      const { asGrid } = classifiedTable;
+      // Con una sola fuente, la columna «Cita» repetiría lo mismo en cada fila:
+      // se retira y la fuente se muestra una vez bajo la tabla.
+      const table = citations?.consolidated
+        ? withoutCitationColumns(classifiedTable.table)
+        : classifiedTable.table;
+      // Si la columna de citas no se pudo retirar sin dejar una sola columna,
+      // sus citas se muestran donde están en vez de quedar celdas vacías.
+      const tableCitations =
+        citations?.consolidated && hasCitationColumn(table)
+          ? { ...citations, consolidated: undefined }
+          : citations;
       flushParagraph();
       flushList();
       if (asGrid) {
         renderedTables += 1;
         blocks.push(
-          renderMarkdownTable(table, renderedTables, citations, {
+          renderMarkdownTable(table, renderedTables, tableCitations, {
             entities: inSuggestions,
             urls: officialUrls,
           }),
@@ -482,7 +546,7 @@ function renderRichContent(
             <ul className="avend-chat-list" key={`table-text-${blocks.length}`}>
               {rowTexts.map((text, index) => (
                 <li key={`${index}-${text}`}>
-                  {renderInline(text, citations, {
+                  {renderInline(text, tableCitations, {
                     entities: inSuggestions,
                     urls: officialUrls,
                   })}
@@ -492,6 +556,7 @@ function renderRichContent(
           );
         }
       }
+      sourceNoteAt = blocks.length;
       lineIndex = table.endIndex;
       continue;
     }
@@ -544,6 +609,18 @@ function renderRichContent(
 
   flushParagraph();
   flushList();
+  if (citations?.consolidated) {
+    const link = citationLink(citations, citations.consolidated.rank, "source");
+    if (link) {
+      blocks.splice(
+        sourceNoteAt ?? blocks.length,
+        0,
+        <p className="avend-chat-source-note" key="source-note">
+          Fuente: {link}
+        </p>,
+      );
+    }
+  }
   return blocks;
 }
 
@@ -1001,6 +1078,82 @@ export function ChatPanel({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await sendQuestion(question.trim());
+  }
+
+  /**
+   * Acciones bajo la respuesta: «Copiar» y «Preparar ficha de orientación»
+   * juntas a la izquierda, la valoración a la derecha. La ficha solo se ofrece
+   * en una respuesta sustentada y completa (`canPrepareOrientation`).
+   */
+  function renderMessageToolbar(
+    message: RenderedMessage,
+    messageIndex: number,
+  ): ReactNode {
+    const canCopy =
+      message.role === "assistant" &&
+      message.id !== "streaming" &&
+      Boolean(message.content.trim());
+    const canReport = message.id === latestReportableAnswerId;
+    const orientationConversationId = message.conversationId ?? conversationId;
+    const canOrient =
+      Boolean(orientationConversationId) &&
+      canPrepareOrientation(
+        message,
+        orientationConversationId,
+        messages
+          .slice(0, messageIndex)
+          .some(
+            (candidate) =>
+              candidate.role === "user" &&
+              candidate.id === message.inReplyToMessageId,
+          ),
+      );
+    if (!canCopy && !canReport && !canOrient) return null;
+
+    const orientationHintId = `orientacion-aviso-${message.id}`;
+    return (
+      <div className="avend-chat-message-toolbar">
+        {canCopy || canOrient ? (
+          <div className="avend-chat-message-actions">
+            {canCopy ? (
+              <CopyAnswerButton
+                content={message.content}
+                sourceRanks={message.sources.map((source) => source.rank)}
+              />
+            ) : null}
+            {canOrient ? (
+              <>
+                <Link
+                  aria-describedby={orientationHintId}
+                  className="avend-chat-action avend-chat-action--text"
+                  href={`/chat/${encodeURIComponent(orientationConversationId ?? "")}/orientacion/${encodeURIComponent(message.id)}`}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                  title={ORIENTATION_HINT}
+                >
+                  <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+                    <path d="M14 3v5h5M9 13h6M9 17h6" />
+                  </svg>
+                  <span>Preparar ficha de orientación</span>
+                </Link>
+                <span className="avend-visually-hidden" id={orientationHintId}>
+                  {ORIENTATION_HINT}
+                </span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {canReport ? (
+          <ConsultationFeedback
+            answerMessageId={latestReportableAnswerId}
+            conversationId={conversationId}
+            disabled={isStreaming}
+            userMessageCount={userMessageCount}
+          />
+        ) : null}
+      </div>
+    );
   }
 
   /**
@@ -1510,7 +1663,14 @@ export function ChatPanel({
                     (message.role === "assistant" ||
                       message.role === "clarification") &&
                       message.id !== "streaming"
-                      ? { messageId: message.id, sources: message.sources }
+                      ? {
+                          consolidated: singleCitedSource(
+                            message.content,
+                            message.sources,
+                          ),
+                          messageId: message.id,
+                          sources: message.sources,
+                        }
                       : undefined,
                     // Las respuestas sin evidencia no agregan enlaces de
                     // entidades por su cuenta: solo los pedidos explícitos de
@@ -1576,31 +1736,7 @@ export function ChatPanel({
                 {message.catalogDocuments?.length ? (
                   <ChatCatalogDownloads documents={message.catalogDocuments} />
                 ) : null}
-                {(message.role === "assistant" &&
-                  message.id !== "streaming" &&
-                  message.content.trim()) ||
-                message.id === latestReportableAnswerId ? (
-                  <div className="avend-chat-message-toolbar">
-                    {message.role === "assistant" &&
-                    message.id !== "streaming" &&
-                    message.content.trim() ? (
-                      <div className="avend-chat-message-actions">
-                        <CopyAnswerButton
-                          content={message.content}
-                          sourceRanks={message.sources.map((source) => source.rank)}
-                        />
-                      </div>
-                    ) : null}
-                    {message.id === latestReportableAnswerId ? (
-                      <ConsultationFeedback
-                        answerMessageId={latestReportableAnswerId}
-                        conversationId={conversationId}
-                        disabled={isStreaming}
-                        userMessageCount={userMessageCount}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
+                {renderMessageToolbar(message, messageIndex)}
                 {message.sources.length && message.id !== "streaming" ? (
                   <ChatSources
                     citedRanks={
@@ -1612,33 +1748,6 @@ export function ChatPanel({
                     messageId={message.id}
                     sources={message.sources}
                   />
-                ) : null}
-                {(message.conversationId ?? conversationId) &&
-                canPrepareOrientation(
-                  message,
-                  message.conversationId ?? conversationId,
-                  messages
-                    .slice(0, messageIndex)
-                    .some(
-                      (candidate) =>
-                        candidate.role === "user" &&
-                        candidate.id === message.inReplyToMessageId,
-                    ),
-                ) ? (
-                  <div className="mt-4 flex flex-col items-start gap-2">
-                    <Link
-                      className="avend-button avend-button--secondary"
-                      href={`/chat/${encodeURIComponent(message.conversationId ?? conversationId ?? "")}/orientacion/${encodeURIComponent(message.id)}`}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      Preparar ficha de orientación
-                    </Link>
-                    <p className="m-0 text-base text-avend-text-muted">
-                      Se abrirá una vista previa editable solo en sus datos de
-                      presentación.
-                    </p>
-                  </div>
                 ) : null}
               </article>
             ))

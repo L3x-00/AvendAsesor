@@ -74,6 +74,32 @@ export function citedSourceRanks(content: string): number[] {
   ];
 }
 
+/**
+ * Fuente única de una respuesta. Si todas las citas del texto apuntan al mismo
+ * documento, basta mostrarla una vez (bajo la tabla o al final) en lugar de
+ * repetirla en cada párrafo, viñeta o fila. Devuelve la fuente de la primera
+ * cita, la que enlaza con su fila en «Referencias». Con citas a documentos
+ * distintos, o sin citas conocidas, devuelve `undefined` y cada cita se queda
+ * donde la escribió el modelo.
+ */
+export function singleCitedSource(
+  content: string,
+  sources: readonly ChatSource[],
+): ChatSource | undefined {
+  const cited = citedSourceRanks(content)
+    .map((rank) => sources.find((source) => source.rank === rank))
+    .filter((source): source is ChatSource => source !== undefined);
+  const [first] = cited;
+  if (!first) return undefined;
+  // Misma identidad que `uniqueDocuments`: en historiales sin versión cada
+  // fuente cuenta como un documento distinto y no se agrupa.
+  const documentKey = (source: ChatSource) =>
+    source.documentVersionId ?? source.id;
+  return cited.every((source) => documentKey(source) === documentKey(first))
+    ? first
+    : undefined;
+}
+
 function pageRange(source: ChatSource): string {
   return source.pageStart === source.pageEnd
     ? `${source.pageStart}`
