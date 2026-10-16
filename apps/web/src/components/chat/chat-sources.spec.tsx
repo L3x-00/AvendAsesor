@@ -169,7 +169,7 @@ describe("ChatSources", () => {
     expect(sourceRow).not.toHaveTextContent("Artículo:");
     expect(
       within(sourceRow as HTMLTableRowElement).getByText(
-        "No se identificó una ubicación más precisa en el fragmento",
+        "Páginas 10–12 del PDF · Sin sección o artículo identificado",
       ),
     ).toBeVisible();
   });
@@ -362,6 +362,78 @@ describe("ChatSources", () => {
     expect(screen.queryByText("1 de 1")).not.toBeInTheDocument();
   });
 
+  it("ubica un fragmento sin estructura por su página PDF sin inventar el total", () => {
+    render(
+      <ChatSources
+        defaultOpen
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Decreto Supremo N.° 049-2025-EF",
+            id: "salary-page-source",
+            mimeType: "application/pdf",
+            moduleName: "Remuneraciones",
+            numeralReference: null,
+            pageEnd: 3,
+            pageStart: 3,
+            rank: 1,
+            relevanceScore: 0.9,
+            sectionTitle:
+              "7 NORMAS LEGALES Jueves 20 de marzo de 2025 El Peruano",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Página 3 del PDF · Sin sección o artículo identificado",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: /Abrir fuente/u })).toHaveAttribute(
+      "href",
+      "/api/chat/sources/salary-page-source/download?pagina=3",
+    );
+    expect(screen.queryByText("3 de 3")).not.toBeInTheDocument();
+  });
+
+  it("mantiene una ubicación honesta para Word sin sección ni paginación física", () => {
+    render(
+      <ChatSources
+        defaultOpen
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Preguntas frecuentes",
+            id: "faq-word-source",
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            moduleName: null,
+            numeralReference: null,
+            pageEnd: 2,
+            pageStart: 1,
+            rank: 1,
+            relevanceScore: 0.8,
+            sectionTitle: null,
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Fragmento del documento · Sin sección o artículo identificado",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/Páginas 1–2 del PDF/u)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Abrir fuente/u })).toHaveAttribute(
+      "href",
+      "/api/chat/sources/faq-word-source/download?pagina=1",
+    );
+  });
+
   it("distinguishes replaced and archived evidence while preserving each source download", () => {
     render(
       <ChatSources
@@ -410,7 +482,9 @@ describe("ChatSources", () => {
     const archivedRow = within(table)
       .getByText("Antecedente archivado de 2009")
       .closest("tr");
-    expect(replacedRow).toHaveTextContent("Reemplazado / sin vigencia · Histórico");
+    expect(replacedRow).toHaveTextContent(
+      "Reemplazado / sin vigencia · Histórico",
+    );
     expect(archivedRow).toHaveTextContent("Archivado · Antecedente histórico");
     expect(screen.queryByText("Vigente")).not.toBeInTheDocument();
     expect(
@@ -587,6 +661,16 @@ describe("ChatSources — fuentes citadas", () => {
     expect(document.getElementById("fuente-m-1-2")).toHaveTextContent(
       "Norma citada",
     );
+    expect(
+      document
+        .getElementById("fuente-m-1-2")
+        ?.querySelector('[data-label="Ubicación"]'),
+    ).toHaveTextContent("Página 1 del PDF");
+    expect(
+      document
+        .getElementById("fuente-m-1-1")
+        ?.querySelector('[data-label="Ubicación"]'),
+    ).toHaveTextContent("Página 1 del PDF");
     expect(
       screen.getByText(/Otros fragmentos revisados, no citados/u),
     ).toBeInTheDocument();
