@@ -7,17 +7,26 @@ jest.mock('tesseract.js', () => ({
 }));
 
 import { OcrService } from './ocr.service';
+import { EventEmitter } from 'node:events';
+import { Worker } from 'node:worker_threads';
 
 describe('OcrService', () => {
   const service = new OcrService();
+  let nativeWorker: EventEmitter & { threadId: number };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    nativeWorker = Object.assign(new EventEmitter(), { threadId: 1 });
     mockCreateWorker.mockResolvedValue({
       recognize: mockRecognize,
       terminate: mockTerminate,
+      worker: nativeWorker,
     });
-    mockTerminate.mockResolvedValue(undefined);
+    mockTerminate.mockImplementation(() => {
+      nativeWorker.threadId = -1;
+      nativeWorker.emit('exit', 0);
+      return Promise.resolve();
+    });
   });
 
   it('reuses a single worker for every page and frees it once', async () => {
@@ -71,7 +80,10 @@ describe('OcrService', () => {
     let finishTermination!: () => void;
     mockTerminate.mockReturnValue(
       new Promise<void>((resolve) => {
-        finishTermination = resolve;
+        finishTermination = () => {
+          nativeWorker.emit('exit', 0);
+          resolve();
+        };
       }),
     );
     mockRecognize.mockImplementation(() => {
@@ -111,7 +123,11 @@ describe('OcrService', () => {
     const processing = service.withWorker(run, cancellation.signal);
     const failure = expect(processing).rejects.toThrow('INGESTION_TIMEOUT');
     cancellation.abort(new Error('INGESTION_TIMEOUT'));
-    initialized({ recognize: mockRecognize, terminate: mockTerminate });
+    initialized({
+      recognize: mockRecognize,
+      terminate: mockTerminate,
+      worker: nativeWorker,
+    });
     await failure;
     expect(run).not.toHaveBeenCalled();
     expect(mockTerminate).toHaveBeenCalledTimes(1);
@@ -124,5 +140,62 @@ describe('OcrService', () => {
       service.withWorker(jest.fn(), cancellation.signal),
     ).rejects.toThrow('INGESTION_TIMEOUT');
     expect(mockCreateWorker).not.toHaveBeenCalled();
+  });
+
+  it('waits for a real Node worker exit even when the Tesseract wrapper resolves immediately', async () => {
+    const thread = new Worker('setInterval(() => {}, 1000)', { eval: true });
+    await new Promise<void>((resolve) => {
+      thread.once('online', resolve);
+    });
+    let finishExit!: () => void;
+    const permissionToExit = new Promise<void>((resolve) => {
+      finishExit = resolve;
+    });
+    let exitObserved = false;
+    thread.once('exit', () => {
+      exitObserved = true;
+    });
+    mockCreateWorker.mockResolvedValue({
+      worker: thread,
+      recognize: mockRecognize,
+      terminate: mockTerminate,
+    });
+    // Match the installed wrapper: it discards the real termination promise.
+    mockTerminate.mockImplementation(() => {
+      void permissionToExit.then(() => thread.terminate());
+      return Promise.resolve();
+    });
+    let settled = false;
+    const processing = service.withWorker(() => Promise.resolve('texto'));
+    void processing.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    try {
+      for (let index = 0; index < 10; index++) await Promise.resolve();
+      expect(mockTerminate).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+      expect(exitObserved).toBe(false);
+      finishExit();
+      await expect(processing).resolves.toBe('texto');
+      expect(exitObserved).toBe(true);
+    } finally {
+      finishExit();
+      await thread.terminate();
+      await processing.catch(() => undefined);
+    }
+  });
+
+  it('handles a worker that has already exited without waiting for an event that passed', async () => {
+    nativeWorker.threadId = -1;
+    mockTerminate.mockResolvedValue(undefined);
+    await expect(
+      service.withWorker(() => Promise.resolve('texto')),
+    ).resolves.toBe('texto');
+    expect(nativeWorker.listenerCount('exit')).toBe(0);
   });
 });

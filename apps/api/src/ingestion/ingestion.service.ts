@@ -54,6 +54,7 @@ export class IngestionService {
     let job: ClaimedIngestionJob | null = null;
     let task: Promise<void> | undefined;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let refresh: Promise<void> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     const cancellation = new AbortController();
     try {
@@ -63,13 +64,11 @@ export class IngestionService {
       // La extracción y el OCR de un PDF escaneado pueden tardar más que el
       // turno: antes solo se renovaba al insertar fragmentos, así que el turno
       // vencía a mitad del OCR y el trabajo acababa en LEASE_EXPIRED.
-      let refreshing = false;
       heartbeat = setInterval(
         () => {
           // A slow store must not leave another pending refresh every interval.
-          if (refreshing || cancellation.signal.aborted) return;
-          refreshing = true;
-          void this.gateway
+          if (refresh || cancellation.signal.aborted) return;
+          refresh = this.gateway
             .refreshLease(claimedJob, leaseSeconds)
             .catch(() => {
               this.logger.warn(
@@ -77,7 +76,7 @@ export class IngestionService {
               );
             })
             .finally(() => {
-              refreshing = false;
+              refresh = undefined;
             });
         },
         Math.max(10, Math.floor(leaseSeconds / 3)) * 1000,
@@ -120,17 +119,12 @@ export class IngestionService {
     } finally {
       clearInterval(heartbeat);
       if (deadline) clearTimeout(deadline);
-      if (task) {
-        // Handle late rejection too. Releasing at the timeout would re-create
-        // the OCR/parser overlap which the worker's polling guard prevents.
-        void task.then(
-          () => {
-            this.active = false;
-          },
-          () => {
-            this.active = false;
-          },
-        );
+      if (task || refresh) {
+        // A job owns ALL its pending work, including the heartbeat request.
+        // Its slot is released only after every owned promise has settled.
+        void Promise.allSettled([task, refresh]).then(() => {
+          this.active = false;
+        });
       } else {
         this.active = false;
       }

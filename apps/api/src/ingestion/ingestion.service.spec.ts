@@ -463,6 +463,50 @@ describe('IngestionService', () => {
     }
   });
 
+  it('keeps the job slot until its last heartbeat settles, even after timeout drains the main task', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishRefresh!: () => void;
+      let finishEmbedding!: (vectors: number[][]) => void;
+      gateway.claimNext.mockResolvedValueOnce(job).mockResolvedValue(null);
+      gateway.downloadPdf.mockResolvedValue(
+        Buffer.from('Texto Markdown válido.'),
+      );
+      chunking.chunk.mockReturnValue([chunk]);
+      embeddings.embed.mockReturnValue(
+        new Promise((resolve) => {
+          finishEmbedding = resolve;
+        }),
+      );
+      gateway.refreshLease.mockReturnValue(
+        new Promise<void>((resolve) => {
+          finishRefresh = resolve;
+        }),
+      );
+
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1);
+      await expect(processing).resolves.toBe(false);
+      finishEmbedding([vector()]);
+      await jest.advanceTimersByTimeAsync(0);
+      // The main task has drained, but the old store request still owns a slot.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await expect(service.processNext()).resolves.toBe(false);
+      }
+      expect(gateway.claimNext).toHaveBeenCalledTimes(1);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(1);
+      finishRefresh();
+      await jest.advanceTimersByTimeAsync(0);
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.claimNext).toHaveBeenCalledTimes(2);
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('prevents a concurrent claim and releases its slot after a claim failure', async () => {
     let failClaim!: (error: Error) => void;
     gateway.claimNext.mockReturnValueOnce(

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rmdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rmdir, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -103,7 +103,7 @@ async function worker(scenario) {
       result = { chunks: chunks.length, outputHash: fingerprint(chunks) };
       sample();
       chunks = null;
-    } else if (scenario === "pdf") {
+    } else if (scenario === "pdf" || scenario === "ocr") {
       const { PdfExtractionService } = require(
         join(dist, "ingestion/pdf-extraction.service.js"),
       );
@@ -111,9 +111,10 @@ async function worker(scenario) {
       const file = smallPdf();
       const originalHash = fingerprint([...file]);
       const extracted = await service.extract(file);
-      const rendered = await service.render(file, [1, 2, 3, 4, 5]);
+      const requestedPages = scenario === "ocr" ? [1] : [1, 2, 3, 4, 5];
+      const rendered = await service.render(file, requestedPages);
       assert.equal(extracted.length, 5);
-      assert.equal(rendered.size, 5);
+      assert.equal(rendered.size, requestedPages.length);
       assert.equal(fingerprint([...file]), originalHash);
       result = {
         pages: extracted.length,
@@ -125,6 +126,17 @@ async function worker(scenario) {
           ]),
         }),
       };
+      if (scenario === "ocr") {
+        const { OcrService } = require(join(dist, "ingestion/ocr.service.js"));
+        const text = await app
+          .get(OcrService)
+          .withWorker((recognize) => recognize(rendered.get(1)));
+        assert.ok(text.includes("Requisitos"));
+        result = {
+          pages: 1,
+          outputHash: fingerprint({ pdf: result.outputHash, text }),
+        };
+      }
     } else if (scenario === "ingest") {
       const { IngestionService } = require(
         join(dist, "ingestion/ingestion.service.js"),
@@ -270,7 +282,7 @@ async function main() {
     const scenarios = arg("--scenarios", "boot,chunk,ingest").split(",");
     assert.ok(
       scenarios.every((scenario) =>
-        ["boot", "chunk", "ingest", "pdf"].includes(scenario),
+        ["boot", "chunk", "ingest", "pdf", "ocr"].includes(scenario),
       ),
     );
     for (const scenario of scenarios) {
@@ -349,6 +361,10 @@ async function main() {
       await writeFile(resolve(output), JSON.stringify(report, null, 2) + "\n");
   } finally {
     await new Promise((resolve) => provider.close(resolve));
+    // Tesseract may write its local language cache in this task-owned temp dir.
+    await unlink(join(cwd, "spa.traineddata")).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
     await rmdir(cwd);
   }
 }

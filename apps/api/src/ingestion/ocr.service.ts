@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import spanishData from '@tesseract.js-data/spa';
+import type { Worker } from 'node:worker_threads';
 
 export type OcrRecognize = (image: Buffer) => Promise<string>;
 
@@ -23,8 +24,25 @@ export class OcrService {
       gzip: spanishData.gzip,
       langPath: spanishData.langPath,
     });
+    // tesseract.js 7 exposes its Node Worker at runtime (its declarations omit
+    // it). Its terminate() discards Worker.terminate()'s promise, so awaiting
+    // that wrapper alone can overlap the next job with a still-live WASM heap.
+    const nativeWorker = (worker as typeof worker & { worker: Worker }).worker;
+    const exited =
+      nativeWorker.threadId === -1
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            nativeWorker.once('exit', () => resolve());
+          });
     let termination: Promise<unknown> | undefined;
-    const terminate = () => (termination ??= worker.terminate());
+    const terminate = () =>
+      (termination ??= (async () => {
+        try {
+          await worker.terminate();
+        } finally {
+          await exited;
+        }
+      })());
     const onAbort = () => {
       // Tesseract termination does not reject a pending recognize promise.
       // The per-recognition race below unwinds its caller as well.
