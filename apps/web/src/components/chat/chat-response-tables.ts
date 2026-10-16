@@ -3,7 +3,11 @@
  * Markdown general: solo se reconoce una tabla con separador válido, para que
  * una barra en una oración nunca cambie la presentación del chat.
  */
+export type ColumnAlignment = "left" | "center" | "right";
+
 export interface MarkdownTableBlock {
+  /** Alineación escrita en el separador (`:---`, `:---:`, `---:`); null si no hay. */
+  alignments: Array<ColumnAlignment | null>;
   endIndex: number;
   headers: string[];
   rows: string[][];
@@ -28,6 +32,14 @@ const GRID_LIMITS: TableLimits = { cellChars: 180, columns: 6, rows: 12 };
 const READABLE_LIMITS: TableLimits = { cellChars: 1_000, columns: 12, rows: 60 };
 const TABLE_SEPARATOR_CELL = /^:?-{3,}:?$/u;
 const TABLE_CITATION = /\[\[?\s*(\d+)\s*\]\]?/gu;
+
+function separatorAlignment(cell: string): ColumnAlignment | null {
+  const left = cell.startsWith(":");
+  const right = cell.endsWith(":");
+  if (left && right) return "center";
+  if (right) return "right";
+  return left ? "left" : null;
+}
 
 function tableCells(line: string, limits: TableLimits): string[] | null {
   const trimmed = line.trim();
@@ -75,7 +87,9 @@ function parseTableAt(
     index += 1;
   }
 
-  return rows.length ? { endIndex: index, headers, rows } : null;
+  return rows.length
+    ? { alignments: separator.map(separatorAlignment), endIndex: index, headers, rows }
+    : null;
 }
 
 /**
@@ -162,32 +176,108 @@ export function classifyTableAt(
 /** Una celda vacía o un guion solo indican «sin dato»: no aportan a la lectura. */
 const EMPTY_CELL = /^[-–—]?$/u;
 
+/** `true` si la celda no trae dato (vacía o solo un guion). */
+export function isBlankCell(cell: string): boolean {
+  return EMPTY_CELL.test(cell.trim());
+}
+
+/** Marcas que el chat interpreta (negrita, citas [n], [1, 2], [1-2]); no son texto. */
+const CELL_MARKS =
+  /\*\*|__|\s*\[\[?\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\]\]?/gu;
+
+/** Texto de una celda sin negrita ni citas, para repetirlo como etiqueta. */
+function plainCellText(cell: string): string {
+  return cell.replace(CELL_MARKS, "").trim();
+}
+
+export interface FirstColumnLabel {
+  /** El texto viene del grupo de una fila anterior, no de la celda de esta fila. */
+  inherited: boolean;
+  /**
+   * Texto de la celda. Si es heredado va sin negrita ni citas: la cita sustenta
+   * la fila donde está escrita, y repetirla en otra la haría pasar por sustento.
+   */
+  label: string;
+}
+
+/**
+ * Etiqueta de cada fila en su primera columna. Una primera celda VACÍA continúa
+ * el grupo de la fila anterior (así escribe el modelo las celdas combinadas):
+ * sin ella la fila no diría a qué grupo pertenece. Un guion no hereda: puede
+ * significar «no aplica». Solo se hereda si la fila tiene otro dato; una fila
+ * vacía no inventa contenido.
+ */
+export function firstColumnLabels(rows: readonly string[][]): FirstColumnLabel[] {
+  let group = "";
+  return rows.map((row) => {
+    const [first = "", ...rest] = row;
+    if (first !== "") {
+      if (!isBlankCell(first)) group = plainCellText(first);
+      return { inherited: false, label: first };
+    }
+    const continuesGroup =
+      group !== "" && rest.some((cell) => !isBlankCell(cell));
+    return continuesGroup
+      ? { inherited: true, label: group }
+      : { inherited: false, label: first };
+  });
+}
+
 /**
  * Lectura de una tabla que no se pinta como grilla: una línea por fila,
- * «Encabezado: valor». Una primera celda vacía continúa el grupo de la fila
- * anterior (así escribe el modelo las celdas combinadas), porque sin ella la
- * línea no diría a qué grupo pertenece. Las demás celdas vacías o con guion se
- * omiten y las citas de cada celda se conservan.
+ * «Encabezado: valor». Las celdas vacías o con guion se omiten, la primera
+ * celda vacía continúa el grupo anterior y las citas de cada celda se conservan.
  */
 export function markdownTableRowsAsText(table: MarkdownTableBlock): string[] {
-  let group = "";
+  const labels = firstColumnLabels(table.rows);
   return table.rows
-    .map((row) => {
-      const [first = "", ...rest] = row;
-      if (!EMPTY_CELL.test(first)) group = first;
-      const continuesGroup =
-        EMPTY_CELL.test(first) &&
-        group !== "" &&
-        rest.some((cell) => !EMPTY_CELL.test(cell));
-      const cells = continuesGroup ? [group, ...rest] : row;
+    .map((row, rowIndex) => {
+      const { inherited, label } = labels[rowIndex];
+      const cells = inherited ? [label, ...row.slice(1)] : row;
       return cells
         .map((cell, column) =>
-          EMPTY_CELL.test(cell) ? null : `${table.headers[column]}: ${cell}`,
+          isBlankCell(cell) ? null : `${table.headers[column]}: ${cell}`,
         )
         .filter((part): part is string => part !== null)
         .join("; ");
     })
     .filter(Boolean);
+}
+
+/**
+ * Cifra o monto suelto, con su moneda y signo opcionales: «30», «3,300.60»,
+ * «3 300,60», «1.200,50», «S/ 2 666,80», «S/ -100», «12 %». Los miles van en
+ * grupos de tres dígitos, así que una fecha («15.03.2025»), un teléfono
+ * («01 615 5800») o dos números juntos («30 40») no cuentan como cifra.
+ */
+const NUMERIC_CELL =
+  /^(?:(?:S\/\.?|US\$|\$)\s*)?[+\-−]?\s?(?:\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*%?$/u;
+
+function isNumericColumn(rows: readonly string[][], column: number): boolean {
+  let numbers = 0;
+  for (const row of rows) {
+    const cell = plainCellText(row[column] ?? "");
+    if (isBlankCell(cell)) continue;
+    if (!NUMERIC_CELL.test(cell)) return false;
+    numbers += 1;
+  }
+  return numbers > 0;
+}
+
+/**
+ * Alineación de cada columna. Gana la que el modelo escribió en el separador;
+ * si no escribió ninguna, una columna de solo cifras o montos se alinea a la
+ * derecha para comparar unidades y decimales de un vistazo. La primera columna
+ * nombra la fila, así que no se infiere. `undefined` = alineación normal.
+ */
+export function columnAlignments(
+  table: MarkdownTableBlock,
+): Array<ColumnAlignment | undefined> {
+  return table.headers.map(
+    (_, column) =>
+      table.alignments[column] ??
+      (column > 0 && isNumericColumn(table.rows, column) ? "right" : undefined),
+  );
 }
 
 /**

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyTableAt,
+  columnAlignments,
+  firstColumnLabels,
   markdownTableAt,
   markdownTableRowsAsText,
   markdownTablesToPlainText,
@@ -20,6 +22,7 @@ describe("markdownTableAt", () => {
         0,
       ),
     ).toEqual({
+      alignments: [null, "right"],
       endIndex: 3,
       headers: ["Escala", "Monto"],
       rows: [["Primera", "S/ 3 300,00"]],
@@ -251,6 +254,151 @@ describe("markdownTableRowsAsText con celdas combinadas", () => {
       "Modalidad: EBR; Nivel: Primaria; Monto: 3,300.60",
       "Modalidad: EBE; Nivel: Inicial; Monto: 3,300.60",
       "Modalidad: EBE; Monto: 3,300.60",
+    ]);
+  });
+});
+
+function tableFrom(...lines: string[]) {
+  const table = markdownTableAt(lines, 0);
+  if (!table) throw new Error("tabla de prueba no reconocida");
+  return table;
+}
+
+describe("columnAlignments", () => {
+  it("respeta la alineación escrita en el separador", () => {
+    const table = tableFrom(
+      "| A | B | C | D |",
+      "| :--- | :---: | ---: | --- |",
+      "| x | y | z | w |",
+    );
+
+    expect(table.alignments).toEqual(["left", "center", "right", null]);
+    expect(columnAlignments(table)).toEqual([
+      "left",
+      "center",
+      "right",
+      undefined,
+    ]);
+  });
+
+  it("alinea a la derecha las columnas de cifras y montos aunque el separador no diga nada", () => {
+    const table = tableFrom(
+      "| Modalidad | Nivel | Jornada | Monto | Cita |",
+      "|---|---|---|---|---|",
+      "| EBR | Inicial | 30 | S/ 3 300,60 [1] | [1] |",
+      "| | Primaria | 30 | 3,300.60 [1] | [1] |",
+      "| PRONOEI | - | - | 4,400.80 [1] | [1] |",
+    );
+
+    expect(columnAlignments(table)).toEqual([
+      undefined, // la primera columna nombra la fila
+      undefined, // texto
+      "right", // «-» no cuenta como dato
+      "right",
+      undefined, // solo citas: no es una columna de cifras
+    ]);
+  });
+
+  it("la primera columna nombra la fila: unos años no se alinean como cifras", () => {
+    const table = tableFrom(
+      "| Año | Monto |",
+      "| --- | --- |",
+      "| 2024 | 3 000,00 |",
+      "| 2025 | 3 300,60 |",
+    );
+
+    expect(columnAlignments(table)).toEqual([undefined, "right"]);
+  });
+
+  it("reconoce cifras con signo, negrita y citas agrupadas, y descarta fechas, teléfonos y rangos", () => {
+    const column = (...cells: string[]) =>
+      columnAlignments(
+        tableFrom(
+          "| Concepto | Valor |",
+          "| --- | --- |",
+          ...cells.map((cell, index) => `| fila ${index} | ${cell} |`),
+        ),
+      )[1];
+
+    expect(column("**3,300.60** [1, 2]", "-150 [1-2]", "S/ -100", "+5 %")).toBe(
+      "right",
+    );
+    expect(column("S/. 1 200", "US$ 100", "1.200,50", "12 %")).toBe("right");
+    expect(column("15.03.2025", "20.04.2025")).toBeUndefined(); // fechas
+    expect(column("01 615 5800", "01 615 5801")).toBeUndefined(); // teléfonos
+    expect(column("30-40", "2025-2026")).toBeUndefined(); // rangos
+    expect(column("30 40")).toBeUndefined(); // dos números juntos
+  });
+
+  it("no alinea a la derecha una columna con texto mezclado ni una columna vacía", () => {
+    const table = tableFrom(
+      "| Concepto | Plazo | Notas |",
+      "| --- | --- | --- |",
+      "| A | 30 días | |",
+      "| B | 45 | |",
+    );
+
+    expect(columnAlignments(table)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("lo que el modelo escribió gana sobre lo inferido", () => {
+    const table = tableFrom(
+      "| Concepto | Monto |",
+      "| --- | :--- |",
+      "| A | 100 |",
+    );
+
+    expect(columnAlignments(table)).toEqual([undefined, "left"]);
+  });
+});
+
+describe("firstColumnLabels", () => {
+  it("una primera celda vacía continúa el grupo anterior solo si la fila trae otro dato", () => {
+    expect(
+      firstColumnLabels([
+        ["EBR", "Inicial"],
+        ["", "Primaria"],
+        ["", "Secundaria"],
+        ["", "-"],
+        ["EBE", "Inicial"],
+        ["", "Primaria"],
+      ]),
+    ).toEqual([
+      { inherited: false, label: "EBR" },
+      { inherited: true, label: "EBR" },
+      { inherited: true, label: "EBR" },
+      { inherited: false, label: "" },
+      { inherited: false, label: "EBE" },
+      { inherited: true, label: "EBE" },
+    ]);
+  });
+
+  it("un guion en la primera celda no hereda el grupo: puede significar «no aplica»", () => {
+    expect(
+      firstColumnLabels([
+        ["EBR", "Inicial"],
+        ["-", "Total general"],
+        ["", "Primaria"],
+      ]),
+    ).toEqual([
+      { inherited: false, label: "EBR" },
+      { inherited: false, label: "-" },
+      { inherited: true, label: "EBR" },
+    ]);
+  });
+
+  it("el grupo heredado va sin negrita ni citas: la cita sustenta solo la fila donde está", () => {
+    expect(
+      firstColumnLabels([
+        ["**EBR** [2]", "Inicial [1]"],
+        ["", "Primaria [1]"],
+      ])[1],
+    ).toEqual({ inherited: true, label: "EBR" });
+  });
+
+  it("no inventa un grupo cuando la tabla empieza con la primera celda vacía", () => {
+    expect(firstColumnLabels([["", "Primaria"]])).toEqual([
+      { inherited: false, label: "" },
     ]);
   });
 });

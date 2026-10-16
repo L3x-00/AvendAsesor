@@ -54,6 +54,109 @@ describe("ChatTable", () => {
     expect(within(table).getAllByRole("row")).toHaveLength(3);
   });
 
+  it("la primera columna es el encabezado de cada fila", () => {
+    renderTable();
+
+    const rowHeaders = screen.getAllByRole("rowheader");
+    expect(rowHeaders.map((cell) => cell.textContent)).toEqual([
+      "Docente coordinador",
+      "Director encargado",
+    ]);
+    expect(rowHeaders.every((cell) => cell.getAttribute("scope") === "row")).toBe(
+      true,
+    );
+    // Los datos siguen siendo celdas, no encabezados.
+    expect(screen.getAllByRole("cell")).toHaveLength(2);
+  });
+
+  it("una celda combinada hereda el grupo para el lector de pantalla y no se pierde la fila", () => {
+    renderTable({
+      headers: ["Modalidad", "Nivel", "Monto"],
+      rows: [
+        ["EBR", "Inicial", "S/ 3 300,60"],
+        ["", "Primaria", "S/ 3 300,60"],
+        ["", "-", "-"],
+      ],
+    });
+
+    const rowHeaders = screen.getAllByRole("rowheader");
+    expect(rowHeaders.map((cell) => cell.textContent)).toEqual(["EBR", "EBR"]);
+    const inherited = rowHeaders[1].querySelector(".avend-chat-table-inherited");
+    expect(inherited).toHaveClass("avend-visually-hidden");
+    // La fila sin ningún dato no inventa un grupo: su primera celda queda vacía.
+    const lastRow = screen.getAllByRole("row")[3];
+    expect(within(lastRow).queryByRole("rowheader")).not.toBeInTheDocument();
+  });
+
+  it("el grupo heredado es texto plano: sin el enlace de cita que traía la celda original", () => {
+    renderTable({
+      headers: ["Modalidad", "Nivel"],
+      renderCell: (text) => <a href="#fuente">{text}</a>,
+      rows: [
+        ["EBR [2]", "Inicial"],
+        ["", "Primaria"],
+      ],
+    });
+
+    const inherited = screen
+      .getAllByRole("rowheader")[1]
+      .querySelector(".avend-chat-table-inherited");
+    expect(inherited).toHaveTextContent(/^EBR$/u);
+    expect(inherited?.querySelector("a")).toBeNull();
+  });
+
+  it("marca las celdas sin dato para no mostrarlas en la tarjeta", () => {
+    renderTable({
+      headers: ["Cargo", "Jornada", "Monto"],
+      rows: [["Coordinador", "-", "S/ 4 400,80"], ["Director", "", "S/ 3 000,00"]],
+    });
+
+    const cells = screen.getAllByRole("cell");
+    expect(cells.map((cell) => cell.hasAttribute("data-blank"))).toEqual([
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it("marca la alineación de cada columna y la etiqueta de cada dato", () => {
+    renderTable({ alignments: [undefined, "right"] });
+
+    const header = screen.getByRole("columnheader", {
+      name: "Remuneración mensual",
+    });
+    expect(header).toHaveAttribute("data-align", "right");
+    const amounts = screen
+      .getAllByRole("cell")
+      .map((cell) => [cell.getAttribute("data-align"), cell.getAttribute("data-label")]);
+    expect(amounts).toEqual([
+      ["right", "Remuneración mensual"],
+      ["right", "Remuneración mensual"],
+    ]);
+    expect(
+      screen.getAllByRole("rowheader")[0].getAttribute("data-align"),
+    ).toBeNull();
+  });
+
+  it("la etiqueta de la tarjeta no lleva negrita ni citas del encabezado", () => {
+    renderTable({ headers: ["Cargo", "**Monto** [1]"] });
+
+    expect(screen.getAllByRole("cell")[0]).toHaveAttribute("data-label", "Monto");
+  });
+
+  it("apila las filas en el teléfono solo desde tres columnas", () => {
+    const { unmount } = renderTable();
+    expect(screen.getByRole("table")).not.toHaveClass("avend-chat-table--stacked");
+    unmount();
+
+    renderTable({
+      headers: ["Cargo", "Jornada", "Monto"],
+      rows: [["Docente", "30", "S/ 3 300,60"]],
+    });
+    expect(screen.getByRole("table")).toHaveClass("avend-chat-table--stacked");
+  });
+
   it("permite desplazarse con el teclado dentro de la tabla, no de la página", () => {
     renderTable();
 

@@ -80,6 +80,52 @@ describe("contratos de presentación del chat en teléfono", () => {
     );
   });
 
+  it("el encabezado de fila no se tiñe como el de columnas y las cifras se alinean en vertical", () => {
+    expect(ruleBody(globalStyles, ".avend-chat-table thead th")).toMatch(
+      /background:\s*var\(--avend-soft-blue\)/u,
+    );
+    expect(ruleBody(globalStyles, ".avend-chat-table tbody th")).not.toMatch(
+      /background/u,
+    );
+    const numeric = ruleBody(globalStyles, '.avend-chat-table [data-align="right"]');
+    expect(numeric).toMatch(/text-align:\s*right/u);
+    expect(numeric).toMatch(/font-variant-numeric:\s*tabular-nums/u);
+    // Franjas por fila: sirven a la tabla ancha y a la tarjeta del teléfono.
+    expect(
+      ruleBody(globalStyles, ".avend-chat-table tbody tr:nth-child(even)"),
+    ).toMatch(/background:\s*var\(--avend-surface-muted\)/u);
+  });
+
+  it("en el teléfono las filas se apilan como tarjetas sin perder los encabezados de columna", () => {
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 40rem\)\s*\{\s*\.avend-chat-table\.avend-chat-table--stacked\s*\{/u,
+    );
+
+    const stacked = ".avend-chat-table.avend-chat-table--stacked";
+    expect(ruleBody(globalStyles, `${stacked} td::before`)).toMatch(
+      /content:\s*attr\(data-label\)/u,
+    );
+    // Oculto a la vista pero presente para el lector de pantalla (no display:none).
+    const head = ruleBody(globalStyles, `${stacked} thead`);
+    expect(head).toMatch(/clip-path:\s*inset\(50%\)/u);
+    expect(head).not.toMatch(/display:\s*none/u);
+    // El lector de pantalla no repite el encabezado que ya anuncia por la tabla.
+    expect(ruleBody(globalStyles, `${stacked} td::before`)).toMatch(
+      /content:\s*attr\(data-label\)\s*\/\s*""/u,
+    );
+    expect(ruleBody(globalStyles, `${stacked} td`)).toMatch(/display:\s*grid/u);
+    expect(ruleBody(globalStyles, `${stacked} td[data-blank]`)).toMatch(
+      /display:\s*none/u,
+    );
+    expect(
+      ruleBody(globalStyles, `${stacked} [data-align]`),
+    ).toMatch(/text-align:\s*left/u);
+    // El grupo de una celda combinada se ve en la tarjeta.
+    expect(
+      ruleBody(globalStyles, ".avend-chat-table--stacked .avend-chat-table-inherited"),
+    ).toMatch(/position:\s*static/u);
+  });
+
   it("en el teléfono la tabla recupera la sangría del avatar", () => {
     expect(globalStyles).toMatch(
       /@media \(max-width: 40rem\)\s*\{\s*\.avend-chat-table-block\s*\{[^}]*margin-inline-start:\s*-2\.375rem/u,

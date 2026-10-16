@@ -1204,18 +1204,124 @@ textarea[aria-invalid="true"]:focus,
   border-right: 1px solid var(--avend-border);
 }
 
-.avend-chat-table th {
+.avend-chat-table thead th {
   background: var(--avend-soft-blue);
   color: var(--avend-navy);
   font-weight: 700;
 }
 
-.avend-chat-table tbody tr:nth-child(even) td {
+/* La primera columna nombra la fila (encabezado de fila): se distingue de los
+   datos sin teñirla como el encabezado de columnas. */
+.avend-chat-table tbody th {
+  color: var(--avend-text);
+  font-weight: 700;
+}
+
+/* Cifras y montos a la derecha y con dígitos de igual ancho: las unidades y los
+   decimales quedan en vertical y se comparan de un vistazo. */
+.avend-chat-table [data-align="right"] {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.avend-chat-table [data-align="center"] {
+  text-align: center;
+}
+
+/* Franjas por fila (no por celda): sirven también a la tarjeta del teléfono. */
+.avend-chat-table tbody tr:nth-child(even) {
   background: var(--avend-surface-muted);
 }
 
-.avend-chat-table tbody tr:last-child td {
+.avend-chat-table tbody tr:last-child > * {
   border-bottom: 0;
+}
+
+/* Teléfono: una tabla de tres o más columnas obligaba a deslizar de lado y
+   perder el nombre de la fila. Cada fila pasa a ser una tarjeta: el nombre de
+   la fila arriba y, debajo, «Encabezado: valor». Los encabezados de columna
+   siguen en el documento (fuera de la vista) y las filas conservan su rol de
+   tabla en el HTML para los lectores de pantalla. */
+@media (max-width: 40rem) {
+  .avend-chat-table.avend-chat-table--stacked {
+    display: block;
+    min-width: 0;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked thead {
+    block-size: 1px;
+    clip-path: inset(50%);
+    display: block;
+    inline-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked tbody,
+  .avend-chat-table.avend-chat-table--stacked tr {
+    display: block;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked tbody tr {
+    border-bottom: 1px solid var(--avend-border);
+    padding: 0.75rem 0.875rem;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked th,
+  .avend-chat-table.avend-chat-table--stacked td {
+    border: 0;
+    padding: 0.25rem 0;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked tbody th {
+    color: var(--avend-navy);
+    display: block;
+    font-size: 1.0625rem;
+    padding-bottom: 0.375rem;
+  }
+
+  .avend-chat-table.avend-chat-table--stacked td {
+    column-gap: 0.75rem;
+    display: grid;
+    grid-template-columns: minmax(8.25rem, 42%) minmax(0, 1fr);
+  }
+
+  .avend-chat-table.avend-chat-table--stacked td::before {
+    color: var(--avend-navy);
+    content: attr(data-label);
+    /* Con texto alternativo vacío el lector de pantalla no repite el encabezado
+       que ya anuncia por la tabla; el navegador que no lo admite ignora esta
+       línea y conserva la anterior. */
+    content: attr(data-label) / "";
+    font-weight: 700;
+  }
+
+  /* Una celda sin dato (vacía o con guion) no ocupa una línea en la tarjeta. */
+  .avend-chat-table.avend-chat-table--stacked td[data-blank] {
+    display: none;
+  }
+
+  /* En la tarjeta todo se lee de izquierda a derecha. */
+  .avend-chat-table.avend-chat-table--stacked [data-align] {
+    text-align: left;
+  }
+
+  /* El grupo de una celda combinada, oculto en pantalla ancha, aquí se ve. */
+  .avend-chat-table--stacked .avend-chat-table-inherited {
+    block-size: auto;
+    clip-path: none;
+    inline-size: auto;
+    margin: 0;
+    overflow: visible;
+    position: static;
+    white-space: normal;
+  }
 }
 
 .avend-chat-message-content strong {
