@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import * as mammoth from 'mammoth';
 import {
   assertDocxWithinMemoryLimits,
   MAX_EXTRACTED_CHARS,
@@ -12,6 +11,8 @@ export class DocxExtractionService {
     // Guarda de memoria (Render Free 512 MB): rechaza un XML descomprimido
     // desmesurado ANTES de que mammoth lo cargue y construya el DOM.
     assertDocxWithinMemoryLimits(buffer);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mammoth = require('mammoth') as typeof import('mammoth');
     const result = await mammoth.extractRawText({ buffer });
     const text = result.value.trim();
     if (text.length > MAX_EXTRACTED_CHARS) {

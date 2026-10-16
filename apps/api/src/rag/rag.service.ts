@@ -770,7 +770,11 @@ export class RagService {
     const globalQuery = globalUsesContext ? contextual : question;
     const selectedQuery = hasPrior ? contextual : question;
     const queries =
-      selectedModuleId && selectedQuery !== globalQuery
+      // Exact retrieval only consumes the global vector; its module view is
+      // derived from those same candidates, without a second vector search.
+      !exactReferences.length &&
+      selectedModuleId &&
+      selectedQuery !== globalQuery
         ? [globalQuery, selectedQuery]
         : [globalQuery];
     const embeddings = await this.embeddings.embed(

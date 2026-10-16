@@ -7,7 +7,10 @@ const mockOpenAi = jest.fn().mockImplementation(() => ({
 
 jest.mock('openai', () => ({ __esModule: true, default: mockOpenAi }));
 
-import { OpenAiEmbeddingsGateway } from './openai-embeddings.gateway';
+import {
+  MAX_EMBEDDING_BATCH_SIZE,
+  OpenAiEmbeddingsGateway,
+} from './openai-embeddings.gateway';
 
 function vector(): number[] {
   return Array.from({ length: 1536 }, () => 0.1);
@@ -41,12 +44,15 @@ describe('OpenAiEmbeddingsGateway', () => {
       vector(),
       vector(),
     ]);
-    expect(mockCreate).toHaveBeenCalledWith({
-      dimensions: 1536,
-      input: ['primera', 'segunda'],
-      model: 'text-embedding-3-small',
-    });
-    // La indexación embebe un documento entero: conserva los límites del SDK.
+    expect(mockCreate).toHaveBeenCalledWith(
+      {
+        dimensions: 1536,
+        input: ['primera', 'segunda'],
+        model: 'text-embedding-3-small',
+      },
+      { signal: undefined },
+    );
+    // La indexación conserva los límites del SDK por lote.
     const [options] = mockOpenAi.mock.calls[0] as [Record<string, unknown>];
     expect(options).not.toHaveProperty('timeout');
     expect(options).not.toHaveProperty('maxRetries');
@@ -79,5 +85,125 @@ describe('OpenAiEmbeddingsGateway', () => {
     await expect(gateway.embed(['consulta'])).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+
+  it('embeds bounded sequential batches without losing input order', async () => {
+    const gateway = new OpenAiEmbeddingsGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
+      ),
+    } as never);
+    const inputs = Array.from({ length: 65 }, (_, index) => String(index));
+    let active = 0;
+    let peak = 0;
+    mockCreate.mockImplementation(async ({ input }: { input: string[] }) => {
+      active++;
+      peak = Math.max(peak, active);
+      await Promise.resolve();
+      active--;
+      return {
+        data: input
+          .map((value, index) => ({
+            index,
+            embedding: Array.from({ length: 1536 }, () => Number(value)),
+          }))
+          .reverse(),
+      };
+    });
+
+    const result = await gateway.embed(inputs);
+
+    expect(result).toEqual(
+      inputs.map((value) => Array.from({ length: 1536 }, () => Number(value))),
+    );
+    expect(
+      mockCreate.mock.calls.map(
+        ([body]: [{ input: string[] }]) => body.input.length,
+      ),
+    ).toEqual([32, 32, 1]);
+    expect(MAX_EMBEDDING_BATCH_SIZE).toBe(32);
+    expect(peak).toBe(1);
+    expect(mockOpenAi).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects duplicate or missing provider indices instead of attaching the wrong vector', async () => {
+    const gateway = new OpenAiEmbeddingsGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
+      ),
+    } as never);
+    mockCreate.mockResolvedValue({
+      data: [
+        { index: 0, embedding: vector() },
+        { index: 0, embedding: vector() },
+      ],
+    });
+
+    await expect(gateway.embed(['uno', 'dos'])).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('stops after a later batch fails validation without returning partial vectors', async () => {
+    const gateway = new OpenAiEmbeddingsGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
+      ),
+    } as never);
+    mockCreate
+      .mockResolvedValueOnce({
+        data: Array.from({ length: 32 }, (_, index) => ({
+          index,
+          embedding: vector(),
+        })),
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    await expect(
+      gateway.embed(Array.from({ length: 65 }, () => 'texto')),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes cancellation to the SDK and starts no further batch after abort', async () => {
+    const gateway = new OpenAiEmbeddingsGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
+      ),
+    } as never);
+    const cancellation = new AbortController();
+    mockCreate.mockImplementation(() => {
+      cancellation.abort(new Error('INGESTION_TIMEOUT'));
+      return Promise.resolve({
+        data: Array.from({ length: 32 }, (_, index) => ({
+          index,
+          embedding: vector(),
+        })),
+      });
+    });
+
+    await expect(
+      gateway.embed(
+        Array.from({ length: 65 }, () => 'texto'),
+        undefined,
+        cancellation.signal,
+      ),
+    ).rejects.toThrow('INGESTION_TIMEOUT');
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const call = mockCreate.mock.calls[0] as [unknown, { signal: AbortSignal }];
+    expect(call[1]).toEqual({
+      signal: cancellation.signal,
+    });
+  });
+
+  it('avoids a provider call for an empty input or an already cancelled job', async () => {
+    const gateway = new OpenAiEmbeddingsGateway({ get: jest.fn() } as never);
+    await expect(gateway.embed([])).resolves.toEqual([]);
+    const cancellation = new AbortController();
+    cancellation.abort(new Error('INGESTION_TIMEOUT'));
+    await expect(
+      gateway.embed(['texto'], undefined, cancellation.signal),
+    ).rejects.toThrow('INGESTION_TIMEOUT');
+    expect(mockOpenAi).not.toHaveBeenCalled();
   });
 });

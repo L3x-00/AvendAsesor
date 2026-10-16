@@ -366,8 +366,10 @@ adjuntos de casos.
    - tokenizador `o200k_base` (`js-tiktoken`);
    - hasta 800 tokens por fragmento, con solapamiento de 100;
    - respeta títulos, artículos y numerales, y conserva páginas y sección.
-8. Embeddings de 1536 dimensiones. Un vector de otra dimensión aborta el
-   trabajo.
+8. Embeddings de 1536 dimensiones, solicitados en lotes secuenciales de hasta
+   32 textos para acotar la memoria de decodificación. Se validan todos los
+   lotes y sus índices antes de reemplazar fragmentos existentes. Un vector de
+   otra dimensión aborta el trabajo.
 9. El worker reemplaza los fragmentos de la versión en lotes de 25, renovando
    el lease, y cierra con `complete_document_ingestion_job`, que deja la versión
    en `indexed`. Ante un error llama a `fail_document_ingestion_job`, que la
@@ -710,6 +712,12 @@ Consideraciones de Render Free:
   mientras la instancia está activa**.
 - Los topes de OCR, lotes y guardas de memoria están pensados para 512 MB
   (`ingestion.service.ts`, `document-format.ts`).
+- PDF/Word/OCR y el vocabulario del tokenizador se cargan cuando se necesitan.
+  Un vencimiento de ingesta cancela embeddings/OCR; la plaza se conserva hasta
+  que terminen la tarea, la última renovación pendiente y el hilo nativo OCR.
+  Las operaciones sin cancelación nativa pueden retener esa plaza. Las
+  mediciones locales y sus límites están en
+  [el informe de rendimiento](../requirements/RENDIMIENTO_API_RAG_2026-10-16.md).
 
 ### 9.3 Variables de entorno
 

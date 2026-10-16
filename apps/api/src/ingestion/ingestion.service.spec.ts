@@ -38,7 +38,7 @@ function createGateway(): jest.Mocked<IngestionGateway> {
     downloadPdf: jest.fn(),
     fail: jest.fn(),
     insertChunks: jest.fn(),
-    refreshLease: jest.fn(),
+    refreshLease: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -369,6 +369,191 @@ describe('IngestionService', () => {
       const renewals = gateway.refreshLease.mock.calls.length;
       await jest.advanceTimersByTimeAsync(600_000);
       expect(gateway.refreshLease).toHaveBeenCalledTimes(renewals);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps a timed-out extraction isolated and prevents late OCR, embeddings and writes', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishExtraction!: (
+        pages: { pageNumber: number; text: string }[],
+      ) => void;
+      gateway.claimNext.mockResolvedValueOnce(job).mockResolvedValue(null);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      pdf.extract.mockReturnValue(
+        new Promise((resolve) => {
+          finishExtraction = resolve;
+        }),
+      );
+
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1);
+      await expect(processing).resolves.toBe(false);
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.claimNext).toHaveBeenCalledTimes(1);
+
+      finishExtraction([{ pageNumber: 1, text: ' ' }]);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(ocr.withWorker).not.toHaveBeenCalled();
+      expect(chunking.chunk).not.toHaveBeenCalled();
+      expect(embeddings.embed).not.toHaveBeenCalled();
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.insertChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.claimNext).toHaveBeenCalledTimes(2);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('aborts embedding requests and ignores late vectors before clearing existing chunks', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishEmbedding!: (vectors: number[][]) => void;
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(
+        Buffer.from('Texto Markdown válido.'),
+      );
+      chunking.chunk.mockReturnValue([chunk]);
+      embeddings.embed.mockReturnValue(
+        new Promise((resolve) => {
+          finishEmbedding = resolve;
+        }),
+      );
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1);
+      await expect(processing).resolves.toBe(false);
+      const call = embeddings.embed.mock.calls[0] as [
+        string[],
+        undefined,
+        AbortSignal,
+      ];
+      const signal = call[2];
+      expect(signal.aborted).toBe(true);
+      finishEmbedding([vector()]);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.insertChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not accumulate heartbeat requests when the store stops responding', async () => {
+    jest.useFakeTimers();
+    try {
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      gateway.refreshLease.mockReturnValue(new Promise(() => undefined));
+      pdf.extract.mockReturnValue(new Promise(() => undefined));
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(600_000);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS);
+      await expect(processing).resolves.toBe(false);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps the job slot until its last heartbeat settles, even after timeout drains the main task', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishRefresh!: () => void;
+      let finishEmbedding!: (vectors: number[][]) => void;
+      gateway.claimNext.mockResolvedValueOnce(job).mockResolvedValue(null);
+      gateway.downloadPdf.mockResolvedValue(
+        Buffer.from('Texto Markdown válido.'),
+      );
+      chunking.chunk.mockReturnValue([chunk]);
+      embeddings.embed.mockReturnValue(
+        new Promise((resolve) => {
+          finishEmbedding = resolve;
+        }),
+      );
+      gateway.refreshLease.mockReturnValue(
+        new Promise<void>((resolve) => {
+          finishRefresh = resolve;
+        }),
+      );
+
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1);
+      await expect(processing).resolves.toBe(false);
+      finishEmbedding([vector()]);
+      await jest.advanceTimersByTimeAsync(0);
+      // The main task has drained, but the old store request still owns a slot.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await expect(service.processNext()).resolves.toBe(false);
+      }
+      expect(gateway.claimNext).toHaveBeenCalledTimes(1);
+      expect(gateway.refreshLease).toHaveBeenCalledTimes(1);
+      finishRefresh();
+      await jest.advanceTimersByTimeAsync(0);
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.claimNext).toHaveBeenCalledTimes(2);
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('prevents a concurrent claim and releases its slot after a claim failure', async () => {
+    let failClaim!: (error: Error) => void;
+    gateway.claimNext.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        failClaim = reject;
+      }),
+    );
+    const processing = service.processNext();
+    const failure = expect(processing).rejects.toThrow('store unavailable');
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(gateway.claimNext).toHaveBeenCalledTimes(1);
+    failClaim(new Error('store unavailable'));
+    await failure;
+    gateway.claimNext.mockResolvedValue(null);
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(gateway.claimNext).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts no further persistence batch after a timeout during an insert', async () => {
+    jest.useFakeTimers();
+    try {
+      let finishInsert!: () => void;
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(
+        Buffer.from('Texto Markdown válido.'),
+      );
+      chunking.chunk.mockReturnValue(
+        Array.from({ length: 26 }, (_, chunkIndex) => ({
+          ...chunk,
+          chunkIndex,
+        })),
+      );
+      embeddings.embed.mockResolvedValue(
+        Array.from({ length: 26 }, () => vector()),
+      );
+      gateway.insertChunks.mockReturnValue(
+        new Promise((resolve) => {
+          finishInsert = resolve;
+        }),
+      );
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS + 1);
+      await expect(processing).resolves.toBe(false);
+      finishInsert();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(gateway.insertChunks).toHaveBeenCalledTimes(1);
+      expect(gateway.complete).not.toHaveBeenCalled();
     } finally {
       jest.useRealTimers();
     }

@@ -174,6 +174,54 @@ describe('RagService', () => {
     );
   });
 
+  it('does not embed an unused module query for an explicit norm after a topic change', async () => {
+    const exactSource = {
+      ...source,
+      documentTitle: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
+      documentType: 'RESOLUCION_SECRETARIA_GENERAL',
+      resolutionNumber: 'RSG N.° 326-2017-MINEDU',
+    };
+    gateway.searchExactReferences.mockResolvedValue([exactSource]);
+    const question =
+      'Según la RSG 326-2017-MINEDU, ¿cuáles son los requisitos de una licencia docente?';
+    const result = await service.retrieve(question, 'module-a', [
+      '¿Cuál es el plazo de la reasignación?',
+      '¿Cuánto gana un docente de 30 horas?',
+      'Ahora quiero saber sobre licencias por enfermedad.',
+    ]);
+
+    expect(embeddings.embed).toHaveBeenCalledWith([question], {
+      maxRetries: 1,
+      timeout: 30_000,
+    });
+    expect(result).toMatchObject({ kind: 'evidence', sources: [exactSource] });
+    expect(gateway.search).not.toHaveBeenCalled();
+    expect(gateway.searchExactReferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: question,
+        embedding: vector(),
+        referenceKeys: ['RSG:3262017MINEDU'],
+      }),
+    );
+  });
+
+  it('preserves both vectors when semantic routing needs separate global and module queries', async () => {
+    gateway.search.mockResolvedValue([source]);
+    const question =
+      '¿Cuáles son los requisitos para solicitar una licencia por enfermedad?';
+    await service.retrieve(question, 'module-a', [
+      '¿Cómo solicito una reasignación por salud?',
+    ]);
+    const calls = embeddings.embed.mock.calls as [string[]][];
+    expect(calls[0][0]).toHaveLength(2);
+    expect(calls[0][0][0]).toBe(question);
+    expect(calls[0][0][1]).toContain(
+      '¿Cómo solicito una reasignación por salud?',
+    );
+    expect(gateway.search).toHaveBeenCalledTimes(2);
+    expect(gateway.searchExactReferences).not.toHaveBeenCalled();
+  });
+
   it('keeps dotted legal abbreviations on the exact route', async () => {
     const exactSource = {
       ...source,

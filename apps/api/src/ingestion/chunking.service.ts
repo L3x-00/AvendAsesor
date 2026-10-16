@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { getEncoding, type Tiktoken } from 'js-tiktoken';
+import { Tiktoken, type TiktokenBPE } from 'js-tiktoken/lite';
 
 export interface ExtractedPage {
   pageNumber: number;
@@ -159,7 +159,13 @@ export class ChunkingService {
    * consulta del chat lo esperaba).
    */
   private get encoding(): Tiktoken {
-    this.encodingCache ??= getEncoding('o200k_base');
+    if (!this.encodingCache) {
+      // The main entry point embeds every vocabulary at import time. Load only
+      // the existing o200k vocabulary, and only when a document is chunked.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ranks = require('js-tiktoken/ranks/o200k_base') as TiktokenBPE;
+      this.encodingCache = new Tiktoken(ranks);
+    }
     return this.encodingCache;
   }
 

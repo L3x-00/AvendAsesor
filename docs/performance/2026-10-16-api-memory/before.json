@@ -1,0 +1,642 @@
+{
+  "recordedAt": "2026-10-16T18:48:13.313Z",
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v24.14.0",
+  "heapLimitMiB": 384,
+  "runs": 3,
+  "compiledHashes": {
+    "ingestion/chunking.service.js": "8449709eb5fb1c5d25e0dbb6eb594475473aa1f03dfd6540167465334a1f7fe9",
+    "ingestion/ingestion.service.js": "33b7672e174e4b2ca2d221dc1773a740e16d156168db032e1a379754c8caa235",
+    "ingestion/openai-embeddings.gateway.js": "50cbd5c5fe7628c3117d0a0054ac81306cd7dd1b79aa928baf7e0de8b453b3cb",
+    "ingestion/ocr.service.js": "ea3198a0f7369e59e9c8d9a2d62dab3bab534e986557e6aa9bd6fae711d1b276",
+    "ingestion/pdf-extraction.service.js": "047775fa037ba3e81ead14b8fff846d66df4c93738d127e79a202546115954da",
+    "documents/pdf-inspection.service.js": "99769e16b3055a0709bf53b3b9399ff64292eba86b044c525e804d48aa87d6fd"
+  },
+  "results": [
+    {
+      "run": 1,
+      "scenario": "boot",
+      "bootMs": 8625.1264,
+      "elapsedMs": 0.9326999999993859,
+      "boot": {
+        "rss": 165003264,
+        "heapTotal": 124805120,
+        "heapUsed": 53921192,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 165036032,
+        "cpuMicros": {
+          "user": 1734000,
+          "system": 1468000
+        }
+      },
+      "beforeGc": {
+        "rss": 165011456,
+        "heapTotal": 124805120,
+        "heapUsed": 54019656,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 165036032,
+        "cpuMicros": {
+          "user": 1734000,
+          "system": 1468000
+        }
+      },
+      "retained": {
+        "rss": 165142528,
+        "heapTotal": 124542976,
+        "heapUsed": 53933224,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 165142528,
+        "cpuMicros": {
+          "user": 1796000,
+          "system": 1484000
+        }
+      },
+      "peaks": {
+        "rss": 165011456,
+        "heapUsed": 71017072,
+        "external": 3882160,
+        "arrayBuffers": 56239
+      },
+      "heavyModuleCount": 62,
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 2,
+      "scenario": "boot",
+      "bootMs": 2591.0565,
+      "elapsedMs": 2.595299999999952,
+      "boot": {
+        "rss": 162381824,
+        "heapTotal": 124280832,
+        "heapUsed": 53913968,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 162414592,
+        "cpuMicros": {
+          "user": 1828000,
+          "system": 953000
+        }
+      },
+      "beforeGc": {
+        "rss": 162390016,
+        "heapTotal": 124280832,
+        "heapUsed": 54012432,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 162414592,
+        "cpuMicros": {
+          "user": 1828000,
+          "system": 953000
+        }
+      },
+      "retained": {
+        "rss": 162414592,
+        "heapTotal": 124280832,
+        "heapUsed": 53930752,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 162414592,
+        "cpuMicros": {
+          "user": 1921000,
+          "system": 953000
+        }
+      },
+      "peaks": {
+        "rss": 162390016,
+        "heapUsed": 69016752,
+        "external": 3882160,
+        "arrayBuffers": 56239
+      },
+      "heavyModuleCount": 62,
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 3,
+      "scenario": "boot",
+      "bootMs": 2670.6482,
+      "elapsedMs": 1.2545000000000073,
+      "boot": {
+        "rss": 164937728,
+        "heapTotal": 125067264,
+        "heapUsed": 53921040,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 164978688,
+        "cpuMicros": {
+          "user": 2015000,
+          "system": 984000
+        }
+      },
+      "beforeGc": {
+        "rss": 164966400,
+        "heapTotal": 125067264,
+        "heapUsed": 54019504,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 164978688,
+        "cpuMicros": {
+          "user": 2015000,
+          "system": 984000
+        }
+      },
+      "retained": {
+        "rss": 165232640,
+        "heapTotal": 124280832,
+        "heapUsed": 53932592,
+        "external": 3882160,
+        "arrayBuffers": 56239,
+        "maxRssBytes": 165232640,
+        "cpuMicros": {
+          "user": 2125000,
+          "system": 984000
+        }
+      },
+      "peaks": {
+        "rss": 164966400,
+        "heapUsed": 71815400,
+        "external": 3882160,
+        "arrayBuffers": 56239
+      },
+      "heavyModuleCount": 62,
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 1,
+      "scenario": "chunk",
+      "bootMs": 2777.1576,
+      "elapsedMs": 1948.9018000000005,
+      "boot": {
+        "rss": 165949440,
+        "heapTotal": 124542976,
+        "heapUsed": 53921808,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 165994496,
+        "cpuMicros": {
+          "user": 2171000,
+          "system": 781000
+        }
+      },
+      "beforeGc": {
+        "rss": 367771648,
+        "heapTotal": 282841088,
+        "heapUsed": 194811384,
+        "external": 4005747,
+        "arrayBuffers": 179826,
+        "maxRssBytes": 368480256,
+        "cpuMicros": {
+          "user": 4578000,
+          "system": 1000000
+        }
+      },
+      "retained": {
+        "rss": 364568576,
+        "heapTotal": 267157504,
+        "heapUsed": 123789448,
+        "external": 4005747,
+        "arrayBuffers": 171521,
+        "maxRssBytes": 368525312,
+        "cpuMicros": {
+          "user": 4718000,
+          "system": 1031000
+        }
+      },
+      "peaks": {
+        "rss": 367771648,
+        "heapUsed": 194810664,
+        "external": 4005747,
+        "arrayBuffers": 179826
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "81b68aa3a1768b5c89c39fb19c6b212e92bcdaee1a7ce1e53106f409f88e3195",
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 2,
+      "scenario": "chunk",
+      "bootMs": 2564.8104000000003,
+      "elapsedMs": 1928.9123000000004,
+      "boot": {
+        "rss": 165924864,
+        "heapTotal": 124542976,
+        "heapUsed": 53927648,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 165978112,
+        "cpuMicros": {
+          "user": 1890000,
+          "system": 984000
+        }
+      },
+      "beforeGc": {
+        "rss": 368263168,
+        "heapTotal": 283627520,
+        "heapUsed": 193465008,
+        "external": 4002287,
+        "arrayBuffers": 176366,
+        "maxRssBytes": 368984064,
+        "cpuMicros": {
+          "user": 4328000,
+          "system": 1093000
+        }
+      },
+      "retained": {
+        "rss": 365060096,
+        "heapTotal": 267681792,
+        "heapUsed": 123795232,
+        "external": 4002287,
+        "arrayBuffers": 164608,
+        "maxRssBytes": 369016832,
+        "cpuMicros": {
+          "user": 4546000,
+          "system": 1109000
+        }
+      },
+      "peaks": {
+        "rss": 368263168,
+        "heapUsed": 193464288,
+        "external": 4002287,
+        "arrayBuffers": 176366
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "81b68aa3a1768b5c89c39fb19c6b212e92bcdaee1a7ce1e53106f409f88e3195",
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 3,
+      "scenario": "chunk",
+      "bootMs": 2649.0805,
+      "elapsedMs": 1924.7753000000002,
+      "boot": {
+        "rss": 166146048,
+        "heapTotal": 124542976,
+        "heapUsed": 53921520,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 166195200,
+        "cpuMicros": {
+          "user": 1734000,
+          "system": 921000
+        }
+      },
+      "beforeGc": {
+        "rss": 368267264,
+        "heapTotal": 282841088,
+        "heapUsed": 196147024,
+        "external": 4008957,
+        "arrayBuffers": 183036,
+        "maxRssBytes": 369057792,
+        "cpuMicros": {
+          "user": 4093000,
+          "system": 1093000
+        }
+      },
+      "retained": {
+        "rss": 364908544,
+        "heapTotal": 266108928,
+        "heapUsed": 123788680,
+        "external": 4008957,
+        "arrayBuffers": 171100,
+        "maxRssBytes": 369057792,
+        "cpuMicros": {
+          "user": 4187000,
+          "system": 1140000
+        }
+      },
+      "peaks": {
+        "rss": 368267264,
+        "heapUsed": 196146304,
+        "external": 4008957,
+        "arrayBuffers": 183036
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "81b68aa3a1768b5c89c39fb19c6b212e92bcdaee1a7ce1e53106f409f88e3195",
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 1,
+      "scenario": "ingest",
+      "bootMs": 2457.6108999999997,
+      "elapsedMs": 2442.1634,
+      "boot": {
+        "rss": 166522880,
+        "heapTotal": 124542976,
+        "heapUsed": 53923280,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 166543360,
+        "cpuMicros": {
+          "user": 1625000,
+          "system": 1015000
+        }
+      },
+      "beforeGc": {
+        "rss": 396689408,
+        "heapTotal": 305704960,
+        "heapUsed": 186730768,
+        "external": 10729098,
+        "arrayBuffers": 1774069,
+        "maxRssBytes": 408158208,
+        "cpuMicros": {
+          "user": 4375000,
+          "system": 1109000
+        }
+      },
+      "retained": {
+        "rss": 368181248,
+        "heapTotal": 268677120,
+        "heapUsed": 124839808,
+        "external": 5796598,
+        "arrayBuffers": 1767925,
+        "maxRssBytes": 408158208,
+        "cpuMicros": {
+          "user": 4500000,
+          "system": 1125000
+        }
+      },
+      "peaks": {
+        "rss": 396689408,
+        "heapUsed": 194822504,
+        "external": 10729098,
+        "arrayBuffers": 2046338
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "58b67799267dde4823e7db5b3242ecf1495b696f84225b1737666685321bba45",
+      "embeddingBatchSizes": [
+        600
+      ]
+    },
+    {
+      "run": 2,
+      "scenario": "ingest",
+      "bootMs": 2789.8635,
+      "elapsedMs": 2450.4056,
+      "boot": {
+        "rss": 160976896,
+        "heapTotal": 124542976,
+        "heapUsed": 53912704,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 161017856,
+        "cpuMicros": {
+          "user": 2015000,
+          "system": 875000
+        }
+      },
+      "beforeGc": {
+        "rss": 395976704,
+        "heapTotal": 305180672,
+        "heapUsed": 187940472,
+        "external": 10765962,
+        "arrayBuffers": 1810933,
+        "maxRssBytes": 404840448,
+        "cpuMicros": {
+          "user": 5015000,
+          "system": 1000000
+        }
+      },
+      "retained": {
+        "rss": 366366720,
+        "heapTotal": 269201408,
+        "heapUsed": 124828960,
+        "external": 5833462,
+        "arrayBuffers": 739899,
+        "maxRssBytes": 404840448,
+        "cpuMicros": {
+          "user": 5187000,
+          "system": 1000000
+        }
+      },
+      "peaks": {
+        "rss": 395976704,
+        "heapUsed": 195964048,
+        "external": 10765962,
+        "arrayBuffers": 2049249
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "58b67799267dde4823e7db5b3242ecf1495b696f84225b1737666685321bba45",
+      "embeddingBatchSizes": [
+        600
+      ]
+    },
+    {
+      "run": 3,
+      "scenario": "ingest",
+      "bootMs": 2501.0414,
+      "elapsedMs": 2531.4253999999996,
+      "boot": {
+        "rss": 165810176,
+        "heapTotal": 124805120,
+        "heapUsed": 53922544,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 165851136,
+        "cpuMicros": {
+          "user": 1843000,
+          "system": 984000
+        }
+      },
+      "beforeGc": {
+        "rss": 396492800,
+        "heapTotal": 305442816,
+        "heapUsed": 186745136,
+        "external": 10729098,
+        "arrayBuffers": 1774069,
+        "maxRssBytes": 408592384,
+        "cpuMicros": {
+          "user": 4468000,
+          "system": 1250000
+        }
+      },
+      "retained": {
+        "rss": 367980544,
+        "heapTotal": 268414976,
+        "heapUsed": 124838000,
+        "external": 5796598,
+        "arrayBuffers": 1356277,
+        "maxRssBytes": 408592384,
+        "cpuMicros": {
+          "user": 4625000,
+          "system": 1250000
+        }
+      },
+      "peaks": {
+        "rss": 396492800,
+        "heapUsed": 195524112,
+        "external": 10729098,
+        "arrayBuffers": 2048245
+      },
+      "heavyModuleCount": 62,
+      "chunks": 600,
+      "outputHash": "58b67799267dde4823e7db5b3242ecf1495b696f84225b1737666685321bba45",
+      "embeddingBatchSizes": [
+        600
+      ]
+    },
+    {
+      "run": 1,
+      "scenario": "pdf",
+      "bootMs": 2737.3324000000002,
+      "elapsedMs": 997.2646,
+      "boot": {
+        "rss": 162074624,
+        "heapTotal": 124542976,
+        "heapUsed": 53913296,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 162115584,
+        "cpuMicros": {
+          "user": 2140000,
+          "system": 984000
+        }
+      },
+      "beforeGc": {
+        "rss": 215547904,
+        "heapTotal": 127365120,
+        "heapUsed": 60887904,
+        "external": 7540320,
+        "arrayBuffers": 1399007,
+        "maxRssBytes": 215547904,
+        "cpuMicros": {
+          "user": 3000000,
+          "system": 1046000
+        }
+      },
+      "retained": {
+        "rss": 214904832,
+        "heapTotal": 128675840,
+        "heapUsed": 57692616,
+        "external": 7540320,
+        "arrayBuffers": 176123,
+        "maxRssBytes": 216100864,
+        "cpuMicros": {
+          "user": 3046000,
+          "system": 1046000
+        }
+      },
+      "peaks": {
+        "rss": 215547904,
+        "heapUsed": 68421648,
+        "external": 7540320,
+        "arrayBuffers": 1399007
+      },
+      "heavyModuleCount": 62,
+      "pages": 5,
+      "outputHash": "4a114877308ae3dd3cff73531abfc3f935128c4feec5d887dfd9b0217de3453f",
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 2,
+      "scenario": "pdf",
+      "bootMs": 2570.6306999999997,
+      "elapsedMs": 968.9719,
+      "boot": {
+        "rss": 166379520,
+        "heapTotal": 125067264,
+        "heapUsed": 53923544,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 166432768,
+        "cpuMicros": {
+          "user": 1687000,
+          "system": 1125000
+        }
+      },
+      "beforeGc": {
+        "rss": 219881472,
+        "heapTotal": 127627264,
+        "heapUsed": 60900368,
+        "external": 7540320,
+        "arrayBuffers": 1399007,
+        "maxRssBytes": 219881472,
+        "cpuMicros": {
+          "user": 2671000,
+          "system": 1171000
+        }
+      },
+      "retained": {
+        "rss": 219639808,
+        "heapTotal": 128675840,
+        "heapUsed": 57695512,
+        "external": 7540320,
+        "arrayBuffers": 176123,
+        "maxRssBytes": 220807168,
+        "cpuMicros": {
+          "user": 2750000,
+          "system": 1171000
+        }
+      },
+      "peaks": {
+        "rss": 219881472,
+        "heapUsed": 72272152,
+        "external": 7540320,
+        "arrayBuffers": 1399007
+      },
+      "heavyModuleCount": 62,
+      "pages": 5,
+      "outputHash": "4a114877308ae3dd3cff73531abfc3f935128c4feec5d887dfd9b0217de3453f",
+      "embeddingBatchSizes": []
+    },
+    {
+      "run": 3,
+      "scenario": "pdf",
+      "bootMs": 2589.445,
+      "elapsedMs": 836.1347000000001,
+      "boot": {
+        "rss": 162611200,
+        "heapTotal": 124018688,
+        "heapUsed": 53911296,
+        "external": 3882146,
+        "arrayBuffers": 56223,
+        "maxRssBytes": 162807808,
+        "cpuMicros": {
+          "user": 1890000,
+          "system": 968000
+        }
+      },
+      "beforeGc": {
+        "rss": 216276992,
+        "heapTotal": 127365120,
+        "heapUsed": 60887592,
+        "external": 7540320,
+        "arrayBuffers": 1399007,
+        "maxRssBytes": 216276992,
+        "cpuMicros": {
+          "user": 2703000,
+          "system": 1015000
+        }
+      },
+      "retained": {
+        "rss": 215625728,
+        "heapTotal": 128675840,
+        "heapUsed": 57691688,
+        "external": 7540320,
+        "arrayBuffers": 176123,
+        "maxRssBytes": 216813568,
+        "cpuMicros": {
+          "user": 2734000,
+          "system": 1046000
+        }
+      },
+      "peaks": {
+        "rss": 216276992,
+        "heapUsed": 69026176,
+        "external": 7540320,
+        "arrayBuffers": 1399007
+      },
+      "heavyModuleCount": 62,
+      "pages": 5,
+      "outputHash": "4a114877308ae3dd3cff73531abfc3f935128c4feec5d887dfd9b0217de3453f",
+      "embeddingBatchSizes": []
+    }
+  ]
+}
