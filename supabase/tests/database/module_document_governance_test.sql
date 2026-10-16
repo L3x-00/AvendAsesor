@@ -1,6 +1,6 @@
 begin;
 
-select plan(68);
+select plan(69);
 
 select has_type('public', 'document_approval_status', 'Technical approval has a constrained type');
 select has_type('public', 'document_archive_reason', 'Archive reasons have a constrained type');
@@ -843,6 +843,29 @@ select ok(
       )
   ),
   'The governed type list keeps exactly the codes the API and the panel offer'
+);
+-- El vector de búsqueda de la biblioteca también enumera los tipos gobernados:
+-- si se agrega un tipo sin su etiqueta, buscar por el nombre del tipo no
+-- encontrará el documento. `pg_get_expr` renderiza el código y la etiqueta.
+select ok(
+  (
+    select
+      pg_catalog.pg_get_expr(
+        default_value.adbin,
+        default_value.adrelid
+      ) like '%RESOLUCION_SECRETARIA_GENERAL%'
+      and pg_catalog.pg_get_expr(
+        default_value.adbin,
+        default_value.adrelid
+      ) like '%Resolucion de Secretaria General%'
+    from pg_catalog.pg_attrdef as default_value
+    join pg_catalog.pg_attribute as attribute
+      on attribute.attrelid = default_value.adrelid
+      and attribute.attnum = default_value.adnum
+    where default_value.adrelid = 'public.documents'::regclass
+      and attribute.attname = 'governed_metadata_search_vector'
+  ),
+  'The library search vector keeps a label for every governed type'
 );
 
 select * from finish();

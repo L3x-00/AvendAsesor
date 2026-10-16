@@ -53,6 +53,8 @@ describe('legal document references', () => {
     )[0];
     if (!reference) throw new Error('Expected an exact reference.');
 
+    // Un documento sin tipo declarado ya no responde por una RSG (ADR-0025):
+    // mencionarla en el título o en el número registrado no lo convierte en ella.
     expect(
       sourceMatchesExactDocumentReference(
         {
@@ -62,7 +64,7 @@ describe('legal document references', () => {
         },
         reference,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       sourceMatchesExactDocumentReference(
         {
@@ -83,7 +85,7 @@ describe('legal document references', () => {
         },
         reference,
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       sourceMatchesExactDocumentReference(
         {
@@ -141,6 +143,84 @@ describe('legal document references', () => {
           resolutionNumber: null,
         },
         law,
+      ),
+    ).toBe(false);
+
+    const supremeDecree = exactDocumentReferencesIn(
+      'Explícame el Decreto Supremo N.° 049-2025-EF',
+    )[0];
+    if (!supremeDecree) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle:
+            'Decreto Supremo N.° 049-2025-EF que aprueba el Reglamento de la Ley N.° 29988',
+          documentType: 'DECRETO_SUPREMO',
+          resolutionNumber: null,
+        },
+        supremeDecree,
+      ),
+    ).toBe(true);
+
+    // El número registrado puede traer la etiqueta completa y acentuada: la
+    // normalización ignora las tildes y retira la etiqueta del código pedido.
+    const registeredWithLabel = exactDocumentReferencesIn(
+      '¿Qué dispone la RSG 512-2021-MINEDU?',
+    )[0];
+    if (!registeredWithLabel) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle: 'Año 2021: Norma de control interno',
+          documentType: 'RESOLUCION_SECRETARIA_GENERAL',
+          resolutionNumber:
+            'Resolución de Secretaría General N.° 512-2021-MINEDU',
+        },
+        registeredWithLabel,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not answer for a norm the title only mentions', () => {
+    const mentioned = exactDocumentReferencesIn(
+      '¿Qué modifica la RM 654-2019-MINEDU?',
+    )[0];
+    const ownIdentity = exactDocumentReferencesIn(
+      '¿Qué modifica la RM 789-2020-MINEDU?',
+    )[0];
+    if (!mentioned || !ownIdentity) throw new Error('Expected exact references.');
+
+    const modifyingResolution = {
+      documentTitle:
+        'Resolución Ministerial N.° 789-2020-MINEDU que modifica la Resolución Ministerial N.° 654-2019-MINEDU',
+      documentType: 'RESOLUCION_MINISTERIAL',
+      resolutionNumber: null,
+    };
+
+    expect(
+      sourceMatchesExactDocumentReference(modifyingResolution, mentioned),
+    ).toBe(false);
+    expect(
+      sourceMatchesExactDocumentReference(modifyingResolution, ownIdentity),
+    ).toBe(true);
+
+    // El caso equivalente de una bolsa sin tipo declarado que difunde una RSG.
+    const diffusedRsg = exactDocumentReferencesIn(
+      '¿Qué dispone la RSG 326-2017-MINEDU?',
+    )[0];
+    if (!diffusedRsg) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle:
+            'Oficio Múltiple N.° 123-2020-MINEDU que difunde la Resolución de Secretaría General N.° 326-2017-MINEDU',
+          documentType: 'OTRO',
+          resolutionNumber: null,
+        },
+        diffusedRsg,
       ),
     ).toBe(false);
   });

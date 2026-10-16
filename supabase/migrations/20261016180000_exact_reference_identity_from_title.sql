@@ -13,34 +13,27 @@
 -- resolver canónico del texto): la identidad de un documento es el número
 -- registrado cuando existe; si no existe, se acepta el número que el título
 -- declara con una etiqueta de tipo reconocible («Ley N.° 29988», «Resolución de
--- Secretaría General N.° 326-2017-MINEDU»). El número registrado manda: si hay
--- un número distinto registrado, el título no puede sustituirlo. El tipo
--- gobernado del documento sigue siendo obligatorio, y la RSG conserva su
--- etiqueta explícita y su tipo propio (ADR-0025).
+-- Secretaría General N.° 326-2017-MINEDU»).
+--
+-- Tres exigencias para no sustituir una norma por otra:
+--   1. El número registrado manda: si existe y no coincide, el título no puede
+--      sustituirlo.
+--   2. Solo cuenta la identidad propia: la PRIMERA declaración de ese código en
+--      el título (`reference_index = 1`). Una norma que menciona a otra —«que
+--      modifica la Resolución Ministerial N.° 123-2018-MINEDU»— no responde por
+--      la mencionada.
+--   3. El tipo gobernado del documento es obligatorio por código; la RSG exige
+--      además su etiqueta explícita y su tipo propio (ADR-0025), sin bolsa
+--      `OTRO`.
+--
+-- Límite conocido (documentado en ADR-0026): un título que solo menciona otra
+-- norma del mismo código, sin declarar la identidad propia y con el número
+-- registrado vacío, responde por esa mención; se corrige por la vía auditable de
+-- metadatos.
 
--- Normaliza un número registrado o declarado: mayúsculas, sin signos y sin la
--- etiqueta del tipo ni el «N.°»/«NRO»/«NUMERO» inicial. Igual que la migración
--- anterior, el resultado es el segundo segmento de una clave `TIPO:NÚMERO`.
-create function private.document_reference_number_key(p_value text)
-returns text
-language sql
-immutable
-set search_path = ''
-as $$
-  select nullif(
-    pg_catalog.regexp_replace(
-      pg_catalog.regexp_replace(
-        pg_catalog.upper(coalesce(p_value, '')),
-        '[^A-Z0-9]', '', 'g'
-      ),
-      '^((DECRETOLEGISLATIVO|DECRETOSUPREMO|DIRECTIVA|RESOLUCIONDESECRETARIAGENERAL|RESOLUCIONVICEMINISTERIAL|RESOLUCIONMINISTERIAL|RESOLUCIONDIRECTORAL|RSG|RVM|RM|RD|DS|DL|LEY))?(N(RO|UMERO)?)?',
-      '', 'g'
-    ),
-    ''
-  );
-$$;
-
--- Etiquetas de tipo que la compuerta exacta reconoce dentro de un título.
+-- Etiquetas de tipo que la compuerta exacta reconoce, en una pregunta, en un
+-- título o dentro de un número registrado. Se declara antes que las demás
+-- funciones porque la normalización del número y la lectura del título la usan.
 create function private.document_reference_prefix_codes()
 returns table (prefix text, lookup_code text)
 language sql
@@ -65,10 +58,71 @@ as $$
   ) as prefixes(prefix, lookup_code);
 $$;
 
--- Identidades `TIPO:NÚMERO` que un título declara explícitamente. Conserva un
--- solo criterio: etiqueta reconocible + número, sin adivinar dígitos sueltos.
+-- Normaliza un número registrado o declarado: tildes transliteradas, mayúsculas,
+-- sin signos y sin la etiqueta del código pedido ni el «N.°»/«NRO»/«NUMERO»
+-- inicial. Espejo de `normalizedRegisteredNumber` en la API: se retira solo la
+-- etiqueta del código que se está comparando, de modo que un número rotulado con
+-- la etiqueta de otro tipo no gane identidad (falla cerrada). El resultado es el
+-- segundo segmento de una clave `TIPO:NÚMERO`.
+create function private.document_reference_number_key(
+  p_value text,
+  p_lookup_code text
+)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  with compacted as (
+    select pg_catalog.regexp_replace(
+      pg_catalog.upper(
+        pg_catalog.translate(
+          coalesce(p_value, ''),
+          'ÁÉÍÓÚÜÑáéíóúüñ',
+          'AEIOUUNaeiouun'
+        )
+      ),
+      '[^A-Z0-9]', '', 'g'
+    ) as text
+  ),
+  prefixes as (
+    select pg_catalog.string_agg(
+      pg_catalog.regexp_replace(
+        pg_catalog.upper(prefix.prefix), '[^A-Z0-9]', '', 'g'
+      ),
+      '|'
+      order by pg_catalog.char_length(prefix.prefix) desc
+    ) as alternatives
+    from private.document_reference_prefix_codes() as prefix
+    where prefix.lookup_code = p_lookup_code
+  )
+  select nullif(
+    pg_catalog.regexp_replace(
+      compacted.text,
+      case
+        when prefixes.alternatives is null then '^(N(RO|UMERO)?)?'
+        else '^(' || prefixes.alternatives || ')?(N(RO|UMERO)?)?'
+      end,
+      '',
+      'g'
+    ),
+    ''
+  )
+  from compacted, prefixes;
+$$;
+
+-- Identidades `TIPO:NÚMERO` que un título declara explícitamente, en el orden en
+-- que aparecen. Conserva un solo criterio: etiqueta reconocible + número, sin
+-- adivinar dígitos sueltos.
+--
+-- `reference_index` es el ordinal de la declaración dentro de su propio código:
+-- el 1 es la identidad propia del documento (la primera norma nombrada con ese
+-- código) y los siguientes son menciones a otras normas, como «Resolución
+-- Ministerial N.° 456-2018-MINEDU que modifica la Resolución Ministerial N.°
+-- 123-2018-MINEDU». Solo el ordinal 1 puede responder por una referencia
+-- exacta: una norma que menciona a otra no responde por la mencionada.
 create function private.document_title_reference_keys(p_title text)
-returns table (lookup_code text, reference_key text)
+returns table (lookup_code text, reference_key text, reference_index integer)
 language sql
 immutable
 set search_path = ''
@@ -96,36 +150,54 @@ as $$
   ),
   matched as (
     select
-      match[1] as prefix,
-      private.document_reference_number_key(match[2]) as reference_key
+      occurrence.match[1] as prefix,
+      occurrence.match[2] as identifier,
+      occurrence.ordinal as match_ordinal
     from compacted
     cross join lateral pg_catalog.regexp_matches(
       compacted.text,
-      '\m(decreto\s+legislativo|decreto\s+s[uú]premo|resoluci[oó]n\s+de\s+secretar[ií]a\s+general|resoluci[oó]n\s+minist[ée]rial|resoluci[oó]n\s+viceminist[ée]rial|resoluci[oó]n\s+director[aá]l|directiva|ley|ds|dl|rm|rvm|rsg|rd)\s*(?:(?:n(?:ro)?|n[uú]mero)\s*)?[.°º:–—-]*\s*([0-9]{1,8}(?:\s*-\s*(?:19|20)[0-9]{2}(?:\s*-\s*[a-z]{2,20})?)?)',
+      '\m(decreto\s+legislativo|decreto\s+s[uú]premo|resoluci[oó]n\s+de\s+secretar[ií]a\s+general|resoluci[oó]n\s+minist[ée]rial|resoluci[oó]n\s+viceminist[ée]rial|resoluci[oó]n\s+director[aá]l|directiva|ley|ds|dl|rm|rvm|rsg|rd)\s*(?:(?:n(?:ro)?|n[uú]mero)\s*)?[.°º:–—-]*\s*([0-9]{1,8}(?:\s*-\s*(?:19|20)[0-9]{2}(?:\s*-\s*[a-z]{2,20})?)?)(?![a-z0-9])',
       'g'
-    ) as match
+    ) with ordinality as occurrence(match, ordinal)
+  ),
+  resolved as (
+    select
+      prefixes.lookup_code,
+      private.document_reference_number_key(
+        matched.identifier,
+        prefixes.lookup_code
+      ) as reference_key,
+      matched.match_ordinal
+    from matched
+    join private.document_reference_prefix_codes() as prefixes
+      -- El título real trae tildes («Resolución Ministerial»): se comparan las
+      -- etiquetas ya sin tildes y con espacios colapsados.
+      on prefixes.prefix = pg_catalog.regexp_replace(
+        pg_catalog.translate(
+          pg_catalog.translate(matched.prefix, 'ÁÉÍÓÚÜÑ', 'AEIOUUN'),
+          'áéíóúüñ', 'aeiouun'
+        ),
+        '\s+', ' ', 'g'
+      )
   )
   select
-    prefixes.lookup_code,
-    matched.reference_key
-  from matched
-  join private.document_reference_prefix_codes() as prefixes
-    -- El título real trae tildes («Resolución Ministerial»): se comparan las
-    -- etiquetas ya sin tildes y con espacios colapsados.
-    on prefixes.prefix = pg_catalog.regexp_replace(
-      pg_catalog.translate(
-        pg_catalog.translate(matched.prefix, 'ÁÉÍÓÚÜÑ', 'AEIOUUN'),
-        'áéíóúüñ', 'aeiouun'
-      ),
-      '\s+', ' ', 'g'
-    )
-  where matched.reference_key is not null
-    and pg_catalog.char_length(matched.reference_key) >= 4;
+    resolved.lookup_code,
+    resolved.reference_key,
+    (
+      pg_catalog.row_number() over (
+        partition by resolved.lookup_code
+        order by resolved.match_ordinal
+      )
+    )::integer as reference_index
+  from resolved
+  where resolved.reference_key is not null
+    and pg_catalog.char_length(resolved.reference_key) >= 4;
 $$;
 
 -- Tipos gobernados que pueden responder por un código de referencia. La RSG
--- tiene tipo propio y conserva la bolsa heredada `OTRO`; en ambos casos el
--- emparejamiento sigue exigiendo la etiqueta explícita.
+-- responde con su tipo propio (ADR-0025) y con la etiqueta explícita de
+-- Secretaría General; `OTRO` no responde por una RSG: un documento sin tipo
+-- declarado que menciona una RSG no es la RSG.
 create function private.document_types_for_reference_code(p_lookup_code text)
 returns text[]
 language sql
@@ -140,12 +212,12 @@ as $$
     when 'RD' then array['RESOLUCION_DIRECTORAL']
     when 'RM' then array['RESOLUCION_MINISTERIAL']
     when 'RVM' then array['RESOLUCION_VICEMINISTERIAL']
-    when 'RSG' then array['RESOLUCION_SECRETARIA_GENERAL', 'OTRO']
+    when 'RSG' then array['RESOLUCION_SECRETARIA_GENERAL']
     else array[]::text[]
   end;
 $$;
 
-revoke all on function private.document_reference_number_key(text)
+revoke all on function private.document_reference_number_key(text, text)
   from public, anon, authenticated;
 revoke all on function private.document_reference_prefix_codes()
   from public, anon, authenticated;
@@ -258,13 +330,24 @@ begin
         or exists (
           select 1
           from pg_catalog.unnest(p_exact_reference_keys) as requested(reference_key)
-          where document.document_type = any (
-              private.document_types_for_reference_code(
+          cross join lateral (
+            select
+              pg_catalog.split_part(requested.reference_key, ':', 1) as lookup_code,
+              pg_catalog.split_part(requested.reference_key, ':', 2) as reference_key,
+              private.document_reference_number_key(
+                document.resolution_number,
                 pg_catalog.split_part(requested.reference_key, ':', 1)
-              )
+              ) as registered_key
+          ) as identity
+          where document.document_type = any (
+              private.document_types_for_reference_code(identity.lookup_code)
             )
             and (
-              pg_catalog.split_part(requested.reference_key, ':', 1) <> 'RSG'
+              identity.lookup_code <> 'RSG'
+              -- La etiqueta explícita puede estar en el título o en el número
+              -- registrado («RSG N.° 326-2017-MINEDU», «Resolución de Secretaría
+              -- General N.° 512-2021-MINEDU»): se revisan juntos, como el
+              -- espejo `declaresSecretariaGeneral` de la API.
               or pg_catalog.regexp_replace(
                 pg_catalog.translate(
                   pg_catalog.upper(
@@ -278,36 +361,21 @@ begin
                 '[^A-Z0-9]',
                 '',
                 'g'
-              ) like '%RSG%'
-              or pg_catalog.regexp_replace(
-                pg_catalog.translate(
-                  pg_catalog.upper(document.title),
-                  'ÁÉÍÓÚÜÑ',
-                  'AEIOUUN'
-                ),
-                '[^A-Z0-9]',
-                '',
-                'g'
-              ) like '%RESOLUCIONDESECRETARIAGENERAL%'
+              ) ~ '(RSG|RESOLUCIONDESECRETARIAGENERAL)'
             )
             and (
-              private.document_reference_number_key(document.resolution_number)
-                = pg_catalog.split_part(requested.reference_key, ':', 2)
+              identity.registered_key = identity.reference_key
               or (
-                private.document_reference_number_key(document.resolution_number) is null
+                identity.registered_key is null
                 and exists (
                   select 1
                   from private.document_title_reference_keys(document.title) as declared
-                  where declared.lookup_code = pg_catalog.split_part(
-                      requested.reference_key,
-                      ':',
-                      1
-                    )
-                    and declared.reference_key = pg_catalog.split_part(
-                      requested.reference_key,
-                      ':',
-                      2
-                    )
+                  where declared.lookup_code = identity.lookup_code
+                    and declared.reference_key = identity.reference_key
+                    -- Solo la identidad propia: una norma que menciona a otra
+                    -- (por ejemplo «que modifica la Resolución Ministerial N.°
+                    -- 123-2018-MINEDU») no responde por la mencionada.
+                    and declared.reference_index = 1
                 )
               )
             )

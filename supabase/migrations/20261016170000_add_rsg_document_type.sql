@@ -107,3 +107,58 @@ alter table public.documents
       'PREGUNTAS_FRECUENTES', 'INFORME', 'INFOGRAFIA', 'OTRO'
     )
   );
+
+-- El vector de búsqueda de la biblioteca enumera los tipos gobernados para que
+-- «resolución de secretaría general» encuentre una RSG aunque su título no
+-- repita la etiqueta (por ejemplo «Año 2018: Instructivo para la planilla de
+-- pagos»). Se reconstruye el vector generado con el tipo nuevo: la columna es
+-- derivada (sus valores se recalculan desde las mismas entradas) y solo la
+-- consume `list_document_library_for_actor`.
+drop index if exists public.documents_governed_metadata_search_idx;
+alter table public.documents drop column governed_metadata_search_vector;
+alter table public.documents
+  add column governed_metadata_search_vector tsvector generated always as (
+    setweight(to_tsvector('public.spanish_unaccent', coalesce(metadata ->> 'documentTypeOther', '')), 'B')
+    || setweight(to_tsvector('public.spanish_unaccent', coalesce(metadata ->> 'issuingEntityOther', '')), 'B')
+    || setweight(to_tsvector('public.spanish_unaccent', coalesce(metadata ->> 'specificDependency', '')), 'B')
+    || setweight(to_tsvector('public.spanish_unaccent', coalesce(metadata ->> 'additionalDetail', '')), 'C')
+    || setweight(to_tsvector('public.spanish_unaccent', case issuing_entity
+        when 'MINEDU' then 'MINEDU Ministerio de Educacion'
+        when 'MTPE' then 'MTPE Ministerio de Trabajo y Promocion del Empleo'
+        when 'UGEL' then 'UGEL Unidad de Gestion Educativa Local'
+        when 'DRE_GRE' then 'DRE GRE Direccion Regional de Educacion Gerencia Regional de Educacion'
+        when 'SERVIR' then 'SERVIR Autoridad Nacional del Servicio Civil'
+        when 'SUNAFIL' then 'SUNAFIL Superintendencia Nacional de Fiscalizacion Laboral'
+        when 'MEF' then 'MEF Ministerio de Economia y Finanzas'
+        when 'PCM' then 'PCM Presidencia del Consejo de Ministros'
+        when 'CONGRESO_REPUBLICA' then 'Congreso de la Republica'
+        when 'TRIBUNAL_CONSTITUCIONAL' then 'Tribunal Constitucional'
+        when 'DEFENSORIA_PUEBLO' then 'Defensoria del Pueblo'
+        when 'GOBIERNO_REGIONAL' then 'Gobierno Regional'
+        when 'OTRA_INSTITUCION' then 'Otra institucion'
+        else ''
+      end), 'C')
+    || setweight(to_tsvector('public.spanish_unaccent', case document_type
+        when 'RESOLUCION_MINISTERIAL' then 'Resolucion Ministerial'
+        when 'RESOLUCION_VICEMINISTERIAL' then 'Resolucion Viceministerial'
+        when 'RESOLUCION_DIRECTORAL' then 'Resolucion Directoral'
+        when 'RESOLUCION_SECRETARIA_GENERAL' then 'Resolucion de Secretaria General'
+        when 'DECRETO_SUPREMO' then 'Decreto Supremo'
+        when 'DECRETO_LEGISLATIVO' then 'Decreto Legislativo'
+        when 'LEY' then 'Ley'
+        when 'REGLAMENTO' then 'Reglamento'
+        when 'DIRECTIVA' then 'Directiva'
+        when 'NORMA_TECNICA' then 'Norma Tecnica'
+        when 'OFICIO' then 'Oficio'
+        when 'MEMORANDUM' then 'Memorandum'
+        when 'COMUNICADO' then 'Comunicado'
+        when 'CRONOGRAMA' then 'Cronograma'
+        when 'ANEXO' then 'Anexo'
+        when 'INFORME' then 'Informe'
+        when 'INFOGRAFIA' then 'Infografia'
+        when 'OTRO' then 'Otro'
+        else ''
+      end), 'C')
+  ) stored;
+create index documents_governed_metadata_search_idx
+  on public.documents using gin (governed_metadata_search_vector);

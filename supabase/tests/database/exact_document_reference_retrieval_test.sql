@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(23);
 
 select has_function(
   'public',
@@ -311,6 +311,31 @@ values
       'documentTypeOther', 'Resolución de Secretaría General',
       'specificDependency', 'Prueba de referencias exactas'
     )
+  ),
+  -- Contraejemplos fijados por la auditoría del 2026-10-16: una norma del mismo
+  -- código que menciona a otra no responde por la mencionada, el sufijo real
+  -- `-EF` del caso de producción resuelve, y un número registrado con la etiqueta
+  -- completa y acentuada también (la normalización ignora las tildes).
+  (
+    'e1000000-0000-4000-8000-000000000109',
+    'Resolución Ministerial N.° 789-2020-MINEDU que modifica la Resolución Ministerial N.° 654-2019-MINEDU',
+    'RESOLUCION_MINISTERIAL',
+    null,
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000110',
+    'Decreto Supremo N.° 049-2025-EF que aprueba el Reglamento de la Ley N.° 29988',
+    'DECRETO_SUPREMO',
+    null,
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000111',
+    'Año 2021: Norma de control interno de las entidades públicas',
+    'RESOLUCION_SECRETARIA_GENERAL',
+    'Resolución de Secretaría General N.° 512-2021-MINEDU',
+    '{}'::jsonb
   );
 
 insert into public.document_versions (
@@ -347,6 +372,24 @@ values
     'e1000000-0000-4000-8000-000000000108',
     1, 'tests/exact/identidad-726.pdf', 'identidad-726.pdf', 'application/pdf',
     1000, 3, repeat('8', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000209',
+    'e1000000-0000-4000-8000-000000000109',
+    1, 'tests/exact/identidad-789.pdf', 'identidad-789.pdf', 'application/pdf',
+    1000, 3, repeat('9', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000210',
+    'e1000000-0000-4000-8000-000000000110',
+    1, 'tests/exact/identidad-049-2025-ef.pdf', 'identidad-049-2025-ef.pdf',
+    'application/pdf', 1000, 3, repeat('a', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000211',
+    'e1000000-0000-4000-8000-000000000111',
+    1, 'tests/exact/identidad-512.pdf', 'identidad-512.pdf', 'application/pdf',
+    1000, 3, repeat('b', 64)
   );
 
 update public.documents
@@ -355,14 +398,20 @@ set current_version_id = case id
   when 'e1000000-0000-4000-8000-000000000105' then 'e1000000-0000-4000-8000-000000000205'::uuid
   when 'e1000000-0000-4000-8000-000000000106' then 'e1000000-0000-4000-8000-000000000206'::uuid
   when 'e1000000-0000-4000-8000-000000000107' then 'e1000000-0000-4000-8000-000000000207'::uuid
-  else 'e1000000-0000-4000-8000-000000000208'::uuid
+  when 'e1000000-0000-4000-8000-000000000108' then 'e1000000-0000-4000-8000-000000000208'::uuid
+  when 'e1000000-0000-4000-8000-000000000109' then 'e1000000-0000-4000-8000-000000000209'::uuid
+  when 'e1000000-0000-4000-8000-000000000110' then 'e1000000-0000-4000-8000-000000000210'::uuid
+  else 'e1000000-0000-4000-8000-000000000211'::uuid
 end
 where id in (
   'e1000000-0000-4000-8000-000000000104',
   'e1000000-0000-4000-8000-000000000105',
   'e1000000-0000-4000-8000-000000000106',
   'e1000000-0000-4000-8000-000000000107',
-  'e1000000-0000-4000-8000-000000000108'
+  'e1000000-0000-4000-8000-000000000108',
+  'e1000000-0000-4000-8000-000000000109',
+  'e1000000-0000-4000-8000-000000000110',
+  'e1000000-0000-4000-8000-000000000111'
 );
 
 select private.set_document_ingestion_status(id, 'processing')
@@ -372,7 +421,10 @@ where id in (
   'e1000000-0000-4000-8000-000000000205',
   'e1000000-0000-4000-8000-000000000206',
   'e1000000-0000-4000-8000-000000000207',
-  'e1000000-0000-4000-8000-000000000208'
+  'e1000000-0000-4000-8000-000000000208',
+  'e1000000-0000-4000-8000-000000000209',
+  'e1000000-0000-4000-8000-000000000210',
+  'e1000000-0000-4000-8000-000000000211'
 );
 select private.set_document_ingestion_status(id, 'indexed')
 from public.document_versions
@@ -381,7 +433,10 @@ where id in (
   'e1000000-0000-4000-8000-000000000205',
   'e1000000-0000-4000-8000-000000000206',
   'e1000000-0000-4000-8000-000000000207',
-  'e1000000-0000-4000-8000-000000000208'
+  'e1000000-0000-4000-8000-000000000208',
+  'e1000000-0000-4000-8000-000000000209',
+  'e1000000-0000-4000-8000-000000000210',
+  'e1000000-0000-4000-8000-000000000211'
 );
 
 update public.documents
@@ -391,7 +446,10 @@ where id in (
   'e1000000-0000-4000-8000-000000000105',
   'e1000000-0000-4000-8000-000000000106',
   'e1000000-0000-4000-8000-000000000107',
-  'e1000000-0000-4000-8000-000000000108'
+  'e1000000-0000-4000-8000-000000000108',
+  'e1000000-0000-4000-8000-000000000109',
+  'e1000000-0000-4000-8000-000000000110',
+  'e1000000-0000-4000-8000-000000000111'
 );
 
 insert into public.document_modules (document_id, module_id)
@@ -402,7 +460,10 @@ where id in (
   'e1000000-0000-4000-8000-000000000105',
   'e1000000-0000-4000-8000-000000000106',
   'e1000000-0000-4000-8000-000000000107',
-  'e1000000-0000-4000-8000-000000000108'
+  'e1000000-0000-4000-8000-000000000108',
+  'e1000000-0000-4000-8000-000000000109',
+  'e1000000-0000-4000-8000-000000000110',
+  'e1000000-0000-4000-8000-000000000111'
 );
 
 insert into public.document_chunks (
@@ -444,11 +505,32 @@ values
     'e1000000-0000-4000-8000-000000000208',
     0, 'La secretaría general registra y controla la asistencia.',
     10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000309',
+    'e1000000-0000-4000-8000-000000000109',
+    'e1000000-0000-4000-8000-000000000209',
+    0, 'La resolución ministerial modifica otra resolución ministerial.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000310',
+    'e1000000-0000-4000-8000-000000000110',
+    'e1000000-0000-4000-8000-000000000210',
+    0, 'El decreto supremo aprueba el reglamento de la ley.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000311',
+    'e1000000-0000-4000-8000-000000000111',
+    'e1000000-0000-4000-8000-000000000211',
+    0, 'El control interno se registra en el aplicativo oficial.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
   );
 
 select is(
   (
-    select document_id
+    select array_agg(document_id order by document_id)
     from public.search_document_chunks_by_exact_references(
       array_fill(0.01::real, array[1536])::extensions.vector,
       'registro de asistencia',
@@ -456,14 +538,13 @@ select is(
       5,
       'current'
     )
-    limit 1
   ),
-  'e1000000-0000-4000-8000-000000000104'::uuid,
-  'An RSG whose number lives only in the title resolves through the exact gate'
+  array['e1000000-0000-4000-8000-000000000104'::uuid],
+  'An RSG whose number lives only in the title resolves through the exact gate, and only it'
 );
 select is(
   (
-    select document_id
+    select array_agg(document_id order by document_id)
     from public.search_document_chunks_by_exact_references(
       array_fill(0.01::real, array[1536])::extensions.vector,
       'incremento de remuneraciones',
@@ -471,10 +552,9 @@ select is(
       5,
       'current'
     )
-    limit 1
   ),
-  'e1000000-0000-4000-8000-000000000105'::uuid,
-  'A law whose number lives only in the title resolves through the exact gate'
+  array['e1000000-0000-4000-8000-000000000105'::uuid],
+  'A law whose number lives only in the title resolves through the exact gate, and only it'
 );
 select is(
   (
@@ -492,7 +572,7 @@ select is(
 );
 select is(
   (
-    select document_id
+    select array_agg(document_id order by document_id)
     from public.search_document_chunks_by_exact_references(
       array_fill(0.01::real, array[1536])::extensions.vector,
       'resolución ministerial',
@@ -500,10 +580,9 @@ select is(
       5,
       'current'
     )
-    limit 1
   ),
-  'e1000000-0000-4000-8000-000000000106'::uuid,
-  'A document whose title declares its own identity resolves through the exact gate'
+  array['e1000000-0000-4000-8000-000000000106'::uuid],
+  'A document whose title declares its own identity resolves through the exact gate, and only it'
 );
 select is(
   (
@@ -560,8 +639,64 @@ select is(
       'current'
     )
   ),
-  1::bigint,
-  'The legacy OTRO bucket keeps resolving an explicitly labelled RSG'
+  0::bigint,
+  'An untyped OTRO document cannot answer for an RSG, even with the explicit label'
+);
+select is(
+  (
+    select array_agg(document_id order by document_id)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'modifica otra resolución',
+      array['RM:7892020MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  array['e1000000-0000-4000-8000-000000000109'::uuid],
+  'A resolution that modifies another one resolves by its own declared identity'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'modifica otra resolución',
+      array['RM:6542019MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  0::bigint,
+  'A resolution that mentions another resolution of the same type does not answer for the mentioned one'
+);
+select is(
+  (
+    select array_agg(document_id order by document_id)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'aprueba el reglamento',
+      array['DS:0492025EF'],
+      5,
+      'current'
+    )
+  ),
+  array['e1000000-0000-4000-8000-000000000110'::uuid],
+  'A supreme decree with the official -EF suffix resolves through the exact gate'
+);
+select is(
+  (
+    select array_agg(document_id order by document_id)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'control interno',
+      array['RSG:5122021MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  array['e1000000-0000-4000-8000-000000000111'::uuid],
+  'A registered number written with the accented full label resolves through the exact gate'
 );
 
 select * from finish();

@@ -149,7 +149,7 @@ describe('RagService', () => {
     const exactSource = {
       ...source,
       documentTitle: 'Norma de registro y control de asistencia',
-      documentType: 'OTRO',
+      documentType: 'RESOLUCION_SECRETARIA_GENERAL',
       resolutionNumber: 'RSG N.° 326-2017-MINEDU',
     };
     gateway.searchExactReferences.mockResolvedValue([exactSource]);
@@ -199,7 +199,7 @@ describe('RagService', () => {
     const exactSource = {
       ...source,
       documentTitle: 'Resolución de Secretaría General N.° 326-2017-MINEDU',
-      documentType: 'OTRO',
+      documentType: 'RESOLUCION_SECRETARIA_GENERAL',
       resolutionNumber: 'RSG N.° 326-2017-MINEDU',
     };
     gateway.searchExactReferences.mockResolvedValue([exactSource]);

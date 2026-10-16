@@ -72,9 +72,7 @@ const DOCUMENT_PREFIX: Readonly<
   },
   'resolucion de secretaria general': {
     display: 'Resolución de Secretaría General',
-    // La RSG tiene tipo propio desde ADR-0025; `OTRO` sigue aceptándose como
-    // bolsa heredada en `sourceMatchesExactDocumentReference`, siempre con la
-    // etiqueta explícita de la norma.
+    // La RSG tiene tipo propio desde ADR-0025 y `OTRO` ya no responde por ella.
     documentType: 'RESOLUCION_SECRETARIA_GENERAL',
     lookupCode: 'RSG',
   },
@@ -133,7 +131,8 @@ function normalizedRegisteredNumber(
 /**
  * Tipos gobernados que pueden responder por cada código de referencia. Espejo
  * de `private.document_types_for_reference_code` en la base: la RSG tiene tipo
- * propio (ADR-0025) y conserva la bolsa heredada `OTRO`.
+ * propio (ADR-0025) y `OTRO` no responde por ella, porque un documento sin tipo
+ * declarado que menciona una RSG no es la RSG.
  */
 const REFERENCE_LOOKUP_TYPES: Readonly<Record<string, readonly string[]>> = {
   DIRECTIVA: ['DIRECTIVA'],
@@ -142,7 +141,7 @@ const REFERENCE_LOOKUP_TYPES: Readonly<Record<string, readonly string[]>> = {
   LEY: ['LEY'],
   RD: ['RESOLUCION_DIRECTORAL'],
   RM: ['RESOLUCION_MINISTERIAL'],
-  RSG: ['RESOLUCION_SECRETARIA_GENERAL', 'OTRO'],
+  RSG: ['RESOLUCION_SECRETARIA_GENERAL'],
   RVM: ['RESOLUCION_VICEMINISTERIAL'],
 };
 
@@ -229,8 +228,12 @@ export function sourceMatchesExactDocumentReference(
   // sustituirlo (evita que una norma que menciona a otra responda por ella).
   if (registeredNumber) return registeredNumber === reference.key;
   // Sin número registrado la identidad puede estar declarada en el título, con
-  // la misma exigencia de etiqueta y número que una pregunta.
-  return exactDocumentReferencesIn(source.documentTitle ?? '').some(
-    (declared) => declared.lookupKey === reference.lookupKey,
-  );
+  // la misma exigencia de etiqueta y número que una pregunta. Solo cuenta la
+  // identidad propia: la PRIMERA declaración de ese código en el título. Una
+  // norma que menciona a otra —«que modifica la Resolución Ministerial N.°
+  // 123-2018-MINEDU»— no responde por la mencionada.
+  const declaredOwnIdentity = exactDocumentReferencesIn(
+    source.documentTitle ?? '',
+  ).find((declared) => declared.lookupKey.split(':', 1)[0] === lookupCode);
+  return declaredOwnIdentity?.lookupKey === reference.lookupKey;
 }
