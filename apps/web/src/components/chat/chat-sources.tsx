@@ -265,7 +265,9 @@ function SourceTable({
                   !source.articleReference &&
                   !source.numeralReference ? (
                     <span className={styles.referenceLine}>
-                      No se identificó una ubicación más precisa en el fragmento
+                      {hasPdfPagination(source)
+                        ? `${source.pageStart === source.pageEnd ? "Página" : "Páginas"} ${pageRange(source)} del PDF · Sin sección o artículo identificado`
+                        : "Fragmento del documento · Sin sección o artículo identificado"}
                     </span>
                   ) : null}
                 </td>
