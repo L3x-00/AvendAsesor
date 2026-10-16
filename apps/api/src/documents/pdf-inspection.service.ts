@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { PDFParse } from 'pdf-parse';
+import { createPdfParser } from './pdf-parser';
 
 /**
  * El módulo aceptaba solo PDF. El cliente necesita cargar también Word y
@@ -166,8 +166,9 @@ export class PdfInspectionService {
       return { ...basic, pageCount: null };
     }
 
-    const parser = new PDFParse({
-      data: Buffer.from(file.buffer),
+    const parser = createPdfParser({
+      // PDFParse already copies Buffer into its own transferable Uint8Array.
+      data: file.buffer,
       stopAtErrors: true,
     });
 

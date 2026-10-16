@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PDFParse } from 'pdf-parse';
+import { createPdfParser } from '../documents/pdf-parser';
 import type { ExtractedPage } from './chunking.service';
 
 /** Ancho de rasterizado para OCR; tiene prioridad sobre la escala. */
@@ -8,7 +8,7 @@ export const OCR_RENDER_WIDTH_PX = 1240;
 @Injectable()
 export class PdfExtractionService {
   async extract(buffer: Buffer): Promise<ExtractedPage[]> {
-    const parser = new PDFParse({ data: buffer });
+    const parser = createPdfParser({ data: buffer });
     try {
       const result = await parser.getText();
       return result.pages.map((page) => ({
@@ -24,7 +24,7 @@ export class PdfExtractionService {
     buffer: Buffer,
     pageNumbers: number[],
   ): Promise<Map<number, Buffer>> {
-    const parser = new PDFParse({ data: buffer });
+    const parser = createPdfParser({ data: buffer });
     try {
       const result = await parser.getScreenshot({
         imageBuffer: true,
@@ -36,7 +36,14 @@ export class PdfExtractionService {
         desiredWidth: OCR_RENDER_WIDTH_PX,
       });
       return new Map(
-        result.pages.map((page) => [page.pageNumber, Buffer.from(page.data)]),
+        result.pages.map((page) => [
+          page.pageNumber,
+          Buffer.from(
+            page.data.buffer,
+            page.data.byteOffset,
+            page.data.byteLength,
+          ),
+        ]),
       );
     } finally {
       await parser.destroy();

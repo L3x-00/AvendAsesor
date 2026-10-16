@@ -59,4 +59,16 @@ describe('PdfExtractionService', () => {
     );
     expect(mockDestroy).toHaveBeenCalledTimes(2);
   });
+
+  it('returns a view of the PNG bytes without retaining bytes outside their slice', async () => {
+    const backing = Uint8Array.from([99, 1, 2, 3, 88]);
+    const data = backing.subarray(1, 4);
+    mockGetScreenshot.mockResolvedValue({ pages: [{ data, pageNumber: 1 }] });
+    const images = await service.render(Buffer.from('%PDF'), [1]);
+    const image = images.get(1)!;
+    expect([...image]).toEqual([1, 2, 3]);
+    expect(image.buffer).toBe(backing.buffer);
+    expect(image.byteOffset).toBe(data.byteOffset);
+    expect(mockDestroy).toHaveBeenCalledTimes(1);
+  });
 });

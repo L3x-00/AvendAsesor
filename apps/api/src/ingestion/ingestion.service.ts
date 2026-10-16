@@ -33,6 +33,8 @@ export const MAX_JOB_DURATION_MS = 45 * 60_000;
 @Injectable()
 export class IngestionService {
   private readonly logger = new Logger(IngestionService.name);
+  /** Includes a timed-out operation until its resources have actually settled. */
+  private active = false;
   constructor(
     @Inject(SUPABASE_INGESTION_GATEWAY)
     private readonly gateway: IngestionGateway,
@@ -45,39 +47,60 @@ export class IngestionService {
   ) {}
 
   async processNext(): Promise<boolean> {
+    if (this.active) return false;
+    this.active = true;
     const leaseSeconds =
       this.config.get<number>('RAG_INGESTION_LEASE_SECONDS') ?? 300;
-    const job = await this.gateway.claimNext(leaseSeconds);
-    if (!job) return false;
-    // La extracción y el OCR de un PDF escaneado pueden tardar más que el
-    // turno: antes solo se renovaba al insertar fragmentos, así que el turno
-    // vencía a mitad del OCR y el trabajo acababa en LEASE_EXPIRED.
-    const heartbeat = setInterval(
-      () => {
-        this.gateway.refreshLease(job, leaseSeconds).catch(() => {
-          this.logger.warn(`Could not refresh the lease of job ${job.jobId}.`);
-        });
-      },
-      Math.max(10, Math.floor(leaseSeconds / 3)) * 1000,
-    );
-    heartbeat.unref?.();
-    // Tope total: un trabajo colgado (OCR o proveedor que no responde) ya no
-    // renueva su turno para siempre ni bloquea la cola del worker; se marca
-    // como fallido con INGESTION_TIMEOUT y el administrador puede reintentar.
+    let job: ClaimedIngestionJob | null = null;
+    let task: Promise<void> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
+    const cancellation = new AbortController();
     try {
+      job = await this.gateway.claimNext(leaseSeconds);
+      if (!job) return false;
+      const claimedJob = job;
+      // La extracción y el OCR de un PDF escaneado pueden tardar más que el
+      // turno: antes solo se renovaba al insertar fragmentos, así que el turno
+      // vencía a mitad del OCR y el trabajo acababa en LEASE_EXPIRED.
+      let refreshing = false;
+      heartbeat = setInterval(
+        () => {
+          // A slow store must not leave another pending refresh every interval.
+          if (refreshing || cancellation.signal.aborted) return;
+          refreshing = true;
+          void this.gateway
+            .refreshLease(claimedJob, leaseSeconds)
+            .catch(() => {
+              this.logger.warn(
+                `Could not refresh the lease of job ${claimedJob.jobId}.`,
+              );
+            })
+            .finally(() => {
+              refreshing = false;
+            });
+        },
+        Math.max(10, Math.floor(leaseSeconds / 3)) * 1000,
+      );
+      heartbeat.unref?.();
+      // Promise.race alone does not stop ingest(). Abort provider/OCR work and
+      // check cancellation between stages; do not admit another job while a
+      // non-cancellable extraction or store call from this one is still pending.
+      task = this.ingest(job, leaseSeconds, cancellation.signal);
       await Promise.race([
-        this.ingest(job, leaseSeconds),
+        task,
         new Promise<never>((_, reject) => {
-          deadline = setTimeout(
-            () => reject(new Error('INGESTION_TIMEOUT')),
-            MAX_JOB_DURATION_MS,
-          );
+          deadline = setTimeout(() => {
+            const error = new Error('INGESTION_TIMEOUT');
+            cancellation.abort(error);
+            reject(error);
+          }, MAX_JOB_DURATION_MS);
           deadline.unref?.();
         }),
       ]);
       return true;
     } catch (error) {
+      if (!job) throw error;
       const message =
         error instanceof Error ? error.message : 'Unexpected ingestion failure';
       try {
@@ -97,24 +120,45 @@ export class IngestionService {
     } finally {
       clearInterval(heartbeat);
       if (deadline) clearTimeout(deadline);
+      if (task) {
+        // Handle late rejection too. Releasing at the timeout would re-create
+        // the OCR/parser overlap which the worker's polling guard prevents.
+        void task.then(
+          () => {
+            this.active = false;
+          },
+          () => {
+            this.active = false;
+          },
+        );
+      } else {
+        this.active = false;
+      }
     }
   }
 
   private async ingest(
     job: ClaimedIngestionJob,
     leaseSeconds: number,
+    signal: AbortSignal,
   ): Promise<void> {
     const file = await this.gateway.downloadPdf(
       job.storageBucket,
       job.storagePath,
     );
+    signal.throwIfAborted();
     const format = detectIngestionFormat(file);
-    const pages = await this.extractPages(format, file, job);
+    const pages = await this.extractPages(format, file, job, signal);
+    signal.throwIfAborted();
     const chunks = this.chunking.chunk(pages);
+    signal.throwIfAborted();
     if (!chunks.length) throw new Error('INGESTION_EMPTY_TEXT');
     const vectors = await this.embeddings.embed(
       chunks.map((chunk) => chunk.chunkContent),
+      undefined,
+      signal,
     );
+    signal.throwIfAborted();
     if (
       vectors.length !== chunks.length ||
       vectors.some((embedding) => embedding.length !== 1536)
@@ -123,6 +167,7 @@ export class IngestionService {
     }
     await this.gateway.clearChunks(job);
     for (let offset = 0; offset < chunks.length; offset += 25) {
+      signal.throwIfAborted();
       await this.gateway.insertChunks(
         chunks.slice(offset, offset + 25).map((chunk, index) => ({
           ...chunk,
@@ -131,8 +176,10 @@ export class IngestionService {
           embedding: vectors[offset + index],
         })),
       );
+      signal.throwIfAborted();
       await this.gateway.refreshLease(job, leaseSeconds);
     }
+    signal.throwIfAborted();
     await this.gateway.complete(
       job,
       format === 'pdf'
@@ -145,6 +192,7 @@ export class IngestionService {
     format: IngestionFormat,
     file: Buffer,
     job: ClaimedIngestionJob,
+    signal: AbortSignal,
   ): Promise<ExtractedPage[]> {
     if (format === 'docx') {
       return [{ pageNumber: 1, text: await this.docx.extract(file) }];
@@ -171,6 +219,7 @@ export class IngestionService {
     // de memoria para Render Free (512 MB): tope de páginas, lotes de render y un
     // único worker Tesseract reutilizado por trabajo.
     const pages = await this.pdf.extract(file);
+    signal.throwIfAborted();
     // Los PDFs grandes omiten el conteo durante la carga para no duplicar una
     // extracción costosa. La ingesta aplica el mismo límite en cuanto conoce
     // el total, antes de OCR, embeddings y escrituras parciales.
@@ -196,15 +245,18 @@ export class IngestionService {
           offset < sparse.length;
           offset += OCR_RENDER_BATCH
         ) {
+          signal.throwIfAborted();
           const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
           const images = await this.pdf.render(file, batch);
+          signal.throwIfAborted();
           for (const pageNumber of batch) {
             const image = images.get(pageNumber);
             const page = pageByNumber.get(pageNumber);
             if (image && page) page.text = await recognize(image);
+            images.delete(pageNumber);
           }
         }
-      });
+      }, signal);
     }
     return pages;
   }

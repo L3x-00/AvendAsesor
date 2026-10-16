@@ -22,8 +22,8 @@ export interface AiGatewayRequestLimits {
  * Límites de las llamadas que hace esperar a una persona en el chat. Sin ellos
  * rigen los del SDK (10 minutos y dos reintentos con espera creciente): un
  * proveedor que no responde retenía la consulta varios minutos antes de caer al
- * modelo de respaldo o al aviso de error. La indexación conserva los del SDK:
- * embebe un documento entero en una sola llamada.
+ * modelo de respaldo o al aviso de error. La indexación conserva los del SDK
+ * por lote; su plazo total y su cancelación los gobierna IngestionService.
  */
 export const INTERACTIVE_AI_LIMITS: AiGatewayRequestLimits = {
   maxRetries: 1,
