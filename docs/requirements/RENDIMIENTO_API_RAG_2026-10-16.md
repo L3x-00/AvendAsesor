@@ -48,7 +48,9 @@ resolver un problema que no quedó demostrado en esas áreas.
 ## Medición reproducible
 
 El arnés de producto es [`benchmark-api-memory.mjs`](../../scripts/benchmark-api-memory.mjs).
-Ejecuta Nest completo y las clases compiladas en un proceso nuevo por muestra.
+Inicializa el grafo completo de módulos Nest y las clases compiladas mediante
+`createApplicationContext`, en un proceso nuevo por muestra. No abre un servidor
+HTTP ni mide rutas/middleware, tráfico concurrente o latencia del chat real.
 Usa Windows x64, Node 24.14.0, heap de 384 MiB, un directorio temporal sin archivos
 de entorno y una lista permitida de variables sin credenciales. El proveedor de
 embeddings es un servidor HTTP en loopback que vive fuera del proceso medido.
