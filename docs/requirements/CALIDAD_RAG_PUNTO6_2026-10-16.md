@@ -151,7 +151,17 @@ credenciales ni los enlaces firmados.
    auditable (ADR-0025). El despliegue de datos y migraciones es una operación
    aparte, con ensayo en seco y autorización del PO. Esto **no** levanta el
    bloqueo de aceptación de este punto: la campaña real sigue siendo la que
-   decide.
+   decide. **Revisión independiente 2026-10-16:** la primera versión fue
+   rechazada con un hallazgo alto reproducible (una norma que menciona a otra
+   del mismo tipo respondía por la mencionada, y un documento sin tipo declarado
+   respondía por una RSG difundida). Corregido: solo cuenta la primera
+   declaración de ese código en el título, `OTRO` no responde por una RSG, la
+   etiqueta de Secretaría General se busca en el número registrado y en el
+   título con tildes normalizadas, y el vector de búsqueda de la biblioteca
+   incluye el tipo nuevo. Los contraejemplos quedaron fijados en pgTAP y en las
+   pruebas unitarias; los límites que siguen sin tolerarse (ceros a la izquierda,
+   guion largo, «Núm.», título que solo menciona otra norma del mismo código sin
+   evidencia propia) están documentados en ADR-0026 y fallan cerrado.
 5. C05 y PI-01: módulos requeridos sin corpus preparado y respuestas con hechos
    desde otros documentos. Contrastarlas contra el corpus antes de aceptarlas;
    no esconderlas como «REQUIERE_CORPUS» después de responder.
