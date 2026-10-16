@@ -1,6 +1,6 @@
 begin;
 
-select plan(27);
+select plan(31);
 
 select has_table(
   'public',
@@ -350,6 +350,73 @@ select is(
   (select count(*) from public.chat_message_sources),
   1::bigint,
   'An idempotent clarification retry cannot duplicate citations'
+);
+
+-- CU-04: since 2026-10-14 the service stops showing evidence until the person
+-- narrows the question, so it completes clarifications without citations while
+-- still recording the ambiguous request for review (TSK-0082, PR #109).
+insert into public.chat_messages (id, conversation_id, role, content)
+values (
+  '00000000-0000-0000-0000-00000000e603',
+  '00000000-0000-0000-0000-00000000e401',
+  'user',
+  '¿Cuánto gana un docente?'
+);
+
+select lives_ok(
+  $clarification_without_sources$
+    select * from public.complete_chat_turn(
+      '00000000-0000-0000-0000-00000000e501',
+      '00000000-0000-0000-0000-00000000e401',
+      '00000000-0000-0000-0000-00000000e603',
+      'clarification',
+      'Para orientarte con cifras necesito precisar el nivel y el régimen. ¿A cuál te refieres?',
+      '[]'::jsonb,
+      'ambiguous_request',
+      null
+    )
+  $clarification_without_sources$,
+  'A clarification completes without citations while the request stays ambiguous'
+);
+select is(
+  (select count(*) from public.chat_message_sources),
+  1::bigint,
+  'A citation-free clarification persists no citations'
+);
+select is(
+  (
+    select count(*)
+    from public.unanswered_questions
+    where reason = 'ambiguous_request'
+  ),
+  2::bigint,
+  'Every clarification reaches the review queue whether or not it cites evidence'
+);
+
+insert into public.chat_messages (id, conversation_id, role, content)
+values (
+  '00000000-0000-0000-0000-00000000e604',
+  '00000000-0000-0000-0000-00000000e401',
+  'user',
+  'Necesito orientación, pero todavía no precisé el tipo de licencia.'
+);
+
+select throws_ok(
+  $clarification_without_reason$
+    select * from public.complete_chat_turn(
+      '00000000-0000-0000-0000-00000000e501',
+      '00000000-0000-0000-0000-00000000e401',
+      '00000000-0000-0000-0000-00000000e604',
+      'clarification',
+      'La evidencia distingue tipos de licencia. ¿Qué tipo deseas consultar?',
+      '[]'::jsonb,
+      null,
+      null
+    )
+  $clarification_without_reason$,
+  '22023',
+  'A clarification requires zero to ten sources and an ambiguous-request reason',
+  'A citation-free clarification still requires the ambiguous-request reason'
 );
 select lives_ok(
   $soft_delete$
