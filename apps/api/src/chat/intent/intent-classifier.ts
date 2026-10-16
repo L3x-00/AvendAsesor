@@ -365,14 +365,13 @@ const SYSTEM_PROBING_PATTERNS: readonly RegExp[] = [
   /\b(?:muestra|muestrame|revela|revelame|dime|ensename|explicame|imprime|repite|repiteme|cual es|que dice|comparte) (?:tu |el |tus |los )?(?:prompt|system prompt|prompt del sistema|instrucciones internas|reglas internas|configuracion interna|configuracion del sistema)\b/u,
   /\b(?:tus (?:instrucciones|reglas|directrices) (?:internas|del sistema|de sistema)|las (?:instrucciones|reglas|directrices) (?:del sistema|de sistema))\b/u,
   /\b(?:que|cual) (?:modelo|version|llm|ia) (?:de (?:ia|lenguaje) )?(?:usas|utilizas|eres|hay detras|esta detras)\b/u,
-  // Cómo está construida o configurada la plataforma. Anclado al final: «¿cómo
-  // está configurada la plataforma SIAGIE?» nombra otro sistema y es del ámbito.
-  /\bcomo (?:esta|fue|esta siendo) (?:configurad|programad|construid|desarrollad|implementad|hech)[oa] (?:la |el |este |esta )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
-  /\b(?:que|cual) (?:tecnologia|stack|framework|lenguaje|base de datos) (?:usa|utiliza|usan|utilizan|emplea|emplean) (?:la |el |este |esta |tu )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
   /\beres (?:un )?(?:gpt|chatgpt|gemini|claude|modelo de lenguaje|llm)\b/u,
   // Secretos y detalles técnicos
   /\b(?:api key|clave de api|api token|token de api|access token|service role|service_role)\b/u,
-  /\b(?:contrasena|password|credenciales) (?:de |del |de la )?(?:admin(?:istrador)?|superadmin|sistema|base de datos|plataforma)\b/u,
+  // «…del sistema SIAGIE» / «…de la plataforma PerúEduca» nombran otro sistema y
+  // son del ámbito: tras «sistema»/«plataforma» solo puede quedar el nombre de
+  // AVEND, «por favor» o el final del mensaje.
+  /\b(?:contrasena|password|credenciales) (?:de |del |de la )?(?:(?:admin(?:istrador)?|superadmin|base de datos)\b|(?:sistema|plataforma)(?: de)?(?: avend(?: asesor)?)?(?: por favor)?(?![a-z0-9]| [a-z0-9]))/u,
   /\b(?:variables de entorno|environment variables|esquema de la base|tablas de la base|connection string|cadena de conexion)\b/u,
   /\b(?:supabase|openrouter|openai|render|vercel|github) (?:key|token|secret|credenciales|url interna)\b/u,
   // El RAG es implementación interna, no un tema educativo para el chat.
@@ -397,6 +396,23 @@ function isSystemProbing(normalized: string): boolean {
   return (
     SYSTEM_PROBING_PATTERNS.some((pattern) => pattern.test(normalized)) ||
     (IMPERSONATION.test(normalized) && SENSITIVE_REQUEST.test(normalized))
+  );
+}
+
+/**
+ * Cómo está construida o configurada la plataforma. Anclado al final («¿cómo
+ * está configurada la plataforma SIAGIE?» nombra otro sistema y es del ámbito)
+ * y solo fuera de una conversación: dentro de una, «¿y cómo está configurado el
+ * sistema?» retoma el tema anterior y lo resuelve el RAG con su contexto.
+ */
+const PLATFORM_CONSTRUCTION_PATTERNS: readonly RegExp[] = [
+  /\bcomo (?:esta|fue|esta siendo) (?:configurad|programad|construid|desarrollad|implementad|hech)[oa] (?:la |el |este |esta )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
+  /\b(?:que|cual) (?:tecnologia|stack|framework|lenguaje|base de datos) (?:usa|utiliza|usan|utilizan|emplea|emplean) (?:la |el |este |esta |tu )?(?:plataforma|sistema|chat|asistente|aplicacion|app)(?: por (?:dentro|detras|debajo))?[^a-z0-9]*$/u,
+];
+
+function isPlatformConstructionQuestion(normalized: string): boolean {
+  return PLATFORM_CONSTRUCTION_PATTERNS.some((pattern) =>
+    pattern.test(normalized),
   );
 }
 
@@ -635,7 +651,10 @@ export function classifyTurnIntent(
 
   // Antes de cualquier señal: un intento de manipulación o de extraer
   // información interna se declina con un límite amable, sin pasar al RAG.
-  if (isSystemProbing(normalized)) {
+  if (
+    isSystemProbing(normalized) ||
+    (!context.inConversation && isPlatformConstructionQuestion(normalized))
+  ) {
     return {
       lane: 'out_of_scope',
       subtype: hasCredentialIntent(normalized)
@@ -643,7 +662,9 @@ export function classifyTurnIntent(
         : 'system_limit',
     };
   }
-  if (isCredentialRecovery(normalized)) {
+  // Dentro de una conversación un mensaje corto retoma lo anterior («¿cómo
+  // recupero mi contraseña?» tras hablar del SIAGIE): al RAG con su contexto.
+  if (!context.inConversation && isCredentialRecovery(normalized)) {
     return { lane: 'out_of_scope', subtype: 'credentials_help' };
   }
 

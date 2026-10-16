@@ -1511,7 +1511,9 @@ export class ChatService {
       }
     }
     // «¿De qué tienes información?»: documentos reales y preguntas sugeridas.
-    // Si el catálogo falla, se responde con los temas (texto determinista).
+    // Si el catálogo falla, se responde sin lista de temas (texto determinista):
+    // los temas se comprueban contra ese mismo catálogo, que acaba de fallar.
+    let catalogFailed = false;
     if (
       (kind === 'catalog' || kind === 'document_catalog') &&
       this.catalogService
@@ -1532,8 +1534,9 @@ export class ChatService {
           type: 'conversational',
         };
       } catch (error) {
+        catalogFailed = true;
         this.logger.warn(
-          `Catálogo no disponible; se responde con los temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
+          `Catálogo no disponible; se responde sin la lista de temas: ${error instanceof Error ? error.message : 'error desconocido'}`,
         );
       }
     }
@@ -1551,10 +1554,11 @@ export class ChatService {
       };
     }
     const topics =
-      kind === 'capabilities' ||
-      kind === 'ask_announcement' ||
-      kind === 'catalog' ||
-      kind === 'document_catalog'
+      !catalogFailed &&
+      (kind === 'capabilities' ||
+        kind === 'ask_announcement' ||
+        kind === 'catalog' ||
+        kind === 'document_catalog')
         ? (await this.activeTopics())?.map((topic) => topic.name)
         : undefined;
     return {
@@ -1726,7 +1730,7 @@ export class ChatService {
     if (!this.catalogService) return undefined;
     try {
       const [modules, documents] = await Promise.all([
-        this.historyGateway.listActiveModules(),
+        this.cachedModules(),
         this.catalogService.availableDocuments(),
       ]);
       // `moduleIds` incluye el módulo enlazado y su padre: un documento de un

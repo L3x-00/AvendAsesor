@@ -209,4 +209,25 @@ describe('ChatService — temas con corpus consultable', () => {
       (clarification as { data: { message: string } }).data.message,
     ).not.toContain('También puedes elegir');
   });
+
+  // Revisión independiente, ronda 1, L-2.
+  it('reutiliza la lista de módulos unos minutos entre preguntas de capacidad', async () => {
+    const { historyGateway, service } = setup();
+
+    await collect(service, '¿Qué puedes hacer?');
+    await collect(service, 'tengo una consulta');
+
+    expect(historyGateway.listActiveModules).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el catálogo acaba de fallar al listar documentos, no lo vuelve a consultar para los temas', async () => {
+    const { catalogService, service } = setup();
+    catalogService.reply.mockRejectedValue(new Error('db down'));
+
+    const events = await collect(service, '¿Qué documentos tienes?');
+
+    expect(events[0]?.type).toBe('conversational');
+    expect(messageOf(events)).not.toContain('Hoy puedes consultarme');
+    expect(catalogService.availableDocuments).not.toHaveBeenCalled();
+  });
 });

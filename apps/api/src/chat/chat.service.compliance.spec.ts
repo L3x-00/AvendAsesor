@@ -848,11 +848,17 @@ describe('ChatService — lineamientos del cliente', () => {
     });
 
     it('si la lista de temas falla, igual responde sin ellos', async () => {
+      // Con catálogo, para que `listActiveModules` llegue a ejecutarse.
+      service = withCorpus();
       historyGateway.listActiveModules.mockRejectedValue(new Error('down'));
 
       const events = await collect({ question: '¿Qué puedes hacer?' });
 
       expect(events[0]?.type).toBe('conversational');
+      expect(historyGateway.listActiveModules).toHaveBeenCalled();
+      expect(
+        (events[0] as { data: { message: string } }).data.message,
+      ).not.toContain('Hoy puedes consultarme');
     });
 
     it.each([
