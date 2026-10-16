@@ -7,10 +7,27 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import {
+  firstColumnLabels,
+  isBlankCell,
+  type ColumnAlignment,
+} from "./chat-response-tables";
 
 /** Marcas que el chat interpreta y que un lector de pantalla no debe leer. */
 const HEADER_MARKUP =
   /\*\*|__|\s*\[\[?\s*\d+(?:\s*(?:[,;–-]|y)\s*\d+)*\s*\]\]?/gu;
+
+/** Texto de un encabezado sin las marcas que el chat interpreta. */
+function plainHeader(header: string): string {
+  return header.replace(HEADER_MARKUP, "").trim();
+}
+
+/**
+ * En un teléfono una tabla de tres o más columnas obliga a deslizar de lado y
+ * perder el nombre de la fila: se muestra cada fila como una tarjeta apilada
+ * (ver `avend-chat-table--stacked`). Con dos columnas cabe sin deslizar.
+ */
+const STACKED_FROM_COLUMNS = 3;
 
 function joinNames(names: readonly string[]): string {
   return names.length > 1
@@ -27,13 +44,13 @@ export function tableSummary(
   headers: readonly string[],
   rowCount: number,
 ): string {
-  const names = headers.map((header) =>
-    header.replace(HEADER_MARKUP, "").trim(),
-  );
+  const names = headers.map(plainHeader);
   return `Tabla de la respuesta ${index}: ${names.length} columnas (${joinNames(names)}) y ${rowCount} ${rowCount === 1 ? "fila" : "filas"}.`;
 }
 
 interface ChatTableProps {
+  /** Alineación por columna (`undefined` = normal); ver `columnAlignments`. */
+  alignments?: Array<ColumnAlignment | undefined>;
   headers: string[];
   index: number;
   /** Da formato a una celda (citas, negrita, enlaces) como en el resto del chat. */
@@ -48,6 +65,7 @@ interface ChatTableProps {
  * que debe deslizar. El nombre accesible resume la tabla (columnas y filas).
  */
 export function ChatTable({
+  alignments = [],
   headers,
   index,
   renderCell,
@@ -55,6 +73,8 @@ export function ChatTable({
 }: ChatTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
+  const labels = firstColumnLabels(rows);
+  const stacked = headers.length >= STACKED_FROM_COLUMNS;
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -76,28 +96,79 @@ export function ChatTable({
         role="region"
         tabIndex={0}
       >
+        {/* Los roles explícitos mantienen la semántica de tabla cuando, en el
+            teléfono, el CSS apila las filas (algunos lectores de pantalla la
+            pierden al cambiar `display`). */}
         <table
-          className="avend-chat-table"
+          className={
+            stacked
+              ? "avend-chat-table avend-chat-table--stacked"
+              : "avend-chat-table"
+          }
+          role="table"
           style={{ "--avend-table-columns": headers.length } as CSSProperties}
         >
           <caption className="avend-visually-hidden">
             {tableSummary(index, headers, rows.length)}
           </caption>
-          <thead>
-            <tr>
+          <thead role="rowgroup">
+            <tr role="row">
               {headers.map((header, column) => (
-                <th key={`${column}-${header}`} scope="col">
+                <th
+                  data-align={alignments[column]}
+                  key={`${column}-${header}`}
+                  role="columnheader"
+                  scope="col"
+                >
                   {renderCell(header)}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {rows.map((row, rowIndex) => (
-              <tr key={`${rowIndex}-${row.join("|")}`}>
-                {row.map((cell, column) => (
-                  <td key={`${column}-${cell}`}>{renderCell(cell)}</td>
-                ))}
+              <tr key={`${rowIndex}-${row.join("|")}`} role="row">
+                {row.map((cell, column) => {
+                  const common = {
+                    "data-align": alignments[column],
+                    "data-label": plainHeader(headers[column] ?? ""),
+                  };
+                  const { inherited, label } = labels[rowIndex];
+                  // La primera columna nombra la fila: es su encabezado.
+                  if (column === 0 && label) {
+                    return (
+                      <th
+                        {...common}
+                        key={`${column}-${cell}`}
+                        role="rowheader"
+                        scope="row"
+                      >
+                        {inherited ? (
+                          // Celda combinada: en pantalla ancha se ve vacía (el
+                          // grupo está en la fila de arriba) y en la tarjeta del
+                          // teléfono se muestra; el lector de pantalla siempre lo lee.
+                          // Va como texto, sin la cita ni el enlace del original:
+                          // un enlace invisible recibiría el foco del teclado.
+                          <span className="avend-chat-table-inherited avend-visually-hidden">
+                            {label}
+                          </span>
+                        ) : (
+                          renderCell(cell)
+                        )}
+                      </th>
+                    );
+                  }
+                  return (
+                    <td
+                      {...common}
+                      data-blank={isBlankCell(cell) ? "true" : undefined}
+                      key={`${column}-${cell}`}
+                      role="cell"
+                    >
+                      {renderCell(cell)}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

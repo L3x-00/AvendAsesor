@@ -1248,6 +1248,20 @@ describe("ChatPanel", () => {
       name: "Tabla de la respuesta 1: 5 columnas (Modalidad / Forma, Nivel / Ciclo, Jornada laboral, Remuneración mensual (S/) y Cita) y 9 filas.",
     });
     expect(within(table).getAllByRole("row")).toHaveLength(10);
+    // La primera columna es el encabezado de fila; las celdas combinadas heredan el grupo.
+    const rowHeaders = within(table).getAllByRole("rowheader");
+    expect(rowHeaders).toHaveLength(9);
+    expect(rowHeaders[1]).toHaveTextContent("Educación Básica Regular - EBR");
+    expect(rowHeaders[6]).toHaveTextContent("Educación Básica Alternativa - EBA");
+    // Solo la columna de montos se alinea a la derecha (sin separador explícito).
+    expect(
+      within(table).getByRole("columnheader", {
+        name: "Remuneración mensual (S/)",
+      }),
+    ).toHaveAttribute("data-align", "right");
+    expect(
+      within(table).getByRole("columnheader", { name: "Nivel / Ciclo" }),
+    ).not.toHaveAttribute("data-align");
     expect(table).toHaveTextContent("Profesor Coordinador PRONOEI");
     expect(table).toHaveTextContent("4,400.80");
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();

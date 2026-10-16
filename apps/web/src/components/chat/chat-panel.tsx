@@ -43,7 +43,9 @@ import { ModuleOverviewCard } from "./module-overview";
 import { ChatCatalogDownloads } from "./chat-catalog-downloads";
 import {
   classifyTableAt,
+  columnAlignments,
   markdownTableRowsAsText,
+  type MarkdownTableBlock,
 } from "./chat-response-tables";
 import { ChatTable } from "./chat-table";
 import { SubmoduleFolder } from "./submodule-folder";
@@ -382,19 +384,19 @@ const persistedMessageIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function renderMarkdownTable(
-  headers: string[],
-  rows: string[][],
+  table: MarkdownTableBlock,
   tableIndex: number,
   citations: CitationContext | undefined,
   links: { entities: boolean; urls: boolean },
 ): ReactNode {
   return (
     <ChatTable
-      headers={headers}
+      alignments={columnAlignments(table)}
+      headers={table.headers}
       index={tableIndex}
       key={`table-${tableIndex}`}
       renderCell={(text) => renderInline(text, citations, links)}
-      rows={rows}
+      rows={table.rows}
     />
   );
 }
@@ -465,13 +467,10 @@ function renderRichContent(
       if (asGrid) {
         renderedTables += 1;
         blocks.push(
-          renderMarkdownTable(
-            table.headers,
-            table.rows,
-            renderedTables,
-            citations,
-            { entities: inSuggestions, urls: officialUrls },
-          ),
+          renderMarkdownTable(table, renderedTables, citations, {
+            entities: inSuggestions,
+            urls: officialUrls,
+          }),
         );
       } else {
         // Sin cita por fila (o fuera de los topes de la grilla) no se presenta
