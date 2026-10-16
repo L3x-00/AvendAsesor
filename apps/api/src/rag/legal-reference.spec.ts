@@ -47,7 +47,7 @@ describe('legal document references', () => {
     );
   });
 
-  it('requires the exact registered number and the matching document type', () => {
+  it('requires the exact number and the matching document type', () => {
     const reference = exactDocumentReferencesIn(
       'Según la RSG 326-2017-MINEDU, ¿qué corresponde?',
     )[0];
@@ -66,6 +66,16 @@ describe('legal document references', () => {
     expect(
       sourceMatchesExactDocumentReference(
         {
+          documentTitle: 'Norma de registro y control de asistencia',
+          documentType: 'RESOLUCION_SECRETARIA_GENERAL',
+          resolutionNumber: 'RSG N.° 326-2017-MINEDU',
+        },
+        reference,
+      ),
+    ).toBe(true);
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
           documentTitle:
             'Resolución de Secretaría General 326-2017-MINEDU para docentes',
           documentType: 'OTRO',
@@ -73,7 +83,7 @@ describe('legal document references', () => {
         },
         reference,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       sourceMatchesExactDocumentReference(
         {
@@ -104,5 +114,62 @@ describe('legal document references', () => {
         reference,
       ),
     ).toBe(false);
+  });
+
+  it('accepts the number the title declares when the registered one is absent', () => {
+    const law = exactDocumentReferencesIn(
+      '¿Qué establece la Ley N.° 29988?',
+    )[0];
+    if (!law) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle:
+            'Año 2019: Habilitante para incremento de remuneraciones  Ley N.° 29988',
+          documentType: 'LEY',
+          resolutionNumber: null,
+        },
+        law,
+      ),
+    ).toBe(true);
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle: 'Año 2019: Otra norma distinta  Ley N.° 29999',
+          documentType: 'LEY',
+          resolutionNumber: null,
+        },
+        law,
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps the registered number authoritative over the title', () => {
+    const reference = exactDocumentReferencesIn(
+      'Revisa la RM 456-2018-MINEDU',
+    )[0];
+    if (!reference) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle: 'Resolución Ministerial N.° 456-2018-MINEDU',
+          documentType: 'RESOLUCION_MINISTERIAL',
+          resolutionNumber: '123-2019-MINEDU',
+        },
+        reference,
+      ),
+    ).toBe(false);
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle: 'Resolución Ministerial N.° 999-2019-MINEDU',
+          documentType: 'RESOLUCION_MINISTERIAL',
+          resolutionNumber: '456-2018-MINEDU',
+        },
+        reference,
+      ),
+    ).toBe(true);
   });
 });

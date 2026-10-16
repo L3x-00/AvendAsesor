@@ -1,12 +1,58 @@
 import { describe, expect, it } from "vitest";
 import {
+  DOCUMENT_TYPE_OPTIONS,
+  NORMATIVE_DOCUMENT_TYPE_VALUES,
   archiveReasonLabel,
   documentTypeLabel,
   documentYears,
   issuingEntityLabel,
 } from "./document-taxonomy";
 
+/**
+ * Lista canónica compartida por la restricción gobernada de la base
+ * (`documents_governed_type_check`, probada en
+ * `supabase/tests/database/module_document_governance_test.sql`) y la API
+ * (`DOCUMENT_TYPE_CODES`). Si una capa agrega o quita un tipo sin actualizar las
+ * demás, esta prueba falla a propósito (ADR-0025).
+ */
+const CANONICAL_DOCUMENT_TYPE_CODES = [
+  "RESOLUCION_MINISTERIAL",
+  "RESOLUCION_VICEMINISTERIAL",
+  "RESOLUCION_DIRECTORAL",
+  "RESOLUCION_SECRETARIA_GENERAL",
+  "DECRETO_SUPREMO",
+  "DECRETO_LEGISLATIVO",
+  "LEY",
+  "REGLAMENTO",
+  "DIRECTIVA",
+  "NORMA_TECNICA",
+  "OFICIO",
+  "MEMORANDUM",
+  "COMUNICADO",
+  "CRONOGRAMA",
+  "ANEXO",
+  "PREGUNTAS_FRECUENTES",
+  "INFORME",
+  "INFOGRAFIA",
+  "OTRO",
+];
+
 describe("document taxonomy labels", () => {
+  it("keeps the type options aligned with the database constraint", () => {
+    expect(DOCUMENT_TYPE_OPTIONS.map((option) => option.value)).toEqual(
+      CANONICAL_DOCUMENT_TYPE_CODES,
+    );
+  });
+
+  it("treats the Secretaría General resolutions as a normative document", () => {
+    expect(NORMATIVE_DOCUMENT_TYPE_VALUES.has("RESOLUCION_SECRETARIA_GENERAL")).toBe(
+      true,
+    );
+    expect(documentTypeLabel("RESOLUCION_SECRETARIA_GENERAL")).toBe(
+      "Resolución de Secretaría General",
+    );
+  });
+
   it("translates the governed codes into the wording the panel shows", () => {
     expect(documentTypeLabel("NORMA_TECNICA")).toBe("Norma Técnica");
     expect(issuingEntityLabel("DRE_GRE")).toBe("DRE/GRE");

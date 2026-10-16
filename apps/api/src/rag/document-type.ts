@@ -16,6 +16,7 @@ const DOCUMENT_TYPE_PROMPT_LABELS: Record<string, string> = {
   REGLAMENTO: 'Reglamento',
   RESOLUCION_DIRECTORAL: 'Resolución Directoral (RD)',
   RESOLUCION_MINISTERIAL: 'Resolución Ministerial (RM)',
+  RESOLUCION_SECRETARIA_GENERAL: 'Resolución de Secretaría General (RSG)',
   RESOLUCION_VICEMINISTERIAL: 'Resolución Viceministerial (RVM)',
 };
 

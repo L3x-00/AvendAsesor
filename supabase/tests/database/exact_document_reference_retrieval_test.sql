@@ -1,6 +1,6 @@
 begin;
 
-select plan(11);
+select plan(19);
 
 select has_function(
   'public',
@@ -267,6 +267,301 @@ select throws_ok(
   '22023',
   'Invalid document search parameters',
   'Malformed reference keys fail closed'
+);
+
+-- (a) La identidad puede estar declarada en el título cuando el número
+-- registrado está vacío. Los títulos reproducen los casos reales de producción
+-- (con tildes, con «N.°» y con la etiqueta al final).
+insert into public.documents (id, title, document_type, resolution_number, metadata)
+values
+  (
+    'e1000000-0000-4000-8000-000000000104',
+    'Año 2017: Norma de registro y control de asistencia  Resolución de Secretaría General N.° 426-2017-MINEDU',
+    'RESOLUCION_SECRETARIA_GENERAL',
+    null,
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000105',
+    'Año 2019: Habilitante para incremento de remuneraciones  Ley N.° 29988',
+    'LEY',
+    null,
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000106',
+    'Resolución Ministerial N.° 456-2018-MINEDU que aprueba la Resolución de Secretaría General N.° 526-2017-MINEDU',
+    'RESOLUCION_MINISTERIAL',
+    null,
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000107',
+    'Resolución Ministerial N.° 456-2018-MINEDU',
+    'RESOLUCION_MINISTERIAL',
+    '123-2019-MINEDU',
+    '{}'::jsonb
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000108',
+    'Resolución de Secretaría General N.° 726-2017-MINEDU',
+    'OTRO',
+    null,
+    jsonb_build_object(
+      'documentTypeOther', 'Resolución de Secretaría General',
+      'specificDependency', 'Prueba de referencias exactas'
+    )
+  );
+
+insert into public.document_versions (
+  id, document_id, version_number, storage_path, original_file_name,
+  mime_type, file_size_bytes, page_count, sha256
+)
+values
+  (
+    'e1000000-0000-4000-8000-000000000204',
+    'e1000000-0000-4000-8000-000000000104',
+    1, 'tests/exact/identidad-426.pdf', 'identidad-426.pdf', 'application/pdf',
+    1000, 3, repeat('d', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000205',
+    'e1000000-0000-4000-8000-000000000105',
+    1, 'tests/exact/identidad-29988.pdf', 'identidad-29988.pdf', 'application/pdf',
+    1000, 3, repeat('e', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000206',
+    'e1000000-0000-4000-8000-000000000106',
+    1, 'tests/exact/identidad-456.pdf', 'identidad-456.pdf', 'application/pdf',
+    1000, 3, repeat('f', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000207',
+    'e1000000-0000-4000-8000-000000000107',
+    1, 'tests/exact/identidad-123-2019.pdf', 'identidad-123-2019.pdf', 'application/pdf',
+    1000, 3, repeat('7', 64)
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000208',
+    'e1000000-0000-4000-8000-000000000108',
+    1, 'tests/exact/identidad-726.pdf', 'identidad-726.pdf', 'application/pdf',
+    1000, 3, repeat('8', 64)
+  );
+
+update public.documents
+set current_version_id = case id
+  when 'e1000000-0000-4000-8000-000000000104' then 'e1000000-0000-4000-8000-000000000204'::uuid
+  when 'e1000000-0000-4000-8000-000000000105' then 'e1000000-0000-4000-8000-000000000205'::uuid
+  when 'e1000000-0000-4000-8000-000000000106' then 'e1000000-0000-4000-8000-000000000206'::uuid
+  when 'e1000000-0000-4000-8000-000000000107' then 'e1000000-0000-4000-8000-000000000207'::uuid
+  else 'e1000000-0000-4000-8000-000000000208'::uuid
+end
+where id in (
+  'e1000000-0000-4000-8000-000000000104',
+  'e1000000-0000-4000-8000-000000000105',
+  'e1000000-0000-4000-8000-000000000106',
+  'e1000000-0000-4000-8000-000000000107',
+  'e1000000-0000-4000-8000-000000000108'
+);
+
+select private.set_document_ingestion_status(id, 'processing')
+from public.document_versions
+where id in (
+  'e1000000-0000-4000-8000-000000000204',
+  'e1000000-0000-4000-8000-000000000205',
+  'e1000000-0000-4000-8000-000000000206',
+  'e1000000-0000-4000-8000-000000000207',
+  'e1000000-0000-4000-8000-000000000208'
+);
+select private.set_document_ingestion_status(id, 'indexed')
+from public.document_versions
+where id in (
+  'e1000000-0000-4000-8000-000000000204',
+  'e1000000-0000-4000-8000-000000000205',
+  'e1000000-0000-4000-8000-000000000206',
+  'e1000000-0000-4000-8000-000000000207',
+  'e1000000-0000-4000-8000-000000000208'
+);
+
+update public.documents
+set approval_status = 'ready', approved_version_id = current_version_id
+where id in (
+  'e1000000-0000-4000-8000-000000000104',
+  'e1000000-0000-4000-8000-000000000105',
+  'e1000000-0000-4000-8000-000000000106',
+  'e1000000-0000-4000-8000-000000000107',
+  'e1000000-0000-4000-8000-000000000108'
+);
+
+insert into public.document_modules (document_id, module_id)
+select id, 'e1000000-0000-4000-8000-000000000001'
+from public.documents
+where id in (
+  'e1000000-0000-4000-8000-000000000104',
+  'e1000000-0000-4000-8000-000000000105',
+  'e1000000-0000-4000-8000-000000000106',
+  'e1000000-0000-4000-8000-000000000107',
+  'e1000000-0000-4000-8000-000000000108'
+);
+
+insert into public.document_chunks (
+  id, document_id, document_version_id, chunk_index, chunk_content,
+  token_count, page_start, page_end, embedding
+)
+values
+  (
+    'e1000000-0000-4000-8000-000000000304',
+    'e1000000-0000-4000-8000-000000000104',
+    'e1000000-0000-4000-8000-000000000204',
+    0, 'La asistencia del personal se registra en el formato oficial.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000305',
+    'e1000000-0000-4000-8000-000000000105',
+    'e1000000-0000-4000-8000-000000000205',
+    0, 'La ley habilitante fija el incremento de remuneraciones.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000306',
+    'e1000000-0000-4000-8000-000000000106',
+    'e1000000-0000-4000-8000-000000000206',
+    0, 'La resolución ministerial aprueba la norma de asistencia.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000307',
+    'e1000000-0000-4000-8000-000000000107',
+    'e1000000-0000-4000-8000-000000000207',
+    0, 'El número registrado identifica esta resolución ministerial.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  ),
+  (
+    'e1000000-0000-4000-8000-000000000308',
+    'e1000000-0000-4000-8000-000000000108',
+    'e1000000-0000-4000-8000-000000000208',
+    0, 'La secretaría general registra y controla la asistencia.',
+    10, 1, 1, array_fill(0.01::real, array[1536])::extensions.vector
+  );
+
+select is(
+  (
+    select document_id
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'registro de asistencia',
+      array['RSG:4262017MINEDU'],
+      5,
+      'current'
+    )
+    limit 1
+  ),
+  'e1000000-0000-4000-8000-000000000104'::uuid,
+  'An RSG whose number lives only in the title resolves through the exact gate'
+);
+select is(
+  (
+    select document_id
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'incremento de remuneraciones',
+      array['LEY:29988'],
+      5,
+      'current'
+    )
+    limit 1
+  ),
+  'e1000000-0000-4000-8000-000000000105'::uuid,
+  'A law whose number lives only in the title resolves through the exact gate'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'registro de asistencia',
+      array['RSG:4272017MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  0::bigint,
+  'A near title number does not satisfy the requested identity'
+);
+select is(
+  (
+    select document_id
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'resolución ministerial',
+      array['RM:4562018MINEDU'],
+      5,
+      'current'
+    )
+    limit 1
+  ),
+  'e1000000-0000-4000-8000-000000000106'::uuid,
+  'A document whose title declares its own identity resolves through the exact gate'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'registro de asistencia',
+      array['RSG:5262017MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  0::bigint,
+  'A ministerial resolution that mentions an RSG cannot answer for that RSG'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'resolución ministerial',
+      array['RM:4562018MINEDU'],
+      5,
+      'current'
+    )
+    where document_id = 'e1000000-0000-4000-8000-000000000107'
+  ),
+  0::bigint,
+  'The registered number stays authoritative over the number declared in the title'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'resolución ministerial',
+      array['RM:1232019MINEDU'],
+      5,
+      'current'
+    )
+    where document_id = 'e1000000-0000-4000-8000-000000000107'
+  ),
+  1::bigint,
+  'The registered number keeps resolving its own identity'
+);
+select is(
+  (
+    select count(*)
+    from public.search_document_chunks_by_exact_references(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'asistencia',
+      array['RSG:7262017MINEDU'],
+      5,
+      'current'
+    )
+  ),
+  1::bigint,
+  'The legacy OTRO bucket keeps resolving an explicitly labelled RSG'
 );
 
 select * from finish();
