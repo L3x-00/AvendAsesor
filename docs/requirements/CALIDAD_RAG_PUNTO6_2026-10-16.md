@@ -142,7 +142,16 @@ credenciales ni los enlaces firmados.
    el carril determinista actual no cubre esa variante y pide sector.
 4. E03 y rechazo exacto de DS049: metadatos de identidad incompletos. Coordinar
    con TSK-0094 causa B y TSK-0091; ninguna corrección de datos o reindexación
-   se ejecutó desde esta rama.
+   se ejecutó desde esta rama. **Nota 2026-10-16 (TSK-0096, autorizado por el
+   PO):** la causa se ataca en dos frentes ya implementados y verificados en
+   rama: (a) la compuerta exacta acepta el número que el título declara cuando
+   el campo registrado está vacío, con el número registrado como autoridad y el
+   tipo gobernado obligatorio (ADR-0026); (b) el catálogo incorpora
+   `RESOLUCION_SECRETARIA_GENERAL` y las dos RSG se retipan y numeran por la vía
+   auditable (ADR-0025). El despliegue de datos y migraciones es una operación
+   aparte, con ensayo en seco y autorización del PO. Esto **no** levanta el
+   bloqueo de aceptación de este punto: la campaña real sigue siendo la que
+   decide.
 5. C05 y PI-01: módulos requeridos sin corpus preparado y respuestas con hechos
    desde otros documentos. Contrastarlas contra el corpus antes de aceptarlas;
    no esconderlas como «REQUIERE_CORPUS» después de responder.
