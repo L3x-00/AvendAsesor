@@ -320,7 +320,9 @@ describe("ChatSources", () => {
       .getByText("Decreto Supremo N.° 306-2017-EF")
       .closest("tr");
 
-    expect(screen.getByRole("columnheader", { name: "Ubicación" })).toBeVisible();
+    expect(
+      screen.getByRole("columnheader", { name: "Ubicación" }),
+    ).toBeVisible();
     expect(row).not.toHaveTextContent("NORMAS LEGALES");
     expect(row).toHaveTextContent("Artículo: Artículo 3");
     expect(row).toHaveTextContent("Numeral o literal: Literal h)");
@@ -363,9 +365,7 @@ describe("ChatSources", () => {
     expect(row).toHaveTextContent(
       "Sección o subtítulo: Implementación de la nueva remuneración docente.",
     );
-    expect(row).not.toHaveTextContent(
-      "Sección o subtítulo: Artículo 3.-",
-    );
+    expect(row).not.toHaveTextContent("Sección o subtítulo: Artículo 3.-");
     expect(row).toHaveTextContent("Artículo: Artículo 3.-");
   });
 
@@ -696,9 +696,7 @@ describe("ChatSources — fuentes citadas", () => {
       name: /Ver fuentes disponibles.*1 referencia.*2 documentos/u,
     });
     fireEvent.click(toggle);
-    expect(
-      screen.getByText(/Documentos citados en la respuesta/u),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(document.getElementById("fuente-m-1-2")).toHaveTextContent(
       "Norma citada",
     );
@@ -712,8 +710,8 @@ describe("ChatSources — fuentes citadas", () => {
         .getElementById("fuente-m-1-1")
         ?.querySelector('[data-label="Ubicación"]'),
     ).toHaveTextContent("Página 1 del PDF");
-    expect(
-      screen.getByText(/Otros fragmentos revisados, no citados/u),
-    ).toBeInTheDocument();
+    const otherFragments = screen.getByText("Otros fragmentos revisados (1)");
+    expect(otherFragments).toBeInTheDocument();
+    expect(otherFragments.closest("details")).not.toHaveAttribute("open");
   });
 });

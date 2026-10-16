@@ -120,6 +120,15 @@ Verificación final: **API 113 suites / 1602 pruebas**, cobertura global
 arnés y `git diff --check` PASS. Tras compilar otra vez, los seis hashes de
 módulos del JSON final siguen coincidiendo con los artefactos.
 
+El primer CI remoto pasó las 1602 pruebas API y falló una prueba web ya
+desalineada en la base `main`: el PR #123 cambió los rótulos de referencias sin
+actualizar sus dos expectativas. Se reprodujo el mismo fallo en el archivo
+original, idéntico al de `main`, y se actualizó únicamente la prueba para los
+rótulos vigentes «Referencias» y «Otros fragmentos revisados (1)», conservando
+los controles de citas, anclas y ubicaciones y comprobando que el grupo de
+fragmentos no citados siga plegado. Focal web: 21/21 PASS y lint focal PASS.
+No se modificó el componente ni su presentación.
+
 No cambian autenticación, RBAC/RLS, tablas, Storage, proveedores, prompts,
 aplicabilidad salarial/temporal, identidad exacta, top-k, saneamiento, límites
 OCR, citas, ubicaciones ni texto histórico. No se reindexa ni modifica el corpus.
