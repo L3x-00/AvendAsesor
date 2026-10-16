@@ -845,27 +845,38 @@ select ok(
   'The governed type list keeps exactly the codes the API and the panel offer'
 );
 -- El vector de búsqueda de la biblioteca también enumera los tipos gobernados:
--- si se agrega un tipo sin su etiqueta, buscar por el nombre del tipo no
--- encontrará el documento. `pg_get_expr` renderiza el código y la etiqueta.
+-- si se agrega un tipo sin su rama, buscar por el nombre del tipo no encontrará
+-- el documento. Se exige una rama por tipo de biblioteca; `PREGUNTAS_FRECUENTES`
+-- no vive en la biblioteca (memoria de FAQ) y queda fuera de esta comprobación.
 select ok(
   (
     select
-      pg_catalog.pg_get_expr(
-        default_value.adbin,
-        default_value.adrelid
-      ) like '%RESOLUCION_SECRETARIA_GENERAL%'
-      and pg_catalog.pg_get_expr(
-        default_value.adbin,
-        default_value.adrelid
-      ) like '%Resolucion de Secretaria General%'
+      pg_catalog.bool_and(
+        pg_catalog.pg_get_expr(
+          default_value.adbin,
+          default_value.adrelid
+        ) like '%' || expected.code || '%'
+        and pg_catalog.pg_get_expr(
+          default_value.adbin,
+          default_value.adrelid
+        ) like '%Resolucion de Secretaria General%'
+      )
     from pg_catalog.pg_attrdef as default_value
     join pg_catalog.pg_attribute as attribute
       on attribute.attrelid = default_value.adrelid
       and attribute.attnum = default_value.adnum
+    cross join pg_catalog.unnest(array[
+      'RESOLUCION_MINISTERIAL', 'RESOLUCION_VICEMINISTERIAL',
+      'RESOLUCION_DIRECTORAL', 'RESOLUCION_SECRETARIA_GENERAL',
+      'DECRETO_SUPREMO', 'DECRETO_LEGISLATIVO',
+      'LEY', 'REGLAMENTO', 'DIRECTIVA', 'NORMA_TECNICA', 'OFICIO',
+      'MEMORANDUM', 'COMUNICADO', 'CRONOGRAMA', 'ANEXO',
+      'INFORME', 'INFOGRAFIA', 'OTRO'
+    ]) as expected(code)
     where default_value.adrelid = 'public.documents'::regclass
       and attribute.attname = 'governed_metadata_search_vector'
   ),
-  'The library search vector keeps a label for every governed type'
+  'The library search vector keeps a branch for every governed library type'
 );
 
 select * from finish();

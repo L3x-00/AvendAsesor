@@ -156,7 +156,7 @@ as $$
     from compacted
     cross join lateral pg_catalog.regexp_matches(
       compacted.text,
-      '\m(decreto\s+legislativo|decreto\s+s[uú]premo|resoluci[oó]n\s+de\s+secretar[ií]a\s+general|resoluci[oó]n\s+minist[ée]rial|resoluci[oó]n\s+viceminist[ée]rial|resoluci[oó]n\s+director[aá]l|directiva|ley|ds|dl|rm|rvm|rsg|rd)\s*(?:(?:n(?:ro)?|n[uú]mero)\s*)?[.°º:–—-]*\s*([0-9]{1,8}(?:\s*-\s*(?:19|20)[0-9]{2}(?:\s*-\s*[a-z]{2,20})?)?)(?![a-z0-9])',
+      '\m(decreto\s+legislativo|decreto\s+s[uú]premo|resoluci[oó]n\s+de\s+secretar[ií]a\s+general|resoluci[oó]n\s+minist[ée]rial|resoluci[oó]n\s+viceminist[ée]rial|resoluci[oó]n\s+director[aá]l|directiva|ley|ds|dl|rm|rvm|rsg|rd)\s*(?:(?:n(?:ro)?|n[uú]mero)\s*)?[.°º:–—-]*\s*([0-9]{1,8}(?:\s*-\s*(?:19|20)[0-9]{2}(?:\s*-\s*[a-z]{2,20})?)?)(?![a-z0-9áéíóúüñ])',
       'g'
     ) with ordinality as occurrence(match, ordinal)
   ),

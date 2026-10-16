@@ -168,11 +168,14 @@ function declaresSecretariaGeneral(
   );
 }
 
-/** Referencias explícitas y acotadas que la persona nombró en su pregunta. */
-export function exactDocumentReferencesIn(
-  question: string,
+/** Tope de referencias que una pregunta puede nombrar antes de acotarla. */
+const MAX_QUESTION_REFERENCES = 5;
+
+function documentReferencesIn(
+  text: string,
+  limit: number | null,
 ): ExactDocumentReference[] {
-  const normalized = normalizeSpanishText(question)
+  const normalized = normalizeSpanishText(text)
     // En textos jurídicos son habituales «R.S.G.», «D. S.» o «R. M.».
     // Compactarlos aquí evita que una puntuación editorial desactive la ruta
     // exacta y haga caer la consulta a similitud semántica.
@@ -205,7 +208,17 @@ export function exactDocumentReferencesIn(
     });
   }
 
-  return [...found.values()].slice(0, 5);
+  const references = [...found.values()];
+  // El texto acotado es la pregunta; sin tope se lee el título de un documento,
+  // que declara todas las referencias que necesite sin disparar búsquedas.
+  return limit === null ? references : references.slice(0, limit);
+}
+
+/** Referencias explícitas y acotadas que la persona nombró en su pregunta. */
+export function exactDocumentReferencesIn(
+  question: string,
+): ExactDocumentReference[] {
+  return documentReferencesIn(question, MAX_QUESTION_REFERENCES);
 }
 
 /** Defensa adicional: ninguna fuente parecida sustituye la norma nombrada. */
@@ -232,8 +245,9 @@ export function sourceMatchesExactDocumentReference(
   // identidad propia: la PRIMERA declaración de ese código en el título. Una
   // norma que menciona a otra —«que modifica la Resolución Ministerial N.°
   // 123-2018-MINEDU»— no responde por la mencionada.
-  const declaredOwnIdentity = exactDocumentReferencesIn(
+  const declaredOwnIdentity = documentReferencesIn(
     source.documentTitle ?? '',
+    null,
   ).find((declared) => declared.lookupKey.split(':', 1)[0] === lookupCode);
   return declaredOwnIdentity?.lookupKey === reference.lookupKey;
 }

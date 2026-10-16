@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(25);
 
 select has_function(
   'public',
@@ -697,6 +697,24 @@ select is(
   ),
   array['e1000000-0000-4000-8000-000000000111'::uuid],
   'A registered number written with the accented full label resolves through the exact gate'
+);
+select is(
+  (
+    select count(*)
+    from private.document_title_reference_keys(
+      'Decreto Supremo N.° 001-2020-EF, Ley N.° 1111, Resolución Ministerial N.° 2222-2020-MINEDU, Resolución Viceministerial N.° 3333-2020-MINEDU, Resolución Directoral N.° 4444-2020-MINEDU y Resolución de Secretaría General N.° 5555-2020-MINEDU'
+    )
+  ),
+  6::bigint,
+  'A title declares every reference it needs, without the question limit'
+);
+select is(
+  (
+    select count(*)
+    from private.document_title_reference_keys('Ley N.° 29988á')
+  ),
+  0::bigint,
+  'A digit run glued to an accented letter is not an identity in any layer'
 );
 
 select * from finish();

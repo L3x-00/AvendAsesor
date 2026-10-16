@@ -227,6 +227,25 @@ describe('legal document references', () => {
     ).toBe(false);
   });
 
+  it('reads every reference a title declares, not only the five of a question', () => {
+    const rsg = exactDocumentReferencesIn(
+      '¿Qué dispone la RSG 5555-2020-MINEDU?',
+    )[0];
+    if (!rsg) throw new Error('Expected an exact reference.');
+
+    expect(
+      sourceMatchesExactDocumentReference(
+        {
+          documentTitle:
+            'Decreto Supremo N.° 001-2020-EF, Ley N.° 1111, Resolución Ministerial N.° 2222-2020-MINEDU, Resolución Viceministerial N.° 3333-2020-MINEDU, Resolución Directoral N.° 4444-2020-MINEDU y Resolución de Secretaría General N.° 5555-2020-MINEDU',
+          documentType: 'RESOLUCION_SECRETARIA_GENERAL',
+          resolutionNumber: null,
+        },
+        rsg,
+      ),
+    ).toBe(true);
+  });
+
   it('keeps the registered number authoritative over the title', () => {
     const reference = exactDocumentReferencesIn(
       'Revisa la RM 456-2018-MINEDU',

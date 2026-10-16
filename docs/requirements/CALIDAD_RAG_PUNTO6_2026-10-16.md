@@ -159,9 +159,12 @@ credenciales ni los enlaces firmados.
    etiqueta de Secretaría General se busca en el número registrado y en el
    título con tildes normalizadas, y el vector de búsqueda de la biblioteca
    incluye el tipo nuevo. Los contraejemplos quedaron fijados en pgTAP y en las
-   pruebas unitarias; los límites que siguen sin tolerarse (ceros a la izquierda,
-   guion largo, «Núm.», título que solo menciona otra norma del mismo código sin
-   evidencia propia) están documentados en ADR-0026 y fallan cerrado.
+   pruebas unitarias; los límites que siguen sin cubrirse (ceros a la izquierda,
+   guion largo, «Núm.», y un título que solo menciona otra norma del mismo código
+   sin evidencia propia) están documentados en ADR-0026. Los tres primeros se
+   comportan igual en las dos capas; solo los ceros a la izquierda entran a la
+   compuerta exacta y responden «sin evidencia», mientras que el guion largo y
+   «Núm.» no se detectan como referencia y siguen la ruta temática.
 5. C05 y PI-01: módulos requeridos sin corpus preparado y respuestas con hechos
    desde otros documentos. Contrastarlas contra el corpus antes de aceptarlas;
    no esconderlas como «REQUIERE_CORPUS» después de responder.
