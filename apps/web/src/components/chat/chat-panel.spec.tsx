@@ -798,12 +798,17 @@ describe("ChatPanel", () => {
         screen.getByText(
           (_, element) =>
             element?.tagName === "P" &&
-            element.textContent === "Respuesta sustentada. [1]",
+            element.textContent === "Respuesta sustentada.",
         ),
       ).toBeVisible();
     });
     expect(await screen.findByText("Respuesta lista.")).toBeVisible();
-    // La cita [1] enlaza con su fila en Referencias (punto 8).
+    // La cita [1] enlaza con su fila en Referencias (punto 8). Con una sola
+    // fuente se muestra una vez, como «Fuente: [1]», y no pegada al párrafo.
+    expect(
+      screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
+        .parentElement?.textContent,
+    ).toBe("Fuente: [1]");
     const citation = screen.getByRole("link", {
       name: "Ver fuente 1: Norma de licencias",
     });
@@ -1170,11 +1175,17 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(table).toHaveTextContent("Docente coordinador");
     expect(table).toHaveTextContent("S/ 2 666,80");
+    // Ambas filas citan el mismo documento: la cita no se repite por fila, va
+    // una sola vez justo bajo la tabla.
+    expect(within(table).queryByRole("link")).not.toBeInTheDocument();
+    expect(table).not.toHaveTextContent("[1]");
+    const source = screen.getByRole("link", {
+      name: "Ver fuente 1: Norma de licencias",
+    });
+    expect(source.parentElement).toHaveTextContent("Fuente: [1]");
     expect(
-      within(table).getAllByRole("link", {
-        name: "Ver fuente 1: Norma de licencias",
-      }),
-    ).toHaveLength(2);
+      table.closest(".avend-chat-table-block")?.nextElementSibling,
+    ).toBe(source.parentElement);
     expect(
       screen.getByRole("region", {
         name: "Tabla de la respuesta 1. Desplázate horizontalmente si es necesario.",
@@ -1244,9 +1255,18 @@ describe("ChatPanel", () => {
       />,
     );
 
+    // Las nueve filas citan el mismo documento: la columna «Cita» se retira y
+    // la fuente se muestra una vez bajo la tabla.
     const table = screen.getByRole("table", {
-      name: "Tabla de la respuesta 1: 5 columnas (Modalidad / Forma, Nivel / Ciclo, Jornada laboral, Remuneración mensual (S/) y Cita) y 9 filas.",
+      name: "Tabla de la respuesta 1: 4 columnas (Modalidad / Forma, Nivel / Ciclo, Jornada laboral y Remuneración mensual (S/)) y 9 filas.",
     });
+    expect(
+      within(table).queryByRole("columnheader", { name: "Cita" }),
+    ).not.toBeInTheDocument();
+    expect(within(table).queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
+    ).toHaveLength(1);
     expect(within(table).getAllByRole("row")).toHaveLength(10);
     // La primera columna es el encabezado de fila; las celdas combinadas heredan el grupo.
     const rowHeaders = within(table).getAllByRole("rowheader");
@@ -1417,12 +1437,187 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
     ).toBeVisible();
-    // La fuente 2 no existe en esta respuesta: queda como texto.
-    const paragraph = screen
+    // La fuente 2 no existe en esta respuesta: se omite, y la 1 se muestra una
+    // sola vez como fuente de la respuesta.
+    const note = screen
       .getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
       .closest("p");
-    expect(paragraph?.textContent).toBe(
-      "La licencia se solicita dentro de 5 días [1].",
+    expect(note?.textContent).toBe("Fuente: [1]");
+    expect(
+      screen.getByText("La licencia se solicita dentro de 5 días."),
+    ).toBeVisible();
+  });
+
+  describe("cita única de la respuesta", () => {
+    const documentVersionId = "33333333-3333-4333-8333-333333333331";
+    const otherVersionId = "33333333-3333-4333-8333-333333333332";
+    const baseSource = eligibleConversation.messages[1].sources[0];
+
+    function renderAnswer(
+      content: string,
+      sources: Array<Record<string, unknown>>,
+    ) {
+      return render(
+        <ChatPanel
+          initialConversation={{
+            ...initialConversation,
+            messages: [
+              eligibleConversation.messages[0],
+              {
+                ...eligibleConversation.messages[1],
+                content,
+                sources: sources.map((source) => ({
+                  ...baseSource,
+                  ...source,
+                })) as typeof eligibleConversation.messages[1]["sources"],
+              },
+            ],
+          }}
+          modules={[chatModule]}
+        />,
+      );
+    }
+
+    const sameDocument = [
+      { documentVersionId, documentType: "DECRETO_SUPREMO", rank: 1 },
+    ];
+
+    it("muestra la cita una sola vez al final y no en cada párrafo", () => {
+      renderAnswer(
+        "Un docente de primaria percibe S/ 3 300,60. [1]\n\nLos contratados reciben una remuneración proporcional. [1]",
+        sameDocument,
+      );
+
+      const links = screen.getAllByRole("link", { name: /Ver fuente 1/u });
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveTextContent("[1] DS");
+      const note = links[0].parentElement;
+      expect(note).toHaveClass("avend-chat-source-note");
+      expect(note).toHaveTextContent("Fuente: [1] DS");
+      // Es lo último del contenido de la respuesta, tras los dos párrafos.
+      expect(note?.previousElementSibling).toHaveTextContent(
+        "Los contratados reciben una remuneración proporcional.",
+      );
+      expect(note?.nextElementSibling).toBeNull();
+      expect(
+        screen.getByText("Un docente de primaria percibe S/ 3 300,60."),
+      ).toBeVisible();
+    });
+
+    it("agrupa en una cita varios fragmentos del mismo documento", () => {
+      renderAnswer("Primer dato. [1]\n\nSegundo dato. [2]", [
+        { documentVersionId, rank: 1 },
+        { documentVersionId, id: "1c8b56af-6d0c-4fef-881e-7c00907540dd", rank: 2 },
+      ]);
+
+      const links = screen.getAllByRole("link", { name: /Ver fuente/u });
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAccessibleName(/Ver fuente 1:/u);
+    });
+
+    it("conserva cada cita en su lugar cuando provienen de documentos distintos", () => {
+      renderAnswer("Primer dato. [1]\n\nSegundo dato. [2]", [
+        { documentVersionId, rank: 1 },
+        {
+          documentVersionId: otherVersionId,
+          documentTitle: "Otra norma",
+          id: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+      ]);
+
+      expect(screen.getAllByRole("link", { name: /Ver fuente/u })).toHaveLength(
+        2,
+      );
+      expect(screen.getByText(/^Primer dato\./u)).toHaveTextContent(
+        "Primer dato. [1]",
+      );
+      expect(document.querySelector(".avend-chat-source-note")).toBeNull();
+    });
+
+    it("no deja un párrafo vacío cuando la cita estaba sola en su línea", () => {
+      renderAnswer("Un dato respaldado.\n\n[1]", sameDocument);
+
+      const answer = screen
+        .getByText("Un dato respaldado.")
+        .closest(".avend-chat-message-content");
+      expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
+      expect(screen.getAllByRole("link", { name: /Ver fuente 1/u })).toHaveLength(
+        1,
+      );
+    });
+
+    it("coloca la fuente bajo la última tabla, antes de la frase de cierre", () => {
+      renderAnswer(
+        [
+          "Estos son los montos:",
+          "",
+          "| Escala | Monto | Cita |",
+          "| --- | ---: | --- |",
+          "| Octava | 2 310,42 | [1] |",
+          "| Séptima | 2 090,38 | [1] |",
+          "",
+          "Esta tabla refleja el decreto vigente.",
+        ].join("\n"),
+        sameDocument,
+      );
+
+      const table = screen.getByRole("table");
+      expect(
+        within(table).queryByRole("columnheader", { name: "Cita" }),
+      ).not.toBeInTheDocument();
+      const note = table.closest(".avend-chat-table-block")?.nextElementSibling;
+      expect(note).toHaveTextContent("Fuente: [1] DS");
+      expect(note?.nextElementSibling).toHaveTextContent(
+        "Esta tabla refleja el decreto vigente.",
+      );
+    });
+
+    it("no quita la columna de citas si la tabla se quedaría con una sola columna", () => {
+      renderAnswer(
+        ["| Escala | Cita |", "| --- | --- |", "| Octava | [1] |"].join("\n"),
+        sameDocument,
+      );
+
+      expect(
+        screen.getByRole("columnheader", { name: "Cita" }),
+      ).toBeVisible();
+      // Sus citas siguen visibles: la celda no queda vacía.
+      expect(
+        within(screen.getByRole("table")).getByRole("link", {
+          name: /Ver fuente 1/u,
+        }),
+      ).toBeVisible();
+    });
+  });
+
+  it("agrupa «Copiar» y «Preparar ficha de orientación» en la misma barra, sin texto de ayuda visible", () => {
+    render(
+      <ChatPanel
+        initialConversation={eligibleConversation}
+        modules={[chatModule]}
+      />,
+    );
+
+    const ficha = screen.getByRole("link", {
+      name: "Preparar ficha de orientación",
+    });
+    const copy = screen.getByRole("button", { name: "Copiar respuesta" });
+    const actions = copy.parentElement;
+    expect(actions).toHaveClass("avend-chat-message-actions");
+    expect(actions).toContainElement(ficha);
+    expect(actions?.parentElement).toHaveClass("avend-chat-message-toolbar");
+    // La explicación sigue disponible para lectores de pantalla y como tooltip,
+    // pero ya no ocupa una línea visible bajo el botón.
+    expect(ficha).toHaveAccessibleDescription(
+      "Se abrirá una vista previa editable solo en sus datos de presentación.",
+    );
+    expect(
+      document.getElementById(ficha.getAttribute("aria-describedby") ?? ""),
+    ).toHaveClass("avend-visually-hidden");
+    expect(ficha).toHaveAttribute(
+      "href",
+      `/chat/${conversationId}/orientacion/${messageId}`,
     );
   });
 

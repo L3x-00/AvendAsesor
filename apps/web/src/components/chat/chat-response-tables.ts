@@ -173,6 +173,56 @@ export function classifyTableAt(
   return { asGrid: fitsGrid && isEvidenced, table: readable };
 }
 
+/** Una celda que solo trae citas: «[2]», «[1] [2]», «[1, 2]». */
+const CITATION_ONLY_CELL =
+  /^(?:\[\[?\s*\d+(?:\s*(?:[,;–-]|y)\s*\d+)*\s*\]\]?\s*)+$/u;
+
+/**
+ * Columnas (sin contar la primera, que nombra la fila) que solo contienen
+ * citas: la «Cita» que el modelo añade a cada fila.
+ */
+function citationColumns(table: MarkdownTableBlock): number[] {
+  return table.headers
+    .map((_, column) => column)
+    .filter((column) => {
+      if (column === 0) return false;
+      const cells = table.rows.map((row) => (row[column] ?? "").trim());
+      return (
+        cells.some((cell) => CITATION_ONLY_CELL.test(cell)) &&
+        cells.every(
+          (cell) => isBlankCell(cell) || CITATION_ONLY_CELL.test(cell),
+        )
+      );
+    });
+}
+
+/** `true` si alguna columna de la tabla solo trae citas. */
+export function hasCitationColumn(table: MarkdownTableBlock): boolean {
+  return citationColumns(table).length > 0;
+}
+
+/**
+ * Quita las columnas que solo contienen citas. Se usa cuando la cita se muestra
+ * una vez bajo la tabla y en «Copiar», donde las citas no se copian y la
+ * columna quedaría vacía. Si no quedarían al menos dos columnas, la tabla se
+ * deja intacta para no romper su estructura.
+ */
+export function withoutCitationColumns(
+  table: MarkdownTableBlock,
+): MarkdownTableBlock {
+  const dropped = new Set(citationColumns(table));
+  const keep = table.headers
+    .map((_, column) => column)
+    .filter((column) => !dropped.has(column));
+  if (!dropped.size || keep.length < 2) return table;
+  return {
+    ...table,
+    alignments: keep.map((column) => table.alignments[column] ?? null),
+    headers: keep.map((column) => table.headers[column]),
+    rows: table.rows.map((row) => keep.map((column) => row[column])),
+  };
+}
+
 /** Una celda vacía o un guion solo indican «sin dato»: no aportan a la lectura. */
 const EMPTY_CELL = /^[-–—]?$/u;
 
@@ -301,11 +351,13 @@ export function markdownTablesToPlainText(
     }
 
     const { asGrid, table } = classified;
+    // Las citas no se copian: una columna que solo las trae quedaría vacía.
+    const copied = withoutCitationColumns(table);
     if (asGrid) {
-      plain.push(table.headers.join("\t"));
-      plain.push(...table.rows.map((row) => row.join("\t")));
+      plain.push(copied.headers.join("\t"));
+      plain.push(...copied.rows.map((row) => row.join("\t")));
     } else {
-      plain.push(...markdownTableRowsAsText(table));
+      plain.push(...markdownTableRowsAsText(copied));
     }
     index = table.endIndex;
   }

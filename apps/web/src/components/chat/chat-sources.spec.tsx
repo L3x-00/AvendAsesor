@@ -5,6 +5,7 @@ import {
   ChatSources,
   citationRanks,
   citedSourceRanks,
+  singleCitedSource,
   sourceCitationLabel,
 } from "./chat-sources";
 
@@ -35,6 +36,46 @@ describe("citas del modelo", () => {
     expect(citationRanks("[1-05-2024]")).toEqual([]);
     expect(citationRanks("[1-2012]")).toEqual([]);
     expect(citationRanks("[3-1]")).toEqual([]);
+  });
+});
+
+describe("singleCitedSource", () => {
+  const source = (rank: number, documentVersionId?: string) =>
+    ({
+      documentVersionId,
+      id: `00000000-0000-4000-8000-00000000000${rank}`,
+      rank,
+    }) as Parameters<typeof singleCitedSource>[1][number];
+  const versionA = "33333333-3333-4333-8333-333333333331";
+  const versionB = "33333333-3333-4333-8333-333333333332";
+
+  it("devuelve la fuente de la primera cita cuando todas son del mismo documento", () => {
+    const sources = [source(1, versionA), source(2, versionA)];
+    expect(singleCitedSource("Uno [2]. Dos [1].", sources)?.rank).toBe(2);
+    expect(singleCitedSource("Uno [1]. Dos [1].", sources)?.rank).toBe(1);
+  });
+
+  it("no agrupa citas de documentos distintos", () => {
+    const sources = [source(1, versionA), source(2, versionB)];
+    expect(singleCitedSource("Uno [1]. Dos [2].", sources)).toBeUndefined();
+  });
+
+  it("solo cuenta lo citado: una fuente disponible pero no citada no impide agrupar", () => {
+    const sources = [source(1, versionA), source(2, versionB)];
+    expect(singleCitedSource("Uno [1].", sources)?.rank).toBe(1);
+  });
+
+  it("ignora citas sin fuente y no inventa una cuando no hay ninguna conocida", () => {
+    const sources = [source(1, versionA)];
+    expect(singleCitedSource("Uno [1, 9].", sources)?.rank).toBe(1);
+    expect(singleCitedSource("Uno [9].", sources)).toBeUndefined();
+    expect(singleCitedSource("Sin citas.", sources)).toBeUndefined();
+  });
+
+  it("sin identidad de versión (historial antiguo) cada fuente es un documento distinto", () => {
+    const sources = [source(1), source(2)];
+    expect(singleCitedSource("Uno [1]. Dos [2].", sources)).toBeUndefined();
+    expect(singleCitedSource("Uno [1]. Dos [1].", sources)?.rank).toBe(1);
   });
 });
 

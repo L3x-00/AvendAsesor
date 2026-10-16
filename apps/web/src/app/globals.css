@@ -1371,6 +1371,28 @@ textarea[aria-invalid="true"]:focus,
   outline-offset: 2px;
 }
 
+/* Fuente única de la respuesta: una sola cita bajo la tabla o al final, en vez
+   de repetirla en cada párrafo, viñeta o fila. El margen negativo la acerca al
+   bloque que respalda; el relleno del enlace amplía el área táctil a ≥ 44 px
+   sin sumar alto a la línea. */
+.avend-chat-source-note {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: -0.375rem 0 0.875rem;
+}
+
+.avend-chat-source-note:last-child {
+  margin-bottom: 0;
+}
+
+.avend-chat-source-note .avend-chat-citation {
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.75rem 0.25rem;
+}
+
 .avend-chat-sources tr:target,
 .avend-chat-sources tr:focus {
   background: var(--avend-soft-blue);

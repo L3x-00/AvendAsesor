@@ -3,11 +3,13 @@ import {
   classifyTableAt,
   columnAlignments,
   firstColumnLabels,
+  hasCitationColumn,
   markdownTableAt,
   markdownTableRowsAsText,
   markdownTablesToPlainText,
   singleRowTableHasAdjacentKnownCitation,
   tableRowsCiteKnownSources,
+  withoutCitationColumns,
 } from "./chat-response-tables";
 
 describe("markdownTableAt", () => {
@@ -400,5 +402,70 @@ describe("firstColumnLabels", () => {
     expect(firstColumnLabels([["", "Primaria"]])).toEqual([
       { inherited: false, label: "" },
     ]);
+  });
+});
+
+describe("withoutCitationColumns", () => {
+  const table = (rows: string[][], headers = ["Escala", "Monto", "Cita"]) => ({
+    alignments: headers.map(() => null),
+    endIndex: rows.length + 2,
+    headers,
+    rows,
+  });
+
+  it("retira la columna que solo trae citas y conserva el resto", () => {
+    const result = withoutCitationColumns({
+      ...table([
+        ["Octava", "2 310,42", "[2]"],
+        ["Séptima", "2 090,38", "[1] [2]"],
+      ]),
+      alignments: [null, "right", "center"],
+    });
+
+    expect(result.headers).toEqual(["Escala", "Monto"]);
+    expect(result.rows).toEqual([
+      ["Octava", "2 310,42"],
+      ["Séptima", "2 090,38"],
+    ]);
+    expect(result.alignments).toEqual([null, "right"]);
+    expect(result.endIndex).toBe(4);
+  });
+
+  it("no toca una columna con texto además de la cita ni una vacía", () => {
+    const mixed = table([["Octava", "2 310,42", "Ver art. 3 [2]"]]);
+    expect(withoutCitationColumns(mixed)).toBe(mixed);
+    const empty = table([["Octava", "2 310,42", ""]]);
+    expect(withoutCitationColumns(empty)).toBe(empty);
+  });
+
+  it("tolera filas sin dato en la columna de citas", () => {
+    const result = withoutCitationColumns(
+      table([
+        ["Octava", "2 310,42", "[2]"],
+        ["Séptima", "2 090,38", "-"],
+      ]),
+    );
+    expect(result.headers).toEqual(["Escala", "Monto"]);
+  });
+
+  it("nunca quita la primera columna y no deja una tabla de una sola columna", () => {
+    const onlyCitations = table([["[1]", "[1]", "[1]"]]);
+    expect(withoutCitationColumns(onlyCitations)).toBe(onlyCitations);
+    const twoColumns = table([["Requisito", "[1]"]], ["Requisito", "Cita"]);
+    expect(withoutCitationColumns(twoColumns)).toBe(twoColumns);
+    expect(hasCitationColumn(twoColumns)).toBe(true);
+  });
+
+  it("Copiar no arrastra una columna de citas vacía", () => {
+    const content = [
+      "| Escala | Monto | Cita |",
+      "| --- | ---: | --- |",
+      "| Octava | 2 310,42 | [1] |",
+      "| Séptima | 2 090,38 | [1] |",
+    ].join("\n");
+
+    expect(markdownTablesToPlainText(content, [1])).toBe(
+      "Escala\tMonto\nOctava\t2 310,42\nSéptima\t2 090,38",
+    );
   });
 });
