@@ -28,19 +28,24 @@ El perfil salarial trataba cualquier mención de «pagos» como un pedido de mon
 El título de un instructivo activaba por ello una aclaración sobre cifras
 distintas que aparecían dentro del documento, aunque se hubiera pedido su objeto.
 
-Se excluye únicamente la cláusula que pregunta por la finalidad documental.
+Se excluye únicamente la cláusula que pregunta por la finalidad documental,
+incluidas fórmulas de cortesía; un término salarial anterior al pedido mantiene
+los controles de la cláusula.
 Las otras cláusulas de una consulta compuesta conservan sus señales salariales,
 incluso sin un verbo de cobro: «y el sueldo que recibe un profesor» mantiene
 las aclaraciones y la incompatibilidad con otra jornada. Los importes y las
 peticiones de cálculo mantienen los controles también dentro de esa cláusula.
 Las coordinaciones nominales del título, incluidas listas con comas,
-se reconocen para no confundir el título con un segundo pedido. También se
+se reconocen para no confundir el título con un segundo pedido. Un concepto
+salarial coordinado se conserva como pedido independiente. También se
 admiten peticiones como «Explícame la finalidad…» y la abreviatura RSG.
 Una finalidad nueva tampoco hereda factores de un pedido salarial anterior.
 
 La revisión posterior de montos evalúa el contenido generado por el proveedor
 independientemente de que la pregunta sea documental. Se conserva la exención
-previa cuando se solicitó expresamente un concepto adicional. Una asignación presentada como
+previa cuando se solicitó un concepto adicional en una consulta salarial,
+incluidos los seguimientos que heredan esa intención. La finalidad de un
+documento sobre asignaciones conserva la revisión de cifras. Una asignación presentada como
 sueldo, o una regla reemplazada presentada como vigente, conserva la señal de
 revisión humana y su extracto. Esa señal no equivale a una validación jurídica
 ni a un bloqueo automático de la respuesta.
@@ -54,14 +59,14 @@ modelos, top-k ni formato de las citas. Los mensajes previos no se reescriben.
 - La primera revisión detectó una evasión en consultas compuestas y la omisión
   de la revisión posterior de cifras. Ambos casos se reprodujeron con cinco
   pruebas fallidas antes de corregirlos.
-- Tres suites focales: 199 pruebas aprobadas. Incluyen identidad exacta ausente,
+- Tres suites focales: 209 pruebas aprobadas. Incluyen identidad exacta ausente,
   petición documental con cifras distintas, consultas mixtas, filtro de jornada,
   corte de herencia en cadenas de más de tres turnos y revisión de una asignación
   que el proveedor simulado presenta como sueldo.
-- Nueve mutaciones de las protecciones verifican que retirar cada control hace
+- Doce mutaciones de las protecciones verifican que retirar cada control hace
   fallar su prueba, y restauran los archivos con hash verificado.
 - E2E: dos suites, 35 pruebas aprobadas.
-- API completa tras los ajustes de revisión: 113 suites, 1.639 pruebas
+- API completa tras los ajustes de revisión: 113 suites, 1.649 pruebas
   aprobadas; formato, lint, tipos, compilación y diff aprobados. La verificación
   remota del commit final se registra en el PR.
 

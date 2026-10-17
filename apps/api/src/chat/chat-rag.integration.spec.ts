@@ -554,9 +554,10 @@ describe('ChatService + RagService integration', () => {
       }
     });
 
-    it('responde la finalidad sin pedir el vínculo aunque el documento incluya cifras distintas', async () => {
-      const question =
-        'Según la Resolución de Secretaría General N.° 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?';
+    it.each([
+      'Según la Resolución de Secretaría General N.° 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?',
+      'Según la RSG 121-2018-MINEDU, ¿podrías decirme cuál es la finalidad del instructivo de pagos?',
+    ])('responde la finalidad sin pedir el vínculo: %s', async (question) => {
       const events = await collect(service, { question });
 
       expect(events.some((event) => event.type === 'clarification')).toBe(
@@ -628,6 +629,14 @@ describe('ChatService + RagService integration', () => {
       allocationIndex: 0,
       reviewExpected: false,
     },
+    {
+      name: 'revisa el monto si solo se pidió la finalidad de un documento de asignaciones',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de asignación por función directiva?',
+      answer: 'Tu remuneración mensual es de S/ 2 666,80. [2]',
+      allocationIndex: 1,
+      reviewExpected: true,
+    },
   ])('$name', async ({ question, answer, allocationIndex, reviewExpected }) => {
     const base = {
       ...exactResolution,
@@ -653,7 +662,7 @@ describe('ChatService + RagService integration', () => {
     });
     answers.answer = answer;
 
-    await collect(service, { question });
+    const events = await collect(service, { question });
 
     expect(answers.inputs).toHaveLength(1);
     expect(answers.inputs[0]?.sources[allocationIndex]?.chunkContent).toContain(
@@ -670,6 +679,27 @@ describe('ChatService + RagService integration', () => {
       expect(history.completions[0]?.qualitySignals).not.toContain(
         'support_partial',
       );
+      const conversation = events.find(
+        (event) => event.type === 'conversation',
+      );
+      expect(conversation).toBeDefined();
+      for (const followUp of [
+        '¿Y para una directora?',
+        '¿Y para un directivo?',
+      ]) {
+        await collect(service, {
+          conversationId: conversation?.data.conversationId,
+          question: followUp,
+        });
+      }
+      expect(history.completions).toHaveLength(3);
+      expect(
+        history.completions.every(
+          (completion) =>
+            completion.replyRole === 'assistant' &&
+            !completion.qualitySignals?.includes('support_partial'),
+        ),
+      ).toBe(true);
     }
   });
 

@@ -114,6 +114,12 @@ describe('salaryQuestionProfile', () => {
     '¿Cuál es la finalidad del instructivo para la elaboración, aprobación y difusión de la planilla de pagos?',
     '¿Cuál es la finalidad de la RSG 121-2018-MINEDU sobre la planilla de pagos?',
     '¿Cuál es la finalidad de la RSG N.° 121-2018-MINEDU sobre la planilla de pagos?',
+    '¿Podrías decirme cuál es la finalidad del instructivo de pagos?',
+    '¿Me puedes decir cuál es la finalidad del instructivo de pagos?',
+    '¿Me indicas cuál es la finalidad del instructivo de pagos?',
+    'Necesito saber cuál es la finalidad del instructivo de pagos.',
+    'Quisiera saber cuál es la finalidad del instructivo de pagos.',
+    'Me gustaría conocer cuál es la finalidad del instructivo de pagos.',
   ])(
     'no convierte la finalidad de un documento en un monto: %s',
     (question) => {
@@ -121,6 +127,12 @@ describe('salaryQuestionProfile', () => {
       expect(
         salaryClarificationFor(question, [general30, general40]),
       ).toBeNull();
+      expect(
+        withInheritedSalaryFactors(question, [
+          '¿Cuánto gana un profesor contratado?',
+          'Jornada de 30 horas en 2025',
+        ]),
+      ).toBe(question);
     },
   );
 
@@ -141,6 +153,8 @@ describe('salaryQuestionProfile', () => {
     '¿Cuál es la finalidad del instructivo de pagos y el haber mensual de un director?',
     '¿Cuál es la finalidad del instructivo de pagos y la retribución mensual de un profesor?',
     'Necesito conocer la remuneración del profesor antes de que me expliques cuál es la finalidad del instructivo de pagos.',
+    '¿Cuál es la finalidad del reglamento de evaluación y remuneración del docente?',
+    '¿Cuál es la finalidad de la resolución y remuneración docente?',
     '¿Cuál es la finalidad del instructivo de pagos que menciona S/ 3300,60?',
   ])('conserva los controles ante un pedido salarial: %s', (question) => {
     expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(true);

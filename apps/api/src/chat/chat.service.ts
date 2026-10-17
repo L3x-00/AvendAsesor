@@ -1323,13 +1323,14 @@ export class ChatService {
     // marca para revisión humana: pudo tomar una cifra que no es la general.
     // Se revisa el contenido generado también si se preguntó por la finalidad
     // de una norma: el modelo puede introducir un importe que no se le pidió.
+    const salaryProfile = salaryQuestionProfile(salaryQuestion);
     const salaryFinding = assessSalaryAnswerCoverage(
       finalAnswer,
       retrieval.sources,
     );
     if (
       salaryFinding &&
-      !salaryQuestionProfile(question).asksSpecialAllocation
+      !(salaryProfile.isSalaryQuestion && salaryProfile.asksSpecialAllocation)
     ) {
       qualitySignals.add('support_partial');
       qualityExcerpts.support_partial ??= salaryFinding.excerpt;

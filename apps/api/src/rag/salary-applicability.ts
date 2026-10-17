@@ -38,14 +38,15 @@ const SALARY_AMOUNT_QUESTION =
 /** La finalidad de una norma de pagos no pide un importe de esa norma. */
 const DOCUMENT_PURPOSE_REQUEST =
   /\b(?:(?:(?:cual es|explica(?:me)?|dime|indicame|(?:necesito|quiero) (?:saber|conocer)) (?:la finalidad|el (?:objetivo|objeto|proposito))|cuales son los objetivos) (?:del|de la|de este|de esta) |para que sirve (?:el|la|este|esta) )(?:instructivo|documento|norma|resolucion|directiva|reglamento|rsg)\b/u;
-const DOCUMENT_PURPOSE_CLAUSE = new RegExp(
-  `^\\s*${DOCUMENT_PURPOSE_REQUEST.source}`,
-  'u',
-);
+function isDocumentPurposeClause(clause: string): boolean {
+  const purposeIndex = clause.search(DOCUMENT_PURPOSE_REQUEST);
+  // Se admite cortesía antes del pedido, pero no otro concepto salarial.
+  return purposeIndex >= 0 && !SALARY_TERMS.test(clause.slice(0, purposeIndex));
+}
 
 /** Coordinación nominal: elaboración, aprobación y difusión; registro y control. */
 const DOCUMENT_NOMINAL_COORDINATION =
-  /\b([a-z]+(?:cion|sion|miento)|registro|control)(?:,\s*|\s+y\s+)(?=(?:[a-z]+(?:cion|sion|miento)|registro|control)\b)/gu;
+  /\b([a-z]+(?:cion|sion|miento)|registro|control)(?:,\s*|\s+y\s+)(?=([a-z]+(?:cion|sion|miento)|registro|control)\b)/gu;
 
 /**
  * Un importe o una pregunta cuantitativa nunca se excluyen como finalidad
@@ -68,11 +69,15 @@ function salaryRequestText(text: string): string {
     return text;
   }
   return text
-    .replace(DOCUMENT_NOMINAL_COORDINATION, '$1 ')
+    .replace(
+      DOCUMENT_NOMINAL_COORDINATION,
+      (match: string, head: string, next: string) =>
+        SALARY_TERMS.test(next) ? match : `${head} `,
+    )
     .split(
       /(?<!\bn|\bnro)\.(?![°º]|\d)|[!?;:,¿¡]+|\b(?:y|e|o|u|ni|pero|ademas|tambien|asi como)\b/u,
     )
-    .filter((clause) => !DOCUMENT_PURPOSE_CLAUSE.test(clause))
+    .filter((clause) => !isDocumentPurposeClause(clause))
     .join(' ');
 }
 
