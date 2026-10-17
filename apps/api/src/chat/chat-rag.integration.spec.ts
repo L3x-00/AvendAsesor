@@ -528,6 +528,181 @@ describe('ChatService + RagService integration', () => {
     expect(answers.inputs).toHaveLength(0);
   });
 
+  describe('finalidad de la RSG de planillas frente a consulta salarial', () => {
+    const payrollDocumentId = '00000000-0000-0000-0000-000000000318';
+
+    beforeEach(() => {
+      for (const [index, content] of [
+        'La finalidad del instructivo es establecer las reglas para elaborar y aprobar la planilla de pagos.',
+        'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        'La remuneración mensual del docente contratado es de S/ 2 400,40.',
+      ].entries()) {
+        retrieval.add({
+          ...exactResolution,
+          chunkId: `00000000-0000-0000-0000-00000000021${index}`,
+          chunkContent: content,
+          documentId: payrollDocumentId,
+          documentTitle: 'Resolución de Secretaría General N.° 121-2018-MINEDU',
+          documentVersionId: '00000000-0000-0000-0000-000000000418',
+          moduleIds: [REMUNERATIONS_MODULE_ID],
+          moduleNames: ['Remuneraciones'],
+          resolutionNumber: 'RSG N.° 121-2018-MINEDU',
+          pageStart: index + 3,
+          pageEnd: index + 3,
+          semanticScore: 0.97 - index / 100,
+        });
+      }
+    });
+
+    it.each([
+      'Según la Resolución de Secretaría General N.° 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?',
+      'Según la RSG 121-2018-MINEDU, ¿podrías decirme cuál es la finalidad del instructivo de pagos?',
+    ])('responde la finalidad sin pedir el vínculo: %s', async (question) => {
+      const events = await collect(service, { question });
+
+      expect(events.some((event) => event.type === 'clarification')).toBe(
+        false,
+      );
+      expect(answers.inputs).toHaveLength(1);
+      expect(answers.inputs[0]?.question).toBe(question);
+      expect(
+        answers.inputs[0]?.sources.some(
+          (item) =>
+            item.documentId === payrollDocumentId &&
+            item.chunkContent.includes('La finalidad del instructivo'),
+        ),
+      ).toBe(true);
+      expect(history.completions[0]?.replyRole).toBe('assistant');
+      expect(history.completions[0]?.sources.length).toBeGreaterThan(0);
+      expect(
+        answers.inputs[0]?.sources.every(
+          (item) => item.documentId === payrollDocumentId,
+        ),
+      ).toBe(true);
+      expect(
+        history.completions[0]?.sources.every((item) =>
+          answers.inputs[0]?.sources.some(
+            (candidate) => candidate.chunkId === item.chunkId,
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it.each([
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la remuneración del profesor?',
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y cuánto gana un profesor?',
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y el sueldo que recibe un profesor?',
+    ])(
+      'mantiene la aclaración que decide entre cifras: %s',
+      async (question) => {
+        const events = await collect(service, { question });
+
+        const clarification = events.find(
+          (event) => event.type === 'clarification',
+        );
+        expect(clarification?.data.message).toContain('vínculo');
+        expect(answers.inputs).toHaveLength(0);
+        expect(history.completions[0]).toMatchObject({
+          replyRole: 'clarification',
+          sources: [],
+          unansweredReason: 'ambiguous_request',
+        });
+      },
+    );
+  });
+
+  it.each([
+    {
+      name: 'revisa un monto presentado como sueldo aunque la pregunta sea documental',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos?',
+      answer: 'Tu remuneración mensual es de S/ 2 666,80. [2]',
+      allocationIndex: 1,
+      reviewExpected: true,
+    },
+    {
+      name: 'conserva la exención del concepto adicional solicitado expresamente',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuánto es la asignación por función directiva de un director?',
+      answer:
+        'El director percibe una asignación por función directiva de S/ 2 666,80 mensuales. [1]',
+      allocationIndex: 0,
+      reviewExpected: false,
+    },
+    {
+      name: 'revisa el monto si solo se pidió la finalidad de un documento de asignaciones',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de asignación por función directiva?',
+      answer: 'Tu remuneración mensual es de S/ 2 666,80. [2]',
+      allocationIndex: 1,
+      reviewExpected: true,
+    },
+  ])('$name', async ({ question, answer, allocationIndex, reviewExpected }) => {
+    const base = {
+      ...exactResolution,
+      documentId: '00000000-0000-0000-0000-000000000319',
+      documentTitle: 'Resolución de Secretaría General N.° 121-2018-MINEDU',
+      documentVersionId: '00000000-0000-0000-0000-000000000419',
+      moduleIds: [REMUNERATIONS_MODULE_ID],
+      moduleNames: ['Remuneraciones'],
+      resolutionNumber: 'RSG N.° 121-2018-MINEDU',
+    };
+    retrieval.add({
+      ...base,
+      chunkId: '00000000-0000-0000-0000-000000000221',
+      chunkContent: 'La remuneración mensual es de S/ 3 300,60.',
+      semanticScore: 0.97,
+    });
+    retrieval.add({
+      ...base,
+      chunkId: '00000000-0000-0000-0000-000000000222',
+      chunkContent:
+        'La asignación por función directiva es de S/ 2 666,80 mensuales.',
+      semanticScore: 0.96,
+    });
+    answers.answer = answer;
+
+    const events = await collect(service, { question });
+
+    expect(answers.inputs).toHaveLength(1);
+    expect(answers.inputs[0]?.sources[allocationIndex]?.chunkContent).toContain(
+      'asignación',
+    );
+    if (reviewExpected) {
+      expect(history.completions[0]?.qualitySignals).toContain(
+        'support_partial',
+      );
+      expect(
+        history.completions[0]?.qualityExcerpts?.support_partial,
+      ).toContain('2 666,80');
+    } else {
+      expect(history.completions[0]?.qualitySignals).not.toContain(
+        'support_partial',
+      );
+      const conversation = events.find(
+        (event) => event.type === 'conversation',
+      );
+      expect(conversation).toBeDefined();
+      for (const followUp of [
+        '¿Y para una directora?',
+        '¿Y para un directivo?',
+      ]) {
+        await collect(service, {
+          conversationId: conversation?.data.conversationId,
+          question: followUp,
+        });
+      }
+      expect(history.completions).toHaveLength(3);
+      expect(
+        history.completions.every(
+          (completion) =>
+            completion.replyRole === 'assistant' &&
+            !completion.qualitySignals?.includes('support_partial'),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it('reuses persisted context for a follow-up in the same conversation', async () => {
     const first = await collect(service, {
       question: 'Necesito una licencia por salud.',

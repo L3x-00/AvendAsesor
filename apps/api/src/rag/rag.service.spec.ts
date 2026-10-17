@@ -59,6 +59,20 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([]);
   });
 
+  it('interrumpe la herencia tras explicar la finalidad de un instructivo de pagos', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Nombrado',
+        [
+          salary,
+          'Jornada de 30 horas',
+          '¿Cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?',
+        ],
+        true,
+      ),
+    ).toEqual([]);
+  });
+
   it('no hereda sin consulta salarial previa ni sin seguimiento', () => {
     expect(
       inheritedFactorQuestions(

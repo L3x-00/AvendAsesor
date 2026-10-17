@@ -1321,19 +1321,19 @@ export class ChatService {
     // Una respuesta salarial que presente un importe como sueldo o remuneración
     // citando solo un concepto adicional (asignación, bono, gratificación) se
     // marca para revisión humana: pudo tomar una cifra que no es la general.
-    const salaryProfile = salaryQuestionProfile(question);
+    // Se revisa el contenido generado también si se preguntó por la finalidad
+    // de una norma: el modelo puede introducir un importe que no se le pidió.
+    const salaryProfile = salaryQuestionProfile(salaryQuestion);
+    const salaryFinding = assessSalaryAnswerCoverage(
+      finalAnswer,
+      retrieval.sources,
+    );
     if (
-      salaryProfile.isSalaryQuestion &&
-      !salaryProfile.asksSpecialAllocation
+      salaryFinding &&
+      !(salaryProfile.isSalaryQuestion && salaryProfile.asksSpecialAllocation)
     ) {
-      const salaryFinding = assessSalaryAnswerCoverage(
-        finalAnswer,
-        retrieval.sources,
-      );
-      if (salaryFinding) {
-        qualitySignals.add('support_partial');
-        qualityExcerpts.support_partial ??= salaryFinding.excerpt;
-      }
+      qualitySignals.add('support_partial');
+      qualityExcerpts.support_partial ??= salaryFinding.excerpt;
     }
     // CR-07 (punto 4): una tabla solo se sostiene con una cita válida por fila.
     // Si alguna fila no cita ninguna fuente entregada —o si la tabla excede el
