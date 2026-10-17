@@ -484,6 +484,97 @@ describe('ChatService + RagService integration', () => {
     ]);
   });
 
+  describe('explicación de jornada y continuidad', () => {
+    beforeEach(() => {
+      for (const [index, hours] of [30, 40].entries()) {
+        retrieval.add({
+          ...remunerationPage3,
+          chunkId: `00000000-0000-0000-0000-00000000023${index}`,
+          documentId: `00000000-0000-0000-0000-00000000033${index}`,
+          documentVersionId: `00000000-0000-0000-0000-00000000043${index}`,
+          chunkContent: `La remuneración mensual del profesor nombrado con jornada de ${hours} horas es de S/ ${hours === 30 ? '3 300,60' : '4 400,80'}.`,
+          semanticScore: 0.99 - index / 100,
+        });
+      }
+    });
+
+    it('explica tres réplicas y luego responde la jornada elegida en la misma conversación', async () => {
+      await collect(service, {
+        question: '¿Cuál es la remuneración del profesor nombrado?',
+      });
+      const conversationId = history.completions[0].conversationId;
+      expect(history.completions[0].replyRole).toBe('clarification');
+      const search = jest.spyOn(retrieval, 'search');
+      for (const question of [
+        'que tiene que ver la horanda?',
+        'pero que tiene que ver la jornada? no entiendo',
+        '¿Qué tiene que ver la jornada de 30 o 40 horas?',
+      ]) {
+        const events = await collect(service, { conversationId, question });
+        expect(
+          events.find((event) => event.type === 'clarification')?.data.message,
+        ).toContain('Este dato es importante porque');
+        expect(history.completions.at(-1)).toMatchObject({
+          conversationId,
+          replyRole: 'clarification',
+          sources: [],
+        });
+      }
+      expect(search).not.toHaveBeenCalled();
+      expect(answers.inputs).toHaveLength(0);
+
+      await collect(service, { conversationId, question: '40 horas' });
+      expect(history.conversations.size).toBe(1);
+      expect(history.completions.at(-1)).toMatchObject({
+        conversationId,
+        replyRole: 'assistant',
+      });
+      expect(answers.inputs).toHaveLength(1);
+      expect(
+        answers.inputs[0].sources.some((item) =>
+          item.chunkContent.includes('jornada de 40 horas'),
+        ),
+      ).toBe(true);
+      expect(
+        answers.inputs[0].sources.some((item) =>
+          item.chunkContent.includes('jornada de 30 horas'),
+        ),
+      ).toBe(false);
+      expect(
+        history.conversations
+          .get(conversationId)
+          ?.messages.filter((message) => message.role === 'user')
+          .map((message) => message.content),
+      ).toEqual([
+        '¿Cuál es la remuneración del profesor nombrado?',
+        'que tiene que ver la horanda?',
+        'pero que tiene que ver la jornada? no entiendo',
+        '¿Qué tiene que ver la jornada de 30 o 40 horas?',
+        '40 horas',
+      ]);
+    });
+
+    it('no toma las alternativas de una duda como jornada declarada al aportar otro factor', async () => {
+      await collect(service, {
+        question: '¿Cuál es la remuneración del profesor?',
+      });
+      const conversationId = history.completions[0].conversationId;
+      await collect(service, {
+        conversationId,
+        question: '¿Qué tiene que ver la jornada de 30 o 40 horas?',
+      });
+      const events = await collect(service, {
+        conversationId,
+        question: 'Soy nombrado',
+      });
+      expect(
+        events.find((event) => event.type === 'clarification')?.data.message,
+      ).toContain('¿tu jornada es de 30 o de 40 horas?');
+      expect(answers.inputs).toHaveLength(0);
+      expect(history.completions.at(-1)?.replyRole).toBe('clarification');
+    });
+  });
+
   it('responde una norma exacta solo con el documento de esa identidad', async () => {
     const events = await collect(service, {
       question: '¿Qué dispone la RSG N.° 326-2017-MINEDU?',

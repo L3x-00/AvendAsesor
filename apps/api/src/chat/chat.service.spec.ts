@@ -1183,6 +1183,61 @@ describe('ChatService', () => {
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'que tiene que ver la horanda?',
+    'pero que tiene que ver la jornada? no entiendo',
+    '¿Qué tiene que ver la jornada de 30 o 40 horas?',
+    'no entiendo',
+    'No entiendo, ¿qué tiene que ver la jornada?',
+    'Disculpa, ¿por qué me preguntas por la jornada?',
+  ])(
+    'explica la jornada pendiente sin repetir la aclaración: %s',
+    async (question) => {
+      const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+      historyGateway.getConversationContext.mockResolvedValue({
+        conversationId,
+        selectedModuleId: null,
+        messages: [
+          {
+            role: 'user',
+            content: 'que se requiere para ser auxiliar en educacion?',
+          },
+          {
+            role: 'clarification',
+            content:
+              'Para darte la cifra correcta necesito un solo dato: ¿tu jornada es de 30 o de 40 horas? Con eso te indico el monto vigente que te corresponde y su alcance.',
+          },
+        ],
+      });
+      ragService.retrieve.mockResolvedValue({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+
+      const events = await collect(service, { conversationId, question });
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'clarification',
+        'done',
+      ]);
+      expect(
+        events.find((event) => event.type === 'clarification')?.data.message,
+      ).toContain('Este dato es importante porque');
+      expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId, question }),
+      );
+      expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          replyRole: 'clarification',
+          sources: [],
+          unansweredReason: 'ambiguous_request',
+        }),
+      );
+      expect(ragService.retrieve).not.toHaveBeenCalled();
+      expect(answerGateway.generate).not.toHaveBeenCalled();
+    },
+  );
+
   it('marca para revisión una respuesta salarial que cita solo un concepto adicional', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',

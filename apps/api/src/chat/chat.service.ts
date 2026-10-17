@@ -74,6 +74,7 @@ import type {
   ChatSourceDownload,
   DeletedChatConversation,
 } from './chat-history.gateway';
+import { jornadaClarificationExplanation } from './clarification-explanation';
 import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
@@ -883,8 +884,65 @@ export class ChatService {
       ? (storedContext?.selectedModuleId ?? null)
       : input.selectedModuleId;
     let conversationId = continuesConversation ? input.conversationId : null;
+    const explanation = jornadaClarificationExplanation(
+      question,
+      conversationContext.at(-1),
+    );
+    if (explanation) {
+      if (input.abortSignal?.aborted) return;
+      const turn = await this.historyGateway.beginTurn({
+        conversationId,
+        question: input.question,
+        selectedModuleId,
+        userId: input.authorization.userId,
+      });
+      yield {
+        type: 'conversation',
+        data: {
+          conversationId: turn.conversationId,
+          moduleId: selectedModuleId,
+          startedNewConversation,
+          userMessageId: turn.userMessageId,
+        },
+      };
+      if (input.abortSignal?.aborted) return;
+      const completed = await this.historyGateway.completeTurn({
+        answer: explanation,
+        conversationId: turn.conversationId,
+        faqMemory,
+        qualitySignals: [],
+        replyRole: 'clarification',
+        retrievalScope: detectRetrievalScope(question),
+        sources: [],
+        topRelevanceScore: null,
+        unansweredReason: 'ambiguous_request',
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield {
+        type: 'clarification',
+        data: { message: explanation, modules: [] },
+      };
+      yield {
+        type: 'done',
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          provider: 'rule',
+        },
+      };
+      return;
+    }
     const priorUserQuestions = conversationContext
-      .filter((message) => message.role === 'user')
+      .filter(
+        (message, index) =>
+          message.role === 'user' &&
+          !jornadaClarificationExplanation(
+            message.content,
+            conversationContext[index - 1],
+          ),
+      )
       .map((message) => message.content);
     // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
     // consulta actual ni las anteriores nombran un proceso, hay tantas
