@@ -30,14 +30,22 @@ const AMOUNT_PATTERN =
 const AMOUNT_PATTERN_ALL = new RegExp(AMOUNT_PATTERN.source, 'gu');
 
 const SALARY_TERMS =
-  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gana|ganan|ganaria|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
+  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gana|ganan|ganaria|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
 /** «Ganar un concurso» no pregunta un importe; «cuánto debería ganar» sí. */
 const SALARY_AMOUNT_QUESTION =
   /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b/u;
 
 /** La finalidad de una norma de pagos no pide un importe de esa norma. */
 const DOCUMENT_PURPOSE_REQUEST =
-  /\b(?:(?:cual es (?:la finalidad|el (?:objetivo|objeto|proposito))|cuales son los objetivos) (?:del|de la|de este|de esta) |para que sirve (?:el|la|este|esta) )(?:instructivo|documento|norma|resolucion|directiva|reglamento)\b/u;
+  /\b(?:(?:(?:cual es|explica(?:me)?|dime|indicame|(?:necesito|quiero) (?:saber|conocer)) (?:la finalidad|el (?:objetivo|objeto|proposito))|cuales son los objetivos) (?:del|de la|de este|de esta) |para que sirve (?:el|la|este|esta) )(?:instructivo|documento|norma|resolucion|directiva|reglamento|rsg)\b/u;
+const DOCUMENT_PURPOSE_CLAUSE = new RegExp(
+  `^\\s*${DOCUMENT_PURPOSE_REQUEST.source}`,
+  'u',
+);
+
+/** Coordinación nominal: elaboración, aprobación y difusión; registro y control. */
+const DOCUMENT_NOMINAL_COORDINATION =
+  /\b([a-z]+(?:cion|sion|miento)|registro|control)(?:,\s*|\s+y\s+)(?=(?:[a-z]+(?:cion|sion|miento)|registro|control)\b)/gu;
 
 /**
  * Un importe o una pregunta cuantitativa nunca se excluyen como finalidad
@@ -60,10 +68,11 @@ function salaryRequestText(text: string): string {
     return text;
   }
   return text
-    .replace(/\belaboracion y aprobacion\b/gu, 'elaboracion aprobacion')
-    .replace(/\bregistro y control\b/gu, 'registro control')
-    .split(/[.!?;:,¿¡]+|\b(?:y|e|o|u|ni|pero|ademas|tambien|asi como)\b/u)
-    .filter((clause) => !DOCUMENT_PURPOSE_REQUEST.test(clause))
+    .replace(DOCUMENT_NOMINAL_COORDINATION, '$1 ')
+    .split(
+      /(?<!\bn|\bnro)\.(?![°º]|\d)|[!?;:,¿¡]+|\b(?:y|e|o|u|ni|pero|ademas|tambien|asi como)\b/u,
+    )
+    .filter((clause) => !DOCUMENT_PURPOSE_CLAUSE.test(clause))
     .join(' ');
 }
 

@@ -610,7 +610,25 @@ describe('ChatService + RagService integration', () => {
     );
   });
 
-  it('revisa un monto presentado como sueldo aunque la pregunta sea documental', async () => {
+  it.each([
+    {
+      name: 'revisa un monto presentado como sueldo aunque la pregunta sea documental',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos?',
+      answer: 'Tu remuneración mensual es de S/ 2 666,80. [2]',
+      allocationIndex: 1,
+      reviewExpected: true,
+    },
+    {
+      name: 'conserva la exención del concepto adicional solicitado expresamente',
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuánto es la asignación por función directiva de un director?',
+      answer:
+        'El director percibe una asignación por función directiva de S/ 2 666,80 mensuales. [1]',
+      allocationIndex: 0,
+      reviewExpected: false,
+    },
+  ])('$name', async ({ question, answer, allocationIndex, reviewExpected }) => {
     const base = {
       ...exactResolution,
       documentId: '00000000-0000-0000-0000-000000000319',
@@ -633,19 +651,26 @@ describe('ChatService + RagService integration', () => {
         'La asignación por función directiva es de S/ 2 666,80 mensuales.',
       semanticScore: 0.96,
     });
-    answers.answer = 'Tu remuneración mensual es de S/ 2 666,80. [2]';
+    answers.answer = answer;
 
-    await collect(service, {
-      question:
-        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos?',
-    });
+    await collect(service, { question });
 
     expect(answers.inputs).toHaveLength(1);
-    expect(answers.inputs[0]?.sources[1]?.chunkContent).toContain('asignación');
-    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
-    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
-      '2 666,80',
+    expect(answers.inputs[0]?.sources[allocationIndex]?.chunkContent).toContain(
+      'asignación',
     );
+    if (reviewExpected) {
+      expect(history.completions[0]?.qualitySignals).toContain(
+        'support_partial',
+      );
+      expect(
+        history.completions[0]?.qualityExcerpts?.support_partial,
+      ).toContain('2 666,80');
+    } else {
+      expect(history.completions[0]?.qualitySignals).not.toContain(
+        'support_partial',
+      );
+    }
   });
 
   it('reuses persisted context for a follow-up in the same conversation', async () => {

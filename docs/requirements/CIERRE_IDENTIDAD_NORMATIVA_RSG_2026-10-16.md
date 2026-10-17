@@ -33,12 +33,14 @@ Las otras cláusulas de una consulta compuesta conservan sus señales salariales
 incluso sin un verbo de cobro: «y el sueldo que recibe un profesor» mantiene
 las aclaraciones y la incompatibilidad con otra jornada. Los importes y las
 peticiones de cálculo mantienen los controles también dentro de esa cláusula.
-Las coordinaciones nominales «elaboración y aprobación» y «registro y control»
-se reconocen expresamente para no confundir el título con un segundo pedido.
+Las coordinaciones nominales del título, incluidas listas con comas,
+se reconocen para no confundir el título con un segundo pedido. También se
+admiten peticiones como «Explícame la finalidad…» y la abreviatura RSG.
 Una finalidad nueva tampoco hereda factores de un pedido salarial anterior.
 
 La revisión posterior de montos evalúa el contenido generado por el proveedor
-independientemente del perfil de la pregunta. Una asignación presentada como
+independientemente de que la pregunta sea documental. Se conserva la exención
+previa cuando se solicitó expresamente un concepto adicional. Una asignación presentada como
 sueldo, o una regla reemplazada presentada como vigente, conserva la señal de
 revisión humana y su extracto. Esa señal no equivale a una validación jurídica
 ni a un bloqueo automático de la respuesta.
@@ -52,14 +54,16 @@ modelos, top-k ni formato de las citas. Los mensajes previos no se reescriben.
 - La primera revisión detectó una evasión en consultas compuestas y la omisión
   de la revisión posterior de cifras. Ambos casos se reprodujeron con cinco
   pruebas fallidas antes de corregirlos.
-- Tres suites focales: 188 pruebas aprobadas. Incluyen identidad exacta ausente,
+- Tres suites focales: 199 pruebas aprobadas. Incluyen identidad exacta ausente,
   petición documental con cifras distintas, consultas mixtas, filtro de jornada,
   corte de herencia en cadenas de más de tres turnos y revisión de una asignación
   que el proveedor simulado presenta como sueldo.
-- Siete mutaciones falsables; los archivos se restauraron con hash verificado.
+- Nueve mutaciones de las protecciones verifican que retirar cada control hace
+  fallar su prueba, y restauran los archivos con hash verificado.
 - E2E: dos suites, 35 pruebas aprobadas.
-- API completa: 113 suites, 1.628 pruebas aprobadas; formato, lint, tipos,
-  compilación y comprobación del diff aprobados.
+- API completa tras los ajustes de revisión: 113 suites, 1.639 pruebas
+  aprobadas; formato, lint, tipos, compilación y diff aprobados. La verificación
+  remota del commit final se registra en el PR.
 
 Los resultados de integración, revisión independiente final y repetición del
 chat publicado se registran en el cierre del PR de esta corrección. Las capturas
@@ -68,3 +72,7 @@ credenciales, tokens ni enlaces firmados.
 
 Este cierre acotado no certifica la campaña completa del punto 6 ni demuestra
 estabilidad de memoria bajo carga en Render.
+
+Se conserva el límite previo de números de norma con separador de miles
+(«1.234-2025»): no se amplía el resolutor de identidades como parte de esta
+corrección de intención documental.

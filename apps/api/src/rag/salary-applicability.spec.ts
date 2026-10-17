@@ -107,6 +107,13 @@ describe('salaryQuestionProfile', () => {
     '¿Cuál es el objetivo de la norma de remuneraciones?',
     '¿Para qué sirve el instructivo de pagos?',
     '¿Cuál es la finalidad de la norma de registro y control de pagos?',
+    'Explícame la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos.',
+    'Dime la finalidad del instructivo de pagos.',
+    'Necesito saber la finalidad del instructivo de pagos.',
+    '¿Cuál es la finalidad del instructivo para la formulación y evaluación de la planilla de pagos?',
+    '¿Cuál es la finalidad del instructivo para la elaboración, aprobación y difusión de la planilla de pagos?',
+    '¿Cuál es la finalidad de la RSG 121-2018-MINEDU sobre la planilla de pagos?',
+    '¿Cuál es la finalidad de la RSG N.° 121-2018-MINEDU sobre la planilla de pagos?',
   ])(
     'no convierte la finalidad de un documento en un monto: %s',
     (question) => {
@@ -131,6 +138,9 @@ describe('salaryQuestionProfile', () => {
     '¿Cuál es la finalidad del instructivo de pagos? Además, necesito saber el sueldo de un profesor.',
     '¿Cuál es la finalidad del instructivo de pagos, así como el sueldo que recibe un profesor?',
     '¿Para qué sirve el instructivo de pagos al calcular el monto de la remuneración?',
+    '¿Cuál es la finalidad del instructivo de pagos y el haber mensual de un director?',
+    '¿Cuál es la finalidad del instructivo de pagos y la retribución mensual de un profesor?',
+    'Necesito conocer la remuneración del profesor antes de que me expliques cuál es la finalidad del instructivo de pagos.',
     '¿Cuál es la finalidad del instructivo de pagos que menciona S/ 3300,60?',
   ])('conserva los controles ante un pedido salarial: %s', (question) => {
     expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(true);

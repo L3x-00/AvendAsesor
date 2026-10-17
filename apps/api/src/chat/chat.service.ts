@@ -27,6 +27,7 @@ import { normalizeDomainQuery } from '../rag/query-normalization';
 import {
   assessSalaryAnswerCoverage,
   salaryClarificationFor,
+  salaryQuestionProfile,
   withInheritedSalaryFactors,
 } from '../rag/salary-applicability';
 import { hasTopicTerm } from '../rag/domain-lexicon';
@@ -1326,7 +1327,10 @@ export class ChatService {
       finalAnswer,
       retrieval.sources,
     );
-    if (salaryFinding) {
+    if (
+      salaryFinding &&
+      !salaryQuestionProfile(question).asksSpecialAllocation
+    ) {
       qualitySignals.add('support_partial');
       qualityExcerpts.support_partial ??= salaryFinding.excerpt;
     }
