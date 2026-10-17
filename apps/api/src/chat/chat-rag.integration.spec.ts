@@ -528,6 +528,126 @@ describe('ChatService + RagService integration', () => {
     expect(answers.inputs).toHaveLength(0);
   });
 
+  describe('finalidad de la RSG de planillas frente a consulta salarial', () => {
+    const payrollDocumentId = '00000000-0000-0000-0000-000000000318';
+
+    beforeEach(() => {
+      for (const [index, content] of [
+        'La finalidad del instructivo es establecer las reglas para elaborar y aprobar la planilla de pagos.',
+        'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
+        'La remuneración mensual del docente contratado es de S/ 2 400,40.',
+      ].entries()) {
+        retrieval.add({
+          ...exactResolution,
+          chunkId: `00000000-0000-0000-0000-00000000021${index}`,
+          chunkContent: content,
+          documentId: payrollDocumentId,
+          documentTitle: 'Resolución de Secretaría General N.° 121-2018-MINEDU',
+          documentVersionId: '00000000-0000-0000-0000-000000000418',
+          moduleIds: [REMUNERATIONS_MODULE_ID],
+          moduleNames: ['Remuneraciones'],
+          resolutionNumber: 'RSG N.° 121-2018-MINEDU',
+          pageStart: index + 3,
+          pageEnd: index + 3,
+          semanticScore: 0.97 - index / 100,
+        });
+      }
+    });
+
+    it('responde la finalidad sin pedir el vínculo aunque el documento incluya cifras distintas', async () => {
+      const question =
+        'Según la Resolución de Secretaría General N.° 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?';
+      const events = await collect(service, { question });
+
+      expect(events.some((event) => event.type === 'clarification')).toBe(
+        false,
+      );
+      expect(answers.inputs).toHaveLength(1);
+      expect(answers.inputs[0]?.question).toBe(question);
+      expect(
+        answers.inputs[0]?.sources.some(
+          (item) =>
+            item.documentId === payrollDocumentId &&
+            item.chunkContent.includes('La finalidad del instructivo'),
+        ),
+      ).toBe(true);
+      expect(history.completions[0]?.replyRole).toBe('assistant');
+      expect(history.completions[0]?.sources.length).toBeGreaterThan(0);
+      expect(
+        answers.inputs[0]?.sources.every(
+          (item) => item.documentId === payrollDocumentId,
+        ),
+      ).toBe(true);
+      expect(
+        history.completions[0]?.sources.every((item) =>
+          answers.inputs[0]?.sources.some(
+            (candidate) => candidate.chunkId === item.chunkId,
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it.each([
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la remuneración del profesor?',
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y cuánto gana un profesor?',
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y el sueldo que recibe un profesor?',
+    ])(
+      'mantiene la aclaración que decide entre cifras: %s',
+      async (question) => {
+        const events = await collect(service, { question });
+
+        const clarification = events.find(
+          (event) => event.type === 'clarification',
+        );
+        expect(clarification?.data.message).toContain('vínculo');
+        expect(answers.inputs).toHaveLength(0);
+        expect(history.completions[0]).toMatchObject({
+          replyRole: 'clarification',
+          sources: [],
+          unansweredReason: 'ambiguous_request',
+        });
+      },
+    );
+  });
+
+  it('revisa un monto presentado como sueldo aunque la pregunta sea documental', async () => {
+    const base = {
+      ...exactResolution,
+      documentId: '00000000-0000-0000-0000-000000000319',
+      documentTitle: 'Resolución de Secretaría General N.° 121-2018-MINEDU',
+      documentVersionId: '00000000-0000-0000-0000-000000000419',
+      moduleIds: [REMUNERATIONS_MODULE_ID],
+      moduleNames: ['Remuneraciones'],
+      resolutionNumber: 'RSG N.° 121-2018-MINEDU',
+    };
+    retrieval.add({
+      ...base,
+      chunkId: '00000000-0000-0000-0000-000000000221',
+      chunkContent: 'La remuneración mensual es de S/ 3 300,60.',
+      semanticScore: 0.97,
+    });
+    retrieval.add({
+      ...base,
+      chunkId: '00000000-0000-0000-0000-000000000222',
+      chunkContent:
+        'La asignación por función directiva es de S/ 2 666,80 mensuales.',
+      semanticScore: 0.96,
+    });
+    answers.answer = 'Tu remuneración mensual es de S/ 2 666,80. [2]';
+
+    await collect(service, {
+      question:
+        'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos?',
+    });
+
+    expect(answers.inputs).toHaveLength(1);
+    expect(answers.inputs[0]?.sources[1]?.chunkContent).toContain('asignación');
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+    expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
+      '2 666,80',
+    );
+  });
+
   it('reuses persisted context for a follow-up in the same conversation', async () => {
     const first = await collect(service, {
       question: 'Necesito una licencia por salud.',

@@ -35,6 +35,38 @@ const SALARY_TERMS =
 const SALARY_AMOUNT_QUESTION =
   /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b/u;
 
+/** La finalidad de una norma de pagos no pide un importe de esa norma. */
+const DOCUMENT_PURPOSE_REQUEST =
+  /\b(?:(?:cual es (?:la finalidad|el (?:objetivo|objeto|proposito))|cuales son los objetivos) (?:del|de la|de este|de esta) |para que sirve (?:el|la|este|esta) )(?:instructivo|documento|norma|resolucion|directiva|reglamento)\b/u;
+
+/**
+ * Un importe o una pregunta cuantitativa nunca se excluyen como finalidad
+ * documental, ni siquiera cuando aparecen en la misma cláusula.
+ */
+const SALARY_VALUE_REQUEST =
+  /\b(?:cuant[oa]s?|montos?|importes?|cifras?|calcul[a-z]*|gan(?:a[a-z]*|o)|cobr[a-z]*|percib[a-z]*|paga[a-z]*|paguen)\b/u;
+
+/**
+ * Solo se excluye la cláusula de finalidad. Las demás conservan sus señales
+ * salariales aunque no usen un verbo de cobro («y el sueldo que recibe...»).
+ * Estas coordinaciones nominales del título no son un segundo pedido.
+ */
+function salaryRequestText(text: string): string {
+  if (
+    !DOCUMENT_PURPOSE_REQUEST.test(text) ||
+    SALARY_VALUE_REQUEST.test(text) ||
+    AMOUNT_PATTERN.test(text)
+  ) {
+    return text;
+  }
+  return text
+    .replace(/\belaboracion y aprobacion\b/gu, 'elaboracion aprobacion')
+    .replace(/\bregistro y control\b/gu, 'registro control')
+    .split(/[.!?;:,¿¡]+|\b(?:y|e|o|u|ni|pero|ademas|tambien|asi como)\b/u)
+    .filter((clause) => !DOCUMENT_PURPOSE_REQUEST.test(clause))
+    .join(' ');
+}
+
 const SPECIAL_ALLOCATION_TERMS =
   /\b(?:asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?|sepelio|bono(?:s)?|compensacion(?:es)?)\b/u;
 
@@ -393,6 +425,14 @@ export function withInheritedSalaryFactors(
 ): string {
   if (!priorQuestions.length) return question;
   const current = salaryQuestionProfile(question);
+  // Una finalidad documental explícita no solicita un monto de la persona que
+  // habló en turnos anteriores. No se le añaden factores de aquel pedido.
+  if (
+    !current.isSalaryQuestion &&
+    DOCUMENT_PURPOSE_REQUEST.test(normalizeSpanishText(question))
+  ) {
+    return question;
+  }
   const accumulated = [...priorQuestions, question]
     .map((turn) => salaryQuestionProfile(turn))
     .reduce(mergeSalaryTurn, EMPTY_SALARY_PROFILE);
@@ -424,11 +464,12 @@ export function withInheritedSalaryFactors(
 /** Factores que la propia consulta ya declara. */
 export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
   const text = normalizeSpanishText(question);
+  const salaryText = salaryRequestText(text);
   return {
     asksSpecialAllocation: SPECIAL_ALLOCATION_REQUEST.test(text),
     condition: conditionsIn(text)[0] ?? null,
     isSalaryQuestion:
-      SALARY_TERMS.test(text) || SALARY_AMOUNT_QUESTION.test(text),
+      SALARY_TERMS.test(salaryText) || SALARY_AMOUNT_QUESTION.test(salaryText),
     jornadaHours: hoursIn(text)[0] ?? null,
     role: rolesIn(text)[0] ?? null,
     scale: scalesIn(text)[0] ?? null,

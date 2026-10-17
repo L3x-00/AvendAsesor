@@ -101,6 +101,67 @@ describe('salaryQuestionProfile', () => {
         .isSalaryQuestion,
     ).toBe(false);
   });
+
+  it.each([
+    'Según la Resolución de Secretaría General N.° 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?',
+    '¿Cuál es el objetivo de la norma de remuneraciones?',
+    '¿Para qué sirve el instructivo de pagos?',
+    '¿Cuál es la finalidad de la norma de registro y control de pagos?',
+  ])(
+    'no convierte la finalidad de un documento en un monto: %s',
+    (question) => {
+      expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(false);
+      expect(
+        salaryClarificationFor(question, [general30, general40]),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    'Según la RSG 121-2018-MINEDU, ¿cuál es la remuneración del profesor?',
+    'Necesito información sobre el pago de un profesor.',
+    '¿Cuál es la finalidad del instructivo de pagos y cuánto gana un profesor?',
+    '¿Para qué sirve el instructivo de pagos y cuál es la remuneración del profesor?',
+    '¿Cuál es el objetivo de la norma de pagos? Calcula el monto que me corresponde.',
+    '¿Cuál es la finalidad del instructivo de pagos? Indícame mi sueldo.',
+    '¿Cuál es la finalidad del instructivo de pagos y qué percibiría un profesor?',
+    '¿Cuál es la finalidad del instructivo de pagos? Detalla el sueldo del profesor.',
+    '¿Cuál es la finalidad del instructivo de pagos y qué pago me toca?',
+    '¿Cuál es la finalidad del instructivo de pagos y el sueldo que recibe un profesor?',
+    '¿Cuál es la finalidad del instructivo de pagos? Además, necesito saber el sueldo de un profesor.',
+    '¿Cuál es la finalidad del instructivo de pagos, así como el sueldo que recibe un profesor?',
+    '¿Para qué sirve el instructivo de pagos al calcular el monto de la remuneración?',
+    '¿Cuál es la finalidad del instructivo de pagos que menciona S/ 3300,60?',
+  ])('conserva los controles ante un pedido salarial: %s', (question) => {
+    expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(true);
+    expect(
+      salaryClarificationFor(question, [general30, general40])?.factor,
+    ).toBe('jornada');
+  });
+
+  it('mantiene el filtro de jornada en otra cláusula salarial sin verbo de cobro', () => {
+    const question =
+      '¿Cuál es la finalidad del instructivo de pagos? También necesito conocer la remuneración mensual de un profesor de 30 horas.';
+    expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(true);
+    expect(isSalarySourceCompatible(question, general40)).toBe(false);
+    expect(isSalarySourceCompatible(question, general30)).toBe(true);
+  });
+
+  it('no añade los factores de dos turnos salariales a una finalidad documental nueva', () => {
+    const question =
+      'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo para la elaboración y aprobación de la planilla de pagos?';
+    const inherited = withInheritedSalaryFactors(question, [
+      '¿Cuánto gana un profesor contratado?',
+      'Jornada de 30 horas en 2025',
+    ]);
+    expect(inherited).toBe(question);
+    expect(salaryQuestionProfile(inherited)).toMatchObject({
+      isSalaryQuestion: false,
+      condition: null,
+      jornadaHours: null,
+      year: null,
+    });
+  });
 });
 
 describe('clasificación de la evidencia salarial', () => {
