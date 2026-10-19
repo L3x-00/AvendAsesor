@@ -984,6 +984,26 @@ export class ChatService {
     }
 
     if (
+      input.conversationId &&
+      !acceptedQuestion &&
+      isAffirmativeFollowUpAnswer(question) &&
+      prefetchedContext?.messages.at(-1)?.role === 'clarification'
+    ) {
+      // El turno anterior pidió un dato o eligió entre varios temas. Un «sí» a
+      // secas no responde esa pregunta: se invita a usar las opciones que ya
+      // están en pantalla en vez de buscar «sí» en el corpus y caer en
+      // «sin evidencia».
+      yield {
+        data: {
+          message:
+            'Para continuar, elige uno de los temas que te mostré en los botones o escríbeme el trámite o proceso concreto que quieres consultar.',
+        },
+        type: 'conversational',
+      };
+      return;
+    }
+
+    if (
       !acceptedQuestion &&
       intent.lane === 'social' &&
       intent.subtype === 'catalog' &&

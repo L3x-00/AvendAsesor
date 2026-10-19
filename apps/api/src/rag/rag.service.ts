@@ -1026,6 +1026,42 @@ export class RagService {
       );
     let globalRoutingSources = routingSources(rawGlobalSources);
     let selectedRoutingSources = routingSources(rawSelectedSources);
+    // Una pregunta salarial general suele mezclar documentos de contratación,
+    // CTS y bonificaciones. Si esos fragmentos no contienen la escala general,
+    // se busca además la tabla de remuneraciones con una consulta canónica para
+    // no responder solo con conceptos adicionales.
+    const broadSalaryProfile = salaryQuestionProfile(question);
+    if (
+      !selectedModuleId &&
+      !options.personalSalary &&
+      isBroadSalaryQuestion(question) &&
+      (broadSalaryProfile.role === null ||
+        broadSalaryProfile.role === 'docente') &&
+      !hasGeneralSalaryEvidence(globalRoutingSources, retrievalScope)
+    ) {
+      const salaryQuery =
+        'remuneración íntegra mensual RIM docente escala magisterial nivel inicial primaria secundaria EBR EBE EBA ETP';
+      const [salaryEmbedding] = await this.embeddings.embed(
+        [salaryQuery],
+        INTERACTIVE_AI_LIMITS,
+      );
+      if (salaryEmbedding?.length === 1536) {
+        const salarySources = (
+          await this.gateway.search({
+            ...searchBase,
+            embedding: salaryEmbedding,
+            query: salaryQuery,
+            selectedModuleId: null,
+          })
+        ).filter(
+          (candidate) => candidate.semanticScore >= searchBase.matchThreshold,
+        );
+        globalRoutingSources = routingSources([
+          ...rawGlobalSources,
+          ...salarySources,
+        ]);
+      }
+    }
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {
       // Rescate léxico: si la similitud vectorial no deja ningún candidato,
       // se recuperan los fragmentos con coincidencia de términos de la misma

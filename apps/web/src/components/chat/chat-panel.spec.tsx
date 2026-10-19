@@ -1632,7 +1632,7 @@ describe("ChatPanel", () => {
       .mockImplementationOnce(async () =>
         streamResponse([
           conversationEvent(),
-          `event: clarification\ndata: {"message":"Precisa el tema.","modules":[{"id":"${chatModule.id}","name":"${chatModule.name}"}]}\n\n`,
+          `event: clarification\ndata: {"message":"Precisa el tema.","modules":[{"id":"${childModule.id}","name":"${childModule.name}"}]}\n\n`,
           doneEvent("rule"),
         ]),
       )
@@ -1644,7 +1644,7 @@ describe("ChatPanel", () => {
         ]),
       );
     vi.stubGlobal("fetch", fetchMock);
-    render(<ChatPanel modules={[chatModule]} />);
+    render(<ChatPanel modules={[chatModule, childModule]} />);
 
     await submitQuestion(user);
     expect(await screen.findByText("Precisa el tema.")).toBeVisible();
@@ -1655,18 +1655,25 @@ describe("ChatPanel", () => {
     expect(screen.getByText("Pensado por 1 segundo")).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: "Consultar Licencias" }),
+      screen.getByRole("button", { name: "Consultar Licencia por salud" }),
     );
 
-    // La pregunta original se reenvía sola, en una conversación nueva del tema
-    // elegido: el docente no tiene que reescribirla.
+    // La opción elegida navega al módulo padre y queda escrita en el chat,
+    // conservando detrás la consulta original.
     await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
     expect(
       requestBody(chatCalls(fetchMock)[1] as [RequestInfo, RequestInit]),
     ).toEqual({
+      // El botón del submódulo resuelve el padre y escribe la opción elegida.
       moduleId: chatModule.id,
-      question: "¿Cómo solicito una licencia?",
+      question: "Consultar Licencias: ¿Cómo solicito una licencia?",
     });
+    expect(
+      await screen.findByText(
+        "Consultar Licencias: ¿Cómo solicito una licencia?",
+      ),
+    ).toBeVisible();
+    expect(window.location.pathname).toMatch(/^\/chat\//u);
     expect(
       await screen.findByText("No hay sustento suficiente."),
     ).toBeVisible();
