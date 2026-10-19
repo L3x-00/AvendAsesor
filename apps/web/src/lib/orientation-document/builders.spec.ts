@@ -139,6 +139,65 @@ describe("orientation binary builders", () => {
     expect(() => new SaxesParser().write(documentXml).close()).not.toThrow();
   });
 
+  it("repairs structured salary bullets before building the DOCX table", async () => {
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer: [
+        "La escala es:",
+        "",
+        "- Modalidad: EBR; Nivel: Inicial; Jornada: 30; Remuneración: S/ 3,500.70",
+        "- Modalidad: EBR; Nivel: Primaria; Jornada: 30; Remuneración: S/ 3,500.70",
+        "",
+        "La jornada menor se paga de forma proporcional. [1][2]",
+      ].join("\n"),
+      sources: [
+        { ...content.sources[0]!, documentVersionId: "version-1" },
+        {
+          ...content.sources[0]!,
+          documentVersionId: "version-1",
+          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+      ],
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Remuneración");
+    expect(documentXml).not.toContain("Modalidad: EBR;");
+    expect(documentXml.match(/\[1\]/gu)).toHaveLength(1);
+    expect(documentXml).not.toContain("[2]");
+  });
+
+  it("preserves cited ranks when the export uses different documents", async () => {
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer:
+        "Dato del primer documento. [2]\n\nDato del segundo documento. [3]",
+      sources: [
+        { ...content.sources[0]!, documentVersionId: "version-a" },
+        {
+          ...content.sources[0]!,
+          documentVersionId: "version-a",
+          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+        {
+          ...content.sources[0]!,
+          documentTitle: "Reglamento de la Ley de Reforma Magisterial",
+          documentVersionId: "version-b",
+          id: "7c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 3,
+        },
+      ],
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    // Cada rango aparece en el cuerpo y en su entrada de «Fuentes consultadas».
+    expect(documentXml.match(/\[2\]/gu)).toHaveLength(2);
+    expect(documentXml.match(/\[3\]/gu)).toHaveLength(2);
+  });
+
   it("renders a Markdown salary table as a grid in the PDF", async () => {
     const binary = await buildOrientationPdf({
       ...content,
@@ -149,7 +208,18 @@ describe("orientation binary builders", () => {
         "| --- | --- | --- | --- |",
         "| EBR | Inicial | 30 | S/ 3,300.60 |",
         "| EBR | Primaria | 30 | S/ 3,300.60 |",
+        "",
+        "La jornada menor se paga de forma proporcional. [1][2]",
       ].join("\n"),
+      sources: [
+        { ...content.sources[0]!, documentVersionId: "version-1" },
+        {
+          ...content.sources[0]!,
+          documentVersionId: "version-1",
+          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+      ],
     });
     const parser = new PDFParse({ data: binary });
     const extracted = await parser.getText();
@@ -158,7 +228,9 @@ describe("orientation binary builders", () => {
     expect(extracted.text).toContain("Modalidad");
     expect(extracted.text).toContain("Inicial");
     expect(extracted.text).toContain("3,300.60");
-  });
+    expect(extracted.text.match(/\[1\]/gu)).toHaveLength(1);
+    expect(extracted.text).not.toContain("[2]");
+  }, 30_000);
 
   it("creates a parseable A4 PDF and preserves Latin Extended plus emoji", async () => {
     const binary = await buildOrientationPdf({

@@ -65,9 +65,9 @@ describe("singleCitedSource", () => {
     expect(singleCitedSource("Uno [1].", sources)?.rank).toBe(1);
   });
 
-  it("ignora citas sin fuente y no inventa una cuando no hay ninguna conocida", () => {
+  it("no consolida si alguna cita carece de una fuente conocida", () => {
     const sources = [source(1, versionA)];
-    expect(singleCitedSource("Uno [1, 9].", sources)?.rank).toBe(1);
+    expect(singleCitedSource("Uno [1, 9].", sources)).toBeUndefined();
     expect(singleCitedSource("Uno [9].", sources)).toBeUndefined();
     expect(singleCitedSource("Sin citas.", sources)).toBeUndefined();
   });

@@ -1,8 +1,17 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
-import { ORIENTATION_FIELD_LIMITS, type OrientationContext } from "@/lib/orientation-document/model";
+import {
+  ORIENTATION_FIELD_LIMITS,
+  type OrientationContext,
+} from "@/lib/orientation-document/model";
 import { OrientationPreview } from "./orientation-preview";
 
 const context: OrientationContext = {
@@ -68,7 +77,13 @@ describe("OrientationPreview", () => {
       }),
     ).toBeVisible();
     expect(screen.getByText(context.question)).toBeVisible();
-    expect(screen.getByText(context.answer)).toBeVisible();
+    expect(
+      screen.getByText("La solicitud se presenta por mesa de partes."),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
+      "href",
+      `#fuente-${context.messageId}-1`,
+    );
     expect(screen.getByDisplayValue("María Pérez")).toBeVisible();
     expect(
       screen.getAllByText(/No constituye un acto administrativo/i),
@@ -77,6 +92,77 @@ describe("OrientationPreview", () => {
     expect(
       screen.getByRole("link", { name: "Volver a la conversación" }),
     ).toHaveAttribute("href", `/chat/${context.conversationId}`);
+  });
+
+  it("muestra como tabla la escala salarial recibida en viñetas y consolida su fuente", () => {
+    const salaryContext: OrientationContext = {
+      ...context,
+      answer: [
+        "La remuneración varía según la modalidad:",
+        "",
+        "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+        "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+        "",
+        "La jornada menor se paga de forma proporcional. [1]",
+      ].join("\n"),
+      question: "¿Cuánto gana un docente?",
+    };
+
+    render(
+      <OrientationPreview
+        context={salaryContext}
+        initialTeacherName="María Pérez"
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: /4 columnas .* y 2 filas/u,
+    });
+    expect(
+      within(table).getByRole("columnheader", { name: "Nivel / Ciclo" }),
+    ).toBeVisible();
+    expect(within(table).getAllByText("3 500,70")).toHaveLength(2);
+    expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
+    expect(screen.getByText("Fuente:")).toBeVisible();
+    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
+      "href",
+      `#fuente-${salaryContext.messageId}-1`,
+    );
+  });
+
+  it("mantiene cada cita junto a su párrafo cuando proviene de documentos distintos", () => {
+    const secondSource = {
+      ...context.sources[0]!,
+      documentTitle: "Reglamento de la Ley de Reforma Magisterial",
+      id: "7c8b56af-6d0c-4fef-881e-7c00907540dd",
+      rank: 2,
+    };
+    const citedContext: OrientationContext = {
+      ...context,
+      answer: [
+        "La solicitud se presenta por mesa de partes. [1]",
+        "",
+        "El reglamento precisa la documentación. [2]",
+      ].join("\n"),
+      sources: [context.sources[0]!, secondSource],
+    };
+
+    render(
+      <OrientationPreview
+        context={citedContext}
+        initialTeacherName="María Pérez"
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
+      "href",
+      `#fuente-${citedContext.messageId}-1`,
+    );
+    expect(screen.getByRole("link", { name: "[2]" })).toHaveAttribute(
+      "href",
+      `#fuente-${citedContext.messageId}-2`,
+    );
+    expect(screen.queryByText("Fuente:")).not.toBeInTheDocument();
   });
 
   it("previews optional fields as text and never interprets them as HTML", () => {
@@ -174,13 +260,29 @@ describe("OrientationPreview", () => {
 
   it("identifies every oversized optional field and clears each error when corrected", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetch).mockResolvedValue(new Response(new Blob(["PK-binary"]), { status: 200 }));
-    render(<OrientationPreview context={context} initialTeacherName="María Pérez" />);
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Blob(["PK-binary"]), { status: 200 }),
+    );
+    render(
+      <OrientationPreview context={context} initialTeacherName="María Pérez" />,
+    );
     const fields = [
-      [screen.getByLabelText("Nombre del docente"), ORIENTATION_FIELD_LIMITS.teacherName],
-      [screen.getByLabelText("Institución educativa"), ORIENTATION_FIELD_LIMITS.institution],
-      [screen.getByLabelText("Título del caso"), ORIENTATION_FIELD_LIMITS.caseTitle],
-      [screen.getByLabelText("Notas del caso"), ORIENTATION_FIELD_LIMITS.caseNotes],
+      [
+        screen.getByLabelText("Nombre del docente"),
+        ORIENTATION_FIELD_LIMITS.teacherName,
+      ],
+      [
+        screen.getByLabelText("Institución educativa"),
+        ORIENTATION_FIELD_LIMITS.institution,
+      ],
+      [
+        screen.getByLabelText("Título del caso"),
+        ORIENTATION_FIELD_LIMITS.caseTitle,
+      ],
+      [
+        screen.getByLabelText("Notas del caso"),
+        ORIENTATION_FIELD_LIMITS.caseNotes,
+      ],
     ] as const;
     for (const [field, max] of fields) {
       fireEvent.change(field, { target: { value: "a".repeat(max + 1) } });
@@ -191,7 +293,9 @@ describe("OrientationPreview", () => {
     expect(fetch).not.toHaveBeenCalled();
     for (const [field, max] of fields) {
       expect(field).toHaveAttribute("aria-invalid", "true");
-      expect(field).toHaveAccessibleDescription(new RegExp(`no puede superar ${max} caracteres`));
+      expect(field).toHaveAccessibleDescription(
+        new RegExp(`no puede superar ${max} caracteres`),
+      );
       expect(field).toHaveValue("a".repeat(max + 1));
     }
     await waitFor(() => expect(fields[0][0]).toHaveFocus());
@@ -199,7 +303,9 @@ describe("OrientationPreview", () => {
       fireEvent.change(field, { target: { value: "" } });
       await waitFor(() => expect(field).not.toHaveAttribute("aria-invalid"));
     }
-    expect(fields[3][0]).toHaveAccessibleDescription(/Evita incluir datos personales sensibles/);
+    expect(fields[3][0]).toHaveAccessibleDescription(
+      /Evita incluir datos personales sensibles/,
+    );
     await user.click(screen.getByRole("button", { name: "Descargar DOCX" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
   });
@@ -218,25 +324,42 @@ describe("OrientationPreview", () => {
     vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 200 }));
     const { container } = render(
       <ToastProvider>
-        <OrientationPreview context={context} initialTeacherName="María Pérez" />
+        <OrientationPreview
+          context={context}
+          initialTeacherName="María Pérez"
+        />
       </ToastProvider>,
     );
 
     await user.click(screen.getByRole("button", { name: "Descargar PDF" }));
     expect(fetch).toHaveBeenCalledOnce();
     expect(downloadedNames).toEqual([]);
-    expect(screen.queryByText("La descarga PDF está lista.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Preparando PDF…" })).toBeDisabled();
+    expect(
+      screen.queryByText("La descarga PDF está lista."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Preparando PDF…" }),
+    ).toBeDisabled();
 
     completeFile();
 
-    await waitFor(() => expect(downloadedNames).toEqual(["ficha-orientacion-avend.pdf"]));
-    const toast = container.querySelector<HTMLElement>(".avend-toast--success")!;
+    await waitFor(() =>
+      expect(downloadedNames).toEqual(["ficha-orientacion-avend.pdf"]),
+    );
+    const toast = container.querySelector<HTMLElement>(
+      ".avend-toast--success",
+    )!;
     expect(toast).toBeVisible();
-    expect(within(toast).getByText("La descarga PDF está lista.")).toBeVisible();
-    const feedback = container.querySelector<HTMLElement>(".avend-feedback--success")!;
+    expect(
+      within(toast).getByText("La descarga PDF está lista."),
+    ).toBeVisible();
+    const feedback = container.querySelector<HTMLElement>(
+      ".avend-feedback--success",
+    )!;
     expect(feedback).toHaveAttribute("role", "status");
-    expect(feedback.querySelector('svg[aria-hidden="true"]')).toBeInTheDocument();
+    expect(
+      feedback.querySelector('svg[aria-hidden="true"]'),
+    ).toBeInTheDocument();
   });
 
   it("keeps visible busy feedback while a PDF is being prepared", async () => {
@@ -284,8 +407,12 @@ describe("OrientationPreview", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("alert")).toHaveClass("avend-feedback--error");
-    expect(screen.getByLabelText("Nombre del docente")).toHaveValue("María Pérez");
-    expect(screen.getByLabelText("Título del caso")).toHaveValue("Licencia docente");
+    expect(screen.getByLabelText("Nombre del docente")).toHaveValue(
+      "María Pérez",
+    );
+    expect(screen.getByLabelText("Título del caso")).toHaveValue(
+      "Licencia docente",
+    );
     expect(screen.getByRole("button", { name: "Descargar PDF" })).toBeEnabled();
     expect(downloadedNames).toEqual([]);
   });

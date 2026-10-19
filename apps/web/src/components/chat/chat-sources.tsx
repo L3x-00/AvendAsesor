@@ -86,9 +86,11 @@ export function singleCitedSource(
   content: string,
   sources: readonly ChatSource[],
 ): ChatSource | undefined {
-  const cited = citedSourceRanks(content)
+  const ranks = citedSourceRanks(content);
+  const cited = ranks
     .map((rank) => sources.find((source) => source.rank === rank))
     .filter((source): source is ChatSource => source !== undefined);
+  if (cited.length !== ranks.length) return undefined;
   const [first] = cited;
   if (!first) return undefined;
   // Misma identidad que `uniqueDocuments`: en historiales sin versión cada
@@ -181,12 +183,14 @@ function locationSectionTitle(source: ChatSource): string | null {
   // Implementación…», la referencia jurídica ya aparece en su propia línea.
   // Se conserva solo el nombre del apartado, que es lo que permite ubicar el
   // pasaje sin repetir «Artículo 3» dos veces.
-  const articleReference = source.articleReference?.replace(/\s+/gu, " ").trim();
+  const articleReference = source.articleReference
+    ?.replace(/\s+/gu, " ")
+    .trim();
   if (
     articleReference &&
-    title.toLocaleLowerCase("es").startsWith(
-      articleReference.toLocaleLowerCase("es"),
-    )
+    title
+      .toLocaleLowerCase("es")
+      .startsWith(articleReference.toLocaleLowerCase("es"))
   ) {
     title = title
       .slice(articleReference.length)
@@ -473,9 +477,11 @@ export function ChatSources({
             {isOpen ? "Ocultar fuentes" : "Ver fuentes disponibles"}
           </strong>
           <span>
-            {primary.length} {primary.length === 1 ? "referencia" : "referencias"}
+            {primary.length}{" "}
+            {primary.length === 1 ? "referencia" : "referencias"}
             {" · "}
-            {documents.length} {documents.length === 1 ? "documento" : "documentos"}
+            {documents.length}{" "}
+            {documents.length === 1 ? "documento" : "documentos"}
           </span>
         </span>
         <svg
@@ -489,48 +495,46 @@ export function ChatSources({
       </button>
 
       <div
-  aria-hidden={!isOpen}
-  aria-labelledby={toggleId}
-  className={styles.disclosurePanel}
-  data-open={isOpen ? "true" : "false"}
-  id={contentId}
-  inert={!isOpen}
-  role="region"
->
-  <div className={styles.disclosurePanelInner}>
-    <header className={styles.heading}>
-      <div>
-        <h2>Referencias</h2>
-        <p className={styles.sourceHint}>
-          {hasCitations
-            ? "Toca [1], [2] para ver la fuente."
-            : "Fuentes consultadas."}
-        </p>
+        aria-hidden={!isOpen}
+        aria-labelledby={toggleId}
+        className={styles.disclosurePanel}
+        data-open={isOpen ? "true" : "false"}
+        id={contentId}
+        inert={!isOpen}
+        role="region"
+      >
+        <div className={styles.disclosurePanelInner}>
+          <header className={styles.heading}>
+            <div>
+              <h2>Referencias</h2>
+              <p className={styles.sourceHint}>
+                {hasCitations
+                  ? "Toca [1], [2] para ver la fuente."
+                  : "Fuentes consultadas."}
+              </p>
+            </div>
+          </header>
+
+          <SourceTable
+            caption="Fuentes documentales, ubicación y descarga"
+            messageId={messageId}
+            sources={primary}
+          />
+
+          {others.length ? (
+            <details className={styles.others}>
+              <summary>Otros fragmentos revisados ({others.length})</summary>
+              <SourceTable
+                caption="Fragmentos revisados no citados"
+                messageId={messageId}
+                sources={others}
+              />
+            </details>
+          ) : null}
+
+          <ChatDownloads sources={sources} />
+        </div>
       </div>
-    </header>
-
-    <SourceTable
-      caption="Fuentes documentales, ubicación y descarga"
-      messageId={messageId}
-      sources={primary}
-    />
-
-    {others.length ? (
-      <details className={styles.others}>
-        <summary>
-          Otros fragmentos revisados ({others.length})
-        </summary>
-        <SourceTable
-          caption="Fragmentos revisados no citados"
-          messageId={messageId}
-          sources={others}
-        />
-      </details>
-    ) : null}
-
-    <ChatDownloads sources={sources} />
-  </div>
-</div>
     </section>
   );
 }

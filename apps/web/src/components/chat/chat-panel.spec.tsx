@@ -769,10 +769,7 @@ describe("ChatPanel", () => {
       callback(0);
       return 1;
     });
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn().mockReturnValue({ matches: true }),
-    );
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
     vi.stubGlobal(
       "fetch",
@@ -1169,7 +1166,9 @@ describe("ChatPanel", () => {
     const table = screen.getByRole("table", {
       name: "Tabla de la respuesta 1: 2 columnas (Cargo y Remuneración mensual) y 2 filas.",
     });
-    expect(within(table).getByRole("columnheader", { name: "Cargo" })).toBeVisible();
+    expect(
+      within(table).getByRole("columnheader", { name: "Cargo" }),
+    ).toBeVisible();
     expect(
       within(table).getByRole("columnheader", { name: "Remuneración mensual" }),
     ).toBeVisible();
@@ -1183,14 +1182,48 @@ describe("ChatPanel", () => {
       name: "Ver fuente 1: Norma de licencias",
     });
     expect(source.parentElement).toHaveTextContent("Fuente: [1]");
-    expect(
-      table.closest(".avend-chat-table-block")?.nextElementSibling,
-    ).toBe(source.parentElement);
+    expect(table.closest(".avend-chat-table-block")?.nextElementSibling).toBe(
+      source.parentElement,
+    );
     expect(
       screen.getByRole("region", {
         name: "Tabla de la respuesta 1. Desplázate horizontalmente si es necesario.",
       }),
     ).toHaveAttribute("tabindex", "0");
+  });
+
+  it("repairs structured salary bullets as a table in a persisted chat", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: [
+                "La remuneración varía según la modalidad:",
+                "",
+                "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+                "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+                "",
+                "La jornada menor se paga proporcionalmente. [1]",
+              ].join("\n"),
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: /4 columnas .* y 2 filas/u,
+    });
+    expect(within(table).getAllByText("3 500,70")).toHaveLength(2);
+    expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
+    expect(
+      table.closest(".avend-chat-table-block")?.nextElementSibling,
+    ).toHaveTextContent("Fuente: [1]");
   });
 
   it("renders a one-row table when its immediately following evidence sentence cites the source", () => {
@@ -1272,7 +1305,9 @@ describe("ChatPanel", () => {
     const rowHeaders = within(table).getAllByRole("rowheader");
     expect(rowHeaders).toHaveLength(9);
     expect(rowHeaders[1]).toHaveTextContent("Educación Básica Regular - EBR");
-    expect(rowHeaders[6]).toHaveTextContent("Educación Básica Alternativa - EBA");
+    expect(rowHeaders[6]).toHaveTextContent(
+      "Educación Básica Alternativa - EBA",
+    );
     // Solo la columna de montos se alinea a la derecha (sin separador explícito).
     expect(
       within(table).getByRole("columnheader", {
@@ -1286,7 +1321,9 @@ describe("ChatPanel", () => {
     expect(table).toHaveTextContent("4,400.80");
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
     expect(
-      screen.getByText("Los docentes contratados perciben una remuneración proporcional."),
+      screen.getByText(
+        "Los docentes contratados perciben una remuneración proporcional.",
+      ),
     ).toBeVisible();
   });
 
@@ -1311,7 +1348,9 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
     expect(
-      screen.getByText("Cargo: Docente coordinador; Jornada: 30; Remuneración: S/ 2 666,80"),
+      screen.getByText(
+        "Cargo: Docente coordinador; Jornada: 30; Remuneración: S/ 2 666,80",
+      ),
     ).toBeVisible();
     expect(
       screen.getByText("Cargo: Director encargado; Remuneración: S/ 3 000,00"),
@@ -1382,7 +1421,8 @@ describe("ChatPanel", () => {
             eligibleConversation.messages[0],
             {
               ...eligibleConversation.messages[1],
-              content: "El tramo A | B es una referencia literal del documento. [1]",
+              content:
+                "El tramo A | B es una referencia literal del documento. [1]",
             },
           ],
         }}
@@ -1391,7 +1431,9 @@ describe("ChatPanel", () => {
     );
 
     expect(
-      screen.getByText("El tramo A | B es una referencia literal del documento."),
+      screen.getByText(
+        "El tramo A | B es una referencia literal del documento.",
+      ),
     ).toBeVisible();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
@@ -1417,7 +1459,7 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("normalizes old grouped citations and omits unknown sources", () => {
+  it("keeps the known citation beside its paragraph when a grouped rank is unknown", () => {
     render(
       <ChatPanel
         initialConversation={{
@@ -1437,15 +1479,15 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("link", { name: "Ver fuente 1: Norma de licencias" }),
     ).toBeVisible();
-    // La fuente 2 no existe en esta respuesta: se omite, y la 1 se muestra una
-    // sola vez como fuente de la respuesta.
-    const note = screen
+    // La fuente 2 no existe: se omite sin convertir la fuente 1 en una cita
+    // global que podría atribuirle otras afirmaciones.
+    const paragraph = screen
       .getByRole("link", { name: "Ver fuente 1: Norma de licencias" })
       .closest("p");
-    expect(note?.textContent).toBe("Fuente: [1]");
-    expect(
-      screen.getByText("La licencia se solicita dentro de 5 días."),
-    ).toBeVisible();
+    expect(paragraph).toHaveTextContent(
+      "La licencia se solicita dentro de 5 días [1].",
+    );
+    expect(screen.queryByText("Fuente:")).not.toBeInTheDocument();
   });
 
   describe("cita única de la respuesta", () => {
@@ -1469,7 +1511,7 @@ describe("ChatPanel", () => {
                 sources: sources.map((source) => ({
                   ...baseSource,
                   ...source,
-                })) as typeof eligibleConversation.messages[1]["sources"],
+                })) as (typeof eligibleConversation.messages)[1]["sources"],
               },
             ],
           }}
@@ -1507,7 +1549,11 @@ describe("ChatPanel", () => {
     it("agrupa en una cita varios fragmentos del mismo documento", () => {
       renderAnswer("Primer dato. [1]\n\nSegundo dato. [2]", [
         { documentVersionId, rank: 1 },
-        { documentVersionId, id: "1c8b56af-6d0c-4fef-881e-7c00907540dd", rank: 2 },
+        {
+          documentVersionId,
+          id: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
       ]);
 
       const links = screen.getAllByRole("link", { name: /Ver fuente/u });
@@ -1542,9 +1588,9 @@ describe("ChatPanel", () => {
         .getByText("Un dato respaldado.")
         .closest(".avend-chat-message-content");
       expect(answer?.querySelectorAll(".avend-chat-paragraph")).toHaveLength(1);
-      expect(screen.getAllByRole("link", { name: /Ver fuente 1/u })).toHaveLength(
-        1,
-      );
+      expect(
+        screen.getAllByRole("link", { name: /Ver fuente 1/u }),
+      ).toHaveLength(1);
     });
 
     it("coloca la fuente bajo la última tabla, antes de la frase de cierre", () => {
@@ -1579,9 +1625,7 @@ describe("ChatPanel", () => {
         sameDocument,
       );
 
-      expect(
-        screen.getByRole("columnheader", { name: "Cita" }),
-      ).toBeVisible();
+      expect(screen.getByRole("columnheader", { name: "Cita" })).toBeVisible();
       // Sus citas siguen visibles: la celda no queda vacía.
       expect(
         within(screen.getByRole("table")).getByRole("link", {
@@ -1844,11 +1888,7 @@ describe("ChatPanel", () => {
     expect(
       await screen.findByText("No hay sustento suficiente."),
     ).toBeVisible();
-    expect(
-      screen.getByText(
-        "Respuesta lista.",
-      ),
-    ).toBeVisible();
+    expect(screen.getByText("Respuesta lista.")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Referencias" })).toBeNull();
   });
 
@@ -1869,7 +1909,9 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("note")).toHaveTextContent(
       "Hay información nueva.",
     );
-    await user.click(screen.getByRole("button", { name: "Volver a preguntar" }));
+    await user.click(
+      screen.getByRole("button", { name: "Volver a preguntar" }),
+    );
     const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
     expect(box).toHaveValue("¿Qué requisitos corresponden?");
     expect(box).toHaveFocus();
@@ -1911,7 +1953,9 @@ describe("ChatPanel", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Volver a preguntar" }));
+    await user.click(
+      screen.getByRole("button", { name: "Volver a preguntar" }),
+    );
     await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
 
     await waitFor(() =>
@@ -1986,9 +2030,7 @@ describe("ChatPanel", () => {
               },
             ],
             message: "¡Claro! Hoy puedo responderte con este documento.",
-            suggestions: [
-              "¿Qué funciones tiene el Coordinador Pedagógico?",
-            ],
+            suggestions: ["¿Qué funciones tiene el Coordinador Pedagógico?"],
           })}\n\n`,
         ]),
       ),

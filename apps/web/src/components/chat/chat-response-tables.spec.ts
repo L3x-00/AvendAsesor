@@ -8,19 +8,82 @@ import {
   markdownTableRowsAsText,
   markdownTablesToPlainText,
   singleRowTableHasAdjacentKnownCitation,
+  STRUCTURED_SALARY_MARKER,
+  structuredSalaryRowsToMarkdown,
   tableRowsCiteKnownSources,
   withoutCitationColumns,
 } from "./chat-response-tables";
+
+describe("structuredSalaryRowsToMarkdown", () => {
+  it("convierte la respuesta salarial real de diez viñetas en una tabla", () => {
+    const answer = [
+      "La remuneración varía según la modalidad:",
+      "",
+      "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Secundaria; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Especial – EBE; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Especial – EBE; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Alternativa – EBA; Nivel / Ciclo: Inicial / Intermedio; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Básica Alternativa – EBA; Nivel / Ciclo: Avanzado; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Educación Técnico Productiva – ETP; Nivel / Ciclo: Básico y Medio; Jornada laboral: 30; Remuneración mensual (S/): 3 500,70",
+      "- Modalidad / Forma: Profesor Coordinador (PRONOEI); Remuneración mensual (S/): 4 667,60",
+      "- Modalidad / Forma: Docente Coordinador (ONDEC/ODEC); Remuneración mensual (S/): 4 667,60",
+      "",
+      "Los docentes con una jornada menor reciben un monto proporcional. [1][2][3][4][5]",
+    ].join("\n");
+
+    const formatted = structuredSalaryRowsToMarkdown(answer);
+
+    expect(formatted).toContain(
+      "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |",
+    );
+    expect(formatted).toContain(
+      "| Profesor Coordinador (PRONOEI) | — | — | 4 667,60 |",
+    );
+    expect(formatted).not.toContain("- Modalidad / Forma:");
+    expect(formatted).toContain("[1][2][3][4][5]");
+  });
+
+  it("no asigna la primera cita del bloque a ninguna fila", () => {
+    const answer = [
+      "- Modalidad: EBR; Nivel: Inicial; Remuneración: S/ 3 500,70",
+      "- Modalidad: EBE; Nivel: Primaria; Remuneración: S/ 3 500,70",
+      "",
+      "Fuentes: [1][2]",
+    ].join("\n");
+
+    const formatted = structuredSalaryRowsToMarkdown(answer);
+
+    expect(formatted).toContain("| EBR | Inicial | S/ 3 500,70 |");
+    expect(formatted).not.toContain("S/ 3 500,70 [1] |");
+  });
+
+  it("no convierte una lista ordinaria que no es una escala", () => {
+    const answer = [
+      "- Documento: Solicitud; Presentación: Mesa de partes",
+      "- Documento: Certificado; Presentación: Plataforma",
+    ].join("\n");
+
+    expect(structuredSalaryRowsToMarkdown(answer)).toBe(answer);
+  });
+
+  it("deja intacto de forma atómica un bloque que supera doce filas", () => {
+    const answer = Array.from(
+      { length: 13 },
+      (_, index) =>
+        `- Modalidad: EBR; Nivel: ${index + 1}; Remuneración: S/ 3 500,70`,
+    ).join("\n");
+
+    expect(structuredSalaryRowsToMarkdown(answer)).toBe(answer);
+  });
+});
 
 describe("markdownTableAt", () => {
   it("accepts a compact table with a valid separator", () => {
     expect(
       markdownTableAt(
-        [
-          "| Escala | Monto |",
-          "| --- | ---: |",
-          "| Primera | S/ 3 300,00 |",
-        ],
+        ["| Escala | Monto |", "| --- | ---: |", "| Primera | S/ 3 300,00 |"],
         0,
       ),
     ).toEqual({
@@ -200,6 +263,19 @@ describe("classifyTableAt", () => {
     expect(classifyTableAt(mixed, 0, [1])?.asGrid).toBe(false);
     expect(classifyTableAt(foreign, 0, [1])?.asGrid).toBe(false);
     expect(classifyTableAt(cited, 0, [])?.asGrid).toBe(false);
+  });
+
+  it("admite una cita de bloque solo cuando la interfaz ya comprobó un documento único", () => {
+    const uncited = [
+      ...header,
+      "| A | 1 |",
+      "| B | 2 |",
+      STRUCTURED_SALARY_MARKER,
+    ];
+
+    expect(classifyTableAt(uncited, 0, [1])?.asGrid).toBe(false);
+    expect(classifyTableAt(uncited, 0, [1], 1)?.asGrid).toBe(true);
+    expect(classifyTableAt(uncited, 0, [1], 2)?.asGrid).toBe(false);
   });
 
   it("acepta exactamente seis columnas y doce filas como grilla", () => {
