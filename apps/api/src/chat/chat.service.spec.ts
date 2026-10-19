@@ -1244,6 +1244,53 @@ describe('ChatService', () => {
     );
   });
 
+  it('convierte las filas salariales en tabla aunque el modelo use viñetas', async () => {
+    const tableSource = {
+      ...source,
+      chunkContent: [
+        '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
+        '| --- | --- | --- | --- |',
+        '| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 |',
+        '| Educación Básica Regular – EBR | Primaria | 30 | 3,500.70 |',
+      ].join('\n'),
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [tableSource],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield [
+          'La remuneración varía según la modalidad:',
+          '',
+          '- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3,500.70',
+          '- Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3,500.70',
+          '',
+          'Fuente: [1]',
+        ].join('\n');
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un docente?',
+    });
+
+    const token = events.find((event) => event.type === 'token');
+    expect(token?.data.text).toContain(
+      '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
+    );
+    expect(token?.data.text).not.toContain('- Modalidad / Forma:');
+    const completion = (
+      historyGateway.completeTurn.mock.calls as Array<
+        [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+      >
+    )[0]?.[0];
+    expect(completion?.answer).toContain('| Nivel / Ciclo |');
+  });
+
   it('no convierte una negativa del modelo en «sin evidencia» si hay salario general', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
