@@ -126,6 +126,7 @@ proveedor está activo (`openrouter`, `openai` o `none`) sin exponer las claves
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | No | Segundos de *lease* al reclamar un trabajo de ingesta (`ingestion.service.ts`). Entero de 30 a 900. |
 | `RAG_MATCH_THRESHOLD` | No | `0.5` (`RAG_DEFAULT_MATCH_THRESHOLD`, `apps/api/src/rag/rag.constants.ts`) | No | Similitud coseno mínima (0 a 1) para aceptar un fragmento como evidencia. `0.5` es el valor calibrado con el corpus real. No volver a `0.7`: con ese valor casi toda consulta real queda sin evidencia. |
 | `RAG_MATCH_COUNT` | No | `5` | No | Máximo de fuentes por respuesta. Cada búsqueda pide `min(10, 2 × valor)` candidatos (`rag.service.ts`). Entero de 1 a 10. |
+| `RAG_MINERU_SIDECAR_ENABLED` | No | `true` | No | Si es `false`, el worker de ingesta no busca el Markdown enriquecido de MinerU junto al PDF y usa siempre la extracción PDF. Si es `true`, un sidecar válido aporta páginas y tablas; si falta o es inválido, se ignora sin romper la ingesta. Ver `docs/architecture/MINERU_PDF_TABLAS.md`. |
 
 Nombres de modelo: los valores por defecto del código (`gpt-4o-mini` y
 `text-embedding-3-small`) son nombres de OpenAI directo. Con OpenRouter activo,

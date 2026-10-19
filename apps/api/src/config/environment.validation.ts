@@ -43,6 +43,10 @@ const environmentSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     RAG_MATCH_COUNT: z.coerce.number().int().min(1).max(10).default(5),
+    RAG_MINERU_SIDECAR_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
     RAG_MATCH_THRESHOLD: z.coerce
       .number()
       .min(0)

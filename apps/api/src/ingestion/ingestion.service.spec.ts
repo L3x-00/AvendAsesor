@@ -35,6 +35,7 @@ function createGateway(): jest.Mocked<IngestionGateway> {
     claimNext: jest.fn(),
     clearChunks: jest.fn(),
     complete: jest.fn(),
+    downloadOptionalObject: jest.fn().mockResolvedValue(null),
     downloadPdf: jest.fn(),
     fail: jest.fn(),
     insertChunks: jest.fn(),
@@ -49,6 +50,7 @@ describe('IngestionService', () => {
   let docx: { extract: jest.Mock };
   let ocr: { withWorker: jest.Mock };
   let chunking: { chunk: jest.Mock };
+  let mineru: { extract: jest.Mock };
   let service: IngestionService;
 
   beforeEach(() => {
@@ -59,6 +61,7 @@ describe('IngestionService', () => {
     docx = { extract: jest.fn() };
     ocr = { withWorker: jest.fn() };
     chunking = { chunk: jest.fn() };
+    mineru = { extract: jest.fn() };
     service = new IngestionService(
       gateway,
       embeddings,
@@ -66,6 +69,7 @@ describe('IngestionService', () => {
       docx,
       ocr,
       chunking as never,
+      mineru,
       { get: jest.fn().mockReturnValue(300) } as never,
     );
   });
@@ -87,6 +91,7 @@ describe('IngestionService', () => {
       docx,
       ocr,
       chunking as never,
+      mineru,
       { get: jest.fn().mockReturnValue(undefined) } as never,
     );
 
@@ -122,6 +127,78 @@ describe('IngestionService', () => {
     expect(insertedChunk.embedding).toHaveLength(1536);
     expect(gateway.refreshLease).toHaveBeenCalledWith(job, 300);
     expect(gateway.complete).toHaveBeenCalledWith(job, 2);
+  });
+
+  it('usa el sidecar MinerU válido antes de extraer el PDF', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    (gateway.downloadOptionalObject as jest.Mock).mockResolvedValue(
+      Buffer.from('<!-- page 1 of 1 -->\n| A | B |\n| --- | --- |\n| 1 | 2 |'),
+    );
+    mineru.extract.mockReturnValue([
+      { pageNumber: 1, text: '| A | B |\n| --- | --- |\n| 1 | 2 |' },
+    ]);
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(service.processNext()).resolves.toBe(true);
+
+    expect(gateway.downloadOptionalObject).toHaveBeenCalledWith(
+      job.storageBucket,
+      `${job.storagePath}.mineru.md`,
+    );
+    expect(mineru.extract).toHaveBeenCalledWith(expect.any(String), 1);
+    expect(pdf.extract).not.toHaveBeenCalled();
+    expect(gateway.complete).toHaveBeenCalledWith(job, 1);
+  });
+
+  it('cae a la extracción PDF si el sidecar MinerU es inválido', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    (gateway.downloadOptionalObject as jest.Mock).mockResolvedValue(
+      Buffer.from('Markdown sin marcadores de página'),
+    );
+    mineru.extract.mockReturnValue(null);
+    pdf.extract.mockResolvedValue([
+      { pageNumber: 1, text: 'Texto suficiente para indexar el PDF.' },
+    ]);
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(service.processNext()).resolves.toBe(true);
+
+    expect(pdf.extract).toHaveBeenCalled();
+    expect(gateway.complete).toHaveBeenCalledWith(job, 1);
+  });
+
+  it('no solicita el sidecar cuando la función está desactivada', async () => {
+    const disabledGateway = createGateway();
+    disabledGateway.claimNext.mockResolvedValue(job);
+    disabledGateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    const disabledService = new IngestionService(
+      disabledGateway,
+      embeddings,
+      pdf,
+      docx,
+      ocr,
+      chunking as never,
+      mineru,
+      {
+        get: jest.fn((key: string) =>
+          key === 'RAG_MINERU_SIDECAR_ENABLED' ? false : 300,
+        ),
+      } as never,
+    );
+    pdf.extract.mockResolvedValue([
+      { pageNumber: 1, text: 'Texto suficiente para indexar el PDF.' },
+    ]);
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
+
+    await expect(disabledService.processNext()).resolves.toBe(true);
+
+    expect(disabledGateway.downloadOptionalObject).not.toHaveBeenCalled();
+    expect(pdf.extract).toHaveBeenCalled();
   });
 
   it('extracts a docx via mammoth without touching the PDF path', async () => {

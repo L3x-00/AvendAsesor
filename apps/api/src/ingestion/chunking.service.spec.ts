@@ -573,4 +573,31 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
       }
     },
   );
+
+  it('conserva una tabla Markdown como una unidad con sus filas', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 7,
+        text: [
+          'La escala remunerativa vigente es la siguiente:',
+          '',
+          '| Nivel | Remuneración |',
+          '| --- | --- |',
+          '| Inicial | S/ 3 300,60 |',
+          '| Primaria | S/ 3 300,60 |',
+          '| Secundaria | S/ 3 300,60 |',
+          '',
+          'La tabla se aplica al personal nombrado.',
+        ].join('\n'),
+      },
+    ]);
+
+    const table = chunks.find((chunk) =>
+      chunk.chunkContent.includes('| Nivel | Remuneración |'),
+    );
+    expect(table?.chunkContent).toContain(
+      '| Inicial | S/ 3 300,60 |\n| Primaria | S/ 3 300,60 |\n| Secundaria | S/ 3 300,60 |',
+    );
+    expect(table).toMatchObject({ pageStart: 7, pageEnd: 7 });
+  });
 });

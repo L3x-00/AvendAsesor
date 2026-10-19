@@ -16,6 +16,7 @@ import type {
   IngestionGateway,
 } from './ingestion.gateway';
 import { EMBEDDINGS_GATEWAY } from './ingestion.tokens';
+import { MineruMarkdownService } from './mineru-markdown.service';
 import { OcrService } from './ocr.service';
 import { PdfExtractionService } from './pdf-extraction.service';
 
@@ -29,6 +30,13 @@ const OCR_RENDER_BATCH = 5;
  * colgado.
  */
 export const MAX_JOB_DURATION_MS = 45 * 60_000;
+/**
+ * Sidecar Markdown producido por MinerU. Se guarda junto al PDF con el sufijo
+ * `.mineru.md` y solo aporta texto/páginas; el PDF sigue siendo la fuente
+ * canónica para citas y para el visor.
+ */
+export const MINERU_SIDECAR_SUFFIX = '.mineru.md';
+const MAX_MINERU_SIDECAR_BYTES = 8 * 1024 * 1024;
 
 @Injectable()
 export class IngestionService {
@@ -43,6 +51,7 @@ export class IngestionService {
     private readonly docx: DocxExtractionService,
     private readonly ocr: OcrService,
     private readonly chunking: ChunkingService,
+    private readonly mineru: MineruMarkdownService,
     private readonly config: ConfigService,
   ) {}
 
@@ -182,6 +191,47 @@ export class IngestionService {
     );
   }
 
+  /**
+   * El sidecar es opcional y no confiable: si no existe, está deshabilitado,
+   * excede el tope o no trae marcadores de página válidos, se ignora sin
+   * afectar el trabajo. Nunca reemplaza al PDF como fuente de la cita.
+   */
+  private async extractMineruSidecar(
+    job: ClaimedIngestionJob,
+    signal: AbortSignal,
+  ): Promise<ExtractedPage[] | null> {
+    if (this.config.get<boolean>('RAG_MINERU_SIDECAR_ENABLED') === false) {
+      return null;
+    }
+    if (!this.gateway.downloadOptionalObject) return null;
+    try {
+      const sidecar = await this.gateway.downloadOptionalObject(
+        job.storageBucket,
+        `${job.storagePath}${MINERU_SIDECAR_SUFFIX}`,
+      );
+      signal.throwIfAborted();
+      if (!sidecar?.length || sidecar.length > MAX_MINERU_SIDECAR_BYTES) {
+        return null;
+      }
+      const pages = this.mineru.extract(
+        sidecar.toString('utf8'),
+        job.pageCount,
+      );
+      if (!pages) {
+        this.logger.warn(
+          `MinerU sidecar inválido para el job ${job.jobId}; se usa la extracción PDF.`,
+        );
+      }
+      return pages;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      this.logger.warn(
+        `No se pudo leer el MinerU sidecar del job ${job.jobId}; se usa la extracción PDF.`,
+      );
+      return null;
+    }
+  }
+
   private async extractPages(
     format: IngestionFormat,
     file: Buffer,
@@ -208,6 +258,13 @@ export class IngestionService {
       // en vez de intentar parsearlo como PDF y fallar de forma opaca.
       throw new Error('INGESTION_UNSUPPORTED_FORMAT');
     }
+
+    // MinerU no se ejecuta dentro de la API (el runtime de Render no tiene sus
+    // modelos ni memoria para ellos). Si un operador ya convirtió el PDF, el
+    // Markdown sidecar aporta tablas y estructura por página; si falta o es
+    // inválido, se conserva exactamente la extracción PDF anterior.
+    const mineruPages = await this.extractMineruSidecar(job, signal);
+    if (mineruPages) return mineruPages;
 
     // PDF: extracción por página + OCR local de páginas casi vacías, con guardas
     // de memoria para Render Free (512 MB): tope de páginas, lotes de render y un

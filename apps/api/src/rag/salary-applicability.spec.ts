@@ -2,7 +2,11 @@ import type { RetrievedChunk } from './retrieval.gateway';
 import {
   assessSalaryAnswerCoverage,
   canonicalAmount,
+  hasGeneralSalaryEvidence,
+  hasPersonalSalaryContext,
+  isBroadSalaryQuestion,
   isGeneralRemunerationSource,
+  isPersonalSalaryQuestion,
   isSalarySourceCompatible,
   isSpecialAllocationSource,
   salaryApplicabilityTier,
@@ -158,8 +162,24 @@ describe('salaryQuestionProfile', () => {
     '¿Cuál es la finalidad del instructivo de pagos que menciona S/ 3300,60?',
   ])('conserva los controles ante un pedido salarial: %s', (question) => {
     expect(salaryQuestionProfile(question).isSalaryQuestion).toBe(true);
+    // El pedido salarial se conserva y filtra las fuentes por sus factores.
+    // Una consulta general ya no se reemplaza por una aclaración; una que
+    // pregunta por el propio caso puede seguir pidiendo el dato decisivo.
+    if (isBroadSalaryQuestion(question)) {
+      expect(
+        salaryClarificationFor(question, [general30, general40]),
+      ).toBeNull();
+    } else {
+      expect(isPersonalSalaryQuestion(question)).toBe(true);
+    }
+  });
+
+  it('mantiene la aclaración para una pregunta por el propio sueldo', () => {
     expect(
-      salaryClarificationFor(question, [general30, general40])?.factor,
+      salaryClarificationFor('¿Cuánto gano yo como profesor?', [
+        general30,
+        general40,
+      ])?.factor,
     ).toBe('jornada');
   });
 
@@ -645,6 +665,300 @@ describe('withInheritedSalaryFactors', () => {
   });
 });
 
+describe('intención personal de una consulta salarial', () => {
+  it.each([
+    '¿Cuánto ganó un docente en 2024?',
+    '¿Cuánto ganaría un docente?',
+    '¿Cuánto gana un docente de 30 horas de trabajo?',
+  ])('no marca como personal «%s»', (question) => {
+    expect(isPersonalSalaryQuestion(question)).toBe(false);
+  });
+
+  it.each([
+    '¿Cuánto gano yo como docente?',
+    '¿Cuál es mi remuneración?',
+    'Trabajo como docente, ¿cuál es mi sueldo?',
+  ])('reconoce la primera persona en «%s»', (question) => {
+    expect(
+      isPersonalSalaryQuestion(question) ||
+        hasPersonalSalaryContext(question, []),
+    ).toBe(true);
+  });
+
+  it('reconoce «Soy nombrado» cuando el hilo ya era salarial', () => {
+    expect(
+      hasPersonalSalaryContext('Soy nombrado', ['¿Cuánto gana un docente?']),
+    ).toBe(true);
+  });
+
+  it('conserva la intención personal de la consulta que abrió el hilo', () => {
+    expect(
+      hasPersonalSalaryContext('Nombrado', ['¿Cuánto gano yo como docente?']),
+    ).toBe(true);
+    expect(
+      hasPersonalSalaryContext('Nombrado', ['¿Cuánto gana un docente?']),
+    ).toBe(true);
+  });
+
+  it('no hereda la intención personal en una pregunta general nueva', () => {
+    for (const question of [
+      '¿Cuánto gana un director?',
+      '¿Cuánto se gana en el sector público?',
+      '¿Cuánto gana el personal nombrado?',
+    ]) {
+      expect(
+        hasPersonalSalaryContext(question, ['¿Cuánto gano yo como docente?']),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('hasGeneralSalaryEvidence', () => {
+  it('exige una fuente vigente en el alcance actual y acepta la histórica cuando se pide', () => {
+    const historical = chunk({
+      chunkContent:
+        'La remuneración mensual del docente en 2018 era de S/ 2 000,00.',
+      documentSituation: 'replaced',
+    });
+    expect(hasGeneralSalaryEvidence([historical], 'current')).toBe(false);
+    expect(hasGeneralSalaryEvidence([historical], 'historical')).toBe(true);
+    expect(
+      hasGeneralSalaryEvidence(
+        [
+          chunk({
+            chunkContent:
+              'La remuneración mensual del docente es de S/ 3 300,60.',
+            documentSituation: 'current',
+          }),
+        ],
+        'historical',
+      ),
+    ).toBe(false);
+    expect(hasGeneralSalaryEvidence([historical], 'archived_explicit')).toBe(
+      false,
+    );
+  });
+});
+
+describe('tablas salariales multicondición', () => {
+  const table = chunk({
+    chunkContent: [
+      '| Jornada | Remuneración |',
+      '| --- | --- |',
+      '| 30 horas | S/ 3 300,60 |',
+      '| 40 horas | S/ 4 400,80 |',
+    ].join('\n'),
+  });
+
+  it('lee la jornada del encabezado y no aplica una fila de otra jornada', () => {
+    expect(
+      isSalarySourceCompatible('¿Cuánto gana un profesor de 20 horas?', table),
+    ).toBe(false);
+    expect(
+      isSalarySourceCompatible('¿Cuánto gana un profesor de 40 horas?', table),
+    ).toBe(true);
+  });
+
+  it('pide la jornada cuando la tabla contiene dos filas válidas', () => {
+    expect(
+      salaryClarificationFor('¿Cuánto gano yo como profesor?', [table])?.factor,
+    ).toBe('jornada');
+  });
+
+  it('detecta un importe atribuido a la fila de otra jornada', () => {
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración es S/ 4 400,80. [1]',
+        [table],
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración es S/ 3 300,60. [1]',
+        [table],
+      ),
+    ).toBeNull();
+  });
+
+  it('detecta una tabla de respuesta con el encabezado capitalizado', () => {
+    expect(
+      assessSalaryAnswerCoverage(
+        [
+          '| Jornada | Remuneración |',
+          '| --- | --- |',
+          '| 30 horas | S/ 4 400,80 [1] |',
+        ].join('\n'),
+        [table],
+      ),
+    ).not.toBeNull();
+  });
+
+  it('valida una tabla del modelo aunque la fuente sea texto plano', () => {
+    const flat = chunk({
+      chunkContent:
+        'La remuneración del docente con jornada de 30 horas es de S/ 3 300,60. La remuneración con jornada de 40 horas es de S/ 4 400,80.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        [
+          '| Jornada | Remuneración |',
+          '| --- | --- |',
+          '| 30 horas | S/ 4 400,80 [1] |',
+        ].join('\n'),
+        [flat],
+      ),
+    ).not.toBeNull();
+  });
+
+  it('valida una respuesta plana contra una fuente plana con dos jornadas', () => {
+    const flat = chunk({
+      chunkContent:
+        'La remuneración del docente con jornada de 30 horas es de S/ 3 300,60. La remuneración con jornada de 40 horas es de S/ 4 400,80.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración mensual es S/ 4 400,80. [1]',
+        [flat],
+        '¿Cuánto gano como docente de 30 horas?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'La remuneración mensual es S/ 4 400,80. [1]',
+        [flat],
+        '¿Cuánto gano como docente de 30 horas?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración mensual es S/ 3 300,60. [1]',
+        [flat],
+        '¿Cuánto gano como docente de 30 horas?',
+      ),
+    ).toBeNull();
+  });
+
+  it('valida el cargo cuando la tabla lo declara y la pregunta lo precisa', () => {
+    const cargoTable = chunk({
+      chunkContent: [
+        '| Cargo | Remuneración |',
+        '| --- | --- |',
+        '| Director | S/ 5 000,00 |',
+        '| Docente | S/ 3 000,00 |',
+      ].join('\n'),
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El docente gana S/ 5 000,00. [1]',
+        [cargoTable],
+        '¿Cuánto gana un director?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'El director gana S/ 5 000,00. [1]',
+        [cargoTable],
+        '¿Cuánto gana un director?',
+      ),
+    ).toBeNull();
+  });
+
+  it('exige el cargo de la pregunta docente si la fuente distingue cargos', () => {
+    const cargoTable = chunk({
+      chunkContent: [
+        '| Cargo | Remuneración |',
+        '| --- | --- |',
+        '| Director | S/ 5 000,00 |',
+        '| Docente | S/ 3 000,00 |',
+      ].join('\n'),
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'La remuneración mensual es S/ 5 000,00. [1]',
+        [cargoTable],
+        '¿Cuánto gana un docente?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'La remuneración mensual es S/ 3 000,00. [1]',
+        [cargoTable],
+        '¿Cuánto gana un docente?',
+      ),
+    ).toBeNull();
+  });
+
+  it('no aplica factores de la pregunta a una asignación especial', () => {
+    const allocationTable = chunk({
+      chunkContent: [
+        '| Concepto | Monto |',
+        '| --- | --- |',
+        '| Asignación por jornada | S/ 500,00 |',
+        '| Remuneración mensual | S/ 3 000,00 |',
+      ].join('\n'),
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'La asignación es S/ 500,00. [1]',
+        [allocationTable],
+        '¿Cuánto es la asignación por jornada de 30 horas?',
+      ),
+    ).toBeNull();
+  });
+
+  it('exige todos los factores de la pregunta aunque la respuesta declare uno', () => {
+    const twoFactorTable = chunk({
+      chunkContent: [
+        '| Jornada | Vínculo | Remuneración |',
+        '| --- | --- | --- |',
+        '| 30 horas | nombrado | S/ 3 300,60 |',
+        '| 30 horas | contratado | S/ 2 400,40 |',
+      ].join('\n'),
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración es S/ 2 400,40. [1]',
+        [twoFactorTable],
+        '¿Cuánto gano yo como docente nombrado de 30 horas?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para 30 horas, la remuneración es S/ 3 300,60. [1]',
+        [twoFactorTable],
+        '¿Cuánto gano yo como docente nombrado de 30 horas?',
+      ),
+    ).toBeNull();
+  });
+
+  it('lee y valida la escala con dos puntos en una tabla', () => {
+    const scaleTable = chunk({
+      chunkContent: [
+        '| Escala | Remuneración |',
+        '| --- | --- |',
+        '| 1 | S/ 3 300,60 |',
+        '| 2 | S/ 4 400,80 |',
+      ].join('\n'),
+    });
+    expect(
+      isSalarySourceCompatible(
+        '¿Cuánto gana un docente de escala 2?',
+        scaleTable,
+      ),
+    ).toBe(true);
+    expect(
+      salaryClarificationFor('¿Cuánto gano yo como docente?', [scaleTable])
+        ?.factor,
+    ).toBe('escala');
+    expect(
+      assessSalaryAnswerCoverage(
+        'Para la escala 1, la remuneración es S/ 4 400,80. [1]',
+        [scaleTable],
+      ),
+    ).not.toBeNull();
+  });
+});
+
 describe('salaryClarificationFor', () => {
   // Requisito 5: un monto histórico no compite con el vigente.
   it('no pide precisión cuando hay un monto general vigente aunque exista un antecedente', () => {
@@ -665,18 +979,16 @@ describe('salaryClarificationFor', () => {
     ).toBeNull();
   });
 
-  // Requisito 11 del punto 3: se pide solo el dato que cambia la respuesta.
-  it('pide la jornada cuando dos montos generales vigentes difieren por ella', () => {
-    const clarification = salaryClarificationFor('¿Cuánto gana un profesor?', [
-      general30,
-      general40,
-    ]);
-
-    expect(clarification?.factor).toBe('jornada');
-    expect(clarification?.message).toContain(
-      '¿tu jornada es de 30 o de 40 horas?',
-    );
-    expect(clarification?.message).not.toContain('Encontré');
+  // Decisión del Product Owner (2026-10-18): una consulta general sobre
+  // remuneración docente se responde con el panorama y sus condiciones; no se
+  // reemplaza por una pregunta que retrase la información.
+  it('no bloquea una consulta general aunque dos montos difieran por jornada', () => {
+    expect(
+      salaryClarificationFor('¿Cuánto gana un profesor?', [
+        general30,
+        general40,
+      ]),
+    ).toBeNull();
   });
 
   it('no pide precisión si la consulta ya declara la jornada', () => {
@@ -688,7 +1000,7 @@ describe('salaryClarificationFor', () => {
     ).toBeNull();
   });
 
-  it('pide el vínculo cuando los montos difieren entre nombrado y contratado', () => {
+  it('no bloquea una consulta general aunque los montos difieran por vínculo', () => {
     const named = chunk({
       chunkContent:
         'La remuneración mensual del docente nombrado es de S/ 3 300,60.',
@@ -702,13 +1014,22 @@ describe('salaryClarificationFor', () => {
       documentVersionId: 'version-contratado',
     });
 
+    expect(
+      salaryClarificationFor('¿Cuál es la remuneración del profesor?', [
+        named,
+        hired,
+      ]),
+    ).toBeNull();
+  });
+
+  it('mantiene la precisión cuando la persona pregunta por su propio caso', () => {
     const clarification = salaryClarificationFor(
-      '¿Cuál es la remuneración del profesor?',
-      [named, hired],
+      '¿Cuánto gano yo como profesor?',
+      [general30, general40],
     );
 
-    expect(clarification?.factor).toBe('condicion');
-    expect(clarification?.message).toContain('nombrado');
+    expect(clarification?.factor).toBe('jornada');
+    expect(clarification?.message).toContain('¿tu jornada es de 30 o de 40');
   });
 
   it('no pide precisión cuando solo hay una cifra comparable', () => {
@@ -814,7 +1135,7 @@ describe('salaryClarificationFor', () => {
 
     for (const [first, second] of variants) {
       const clarification = salaryClarificationFor(
-        '¿Cuánto gana un profesor?',
+        '¿Cuánto gano yo como profesor?',
         [
           chunk({
             chunkContent: first,
@@ -968,10 +1289,10 @@ describe('salaryClarificationFor', () => {
       documentVersionId: 'version-jornada-40-fuera',
     });
 
-    const clarification = salaryClarificationFor('¿Cuánto gana un profesor?', [
-      jornada30,
-      jornada40,
-    ]);
+    const clarification = salaryClarificationFor(
+      '¿Cuánto gano yo como profesor?',
+      [jornada30, jornada40],
+    );
 
     expect(clarification?.factor).toBe('jornada');
     expect(clarification?.message).toContain('¿tu jornada es de 30 o de 40');
@@ -1017,7 +1338,7 @@ describe('salaryClarificationFor', () => {
     });
 
     const clarification = salaryClarificationFor(
-      '¿Cuál es la remuneración del profesor?',
+      '¿Cuál es mi remuneración como profesor?',
       [named, hired],
     );
 

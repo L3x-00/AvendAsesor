@@ -500,7 +500,7 @@ describe('ChatService + RagService integration', () => {
 
     it('explica tres réplicas y luego responde la jornada elegida en la misma conversación', async () => {
       await collect(service, {
-        question: '¿Cuál es la remuneración del profesor nombrado?',
+        question: '¿Cuál es mi remuneración como profesor nombrado?',
       });
       const conversationId = history.completions[0].conversationId;
       expect(history.completions[0].replyRole).toBe('clarification');
@@ -546,7 +546,7 @@ describe('ChatService + RagService integration', () => {
           ?.messages.filter((message) => message.role === 'user')
           .map((message) => message.content),
       ).toEqual([
-        '¿Cuál es la remuneración del profesor nombrado?',
+        '¿Cuál es mi remuneración como profesor nombrado?',
         'que tiene que ver la horanda?',
         'pero que tiene que ver la jornada? no entiendo',
         '¿Qué tiene que ver la jornada de 30 o 40 horas?',
@@ -556,7 +556,7 @@ describe('ChatService + RagService integration', () => {
 
     it('no toma las alternativas de una duda como jornada declarada al aportar otro factor', async () => {
       await collect(service, {
-        question: '¿Cuál es la remuneración del profesor?',
+        question: '¿Cuál es mi remuneración como profesor?',
       });
       const conversationId = history.completions[0].conversationId;
       await collect(service, {
@@ -684,20 +684,18 @@ describe('ChatService + RagService integration', () => {
       'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y cuánto gana un profesor?',
       'Según la RSG 121-2018-MINEDU, ¿cuál es la finalidad del instructivo de pagos y el sueldo que recibe un profesor?',
     ])(
-      'mantiene la aclaración que decide entre cifras: %s',
+      'responde con el panorama en vez de bloquear por el vínculo: %s',
       async (question) => {
         const events = await collect(service, { question });
 
-        const clarification = events.find(
-          (event) => event.type === 'clarification',
+        expect(events.some((event) => event.type === 'clarification')).toBe(
+          false,
         );
-        expect(clarification?.data.message).toContain('vínculo');
-        expect(answers.inputs).toHaveLength(0);
-        expect(history.completions[0]).toMatchObject({
-          replyRole: 'clarification',
-          sources: [],
-          unansweredReason: 'ambiguous_request',
-        });
+        expect(answers.inputs).toHaveLength(1);
+        expect(answers.inputs[0].sources.length).toBeGreaterThan(0);
+        expect(history.completions[0].replyRole).toBe('assistant');
+        expect(history.completions[0].unansweredReason).toBeNull();
+        expect(history.completions[0].sources.length).toBeGreaterThan(0);
       },
     );
   });

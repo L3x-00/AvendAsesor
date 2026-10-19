@@ -32,6 +32,15 @@ export interface IngestionGateway {
     verifiedPdfPageCount: number | null,
   ): Promise<void>;
   downloadPdf(storageBucket: string, storagePath: string): Promise<Buffer>;
+  /**
+   * Descarga un artefacto opcional de enriquecimiento (por ejemplo, el Markdown
+   * de MinerU). Devuelve `null` si no existe o no está disponible: el llamador
+   * debe continuar con la extracción normal del PDF.
+   */
+  downloadOptionalObject?(
+    storageBucket: string,
+    storagePath: string,
+  ): Promise<Buffer | null>;
   fail(
     job: ClaimedIngestionJob,
     errorCode: string,

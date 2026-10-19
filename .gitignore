@@ -13,5 +13,8 @@ Thumbs.db
 
 .vercel
 
+# Entorno local de MinerU (herramienta de preprocesamiento, no runtime).
+.mineru/
+
 # Local, DPAPI-protected credentials used only by the production QA pilot.
 infrastructure/qa/.local/

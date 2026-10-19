@@ -121,6 +121,12 @@ function structuralLocation(content: string): StructuralLocation {
   };
 }
 
+interface ChunkBlock {
+  content: string;
+  /** Bloque de tabla Markdown: conserva filas y separadores. */
+  table: boolean;
+}
+
 interface ChunkUnit {
   articleReference?: string;
   content: string;
@@ -218,6 +224,52 @@ export class ChunkingService {
     };
   }
 
+  /**
+   * Separa el texto de una página en párrafos y tablas. Una tabla Markdown es
+   * una sola unidad (no se parte por sus saltos de línea): así el troceo no la
+   * aplana en una línea y el modelo puede citar cada fila. El resto conserva el
+   * corte anterior por líneas en blanco o doble espacio tras un punto.
+   */
+  private pageBlocks(text: string): ChunkBlock[] {
+    const blocks: ChunkBlock[] = [];
+    let paragraph: string[] = [];
+    let table: string[] = [];
+    const flushParagraph = () => {
+      const raw = paragraph.join('\n').trim();
+      if (!raw) return;
+      for (const piece of raw.split(/(?<=\.)\s{2,}/u)) {
+        const content = piece.trim();
+        if (content) blocks.push({ content, table: false });
+      }
+      paragraph = [];
+    };
+    const flushTable = () => {
+      if (!table.length) return;
+      blocks.push({
+        content: table.map((line) => normalizeParagraph(line)).join('\n'),
+        table: true,
+      });
+      table = [];
+    };
+
+    for (const line of text.replace(/\r\n?/gu, '\n').split('\n')) {
+      if (/^\s*\|.*\|\s*$/u.test(line)) {
+        flushParagraph();
+        table.push(line);
+        continue;
+      }
+      flushTable();
+      if (!line.trim()) {
+        flushParagraph();
+        continue;
+      }
+      paragraph.push(line);
+    }
+    flushTable();
+    flushParagraph();
+    return blocks;
+  }
+
   chunk(pages: ExtractedPage[]): TextChunk[] {
     const chunks: TextChunk[] = [];
     let units: ChunkUnit[] = [];
@@ -266,8 +318,10 @@ export class ChunkingService {
     };
 
     for (const page of pages) {
-      for (const raw of page.text.split(/\n{2,}|(?<=\.)\s{2,}/)) {
-        const content = normalizeParagraph(raw);
+      for (const block of this.pageBlocks(page.text)) {
+        const content = block.table
+          ? block.content
+          : normalizeParagraph(block.content);
         if (!content) continue;
         const location = structuralLocation(content);
         const hasFreshBody = units.some(

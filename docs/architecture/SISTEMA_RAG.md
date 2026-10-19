@@ -52,10 +52,19 @@ por defecto (`RAG_INGESTION_WORKER_ENABLED=false`).
 ## Retrieval y decisiones de respuesta
 
 La búsqueda combina similitud vectorial y texto completo. Su umbral inicial es
-configurable y por defecto es `0.70`; el máximo de resultados también está
-acotado. Con un módulo seleccionado, el filtro es duro. Sin selección, si la
-evidencia no comparte un módulo común, el sistema devuelve una aclaración en
-lugar de elegir un tema de manera arbitraria.
+configurable y por defecto es `0.5`; el máximo de resultados también está
+acotado. Si la búsqueda vectorial no deja ningún candidato elegible, se hace un
+rescate léxico con la misma consulta: exige similitud mínima, coincidencia
+léxica real y cobertura de al menos dos términos de contenido (o uno cuando la
+consulta solo tiene uno o dos). Una palabra común aislada no basta para reabrir
+la banda de «sin evidencia». Con un módulo seleccionado, el filtro es duro. Sin
+selección, si la evidencia no comparte un módulo común, el sistema devuelve una
+aclaración en lugar de elegir un tema de manera arbitraria.
+
+Una consulta salarial general («cuánto gana un docente») no se reemplaza por
+una aclaración: si hay montos recuperados, se responde con el panorama y las
+condiciones que cambian la cifra. La aclaración se reserva para el caso propio
+o para cuando la evidencia no permite sustentar ningún monto.
 
 Hay tres resultados mutuamente excluyentes:
 

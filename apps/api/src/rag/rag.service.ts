@@ -9,6 +9,8 @@ import { hasTopicTerm } from './domain-lexicon';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
+  hasGeneralSalaryEvidence,
+  isBroadSalaryQuestion,
   isSalarySourceCompatible,
   salaryApplicabilityTier,
   salaryQuestionProfile,
@@ -192,6 +194,90 @@ function evidenceTokens(content: string): string[] {
     .trim()
     .split(/\s+/u)
     .filter(Boolean);
+}
+
+const LEXICAL_STOP_WORDS = new Set([
+  'aunque',
+  'cual',
+  'cuales',
+  'cuando',
+  'cuanta',
+  'cuantas',
+  'cuanto',
+  'cuantos',
+  'debe',
+  'deben',
+  'debo',
+  'desde',
+  'donde',
+  'esta',
+  'estas',
+  'este',
+  'estos',
+  'hace',
+  'hacer',
+  'hasta',
+  'los',
+  'mas',
+  'menos',
+  'muy',
+  'necesita',
+  'necesito',
+  'para',
+  'pero',
+  'porque',
+  'presentar',
+  'presento',
+  'puede',
+  'pueden',
+  'que',
+  'solicitar',
+  'solicito',
+  'solo',
+  'sobre',
+  'tambien',
+  'tiene',
+  'tienen',
+  'todo',
+  'toda',
+  'todos',
+  'todas',
+  'una',
+  'uno',
+  'unos',
+  'unas',
+]);
+
+function lexicalQueryTerms(text: string): string[] {
+  return [
+    ...new Set(
+      (normalizeSpanishText(text).match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter(
+        (term) => !LEXICAL_STOP_WORDS.has(term),
+      ),
+    ),
+  ];
+}
+
+/**
+ * El rescate léxico no se conforma con una palabra común: exige que el
+ * fragmento cubra al menos dos términos de la consulta (o uno cuando la
+ * consulta solo tiene uno o dos). Sin esta comprobación, una coincidencia
+ * débil podía reabrir la banda de «sin evidencia» que el umbral semántico
+ * acababa de cerrar.
+ */
+function lexicalCoverage(question: string, content: string): boolean {
+  const terms = lexicalQueryTerms(question);
+  if (!terms.length) return false;
+  // Un término corto y genérico («plazo») no basta para reabrir el fail-closed.
+  if (terms.length === 1 && terms[0].length < 7) return false;
+  const words = normalizeSpanishText(content).match(/[\p{L}\p{N}]{3,}/gu) ?? [];
+  const matched = terms.filter((term) => {
+    const prefix = term.slice(0, Math.max(4, term.length - 2));
+    return words.some(
+      (word) => word.startsWith(prefix) || prefix.startsWith(word),
+    );
+  });
+  return matched.length >= (terms.length <= 1 ? 1 : 2);
 }
 
 /**
@@ -623,6 +709,12 @@ export function inheritedFactorQuestions(
   forceContext: boolean,
 ): string[] {
   if (!priorUserQuestions.length) return [];
+  if (
+    !salaryQuestionProfile(question).isSalaryQuestion &&
+    SELF_CONTAINED_NON_SALARY.test(normalizeSpanishText(question))
+  ) {
+    return [];
+  }
   if (!forceContext && !continuesSalaryThread(question)) return [];
   const turns = priorUserQuestions.filter(
     (prior) => !SYNTHETIC_CONTEXT_PREFIX.test(prior),
@@ -649,6 +741,14 @@ const SALARY_FACTOR_TERMS =
  * aclaración que se le hizo a la persona usa esas mismas palabras. Un turno con
  * otro tema propio («licencia por enfermedad») lo interrumpe.
  */
+/**
+ * Pedidos de documentos, requisitos, plazos o pasos que no son salariales. Son
+ * un cambio de aspecto dentro del tema, no una continuación de la cifra: no
+ * deben heredar jornada, vínculo, escala ni año de una consulta salarial.
+ */
+const SELF_CONTAINED_NON_SALARY =
+  /\b(?:documentos?|archivos?|anexos?|expediente|requisitos?|plazos?|pasos?|procedimiento)\b/u;
+
 function continuesSalaryThread(turn: string): boolean {
   // Solo es un factor de la cifra cuando trae su valor («jornada de 30 horas»,
   // «escala magisterial 2»); «¿cuál es la jornada laboral de un auxiliar?» es
@@ -657,6 +757,9 @@ function continuesSalaryThread(turn: string): boolean {
   const declaresFactor =
     profile.jornadaHours !== null || profile.scale !== null;
   const normalized = normalizeSpanishText(turn);
+  if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
+    return false;
+  }
   return (
     !hasTopicTerm(
       declaresFactor
@@ -731,6 +834,8 @@ export class RagService {
        * no herede la jornada o la escala de una consulta anterior.
        */
       salaryContextQuestions?: readonly string[];
+      /** La persona pregunta por su propio caso; no se usa el atajo de panorama. */
+      personalSalary?: boolean;
     } = {},
   ): Promise<RetrievalResult> {
     const directReferences = exactDocumentReferencesIn(question);
@@ -741,18 +846,31 @@ export class RagService {
     // otros temas y se declaraba un falso cambio de tema. Una consulta con tema
     // propio se busca tal cual en la global (que es la que detecta el cambio de
     // tema), y con contexto dentro del módulo de la conversación.
-    const globalUsesContext =
-      hasPrior && (options.forceContext || isEllipticalFollowUp(question));
     // Los factores salariales que declararon los turnos previos siguen
     // vigentes en la respuesta a una aclaración y en un seguimiento.
+    const inheritedFactors = inheritedFactorQuestions(
+      question,
+      options.salaryContextQuestions ?? priorUserQuestions,
+      Boolean(options.forceContext),
+    );
     const salaryQuestion = withInheritedSalaryFactors(
       question,
-      inheritedFactorQuestions(
-        question,
-        options.salaryContextQuestions ?? priorUserQuestions,
-        Boolean(options.forceContext),
-      ),
+      inheritedFactors,
     );
+    // El contexto previo se usa para resolver una elipsis, un deíctico, una
+    // referencia documental o un factor salarial heredado. No se arrastra a una
+    // consulta sustantiva solo porque el turno anterior fuera del mismo chat.
+    const previousDocumentReference =
+      /\b(?:primero?|segundo?|tercero?|anterior(?:es)?|mencionad[oa]s?|descargarl[oa]s?|descargal[oa]s?)\b/u.test(
+        normalizeSpanishText(question),
+      );
+    const globalUsesContext =
+      hasPrior &&
+      (Boolean(options.forceContext) ||
+        isEllipticalFollowUp(question) ||
+        refersBack(question) ||
+        previousDocumentReference ||
+        inheritedFactors.length > 0);
     const contextual = hasPrior
       ? contextualQuery(question, priorUserQuestions)
       : question;
@@ -783,7 +901,10 @@ export class RagService {
       inheritedReferences.length ? contextual : question,
     );
     const globalQuery = globalUsesContext ? contextual : question;
-    const selectedQuery = hasPrior ? contextual : question;
+    // Si la pregunta tiene tema propio y no remite al turno anterior, la
+    // búsqueda del módulo también usa la pregunta sola. Así un tema nuevo no
+    // recibe evidencia del tema anterior solo porque el módulo esté fijado.
+    const selectedQuery = globalUsesContext ? contextual : question;
     const queries =
       // Exact retrieval only consumes the global vector; its module view is
       // derived from those same candidates, without a second vector search.
@@ -891,28 +1012,57 @@ export class RagService {
     // La ruta conserva las asociaciones de todos los documentos pertinentes.
     // La deduplicación interdocumental ocurre solo al armar las fuentes que se
     // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
-    const globalRoutingSources = sourcesWithoutVersionDuplicates(
-      byScoreDescending(
-        sourcesEligibleForQuestion(
-          rawGlobalSources
-            .map(sanitizeRetrievedEvidence)
-            .filter((source): source is RetrievedChunk => Boolean(source)),
-          salaryQuestion,
-          retrievalScope,
+    const routingSources = (sources: RetrievedChunk[]): RetrievedChunk[] =>
+      sourcesWithoutVersionDuplicates(
+        byScoreDescending(
+          sourcesEligibleForQuestion(
+            sources
+              .map(sanitizeRetrievedEvidence)
+              .filter((source): source is RetrievedChunk => Boolean(source)),
+            salaryQuestion,
+            retrievalScope,
+          ),
         ),
-      ),
-    );
-    const selectedRoutingSources = sourcesWithoutVersionDuplicates(
-      byScoreDescending(
-        sourcesEligibleForQuestion(
-          rawSelectedSources
-            .map(sanitizeRetrievedEvidence)
-            .filter((source): source is RetrievedChunk => Boolean(source)),
-          salaryQuestion,
-          retrievalScope,
-        ),
-      ),
-    );
+      );
+    let globalRoutingSources = routingSources(rawGlobalSources);
+    let selectedRoutingSources = routingSources(rawSelectedSources);
+    if (!globalRoutingSources.length && !selectedRoutingSources.length) {
+      // Rescate léxico: si la similitud vectorial no deja ningún candidato,
+      // se recuperan los fragmentos con coincidencia de términos de la misma
+      // consulta. El umbral semántico se relaja solo para esta comprobación y
+      // se exige una coincidencia léxica real y una similitud mínima; si no
+      // hay ninguna, el turno sigue siendo «sin evidencia».
+      const semanticFloor = Math.max(0.45, searchBase.matchThreshold - 0.05);
+      const lexicalSearch = (
+        embedding: number[],
+        query: string,
+        moduleId: string | null,
+      ) =>
+        this.gateway
+          .search({
+            ...searchBase,
+            embedding,
+            matchThreshold: 0,
+            query,
+            selectedModuleId: moduleId,
+          })
+          .then((sources) =>
+            routingSources(
+              sources.filter(
+                (candidate) =>
+                  candidate.lexicalScore > 0 &&
+                  candidate.semanticScore > semanticFloor &&
+                  lexicalCoverage(query, candidate.chunkContent),
+              ),
+            ),
+          );
+      [globalRoutingSources, selectedRoutingSources] = await Promise.all([
+        lexicalSearch(globalEmbedding, globalQuery, null),
+        selectedModuleId
+          ? lexicalSearch(selectedEmbedding, selectedQuery, selectedModuleId)
+          : Promise.resolve([] as RetrievedChunk[]),
+      ]);
+    }
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };
     }
@@ -920,6 +1070,31 @@ export class RagService {
     if (!selectedModuleId) {
       const route = routeSources(globalRoutingSources);
       if (route.kind === 'ambiguous') {
+        // Una consulta salarial general no se convierte en una pregunta por el
+        // caso propio: si hay montos recuperados, se responde con el panorama
+        // y las condiciones que cambian la cifra. La ambigüedad de módulo no
+        // demuestra que las fuentes sean inaplicables. Va antes de elegir un
+        // módulo por mención porque el panorama debe conservar todas las
+        // fuentes salariales pertinentes.
+        if (!options.personalSalary && isBroadSalaryQuestion(question)) {
+          const sources = relevantSources(
+            globalRoutingSources,
+            matchCount,
+            salaryQuestion,
+          );
+          if (
+            sources.length &&
+            hasGeneralSalaryEvidence(sources, retrievalScope)
+          ) {
+            return {
+              kind: 'evidence',
+              resolvedModule: null,
+              sources,
+              topRelevanceScore: topScore(sources),
+            };
+          }
+        }
+
         // Antes de pedir precisión: si la consulta nombra a uno de los módulos
         // en conflicto, ese es el tema real y se responde con su evidencia.
         const namedModule = disambiguateRouteByQuestion(

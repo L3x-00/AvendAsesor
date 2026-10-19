@@ -345,3 +345,27 @@ describe('buildSummaryUserPrompt', () => {
     expect(prompt).not.toContain('[[SIN_SUSTENTO]]');
   });
 });
+
+describe('tablas en el prompt de evidencia', () => {
+  it('conserva las filas de una tabla Markdown para el modelo', () => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Cuánto gana un docente?',
+      [],
+      [
+        {
+          ...source,
+          chunkContent: [
+            '| Jornada | Remuneración |',
+            '| --- | --- |',
+            '| 30 horas | S/ 3 300,60 |',
+            '| 40 horas | S/ 4 400,80 |',
+          ].join('\n'),
+        },
+      ],
+    );
+
+    expect(prompt).toContain(
+      '| Jornada | Remuneración |\n| --- | --- |\n| 30 horas | S/ 3 300,60 |\n| 40 horas | S/ 4 400,80 |',
+    );
+  });
+});
