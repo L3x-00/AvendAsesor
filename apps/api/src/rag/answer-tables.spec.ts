@@ -68,9 +68,9 @@ describe('unsupportedTableRows', () => {
 
   it('ignora una tabla que excede el contrato de columnas', () => {
     const answer = [
-      '| A | B | C | D | E |',
-      '| --- | --- | --- | --- | --- |',
-      '| 1 | 2 | 3 | 4 | 5 |',
+      '| A | B | C | D | E | F | G |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+      '| 1 | 2 | 3 | 4 | 5 | 6 | 7 |',
     ].join('\n');
 
     expect(unsupportedTableRows(answer, 1)).toEqual([]);
@@ -94,21 +94,28 @@ describe('unsupportedTableRows', () => {
     ).toEqual([]);
   });
 
-  // Revisión cruzada: la web rechaza la tabla entera cuando hay una séptima
-  // fila, así que ninguna de sus filas se pinta como grilla; el caso debe
-  // señalarse aunque todas citen una fuente.
+  // Revisión cruzada: la web rechaza la tabla entera cuando hay una fila 13,
+  // así que ninguna de sus filas se pinta como grilla; el caso debe señalarse
+  // aunque todas citen una fuente.
   it('reporta las filas que exceden el tope del contrato', () => {
     const rows = Array.from(
-      { length: 8 },
+      { length: 13 },
       (_value, index) => `| Motivo ${index + 1} | ${index + 1}0 días [1] |`,
     );
     const answer = ['| Motivo | Duración |', '| --- | --- |', ...rows].join(
       '\n',
     );
 
-    expect(unsupportedTableRows(answer, 1)).toEqual([
-      'Motivo 7 70 días [1]',
-      'Motivo 8 80 días [1]',
-    ]);
+    expect(unsupportedTableRows(answer, 1)).toEqual(['Motivo 13 130 días [1]']);
+  });
+
+  it('acepta una escala salarial de nueve filas dentro del nuevo tope', () => {
+    const rows = Array.from(
+      { length: 9 },
+      (_value, index) => `| Nivel ${index + 1} | S/ 3 300,60 [1] |`,
+    );
+    const answer = ['| Nivel | Monto |', '| --- | --- |', ...rows].join('\n');
+
+    expect(unsupportedTableRows(answer, 1)).toEqual([]);
   });
 });

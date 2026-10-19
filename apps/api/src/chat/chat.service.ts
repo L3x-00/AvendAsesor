@@ -24,6 +24,7 @@ import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
 import { normalizeDomainQuery } from '../rag/query-normalization';
+import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import {
   assessSalaryAnswerCoverage,
   hasAmount,
@@ -1727,10 +1728,14 @@ export class ChatService {
     }
 
     // Una respuesta cortada por su extensión se avisa en lenguaje llano en vez
-    // de mostrarse (y guardarse) como si estuviera completa.
-    let finalAnswer = normalizedAnswer;
+    // de mostrarse (y guardarse) como si estuviera completa. En un panorama
+    // salarial, las filas «Campo: valor» se convierten en tabla aunque el
+    // modelo haya ignorado la instrucción de formato.
+    let finalAnswer = salaryProfile.isSalaryQuestion
+      ? formatSalaryBulletsAsTable(normalizedAnswer)
+      : normalizedAnswer;
     const truncated = cutByLength || finishReason === 'length';
-    if (truncated) finalAnswer = `${normalizedAnswer}${truncationNote}`;
+    if (truncated) finalAnswer = `${finalAnswer}${truncationNote}`;
 
     // La validación salarial de una tabla se hace antes de emitir el texto
     // retenido. Si el importe no coincide con su fila, se pide la condición

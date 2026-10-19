@@ -118,6 +118,48 @@ describe("orientation binary builders", () => {
     expect(() => new SaxesParser().write(documentXml).close()).not.toThrow();
   });
 
+  it("renders a Markdown salary table as a real DOCX table", async () => {
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer: [
+        "La escala es:",
+        "",
+        "| Modalidad | Nivel | Jornada | Remuneración |",
+        "| --- | --- | --- | --- |",
+        "| EBR | Inicial | 30 | S/ 3,300.60 |",
+        "| EBR | Primaria | 30 | S/ 3,300.60 |",
+      ].join("\n"),
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Modalidad");
+    expect(documentXml).toContain("S/ 3,300.60");
+    expect(documentXml).not.toContain("| --- |");
+    expect(() => new SaxesParser().write(documentXml).close()).not.toThrow();
+  });
+
+  it("renders a Markdown salary table as a grid in the PDF", async () => {
+    const binary = await buildOrientationPdf({
+      ...content,
+      answer: [
+        "La escala es:",
+        "",
+        "| Modalidad | Nivel | Jornada | Remuneración |",
+        "| --- | --- | --- | --- |",
+        "| EBR | Inicial | 30 | S/ 3,300.60 |",
+        "| EBR | Primaria | 30 | S/ 3,300.60 |",
+      ].join("\n"),
+    });
+    const parser = new PDFParse({ data: binary });
+    const extracted = await parser.getText();
+    await parser.destroy();
+
+    expect(extracted.text).toContain("Modalidad");
+    expect(extracted.text).toContain("Inicial");
+    expect(extracted.text).toContain("3,300.60");
+  });
+
   it("creates a parseable A4 PDF and preserves Latin Extended plus emoji", async () => {
     const binary = await buildOrientationPdf({
       ...content,

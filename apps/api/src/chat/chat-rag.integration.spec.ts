@@ -1165,7 +1165,7 @@ describe('ChatService + RagService integration', () => {
       '| Motivo | Duración |',
       '| --- | --- |',
       ...Array.from(
-        { length: 7 },
+        { length: 13 },
         (_value, index) => `| Motivo ${index + 1} | ${index + 1}0 días [1] |`,
       ),
     ].join('\n');
@@ -1176,7 +1176,7 @@ describe('ChatService + RagService integration', () => {
 
     expect(history.completions[0]?.qualitySignals).toContain('support_partial');
     expect(history.completions[0]?.qualityExcerpts?.support_partial).toContain(
-      'Motivo 7',
+      'Motivo 13',
     );
   });
 });

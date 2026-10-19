@@ -9,7 +9,11 @@ import {
   PageOrientation,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
+  WidthType,
 } from "docx";
 import * as fontkit from "fontkit";
 import PDFDocument from "pdfkit";
@@ -158,6 +162,126 @@ function wordTextParagraphs(text: string): Paragraph[] {
   );
 }
 
+type OrientationBlock =
+  | { kind: "paragraph"; text: string }
+  | { kind: "table"; headers: string[]; rows: string[][] };
+
+const TABLE_SEPARATOR_CELL = /^:?-{3,}:?$/u;
+const MAX_TABLE_COLUMNS = 6;
+const MAX_TABLE_ROWS = 12;
+
+function tableCells(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.includes("|")) return null;
+  const cells = trimmed
+    .replace(/^\|/u, "")
+    .replace(/\|$/u, "")
+    .split("|")
+    .map((cell) => cell.trim());
+  if (
+    cells.length < 2 ||
+    cells.length > MAX_TABLE_COLUMNS ||
+    cells.some((cell) => cell.length === 0)
+  ) {
+    return null;
+  }
+  return cells;
+}
+
+/**
+ * Separa párrafos y tablas Markdown del texto de la respuesta. La ficha debe
+ * reproducir la escala salarial como grilla, no como una línea de barras.
+ */
+function parseOrientationBlocks(text: string): OrientationBlock[] {
+  const lines = sanitizeDocumentText(text).split("\n");
+  const blocks: OrientationBlock[] = [];
+  let paragraph: string[] = [];
+
+  const flushParagraph = () => {
+    const value = paragraph.join("\n").trim();
+    if (value) blocks.push({ kind: "paragraph", text: value });
+    paragraph = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const headers = tableCells(lines[index] ?? "");
+    const separator = tableCells(lines[index + 1] ?? "");
+    if (
+      !headers ||
+      !separator ||
+      separator.length !== headers.length ||
+      !separator.every((cell) => TABLE_SEPARATOR_CELL.test(cell))
+    ) {
+      paragraph.push(lines[index] ?? "");
+      continue;
+    }
+
+    const rows: string[][] = [];
+    let cursor = index + 2;
+    while (cursor < lines.length) {
+      const row = tableCells(lines[cursor] ?? "");
+      if (!row || row.length !== headers.length) break;
+      if (rows.length === MAX_TABLE_ROWS) break;
+      rows.push(row);
+      cursor += 1;
+    }
+    if (!rows.length) {
+      paragraph.push(lines[index] ?? "");
+      continue;
+    }
+
+    flushParagraph();
+    blocks.push({ kind: "table", headers, rows });
+    index = cursor - 1;
+  }
+  flushParagraph();
+  return blocks;
+}
+
+function wordTable(block: Extract<OrientationBlock, { kind: "table" }>): Table {
+  const cell = (value: string, header = false) =>
+    new TableCell({
+      children: [
+        new Paragraph({
+          children: [
+            new TextRun({
+              bold: header,
+              size: 18,
+              text: sanitizeDocumentText(value),
+            }),
+          ],
+          spacing: { after: 0 },
+        }),
+      ],
+      margins: { bottom: 60, left: 80, right: 80, top: 60 },
+      shading: header ? { fill: "E8F1FF" } : undefined,
+    });
+
+  return new Table({
+    rows: [
+      new TableRow({
+        children: block.headers.map((header) => cell(header, true)),
+        tableHeader: true,
+      }),
+      ...block.rows.map(
+        (row) =>
+          new TableRow({
+            children: row.map((value) => cell(value)),
+          }),
+      ),
+    ],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
+
+function wordContentBlocks(text: string): Array<Paragraph | Table> {
+  return parseOrientationBlocks(text).flatMap((block) =>
+    block.kind === "table"
+      ? [wordTable(block)]
+      : wordTextParagraphs(block.text),
+  );
+}
+
 function wordField(label: string, value: string): Paragraph | null {
   if (!value) return null;
   const safeValue = sanitizeDocumentText(value);
@@ -271,7 +395,7 @@ export async function buildOrientationDocx(
             heading: HeadingLevel.HEADING_1,
             spacing: { before: 260, after: 100 },
           }),
-          ...wordTextParagraphs(content.answer),
+          ...wordContentBlocks(content.answer),
           ...(content.caseNotes
             ? [
                 new Paragraph({
@@ -341,6 +465,82 @@ function writePdfBody(document: PDFKit.PDFDocument, text: string): void {
   writePdfText(document, text, "regular", { lineGap: 4 });
 }
 
+function writePdfTable(
+  document: PDFKit.PDFDocument,
+  block: Extract<OrientationBlock, { kind: "table" }>,
+): void {
+  const fontSize = 8.5;
+  const padding = 4;
+  const left = document.page.margins.left;
+  const bottom = document.page.height - document.page.margins.bottom;
+  const availableWidth =
+    document.page.width - document.page.margins.left - document.page.margins.right;
+  const columnWidth = availableWidth / block.headers.length;
+
+  const rowHeight = (cells: string[]): number => {
+    document.font(PDF_FONT_NAMES.latin.regular).fontSize(fontSize);
+    return (
+      Math.min(
+        90,
+        Math.max(
+          ...cells.map((cell) =>
+            document.heightOfString(sanitizeDocumentText(cell), {
+              lineGap: 1,
+              width: columnWidth - padding * 2,
+            }),
+          ),
+        ),
+      ) +
+      padding * 2
+    );
+  };
+
+  const drawRow = (cells: string[], header: boolean): void => {
+    const height = rowHeight(cells);
+    if (document.y + height > bottom) {
+      document.addPage();
+      document.y = document.page.margins.top;
+    }
+    let x = left;
+    const y = document.y;
+    for (const [index, cell] of cells.entries()) {
+      document
+        .rect(x, y, columnWidth, height)
+        .fillAndStroke(header ? "#E8F1FF" : "#FFFFFF", "#B8C4D9");
+      document
+        .font(
+          header ? PDF_FONT_NAMES.latin.bold : PDF_FONT_NAMES.latin.regular,
+        )
+        .fontSize(fontSize)
+        .fillColor("#111827")
+        .text(sanitizeDocumentText(cell), x + padding, y + padding, {
+          ellipsis: true,
+          height: height - padding * 2,
+          lineGap: 1,
+          width: columnWidth - padding * 2,
+        });
+      x += columnWidth;
+      if (index === cells.length - 1) break;
+    }
+    document.y = y + height;
+  };
+
+  document.moveDown(0.25);
+  drawRow(block.headers, true);
+  for (const row of block.rows) drawRow(row, false);
+  document.moveDown(0.6);
+}
+
+function writePdfMarkdownContent(
+  document: PDFKit.PDFDocument,
+  text: string,
+): void {
+  for (const block of parseOrientationBlocks(text)) {
+    if (block.kind === "table") writePdfTable(document, block);
+    else writePdfBody(document, block.text);
+  }
+}
+
 export function buildOrientationPdf(
   content: OrientationDocumentContent,
 ): Promise<Buffer> {
@@ -384,7 +584,7 @@ export function buildOrientationPdf(
     writePdfHeading(document, "Consulta");
     writePdfBody(document, content.question);
     writePdfHeading(document, "Orientación recibida");
-    writePdfBody(document, content.answer);
+    writePdfMarkdownContent(document, content.answer);
 
     if (content.caseNotes) {
       writePdfHeading(document, "Notas del caso");

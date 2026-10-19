@@ -1034,8 +1034,7 @@ export class RagService {
       !options.personalSalary &&
       isBroadSalaryQuestion(question) &&
       (broadSalaryProfile.role === null ||
-        broadSalaryProfile.role === 'docente') &&
-      !hasGeneralSalaryEvidence(globalRoutingSources, retrievalScope)
+        broadSalaryProfile.role === 'docente')
     ) {
       const salaryQuery =
         'remuneración íntegra mensual RIM docente escala magisterial nivel inicial primaria secundaria EBR EBE EBA ETP';
@@ -1045,12 +1044,12 @@ export class RagService {
       );
       if (salaryEmbedding?.length === 1536) {
         const salarySources = (
-          await this.gateway.search({
+          (await this.gateway.search({
             ...searchBase,
             embedding: salaryEmbedding,
             query: salaryQuery,
             selectedModuleId: null,
-          })
+          })) ?? []
         ).filter(
           (candidate) => candidate.semanticScore >= searchBase.matchThreshold,
         );
