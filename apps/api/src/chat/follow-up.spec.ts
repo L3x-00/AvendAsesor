@@ -98,6 +98,14 @@ describe('seguimientos conversacionales', () => {
     expect(pending?.question).toBe('Explícame los requisitos.');
   });
 
+  it('convierte la oferta de requisitos en una pregunta de requisitos', () => {
+    expect(
+      acceptedFollowUpQuestion(
+        '¿Te gustaría saber más sobre los requisitos para ser docente contratado?',
+      ),
+    ).toBe('¿Cuáles son los requisitos para ser docente contratado?');
+  });
+
   it('convierte una oferta de explicación en una petición directa', () => {
     expect(
       acceptedFollowUpQuestion(

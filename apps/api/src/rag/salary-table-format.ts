@@ -21,15 +21,16 @@ interface ParsedRow {
 
 function parseRow(line: string): ParsedRow | null {
   const bullet = BULLET.exec(line);
-  if (!bullet?.[1]) return null;
+  const content = (bullet?.[1] ?? line).trim();
+  if (!content) return null;
   const fields = new Map<string, string>();
-  for (const segment of bullet[1].split(FIELD_SEPARATOR)) {
+  for (const segment of content.split(FIELD_SEPARATOR)) {
     const match = FIELD_PATTERN.exec(segment.trim());
     if (!match?.[1] || !match[2]) continue;
     fields.set(match[1].trim(), match[2].trim());
   }
   if (fields.size < 2) return null;
-  return { fields, raw: bullet[1].trim() };
+  return { fields, raw: content };
 }
 
 function escapeCell(value: string): string {
@@ -60,6 +61,10 @@ export function formatSalaryBulletsAsTable(answer: string): string {
     const rows: ParsedRow[] = [];
     let cursor = index;
     while (cursor < lines.length) {
+      if (!lines[cursor]?.trim()) {
+        cursor += 1;
+        continue;
+      }
       const row = parseRow(lines[cursor] ?? '');
       if (!row) break;
       rows.push(row);

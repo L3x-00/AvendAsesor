@@ -38,6 +38,7 @@ describe('resumen de la conversación', () => {
     'resuma lo que hablamos',
     'resume la sesión',
     'resumen del chat',
+    'resumen de lo hablad',
     'resume lo que conversamos',
     '¿qué hablamos?',
     'Prepárame un resumen.',

@@ -325,6 +325,12 @@ export function acceptedFollowUpQuestion(pendingQuestion: string): string {
   let match = /^¿?\s*te gustar[ií]a saber\s+(.+)\?$/iu.exec(question);
   if (match?.[1]) {
     const rest = withoutQuestionMarks(match[1]);
+    if (/^m[aá]s\s+sobre\s+(?:los\s+)?requisitos?\b/u.test(rest)) {
+      const subject = rest
+        .replace(/^m[aá]s\s+sobre\s+/u, '')
+        .replace(/^requisitos?\b/u, 'los requisitos');
+      return `¿Cuáles son ${subject}?`;
+    }
     if (/^m[aá]s\s+sobre\b/u.test(rest)) {
       return `Dame más información sobre ${toFirstPerson(
         rest.replace(/^m[aá]s\s+sobre\s+/u, ''),
