@@ -130,6 +130,35 @@ describe("OrientationPreview", () => {
     );
   });
 
+  it("mantiene como tabla una escala salarial Markdown con una fuente única", () => {
+    const salaryContext: OrientationContext = {
+      ...context,
+      answer: [
+        "Aquí tienes una tabla informativa. [1]",
+        "",
+        "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |",
+        "| --- | --- | ---: | ---: |",
+        "| Educación Básica Regular – EBR | Inicial | 30 | 3,300.60 |",
+        "| Educación Básica Regular – EBR | Primaria | 30 | 3,300.60 |",
+      ].join("\n"),
+      question: "¿Cuánto gana un docente?",
+    };
+
+    render(
+      <OrientationPreview
+        context={salaryContext}
+        initialTeacherName="María Pérez"
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: /4 columnas .* y 2 filas/u,
+    });
+    expect(within(table).getAllByText("3,300.60")).toHaveLength(2);
+    expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
+    expect(screen.getByText("Fuente:")).toBeVisible();
+  });
+
   it("mantiene cada cita junto a su párrafo cuando proviene de documentos distintos", () => {
     const secondSource = {
       ...context.sources[0]!,

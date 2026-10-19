@@ -278,6 +278,81 @@ describe("classifyTableAt", () => {
     expect(classifyTableAt(uncited, 0, [1], 2)?.asGrid).toBe(false);
   });
 
+  it("conserva como grilla una tabla salarial nativa respaldada por un documento único", () => {
+    const salary = [
+      "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |",
+      "| --- | --- | ---: | ---: |",
+      "| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 |",
+      "| Educación Básica Regular – EBR | Primaria | 30 | 3,500.70 |",
+      "",
+      "Fuente: [1]",
+    ];
+
+    expect(classifyTableAt(salary, 0, [1], 1)?.asGrid).toBe(true);
+    expect(classifyTableAt(salary, 0, [1])?.asGrid).toBe(false);
+    expect(classifyTableAt(salary, 0, [1], 2)?.asGrid).toBe(false);
+  });
+
+  it("no extiende la cita de bloque a una tabla nativa que no es salarial", () => {
+    const ordinary = [
+      "| Documento | Presentación |",
+      "| --- | --- |",
+      "| Solicitud | Mesa de partes |",
+      "| Certificado | Plataforma |",
+      "",
+      "Fuente: [1]",
+    ];
+
+    expect(classifyTableAt(ordinary, 0, [1], 1)?.asGrid).toBe(false);
+  });
+
+  it("no confunde importes contables ni cifras de otra columna con salario", () => {
+    const accounting = [
+      "| Debe | Haber |",
+      "| ---: | ---: |",
+      "| 1,500.00 | 1,500.00 |",
+    ];
+    const unrelatedAmount = [
+      "| Sueldo declarado | Multa (S/) |",
+      "| --- | ---: |",
+      "| No | 3,500.70 |",
+    ];
+
+    expect(classifyTableAt(accounting, 0, [1], 1)?.asGrid).toBe(false);
+    expect(classifyTableAt(unrelatedAmount, 0, [1], 1)?.asGrid).toBe(false);
+  });
+
+  it("reconoce encabezados salariales inequívocos en singular y plural", () => {
+    for (const headerName of [
+      "Remuneración mensual",
+      "Remuneraciones mensuales",
+      "Sueldo",
+      "Sueldos",
+      "Salario",
+      "Salarios",
+    ]) {
+      const table = [
+        `| Nivel | ${headerName} |`,
+        "| --- | ---: |",
+        "| Primaria | S/ 3,500.70 |",
+        "| Secundaria | S/ 3,500.70 |",
+      ];
+
+      expect(classifyTableAt(table, 0, [1], 1)?.asGrid).toBe(true);
+    }
+  });
+
+  it("reconoce un importe entero solo dentro de la columna salarial", () => {
+    const integerSalary = [
+      "| Nivel | Remuneración mensual (S/) |",
+      "| --- | ---: |",
+      "| Primaria | 3500 |",
+      "| Secundaria | 3500 |",
+    ];
+
+    expect(classifyTableAt(integerSalary, 0, [1], 1)?.asGrid).toBe(true);
+  });
+
   it("acepta exactamente seis columnas y doce filas como grilla", () => {
     const names = ["A", "B", "C", "D", "E", "F"];
     const row = (n: number) => `| ${names.map(() => `${n} [1]`).join(" | ")} |`;

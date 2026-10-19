@@ -1226,6 +1226,40 @@ describe("ChatPanel", () => {
     ).toHaveTextContent("Fuente: [1]");
   });
 
+  it("keeps a native salary table as a grid when one document supports the block", () => {
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: [
+                "Aquí tienes una tabla informativa. [1]",
+                "",
+                "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |",
+                "| --- | --- | ---: | ---: |",
+                "| Educación Básica Regular – EBR | Inicial | 30 | 3,300.60 |",
+                "| Educación Básica Regular – EBR | Primaria | 30 | 3,300.60 |",
+              ].join("\n"),
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: /4 columnas .* y 2 filas/u,
+    });
+    expect(within(table).getAllByText("3,300.60")).toHaveLength(2);
+    expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
+    expect(
+      table.closest(".avend-chat-table-block")?.nextElementSibling,
+    ).toHaveTextContent("Fuente: [1]");
+  });
+
   it("renders a one-row table when its immediately following evidence sentence cites the source", () => {
     render(
       <ChatPanel

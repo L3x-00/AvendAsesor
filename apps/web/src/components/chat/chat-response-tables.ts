@@ -40,6 +40,9 @@ const STRUCTURED_FIELD_SEPARATOR = /\s*;\s*/u;
 const STRUCTURED_FIELD = /^([^:;]{2,80}):\s*(.+)$/u;
 const STRUCTURED_SALARY_COLUMN =
   /\b(?:remuneraci[oó]n|monto|sueldo|salario|haber)\b/iu;
+const NATIVE_SALARY_COLUMN =
+  /\b(?:remuneraci[oó]n(?:es)?|sueldos?|salarios?)\b/iu;
+const NATIVE_INTEGER_AMOUNT = /\b\d{3,}\b/u;
 const STRUCTURED_AMOUNT =
   /(?:s\/|\b\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{1,2})?\b|\b\d+[.,]\d{2}\b)/iu;
 const STRUCTURED_BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/u;
@@ -256,12 +259,33 @@ export interface ClassifiedTable {
 }
 
 /**
+ * Una tabla que el propio modelo ya entregó como Markdown no pasa por la
+ * reparación de filas y, por tanto, no lleva el marcador interno. Solo se
+ * reconoce aquí si declara una columna salarial inequívoca y contiene un
+ * importe; «Monto» a secas queda fuera para no extender una cita de bloque a
+ * tablas ordinarias de trámites, presupuestos u otros conceptos.
+ */
+function isNativeSalaryTable(table: MarkdownTableBlock): boolean {
+  const salaryColumns = table.headers
+    .map((header, column) => (NATIVE_SALARY_COLUMN.test(header) ? column : -1))
+    .filter((column) => column >= 0);
+  return salaryColumns.some((column) =>
+    table.rows.some((row) => {
+      const cell = row[column] ?? "";
+      return STRUCTURED_AMOUNT.test(cell) || NATIVE_INTEGER_AMOUNT.test(cell);
+    }),
+  );
+}
+
+/**
  * Decide cómo se presenta la tabla que empieza en `startIndex`. Es la única
  * regla de la pantalla y de «Copiar respuesta», para que ambas coincidan.
  * Es grilla solo si cabe en los topes, no quedó truncada por una celda
  * demasiado larga y cada fila (o la única fila, por la frase contigua) cita una
- * fuente del mensaje. Cualquier otra tabla bien formada se lee por filas en vez
- * de mostrar las barras Markdown unidas en un párrafo.
+ * fuente del mensaje. Una tabla salarial nativa también puede usar la fuente
+ * única ya comprobada por la interfaz, igual que una escala reparada. Cualquier
+ * otra tabla bien formada se lee por filas en vez de mostrar las barras
+ * Markdown unidas en un párrafo.
  */
 export function classifyTableAt(
   lines: readonly string[],
@@ -280,7 +304,8 @@ export function classifyTableAt(
       singleRowTableHasAdjacentKnownCitation(lines, readable, sourceRanks) ||
       (consolidatedSourceRank !== undefined &&
         sourceRanks.includes(consolidatedSourceRank) &&
-        lines[readable.endIndex]?.trim() === STRUCTURED_SALARY_MARKER));
+        (lines[readable.endIndex]?.trim() === STRUCTURED_SALARY_MARKER ||
+          isNativeSalaryTable(readable))));
 
   return { asGrid: fitsGrid && isEvidenced, table: readable };
 }
