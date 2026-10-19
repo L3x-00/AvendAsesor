@@ -36,6 +36,7 @@ import {
   MAX_CHAT_CONTEXT_MESSAGES,
   MAX_RAG_ADVISORY_CHARS,
   MAX_RAG_ANSWER_CHARS,
+  MAX_RAG_SUMMARY_CHARS,
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
   RAG_TOPIC_CLARIFICATION_MESSAGE,
@@ -68,6 +69,7 @@ import type {
   ActiveChatModule,
   ChatCitationInput,
   ChatContextMessage,
+  ChatConversationContext,
   ChatConversationSummary,
   ChatCatalogDocumentDownload,
   ChatHistoryGateway,
@@ -75,6 +77,17 @@ import type {
   DeletedChatConversation,
 } from './chat-history.gateway';
 import { jornadaClarificationExplanation } from './clarification-explanation';
+import { refersBack } from '../rag/anaphora';
+import {
+  buildDeterministicConversationSummary,
+  groundedConversationSummary,
+  isConversationSummaryRequest,
+} from './conversation-summary';
+import {
+  extractPendingFollowUp,
+  hasGenericPendingOffer,
+  isAffirmativeFollowUpAnswer,
+} from './follow-up';
 import {
   decodeChatHistoryCursor,
   encodeChatHistoryCursor,
@@ -112,6 +125,16 @@ function refersToPreviouslyMentionedDocument(question: string): boolean {
       text,
     )
   );
+}
+
+/**
+ * Contexto de una propuesta aceptada: conserva la cabecera (donde suele estar
+ * el número de la norma) y la cola (donde está la propuesta), sin arrastrar
+ * toda la respuesta. El RAG puede así heredar la referencia exacta.
+ */
+function acceptedFollowUpContext(content: string): string {
+  if (content.length <= 2_000) return content;
+  return `${content.slice(0, 800)}\n…\n${content.slice(-1_200)}`;
 }
 
 /** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
@@ -585,6 +608,79 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
 }
 
 /**
+ * Factores salariales que hereda un turno. Una propuesta aceptada solo hereda
+ * si la consulta efectiva sigue siendo salarial o declara un factor de la
+ * cifra; el texto de la propuesta nunca cuenta como declaración de la persona.
+ */
+export function salaryQuestionsForTurn(input: {
+  acceptedQuestion: string | null;
+  effectiveQuestion: string;
+  forceSalaryContext: boolean;
+  priorUserQuestions: readonly string[];
+}): string[] {
+  const profile = salaryQuestionProfile(input.effectiveQuestion);
+  const normalized = normalizeSpanishText(input.effectiveQuestion);
+  const factorFollowUp =
+    /^(?:¿\s*)?(?:y|e|pero|entonces|ademas|tambien|o)\b/u.test(normalized) ||
+    refersBack(input.effectiveQuestion) ||
+    /\b(?:para|en|del?) (?:el |la )?(?:cargo|nivel|escala|condicion|regimen|ano)\b/u.test(
+      normalized,
+    );
+  if (input.acceptedQuestion) {
+    // Una pregunta con tema propio que solo menciona horas (por ejemplo, una
+    // licencia de 40 horas) no es una consulta salarial y no hereda factores.
+    const topicText = normalized.replace(
+      /\b(?:horas?|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
+      ' ',
+    );
+    if (
+      !profile.isSalaryQuestion &&
+      !(factorFollowUp && !hasTopicTerm(topicText))
+    ) {
+      return [];
+    }
+    // Un cambio explícito de cargo no hereda el año, la jornada ni la escala de
+    // la consulta anterior: son factores de otro perfil.
+    const priorSalaryQuestion = [...input.priorUserQuestions]
+      .reverse()
+      .find((prior) => salaryQuestionProfile(prior).isSalaryQuestion);
+    const priorRole = priorSalaryQuestion
+      ? salaryQuestionProfile(priorSalaryQuestion).role
+      : null;
+    if (
+      profile.role !== null &&
+      priorRole !== null &&
+      profile.role !== priorRole
+    ) {
+      return [];
+    }
+    // Una propuesta aceptada solo hereda factores cuando la pregunta efectiva
+    // declara uno de ellos (horas, escala, cargo, condición o año). Una
+    // consulta salarial nueva («¿cuánto gana un director?») no arrastra el año
+    // o la jornada de la consulta anterior.
+    const declaresFactor =
+      profile.jornadaHours !== null ||
+      profile.scale !== null ||
+      profile.asksSpecialAllocation ||
+      (factorFollowUp &&
+        (profile.condition !== null ||
+          profile.role !== null ||
+          profile.year !== null));
+    if (!declaresFactor) return [];
+    return inheritedFactorQuestions(
+      input.effectiveQuestion,
+      input.priorUserQuestions,
+      true,
+    );
+  }
+  return inheritedFactorQuestions(
+    input.effectiveQuestion,
+    input.priorUserQuestions,
+    input.forceSalaryContext,
+  );
+}
+
+/**
  * Mensaje de "sin evidencia" (Hito 3, Fase 9). Amable y sin suposiciones. Cuando
  * la consulta se resolvió con alcance vigente (`current`), invita a revisar
  * antecedentes/versiones anteriores por si la intención era histórica, ya que el
@@ -786,10 +882,94 @@ export class ChatService {
     // «remuneración»). Se usan para entender y buscar; en el historial queda
     // exactamente lo que la persona escribió.
     const question = this.correctedQuestion(input.question);
+
+    // Metapetición sobre la propia conversación: se responde con la memoria de
+    // la sesión y no con el corpus. Sin turno nuevo: es una vista efímera, igual
+    // que el catálogo, y no debe entrar a la cola de consultas sin sustento.
+    if (isConversationSummaryRequest(question)) {
+      yield* this.conversationSummary({
+        abortSignal: input.abortSignal,
+        conversationId: input.conversationId,
+        question,
+        userId: input.authorization.userId,
+      });
+      return;
+    }
+
     const intent = classifyTurnIntent(question, {
       inConversation: Boolean(input.conversationId),
     });
+
+    // «Sí», «claro», «dale»… Antes de responder como charla, se comprueba si la
+    // última respuesta propia dejó una propuesta pendiente. Si existe, la
+    // consulta efectiva es esa propuesta; en el historial queda el «sí» real.
+    let acceptedQuestion: string | null = null;
+    let prefetchedContext: ChatConversationContext | null = null;
+    if (input.conversationId && isAffirmativeFollowUpAnswer(question)) {
+      try {
+        prefetchedContext = this.historyGateway.getConversationSnapshot
+          ? await this.historyGateway.getConversationSnapshot({
+              conversationId: input.conversationId,
+              limit: MAX_CHAT_CONTEXT_MESSAGES,
+              userId: input.authorization.userId,
+            })
+          : await this.historyGateway.getConversationContext({
+              characterLimit: MAX_CHAT_CONTEXT_CHARS,
+              conversationId: input.conversationId,
+              messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
+              userId: input.authorization.userId,
+            });
+        acceptedQuestion =
+          extractPendingFollowUp(prefetchedContext.messages)?.question ?? null;
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo comprobar la propuesta pendiente: ${
+            error instanceof Error ? error.message : 'error desconocido'
+          }`,
+        );
+      }
+    }
+    const acceptedModuleChanged = Boolean(
+      acceptedQuestion &&
+      prefetchedContext &&
+      input.selectedModuleId !== null &&
+      input.selectedModuleId !== prefetchedContext.selectedModuleId,
+    );
+    if (acceptedModuleChanged) {
+      // El usuario cambió de módulo mientras la conversación estaba abierta: su
+      // elección manda y no se reutiliza una propuesta del módulo anterior.
+      acceptedQuestion = null;
+    }
+    const effectiveQuestion = acceptedQuestion ?? question;
+
+    if (acceptedQuestion && isConversationSummaryRequest(acceptedQuestion)) {
+      yield* this.conversationSummary({
+        abortSignal: input.abortSignal,
+        conversationId: input.conversationId,
+        question: acceptedQuestion,
+        userId: input.authorization.userId,
+      });
+      return;
+    }
+
     if (
+      input.conversationId &&
+      !acceptedQuestion &&
+      isAffirmativeFollowUpAnswer(question) &&
+      prefetchedContext &&
+      hasGenericPendingOffer(prefetchedContext.messages)
+    ) {
+      // «¿Necesitas algo más?» / «¿Quieres saber más?»: un «sí» no tiene tema
+      // para el RAG; se responde con calidez y se pide la consulta concreta.
+      yield {
+        data: { message: buildConversationalReply('acknowledgment') },
+        type: 'conversational',
+      };
+      return;
+    }
+
+    if (
+      !acceptedQuestion &&
       intent.lane === 'social' &&
       intent.subtype === 'catalog' &&
       input.selectedModuleId
@@ -804,7 +984,10 @@ export class ChatService {
         return;
       }
     }
-    if (intent.lane === 'social' || intent.lane === 'out_of_scope') {
+    if (
+      !acceptedQuestion &&
+      (intent.lane === 'social' || intent.lane === 'out_of_scope')
+    ) {
       const reply = await this.conversationalReply(
         intent.subtype,
         input.authorization.role,
@@ -828,9 +1011,11 @@ export class ChatService {
     }
 
     // «¿De qué trata la remuneración?»: panorama del tema con sus documentos
-    // y un resumen corto de cada uno, en lugar de buscar una cita puntual.
-    const overview = await this.overviewReply(question, {
-      inConversation: Boolean(input.conversationId),
+    // y un resumen corto de cada uno, en lugar de buscar una cita puntual. Una
+    // propuesta aceptada que pide el panorama usa la misma ruta.
+    const overview = await this.overviewReply(effectiveQuestion, {
+      inConversation:
+        Boolean(input.conversationId) || Boolean(acceptedQuestion),
       selectedModuleId: input.selectedModuleId,
     });
     if (overview) {
@@ -838,14 +1023,17 @@ export class ChatService {
       return;
     }
 
-    const faqMemory = this.faqMemoryService.prepare(input.question);
+    const faqMemory = this.faqMemoryService.prepare(
+      acceptedQuestion ?? input.question,
+    );
 
     // Primera consulta sin tema ni módulo elegido: se pide precisar el trámite
     // antes de buscar (tantas interpretaciones como procesos).
     if (
+      !acceptedQuestion &&
       !input.conversationId &&
       !input.selectedModuleId &&
-      isTopiclessQuestion(question)
+      isTopiclessQuestion(effectiveQuestion)
     ) {
       yield* this.askForTopic({
         faqMemory,
@@ -860,14 +1048,15 @@ export class ChatService {
     const explicitTopicChange =
       Boolean(input.conversationId) && announcesNewTopicWithSubject(question);
     const storedContext =
-      input.conversationId && !explicitTopicChange
+      prefetchedContext ??
+      (input.conversationId && !explicitTopicChange
         ? await this.historyGateway.getConversationContext({
             characterLimit: MAX_CHAT_CONTEXT_CHARS,
             conversationId: input.conversationId,
             messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
             userId: input.authorization.userId,
           })
-        : null;
+        : null);
     const manuallyChangedModule = Boolean(
       storedContext &&
       input.selectedModuleId !== null &&
@@ -950,8 +1139,9 @@ export class ChatService {
     // reintento tras un fallo (la segunda pregunta idéntica llegaba con la
     // conversación vacía y el contexto la resolvía como si tuviera tema).
     if (
+      !acceptedQuestion &&
       !selectedModuleId &&
-      isTopiclessQuestion(question) &&
+      isTopiclessQuestion(effectiveQuestion) &&
       !priorUserQuestions.some((prior) =>
         hasTopicTerm(normalizeSpanishText(prior)),
       )
@@ -965,7 +1155,8 @@ export class ChatService {
       return;
     }
     const documentFollowUp =
-      continuesConversation && refersToPreviouslyMentionedDocument(question);
+      continuesConversation &&
+      refersToPreviouslyMentionedDocument(effectiveQuestion);
     const lastDocumentAnswer = documentFollowUp
       ? [...conversationContext]
           .reverse()
@@ -977,38 +1168,75 @@ export class ChatService {
               ),
           )
       : null;
-    const retrievalContext = lastDocumentAnswer
+    // La propuesta aceptada suele usar deícticos («estos cargos»): se entrega
+    // solo su cola (donde está la propuesta) para resolver la referencia sin
+    // arrastrar cifras o factores salariales del resto de la respuesta. Las
+    // consultas salariales previas solo se pasan aparte si el turno sigue
+    // siendo salarial.
+    const acceptedAnswer = acceptedQuestion
+      ? [...conversationContext]
+          .reverse()
+          .find((message) => message.role !== 'user')
+      : null;
+    const retrievalContext = acceptedAnswer
       ? [
-          ...priorUserQuestions,
-          `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
+          `Propuesta aceptada: ${acceptedFollowUpContext(acceptedAnswer.content)}`,
         ]
-      : priorUserQuestions;
+      : lastDocumentAnswer
+        ? [
+            ...priorUserQuestions,
+            `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
+          ]
+        : priorUserQuestions;
     const forceContext =
+      Boolean(acceptedQuestion) ||
       Boolean(lastDocumentAnswer) ||
       conversationContext.at(-1)?.role === 'clarification';
+    // La propuesta aceptada exige contexto para resolver deícticos, pero no es
+    // una declaración salarial: los factores solo se heredan si la consulta
+    // efectiva continúa realmente ese hilo. La misma lista se usa para
+    // recuperar y para redactar, sin que el RAG vuelva a heredar por su cuenta.
+    const forceSalaryContext =
+      Boolean(lastDocumentAnswer) ||
+      conversationContext.at(-1)?.role === 'clarification';
+    const inheritedSalaryQuestions = salaryQuestionsForTurn({
+      acceptedQuestion,
+      effectiveQuestion,
+      forceSalaryContext,
+      priorUserQuestions,
+    });
     const retrieval = await this.ragService.retrieve(
-      question,
+      effectiveQuestion,
       selectedModuleId,
       retrievalContext,
-      { forceContext },
+      {
+        forceContext,
+        ...(acceptedQuestion
+          ? { salaryContextQuestions: inheritedSalaryQuestions }
+          : {}),
+      },
     );
     // La respuesta a una aclaración no repite la consulta salarial: el perfil
     // hereda los factores que la persona ya declaró en los turnos previos.
     const salaryQuestion = withInheritedSalaryFactors(
-      question,
-      inheritedFactorQuestions(question, priorUserQuestions, forceContext),
+      effectiveQuestion,
+      inheritedSalaryQuestions,
     );
 
     if (input.abortSignal?.aborted) return;
 
-    const retrievalScope = detectRetrievalScope(question);
+    const retrievalScope = detectRetrievalScope(effectiveQuestion);
 
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
       conversationContext = [];
-      selectedModuleId = retrieval.resolvedModule.id;
       startedNewConversation = true;
-    } else if (retrieval.kind === 'ambiguous' && selectedModuleId) {
+      selectedModuleId = retrieval.resolvedModule.id;
+    } else if (
+      retrieval.kind === 'ambiguous' &&
+      selectedModuleId &&
+      !acceptedQuestion
+    ) {
       conversationId = null;
       conversationContext = [];
       selectedModuleId = null;
@@ -1028,7 +1256,14 @@ export class ChatService {
 
     const turn = await this.historyGateway.beginTurn({
       conversationId,
-      question: input.question,
+      // Si la propuesta aceptada abre una conversación nueva (cambio de tema),
+      // el turno nuevo guarda la consulta efectiva; un «sí» aislado no tendría
+      // contexto en el historial. Dentro de la misma conversación se conserva
+      // exactamente lo que escribió la persona.
+      question:
+        acceptedQuestion && startedNewConversation
+          ? effectiveQuestion
+          : input.question,
       selectedModuleId,
       userId: input.authorization.userId,
     });
@@ -1063,7 +1298,7 @@ export class ChatService {
     // Corre antes de las aclaraciones: quien pide dónde está el documento no
     // está preguntando un monto ni una causal.
     if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
-      const locationRequest = sourceLocationRequestIn(question, {
+      const locationRequest = sourceLocationRequestIn(effectiveQuestion, {
         inConversation: continuesConversation,
       });
       if (locationRequest) {
@@ -1118,7 +1353,7 @@ export class ChatService {
       const unrelated =
         !input.conversationId &&
         !selectedModuleId &&
-        !hasEducationalSignal(question);
+        !hasEducationalSignal(effectiveQuestion);
       const message = retrieval.incompleteExactReferences?.length
         ? incompleteExactReferencesMessage(retrieval.incompleteExactReferences)
         : retrieval.missingExactReferences?.length
@@ -1143,11 +1378,11 @@ export class ChatService {
       // de sus extractos sea aplicable al caso. No se muestran citas ni fuentes
       // hasta que la persona precise la condición que permite responder.
       const contextualClarification =
-        causalClarificationFor(question, retrieval.sources) ??
+        causalClarificationFor(effectiveQuestion, retrieval.sources) ??
         salaryClarificationFor(salaryQuestion, retrieval.sources);
       const message =
         contextualClarification?.message ??
-        ambiguityMessage(question, retrieval.modules);
+        ambiguityMessage(effectiveQuestion, retrieval.modules);
       if (input.abortSignal?.aborted) return;
       const completed = await this.historyGateway.completeTurn({
         answer: message,
@@ -1187,7 +1422,7 @@ export class ChatService {
     // de responder con un subconjunto como si fuera la regla general.
     if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
       const clarification =
-        causalClarificationFor(question, retrieval.sources) ??
+        causalClarificationFor(effectiveQuestion, retrieval.sources) ??
         salaryClarificationFor(salaryQuestion, retrieval.sources);
       if (clarification) {
         if (input.abortSignal?.aborted) return;
@@ -1272,7 +1507,7 @@ export class ChatService {
       onFinish: (reason) => {
         finishReason = reason;
       },
-      question: input.question,
+      question: acceptedQuestion ?? input.question,
       sources: retrieval.sources,
     })) {
       if (input.abortSignal?.aborted) return;
@@ -1503,6 +1738,131 @@ export class ChatService {
     } catch (error) {
       this.logger.warn(
         `Orientación general no disponible: ${error instanceof Error ? error.message : 'error desconocido'}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * «Resume lo que hablamos»: se responde con la memoria completa de la
+   * conversación (hasta el tope de `get_chat_conversation`), sin recuperar
+   * corpus. Es una respuesta efímera como el catálogo: no crea un turno nuevo
+   * ni una consulta sin sustento. Si el proveedor falla, el resumen
+   * determinista repite solo lo ya guardado.
+   */
+  private async *conversationSummary(input: {
+    abortSignal?: AbortSignal;
+    conversationId: string | null;
+    messages?: ChatContextMessage[];
+    question: string;
+    userId: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    if (!input.conversationId) {
+      yield {
+        data: {
+          message:
+            'Todavía no tenemos una conversación que resumir. Hazme una consulta y, cuando quieras, te resumo lo que hemos hablado.',
+        },
+        type: 'conversational',
+      };
+      return;
+    }
+
+    let messages: ChatContextMessage[] = input.messages ?? [];
+    if (!input.messages) {
+      try {
+        messages = await this.loadConversationMessages(
+          input.conversationId,
+          input.userId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo leer la conversación para resumirla: ${
+            error instanceof Error ? error.message : 'error desconocido'
+          }`,
+        );
+        yield {
+          data: {
+            message:
+              'No pude recuperar el historial de esta conversación en este momento. Inténtalo de nuevo en unos segundos.',
+          },
+          type: 'conversational',
+        };
+        return;
+      }
+    }
+
+    const hasUserMessage = messages.some((message) => message.role === 'user');
+    const summary = hasUserMessage
+      ? await this.generateConversationSummary(
+          input.question,
+          messages,
+          input.abortSignal,
+        )
+      : null;
+    const fallback = buildDeterministicConversationSummary(messages);
+    yield {
+      data: {
+        message: summary ?? fallback,
+      },
+      type: 'conversational',
+    };
+  }
+
+  /**
+   * Historial completo para el resumen. `getConversationMessages` es opcional
+   * para adaptadores antiguos; en ese caso se usa el contexto acotado.
+   */
+  private async loadConversationMessages(
+    conversationId: string,
+    userId: string,
+  ): Promise<ChatContextMessage[]> {
+    if (this.historyGateway.getConversationMessages) {
+      return this.historyGateway.getConversationMessages({
+        conversationId,
+        limit: CHAT_CONVERSATION_MESSAGE_LIMIT,
+        userId,
+      });
+    }
+    const context = await this.historyGateway.getConversationContext({
+      characterLimit: MAX_CHAT_CONTEXT_CHARS,
+      conversationId,
+      messageLimit: MAX_CHAT_CONTEXT_MESSAGES,
+      userId,
+    });
+    return context.messages;
+  }
+
+  /** Resumen generado y comprobado; `null` activa el respaldo determinista. */
+  private async generateConversationSummary(
+    question: string,
+    messages: ChatContextMessage[],
+    abortSignal?: AbortSignal,
+  ): Promise<string | null> {
+    try {
+      let summary = '';
+      let finishReason: string | null = null;
+      for await (const token of this.answerGateway.generate({
+        abortSignal,
+        conversationContext: messages,
+        mode: 'summary',
+        onFinish: (reason) => {
+          finishReason = reason;
+        },
+        question,
+        sources: [],
+      })) {
+        if (abortSignal?.aborted) return null;
+        if (summary.length < MAX_RAG_SUMMARY_CHARS + 500) summary += token;
+      }
+      // Un resumen cortado por tokens no se presenta como completo.
+      if (finishReason === 'length') return null;
+      return groundedConversationSummary(summary, messages);
+    } catch (error) {
+      this.logger.warn(
+        `Resumen de la conversación no disponible: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
       );
       return null;
     }

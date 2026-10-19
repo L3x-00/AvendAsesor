@@ -15,6 +15,12 @@ export const MAX_RAG_ANSWER_TOKENS = 1_500;
 /** Orientación general (modo asesor): breve y acotada. */
 export const MAX_RAG_ADVISORY_TOKENS = 600;
 export const MAX_RAG_ADVISORY_CHARS = 4_000;
+/** Resumen de la conversación: solo repite lo hablado, sin añadir hechos. */
+export const MAX_RAG_SUMMARY_TOKENS = 700;
+export const MAX_RAG_SUMMARY_CHARS = 8_000;
+/** Presupuesto del historial completo que recibe el modo resumen. */
+export const MAX_SUMMARY_CONTEXT_CHARS = 24_000;
+export const MAX_SUMMARY_MESSAGE_CHARS = 2_000;
 /**
  * El modelo abre con esta marca una respuesta amable a un pedido ajeno al
  * ámbito o que busca información interna; el texto que sigue se muestra.

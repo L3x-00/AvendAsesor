@@ -1,17 +1,20 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { AuthorizationContext } from '../authorization';
 import {
+  MAX_CHAT_CONTEXT_MESSAGES,
   MAX_RAG_ANSWER_CHARS,
   RAG_NO_EVIDENCE_MESSAGE,
 } from '../rag/rag.constants';
 import {
   ChatService,
+  CHAT_CONVERSATION_MESSAGE_LIMIT,
   RAG_TRUNCATION_NOTE,
   evaluateAnswerCitationQuality,
   evaluateAnswerCitationQualityDetails,
   incompleteExactReferencesMessage,
   missingExactReferencesMessage,
   noEvidenceMessage,
+  salaryQuestionsForTurn,
   type ChatStreamEvent,
 } from './chat.service';
 import type { ChatHistoryGateway } from './chat-history.gateway';
@@ -698,6 +701,590 @@ describe('ChatService', () => {
     expect(historyGateway.getConversationContext).not.toHaveBeenCalled();
     expect(historyGateway.beginTurn).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('acepta con «sí» la propuesta pendiente y la busca como consulta', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente contratado?', role: 'user' },
+        {
+          content:
+            'La remuneración es S/ 3,500.70. [1]\n\nSugerencias: ¿Te gustaría saber qué documentos debes presentar para acceder a estos cargos?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los documentos exigidos son el DNI y el título profesional. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Qué documentos debo presentar para acceder a estos cargos?',
+      null,
+      [expect.stringContaining('Propuesta aceptada:')],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: '¿Qué documentos debo presentar para acceder a estos cargos?',
+        sources: [source],
+      }),
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ question: 'sí' }),
+    );
+    expect(historyGateway.getConversationContext).toHaveBeenCalledTimes(1);
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
+  });
+
+  it('hereda factores salariales si la propuesta aceptada sigue siendo salarial', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente de 30 horas?', role: 'user' },
+        {
+          content:
+            'La remuneración es S/ 3,500.70. [1]\n\nSugerencias: ¿Quieres saber cuánto ganas con 40 horas?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Con 40 horas la remuneración es mayor. [1]';
+      })(),
+    );
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuánto gano con 40 horas?',
+      null,
+      [expect.stringContaining('Propuesta aceptada:')],
+      {
+        forceContext: true,
+        salaryContextQuestions: ['¿Cuánto gana un docente de 30 horas?'],
+      },
+    );
+  });
+
+  it('al aceptar una propuesta que cambia de tema abre una conversación nueva con la pregunta efectiva', async () => {
+    const selectedModuleId = source.moduleIds[0];
+    const newModuleId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuáles son los requisitos?', role: 'user' },
+        {
+          content:
+            'La norma regula el procedimiento. [1]\n\n¿Quieres que te explique los requisitos?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'topic_change',
+      resolvedModule: { id: newModuleId, name: 'Otro tema' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los requisitos son el título. [1]';
+      })(),
+    );
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+      selectedModuleId,
+    });
+
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: null,
+        question: 'Explícame los requisitos.',
+        selectedModuleId: newModuleId,
+      }),
+    );
+  });
+
+  it('no pasa al RAG un año previo si la propuesta aceptada cambia de cargo', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente en 2024?', role: 'user' },
+        {
+          content:
+            'La remuneración docente en 2024 era S/ 3,500.70. [1]\n\n¿Quieres saber cuánto gana un director?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La remuneración del director es distinta. [1]';
+      })(),
+    );
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuánto gana un director?',
+      null,
+      [expect.stringContaining('Propuesta aceptada:')],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+  });
+
+  it('no busca en el RAG un «sí» tras un cierre genérico', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'La remuneración es S/ 3,500.70. [1]\n\n¿Necesitas algo más?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(events).toEqual([
+      {
+        data: { message: buildConversationalReply('acknowledgment') },
+        type: 'conversational',
+      },
+    ]);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+  });
+
+  it('no acepta con «sí» una aclaración que pide un dato', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'Para darte la cifra correcta necesito un solo dato: ¿tu vínculo es contratado o nombrado?',
+          role: 'clarification',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    // No se usa la pregunta de la aclaración como si fuera una propuesta
+    // aceptada: el «sí» sigue el flujo normal y no inventa la respuesta.
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'sí',
+      null,
+      ['¿Cuánto gana un docente?'],
+      { forceContext: true },
+    );
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'no_evidence',
+      'done',
+    ]);
+  });
+
+  it('lee la propuesta del final de una respuesta larga sin el recorte de 2.000', async () => {
+    const longAnswer = `Según la RM N.° 123-2024-MINEDU, el plazo es de cinco días. ${'Texto de la respuesta. '.repeat(200)}\n\nSugerencias: ¿Quieres que te explique los requisitos?`;
+    const snapshotGateway = {
+      ...historyGateway,
+      getConversationSnapshot: jest.fn().mockResolvedValue({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        messages: [
+          { content: '¿Cuáles son los requisitos?', role: 'user' as const },
+          { content: longAnswer, role: 'assistant' as const },
+        ],
+        selectedModuleId: null,
+      }),
+    };
+    const snapshotService = new ChatService(
+      answerGateway,
+      snapshotGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+    );
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Requisitos' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los requisitos son el título y la solicitud. [1]';
+      })(),
+    );
+
+    await collect(snapshotService, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(snapshotGateway.getConversationSnapshot).toHaveBeenCalledWith({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      limit: MAX_CHAT_CONTEXT_MESSAGES,
+      userId: authorization.userId,
+    });
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'Explícame los requisitos.',
+      null,
+      [
+        expect.stringMatching(
+          /Propuesta aceptada:[\s\S]*RM N\.° 123-2024-MINEDU/u,
+        ),
+      ],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+    expect(snapshotGateway.getConversationContext).not.toHaveBeenCalled();
+  });
+
+  it('no hereda factores salariales al aceptar una propuesta de otro tema', () => {
+    const prior = [
+      '¿Cuánto gana un docente de 30 horas?',
+      'Propuesta aceptada: la remuneración corresponde a una jornada de 30 horas.',
+    ];
+
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Qué documentos debo presentar?',
+        effectiveQuestion: '¿Qué documentos debo presentar?',
+        forceSalaryContext: false,
+        priorUserQuestions: prior,
+      }),
+    ).toEqual([]);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Y para 30 horas?',
+        effectiveQuestion: '¿Y para 30 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente?'],
+      }),
+    ).toEqual(['¿Cuánto gana un docente?']);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Y para el cargo de director?',
+        effectiveQuestion: '¿Y para el cargo de director?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente?'],
+      }),
+    ).toEqual([]);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Y para el año 2025?',
+        effectiveQuestion: '¿Y para el año 2025?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente?'],
+      }),
+    ).toEqual(['¿Cuánto gana un docente?']);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Cuánto gana un director?',
+        effectiveQuestion: '¿Cuánto gana un director?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente en 2024?'],
+      }),
+    ).toEqual([]);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Cuánto gana un director de 40 horas?',
+        effectiveQuestion: '¿Cuánto gana un director de 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente de 30 horas en 2024?'],
+      }),
+    ).toEqual([]);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿La licencia puede durar 40 horas?',
+        effectiveQuestion: '¿La licencia puede durar 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente de 30 horas en 2024?'],
+      }),
+    ).toEqual([]);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: '¿Qué documentos debo presentar para 40 horas?',
+        effectiveQuestion: '¿Qué documentos debo presentar para 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente de 30 horas en 2024?'],
+      }),
+    ).toEqual([]);
+  });
+
+  it('respeta el módulo elegido si cambia mientras hay una propuesta pendiente', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'La remuneración es S/ 3,500.70. [1]\n\nSugerencias: ¿Quieres que te explique los requisitos?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+      selectedModuleId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'sí',
+      '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+      expect.any(Array),
+      { forceContext: false },
+    );
+  });
+
+  it('responde el resumen de la conversación con la memoria de la sesión', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente contratado?', role: 'user' },
+        {
+          content: 'La remuneración mensual es S/ 3,500.70. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Hablamos de la remuneración mensual de S/ 3,500.70 para el docente contratado.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'en forma resumida dime lo que hablamos',
+    });
+
+    expect(events).toEqual([
+      {
+        data: {
+          message:
+            'Hablamos de la remuneración mensual de S/ 3,500.70 para el docente contratado.',
+        },
+        type: 'conversational',
+      },
+    ]);
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'summary', sources: [] }),
+    );
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
+  });
+
+  it('usa el historial completo cuando el gateway lo ofrece', async () => {
+    const fullMessages = Array.from({ length: 20 }, (_, index) => ({
+      content:
+        index === 0
+          ? '¿Cuánto gana un docente contratado?'
+          : `Mensaje ${index + 1}`,
+      role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+    }));
+    const fullHistoryGateway = {
+      ...historyGateway,
+      getConversationMessages: jest.fn().mockResolvedValue(fullMessages),
+    };
+    const fullHistoryService = new ChatService(
+      answerGateway,
+      fullHistoryGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+    );
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Hablamos de la remuneración docente.';
+      })(),
+    );
+
+    const events = await collect(fullHistoryService, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'resume lo que hablamos',
+    });
+
+    expect(fullHistoryGateway.getConversationMessages).toHaveBeenCalledWith({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      limit: CHAT_CONVERSATION_MESSAGE_LIMIT,
+      userId: authorization.userId,
+    });
+    expect(fullHistoryGateway.getConversationContext).not.toHaveBeenCalled();
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationContext: fullMessages }),
+    );
+    expect(events[0]?.type).toBe('conversational');
+  });
+
+  it('entra al resumen si la persona acepta una oferta de resumen', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente contratado?', role: 'user' },
+        {
+          content:
+            'La remuneración mensual es S/ 3,500.70. [1]\n\n¿Te preparo un resumen de lo que hablamos?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Hablamos de la remuneración mensual de S/ 3,500.70.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'sí',
+    });
+
+    expect(events[0]?.type).toBe('conversational');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'summary' }),
+    );
+    expect(historyGateway.getConversationContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('cae a un resumen determinista si el proveedor falla', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente contratado?', role: 'user' },
+        {
+          content: 'La remuneración mensual es S/ 3,500.70. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('provider down');
+    });
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'resume todo lo hablado en este chat',
+    });
+
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational summary.');
+    }
+    expect(reply.data.message).toContain('En esta conversación hemos hablado');
+    expect(reply.data.message).toContain('¿Cuánto gana un docente contratado?');
+    expect(reply.data.message).not.toContain('[1]');
+  });
+
+  it('descarta un resumen con una cifra inventada y usa el determinista', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente contratado?', role: 'user' },
+        {
+          content: 'La remuneración mensual es S/ 3,500.70. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Hablamos de una remuneración de S/ 4,400.80.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'resume lo que hablamos',
+    });
+
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational summary.');
+    }
+    expect(reply.data.message).toContain('En esta conversación hemos hablado');
+    expect(reply.data.message).not.toContain('4,400.80');
   });
 
   it('reads a conversation scoped to the authenticated user (owner-only)', async () => {

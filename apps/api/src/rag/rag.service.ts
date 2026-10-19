@@ -605,6 +605,13 @@ export function isEllipticalFollowUp(question: string): boolean {
 }
 
 /**
+ * Prefijos de contexto sintético que no son declaraciones de la persona: el
+ * extracto de una respuesta anterior o la propuesta que el asistente formuló y
+ * la persona aceptó. No deben heredar factores salariales.
+ */
+const SYNTHETIC_CONTEXT_PREFIX = /^(?:Respuesta anterior|Propuesta aceptada):/u;
+
+/**
  * Consultas previas cuyos factores declarados completan la actual: solo la
  * respuesta a una aclaración (o un seguimiento elíptico) hereda; una consulta
  * con tema propio es una pregunta nueva. El extracto de una respuesta anterior
@@ -618,7 +625,7 @@ export function inheritedFactorQuestions(
   if (!priorUserQuestions.length) return [];
   if (!forceContext && !continuesSalaryThread(question)) return [];
   const turns = priorUserQuestions.filter(
-    (prior) => !prior.startsWith('Respuesta anterior:'),
+    (prior) => !SYNTHETIC_CONTEXT_PREFIX.test(prior),
   );
   // Se hereda desde la consulta salarial más reciente hasta ahora. Si entre
   // ella y este turno hubo una consulta con tema propio que no es salarial, la
@@ -716,7 +723,15 @@ export class RagService {
     question: string,
     selectedModuleId: string | null,
     priorUserQuestions: string[] = [],
-    options: { forceContext?: boolean } = {},
+    options: {
+      forceContext?: boolean;
+      /**
+       * Consultas que pueden aportar factores salariales. Se separa del
+       * contexto de recuperación para que una propuesta aceptada de otro tema
+       * no herede la jornada o la escala de una consulta anterior.
+       */
+      salaryContextQuestions?: readonly string[];
+    } = {},
   ): Promise<RetrievalResult> {
     const directReferences = exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
@@ -734,7 +749,7 @@ export class RagService {
       question,
       inheritedFactorQuestions(
         question,
-        priorUserQuestions,
+        options.salaryContextQuestions ?? priorUserQuestions,
         Boolean(options.forceContext),
       ),
     );

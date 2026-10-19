@@ -189,6 +189,65 @@ describe('SupabaseChatGatewayAdapter', () => {
     });
   });
 
+  it('loads the full bounded conversation for a session summary', async () => {
+    const { client, rpc } = createClient({
+      rpcData: {
+        conversation: { id: conversationId, selectedModuleId: null },
+        messages: [
+          { content: 'Consulta anterior', role: 'user' },
+          { content: 'Respuesta anterior', role: 'assistant' },
+          { content: 'Aclaración', role: 'clarification' },
+          { content: 'Sin evidencia', role: 'no_evidence' },
+        ],
+      },
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await expect(
+      gateway.getConversationMessages({
+        conversationId,
+        limit: 100,
+        userId,
+      }),
+    ).resolves.toEqual([
+      { content: 'Consulta anterior', role: 'user' },
+      { content: 'Respuesta anterior', role: 'assistant' },
+      { content: 'Aclaración', role: 'clarification' },
+      { content: 'Sin evidencia', role: 'no_evidence' },
+    ]);
+    expect(rpc).toHaveBeenCalledWith('get_chat_conversation', {
+      p_conversation_id: conversationId,
+      p_limit: 100,
+      p_user_id: userId,
+    });
+  });
+
+  it('loads the complete last message and module for a pending proposal', async () => {
+    const longAnswer = `${'x'.repeat(3_000)}\n\nSugerencias: ¿Quieres que te explique los requisitos?`;
+    const { client } = createClient({
+      rpcData: {
+        conversation: {
+          id: conversationId,
+          selectedModuleId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+        messages: [{ content: longAnswer, role: 'assistant' }],
+      },
+    });
+    const gateway = new SupabaseChatGatewayAdapter(client);
+
+    await expect(
+      gateway.getConversationSnapshot({
+        conversationId,
+        limit: 12,
+        userId,
+      }),
+    ).resolves.toEqual({
+      conversationId,
+      messages: [{ content: longAnswer, role: 'assistant' }],
+      selectedModuleId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+    });
+  });
+
   it('fails closed for a malformed or mismatched context payload', async () => {
     const mismatched = createClient({
       rpcData: {
@@ -220,6 +279,43 @@ describe('SupabaseChatGatewayAdapter', () => {
         characterLimit: 10_000,
         conversationId,
         messageLimit: 12,
+        userId,
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('fails closed for a malformed or mismatched conversation snapshot', async () => {
+    const mismatched = createClient({
+      rpcData: {
+        conversation: {
+          id: '00000000-0000-0000-0000-000000000099',
+          selectedModuleId: null,
+        },
+        messages: [],
+      },
+    });
+    await expect(
+      new SupabaseChatGatewayAdapter(mismatched.client).getConversationSnapshot(
+        {
+          conversationId,
+          limit: 12,
+          userId,
+        },
+      ),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    const invalidMessage = createClient({
+      rpcData: {
+        conversation: { id: conversationId, selectedModuleId: null },
+        messages: [{ content: 'Dato', role: 'system' }],
+      },
+    });
+    await expect(
+      new SupabaseChatGatewayAdapter(
+        invalidMessage.client,
+      ).getConversationSnapshot({
+        conversationId,
+        limit: 12,
         userId,
       }),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);

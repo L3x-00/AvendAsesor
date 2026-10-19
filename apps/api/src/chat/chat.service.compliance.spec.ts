@@ -113,6 +113,12 @@ describe('ChatService — lineamientos del cliente', () => {
       deleteConversation: jest.fn(),
       getConversation: jest.fn(),
       getConversationContext: jest.fn(),
+      getConversationMessages: jest.fn().mockResolvedValue([]),
+      getConversationSnapshot: jest.fn().mockResolvedValue({
+        conversationId: CONVERSATION_ID,
+        messages: [],
+        selectedModuleId: null,
+      }),
       listActiveModules: jest.fn().mockResolvedValue([
         {
           code: 'b',
