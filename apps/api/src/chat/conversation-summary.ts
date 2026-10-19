@@ -12,10 +12,10 @@ import { normalizeSpanishText } from '../rag/text-normalization';
 const SUMMARY_WORD = /\b(?:resum\w*|recapitu\w*|sintetiza\w*|sintesis)\b/u;
 
 const CONVERSATION_REFERENCE =
-  /\b(?:lo que (?:hemos |habiamos )?(?:hablamos|conversamos|tratamos)|lo hablado|lo que (?:hemos |habiamos )?(?:conversado|tratado)|lo que me (?:dijiste|contaste|respondiste|explicaste)|tus respuestas|nuestra conversacion|(?:esta|la) conversacion|(?:este|nuestro|el|del) chat|(?:esta|nuestra) sesion|los temas (?:que )?(?:hemos )?(?:hablado|tratado)|que (?:hemos |habiamos )?hablado)\b/u;
+  /\b(?:lo que (?:hemos |habiamos )?(?:hablamos|conversamos|tratamos)|lo hablad[oa]?|lo que (?:hemos |habiamos )?(?:conversado|tratado)|lo que me (?:dijiste|contaste|respondiste|explicaste)|tus respuestas|nuestra conversacion|(?:esta|la) conversacion|(?:este|nuestro|el|del) chat|(?:esta|nuestra) sesion|los temas (?:que )?(?:hemos )?(?:hablad[oa]?|tratado)|que (?:hemos |habiamos )?hablad[oa]?)\b/u;
 
 const TOPICS_SUMMARY =
-  /\b(?:que|los) temas (?:hemos |habiamos )?(?:hablado|tratado)\b/u;
+  /\b(?:que|los) temas (?:hemos |habiamos )?(?:hablad[oa]?|tratado)\b/u;
 
 const SESSION_SUMMARY =
   /\b(?:resume|resumeme|recapitula|sintetiza)\s+(?:la|esta|nuestra)\s+sesion\b/u;
@@ -32,13 +32,13 @@ const CONTENT_USE =
   /\b(?:cuando (?:decimos|hablamos|se dice|nos referimos)|en (?:la|el) (?:ley|norma|reglamento|articulo|decreto|resolucion))\b/u;
 
 const DEICTIC_SUMMARY =
-  /(?:^|\b)(?:de que|sobre que) (?:hemos |habiamos |se )?(?:hablamos|hablado|trata (?:esta|la) conversacion)\b/u;
+  /(?:^|\b)(?:de que|sobre que) (?:hemos |habiamos |se )?(?:hablamos|hablad[oa]?|trata (?:esta|la) conversacion)\b/u;
 
 const ASKED_TO_REMEMBER =
-  /\b(?:dime|cuentame|recuerdame|indica(?:me)?|menciona(?:me)?) (?:de )?(?:que|lo que) (?:hemos |habiamos )?(?:hablamos|hablado|conversado)\b/u;
+  /\b(?:dime|cuentame|recuerdame|indica(?:me)?|menciona(?:me)?) (?:de )?(?:que|lo que) (?:hemos |habiamos )?(?:hablamos|hablad[oa]?|conversado)\b/u;
 
 const PAST_CONVERSATION =
-  /(?:^|\b)(?:que|lo que) (?:hemos |habiamos )?(?:hablado|conversado|tratado)\b/u;
+  /(?:^|\b)(?:que|lo que) (?:hemos |habiamos )?(?:hablad[oa]?|conversado|tratado)\b/u;
 
 /** «lo que hablamos con el director» es una consulta, no un resumen del chat. */
 const THIRD_PARTY_CONVERSATION =

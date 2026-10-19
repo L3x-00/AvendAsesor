@@ -758,6 +758,45 @@ describe('ChatService', () => {
     ]);
   });
 
+  it('acepta la sugerencia de requisitos y la busca como pregunta directa', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'La remuneración es S/ 3,500.70. [1]\n\nSugerencias: ¿Te gustaría saber más sobre los requisitos para ser docente contratado?',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Contratación' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los requisitos son el título y la solicitud. [1]';
+      })(),
+    );
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'si',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuáles son los requisitos para ser docente contratado?',
+      null,
+      [],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+  });
+
   it('hereda factores salariales si la propuesta aceptada sigue siendo salarial', async () => {
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',

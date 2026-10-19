@@ -700,6 +700,15 @@ describe('intención personal de una consulta salarial', () => {
     ).toBe(true);
   });
 
+  it('no trata una pregunta completa de requisitos como intención personal', () => {
+    expect(
+      hasPersonalSalaryContext(
+        '¿Cuáles son los requisitos para ser docente contratado?',
+        ['¿Cuánto gana un docente?'],
+      ),
+    ).toBe(false);
+  });
+
   it('no hereda la intención personal en una pregunta general nueva', () => {
     for (const question of [
       '¿Cuánto gana un director?',
