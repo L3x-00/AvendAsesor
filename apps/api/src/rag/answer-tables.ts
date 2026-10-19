@@ -11,13 +11,13 @@ import { citesAnySource } from './citations';
  *
  * Los límites de forma (columnas, filas y tamaño de celda) provienen de
  * `apps/web/src/components/chat/chat-response-tables.ts`: allí una tabla con más
- * columnas de las permitidas, o con una séptima fila, no se pinta entera. Por eso
- * aquí las filas por encima del tope también se reportan, aunque citen fuentes.
+ * de seis columnas o más de doce filas no se pinta entera. Por eso aquí las filas
+ * por encima del tope también se reportan, aunque citen fuentes.
  */
 
 const MAX_TABLE_CELL_CHARS = 180;
-const MAX_TABLE_COLUMNS = 4;
-const MAX_TABLE_ROWS = 6;
+const MAX_TABLE_COLUMNS = 6;
+const MAX_TABLE_ROWS = 12;
 const MAX_EXCERPT_CHARS = 200;
 const TABLE_SEPARATOR_CELL = /^:?-{3,}:?$/u;
 
