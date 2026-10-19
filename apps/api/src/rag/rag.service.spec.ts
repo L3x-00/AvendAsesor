@@ -253,6 +253,7 @@ describe('RagService', () => {
       };
       gateway.search
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([weakSource])
         .mockResolvedValueOnce([weakSource]);
 
       await expect(service.retrieve(question, null)).resolves.toEqual({
@@ -268,20 +269,55 @@ describe('RagService', () => {
       ['¿Cuánto gana un docente?', 'El docente gana experiencia en el aula.'],
     ] as const) {
       gateway.search.mockReset();
-      gateway.search.mockResolvedValueOnce([]).mockResolvedValueOnce([
-        {
-          ...source,
-          chunkContent,
-          lexicalScore: 0.1,
-          semanticScore: 0.45,
-        },
-      ]);
+      const weak = {
+        ...source,
+        chunkContent,
+        lexicalScore: 0.1,
+        semanticScore: 0.45,
+      };
+      gateway.search
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([weak])
+        .mockResolvedValueOnce([weak]);
 
       await expect(service.retrieve(question, null)).resolves.toEqual({
         kind: 'no_evidence',
         topRelevanceScore: null,
       });
     }
+  });
+
+  it('busca la escala general cuando los primeros fragmentos solo traen conceptos adicionales', async () => {
+    const cts = {
+      ...source,
+      chunkContent:
+        'El docente contratado recibe CTS y bonificaciones al finalizar el vínculo.',
+      chunkId: 'cts',
+      semanticScore: 0.9,
+    };
+    const scale = {
+      ...source,
+      chunkContent: [
+        '| Nivel | Remuneración |',
+        '| --- | --- |',
+        '| Inicial | S/ 3 300,60 |',
+        '| Primaria | S/ 3 300,60 |',
+      ].join('\n'),
+      chunkId: 'scale',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValueOnce([cts]).mockResolvedValueOnce([scale]);
+
+    const result = await service.retrieve('¿Cuánto gana un docente?', null);
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toContain('scale');
+    expect(gateway.search).toHaveBeenCalledTimes(2);
+    expect(embeddings.embed).toHaveBeenCalledTimes(2);
+    expect((embeddings.embed.mock.calls[1] as [string[]][])[0][0]).toContain(
+      'remuneración íntegra mensual',
+    );
   });
 
   it('responde la ambigüedad de una consulta salarial general con la evidencia recuperada', async () => {
