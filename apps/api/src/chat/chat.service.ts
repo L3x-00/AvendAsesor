@@ -26,8 +26,14 @@ import { causalClarificationFor } from '../rag/process-clarification';
 import { normalizeDomainQuery } from '../rag/query-normalization';
 import {
   assessSalaryAnswerCoverage,
+  hasAmount,
+  hasGeneralSalaryEvidence,
+  hasMarkdownTable,
+  hasPersonalSalaryContext,
+  isBroadSalaryQuestion,
   salaryClarificationFor,
   salaryQuestionProfile,
+  salaryRowMismatch,
   withInheritedSalaryFactors,
 } from '../rag/salary-applicability';
 import { hasTopicTerm } from '../rag/domain-lexicon';
@@ -582,12 +588,12 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
   const foundTopics = moduleMention(modules);
   if (isEducatorRemunerationQuestion(question)) {
     const context = foundTopics
-      ? `La búsqueda encontró información en ${foundTopics}, pero eso no permite atribuirte una cifra o una norma sin conocer tu caso.`
+      ? `La búsqueda encontró información relacionada con ${foundTopics}.`
       : '';
     return [
-      'No sería responsable darte una cifra única para todos los docentes del Perú sin confirmar tu situación.',
+      'Puedo darte el panorama de la remuneración docente con las condiciones que cambian la cifra.',
       context,
-      'Para ubicar la regla que corresponde, necesito un solo dato: ¿tu consulta es del sector público o privado?',
+      'Para afinar tu caso, ¿tu consulta es del sector público o privado?',
     ]
       .join(' ')
       .replace(/\s{2,}/gu, ' ')
@@ -605,6 +611,15 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
     .join(' ')
     .replace(/\s{2,}/gu, ' ')
     .trim();
+}
+
+/**
+ * Sustitución segura cuando una tabla salarial no permite asociar el importe
+ * con la condición correcta. Se prefiere pedir el dato decisivo antes que
+ * mostrar una cifra que podría pertenecer a otra fila.
+ */
+function salaryEvidenceClarificationMessage(): string {
+  return 'La evidencia contiene información salarial, pero la respuesta no permite asociar cada monto con la condición correcta. Para no darte una cifra equivocada, ¿me confirmas tu jornada, vínculo, cargo o escala?';
 }
 
 /**
@@ -1178,20 +1193,6 @@ export class ChatService {
           .reverse()
           .find((message) => message.role !== 'user')
       : null;
-    const retrievalContext = acceptedAnswer
-      ? [
-          `Propuesta aceptada: ${acceptedFollowUpContext(acceptedAnswer.content)}`,
-        ]
-      : lastDocumentAnswer
-        ? [
-            ...priorUserQuestions,
-            `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
-          ]
-        : priorUserQuestions;
-    const forceContext =
-      Boolean(acceptedQuestion) ||
-      Boolean(lastDocumentAnswer) ||
-      conversationContext.at(-1)?.role === 'clarification';
     // La propuesta aceptada exige contexto para resolver deícticos, pero no es
     // una declaración salarial: los factores solo se heredan si la consulta
     // efectiva continúa realmente ese hilo. La misma lista se usa para
@@ -1205,12 +1206,49 @@ export class ChatService {
       forceSalaryContext,
       priorUserQuestions,
     });
+    const personalSalary = hasPersonalSalaryContext(
+      effectiveQuestion,
+      priorUserQuestions,
+    );
+    // El contexto de recuperación conserva el tema, no la consulta salarial,
+    // cuando el turno actual no es salarial. Así un pedido de documentos no
+    // arrastra «cuánto gana un docente» a la búsqueda vectorial.
+    const salaryRetrievalRequest =
+      salaryQuestionProfile(effectiveQuestion).isSalaryQuestion ||
+      inheritedSalaryQuestions.length > 0;
+    const topicContext = salaryRetrievalRequest
+      ? priorUserQuestions
+      : priorUserQuestions.filter(
+          (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
+        );
+    // La respuesta anterior solo entra en la búsqueda cuando la propuesta tiene
+    // un deíctico que resolver («estos cargos»).
+    const acceptedAnswerContext =
+      acceptedAnswer && refersBack(effectiveQuestion)
+        ? [
+            `Propuesta aceptada: ${acceptedFollowUpContext(acceptedAnswer.content)}`,
+          ]
+        : [];
+    const retrievalContext = acceptedAnswer
+      ? [...acceptedAnswerContext, ...topicContext]
+      : lastDocumentAnswer
+        ? [
+            ...topicContext,
+            `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
+          ]
+        : topicContext;
+    const forceContext =
+      Boolean(acceptedQuestion) ||
+      Boolean(lastDocumentAnswer) ||
+      conversationContext.at(-1)?.role === 'clarification' ||
+      inheritedSalaryQuestions.length > 0;
     const retrieval = await this.ragService.retrieve(
       effectiveQuestion,
       selectedModuleId,
       retrievalContext,
       {
         forceContext,
+        ...(personalSalary ? { personalSalary: true } : {}),
         ...(acceptedQuestion
           ? { salaryContextQuestions: inheritedSalaryQuestions }
           : {}),
@@ -1226,6 +1264,11 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     const retrievalScope = detectRetrievalScope(effectiveQuestion);
+    const broadSalaryTurn =
+      retrieval.kind === 'ambiguous' &&
+      !personalSalary &&
+      isBroadSalaryQuestion(salaryQuestion) &&
+      hasGeneralSalaryEvidence(retrieval.sources, retrievalScope);
 
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
@@ -1235,7 +1278,8 @@ export class ChatService {
     } else if (
       retrieval.kind === 'ambiguous' &&
       selectedModuleId &&
-      !acceptedQuestion
+      !acceptedQuestion &&
+      !broadSalaryTurn
     ) {
       conversationId = null;
       conversationContext = [];
@@ -1374,45 +1418,56 @@ export class ChatService {
     }
 
     if (retrieval.kind === 'ambiguous') {
-      // La ambigüedad identifica rutas posibles, pero no demuestra que alguno
-      // de sus extractos sea aplicable al caso. No se muestran citas ni fuentes
-      // hasta que la persona precise la condición que permite responder.
-      const contextualClarification =
-        causalClarificationFor(effectiveQuestion, retrieval.sources) ??
-        salaryClarificationFor(salaryQuestion, retrieval.sources);
-      const message =
-        contextualClarification?.message ??
-        ambiguityMessage(effectiveQuestion, retrieval.modules);
-      if (input.abortSignal?.aborted) return;
-      const completed = await this.historyGateway.completeTurn({
-        answer: message,
-        conversationId: turn.conversationId,
-        faqMemory,
-        detectedModuleId: null,
-        detectedSubmoduleId: null,
-        qualitySignals: [],
-        replyRole: 'clarification',
-        retrievalScope,
-        sources: [],
-        topRelevanceScore: retrieval.topRelevanceScore,
-        unansweredReason: 'ambiguous_request',
-        userId: input.authorization.userId,
-        userMessageId: turn.userMessageId,
-      });
-      yield {
-        data: { message, modules: retrieval.modules },
-        type: 'clarification',
-      };
-      yield {
-        data: {
+      // Una consulta salarial general no se bloquea por la sola ambigüedad de
+      // ruta: si hay cifras recuperadas, se responde con el panorama y sus
+      // condiciones. La aclaración se reserva para el caso propio o cuando la
+      // evidencia recuperada no contiene ningún monto que sustentar.
+      if (!broadSalaryTurn) {
+        // La ambigüedad identifica rutas posibles, pero no demuestra que alguno
+        // de sus extractos sea aplicable al caso. No se muestran citas ni
+        // fuentes hasta que la persona precise la condición que permite
+        // responder.
+        const contextualClarification =
+          causalClarificationFor(effectiveQuestion, retrieval.sources) ??
+          salaryClarificationFor(
+            salaryQuestion,
+            retrieval.sources,
+            personalSalary,
+          );
+        const message =
+          contextualClarification?.message ??
+          ambiguityMessage(effectiveQuestion, retrieval.modules);
+        if (input.abortSignal?.aborted) return;
+        const completed = await this.historyGateway.completeTurn({
+          answer: message,
           conversationId: turn.conversationId,
-          inReplyToMessageId: turn.userMessageId,
-          messageId: completed.answerMessageId,
-          provider: 'rule',
-        },
-        type: 'done',
-      };
-      return;
+          faqMemory,
+          detectedModuleId: null,
+          detectedSubmoduleId: null,
+          qualitySignals: [],
+          replyRole: 'clarification',
+          retrievalScope,
+          sources: [],
+          topRelevanceScore: retrieval.topRelevanceScore,
+          unansweredReason: 'ambiguous_request',
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        yield {
+          data: { message, modules: retrieval.modules },
+          type: 'clarification',
+        };
+        yield {
+          data: {
+            conversationId: turn.conversationId,
+            inReplyToMessageId: turn.userMessageId,
+            messageId: completed.answerMessageId,
+            provider: 'rule',
+          },
+          type: 'done',
+        };
+        return;
+      }
     }
 
     // El turno tiene evidencia, pero puede depender de un dato que la persona no
@@ -1423,7 +1478,11 @@ export class ChatService {
     if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
       const clarification =
         causalClarificationFor(effectiveQuestion, retrieval.sources) ??
-        salaryClarificationFor(salaryQuestion, retrieval.sources);
+        salaryClarificationFor(
+          salaryQuestion,
+          retrieval.sources,
+          personalSalary,
+        );
       if (clarification) {
         if (input.abortSignal?.aborted) return;
         const completed = await this.historyGateway.completeTurn({
@@ -1497,6 +1556,19 @@ export class ChatService {
       return piece;
     };
 
+    // Una respuesta salarial sustentada en tablas se retiene hasta comprobar
+    // que cada importe quedó asociado a su fila. Si el modelo mezcla una
+    // jornada o un vínculo, se sustituye por una precisión en vez de mostrar
+    // una cifra equivocada.
+    const salaryProfile = salaryQuestionProfile(salaryQuestion);
+    const deferStreaming =
+      salaryProfile.isSalaryQuestion &&
+      retrieval.sources.some(
+        (candidate) =>
+          hasAmount(candidate.chunkContent) ||
+          hasMarkdownTable(candidate.chunkContent),
+      );
+
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
     const cites = (text: string) =>
@@ -1528,16 +1600,22 @@ export class ChatService {
           continue;
         }
         streaming = true;
-        yield { data: { sources: citations.sources }, type: 'sources' };
+        if (!deferStreaming) {
+          yield { data: { sources: citations.sources }, type: 'sources' };
+        }
         const piece = takePiece(leadIn);
         leadIn = '';
-        if (piece) yield { data: { text: piece }, type: 'token' };
+        if (!deferStreaming && piece) {
+          yield { data: { text: piece }, type: 'token' };
+        }
         if (cutByLength) break;
         continue;
       }
       if (!visible) continue;
       const piece = takePiece(visible);
-      if (piece) yield { data: { text: piece }, type: 'token' };
+      if (!deferStreaming && piece) {
+        yield { data: { text: piece }, type: 'token' };
+      }
       if (cutByLength) break;
     }
 
@@ -1556,6 +1634,48 @@ export class ChatService {
       declined ||
       (whole.trim() !== '' && !cites(whole))
     ) {
+      // Una negativa del modelo a dar una cifra no debe convertirse en «sin
+      // evidencia» si las fuentes sí contienen remuneración general. Se pide
+      // la condición decisiva en lugar de ocultar el panorama disponible.
+      const salaryGeneralEvidence =
+        salaryProfile.isSalaryQuestion &&
+        hasGeneralSalaryEvidence(retrieval.sources, retrievalScope);
+      const refusedSalary =
+        salaryGeneralEvidence &&
+        /\b(?:no ser[ií]a responsable|no puedo darte una cifra|no tengo acceso|no encontr[eé] (?:una cifra|informaci[oó]n))/iu.test(
+          whole,
+        );
+      if (refusedSalary) {
+        const message =
+          salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
+            ?.message ?? salaryEvidenceClarificationMessage();
+        const completed = await this.historyGateway.completeTurn({
+          answer: message,
+          conversationId: turn.conversationId,
+          faqMemory,
+          detectedModuleId: null,
+          detectedSubmoduleId: null,
+          qualitySignals: [],
+          replyRole: 'clarification',
+          retrievalScope,
+          sources: [],
+          topRelevanceScore: retrieval.topRelevanceScore,
+          unansweredReason: 'ambiguous_request',
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        yield { data: { message, modules: [] }, type: 'clarification' };
+        yield {
+          data: {
+            conversationId: turn.conversationId,
+            inReplyToMessageId: turn.userMessageId,
+            messageId: completed.answerMessageId,
+            provider: 'rule',
+          },
+          type: 'done',
+        };
+        return;
+      }
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -1567,7 +1687,10 @@ export class ChatService {
       return;
     }
     const pending = streaming ? tail : unstreamed;
-    if (pending && !cutByLength) {
+    if (deferStreaming) {
+      // El texto retenido se valida completo antes de emitirlo.
+      answer = whole;
+    } else if (pending && !cutByLength) {
       if (!streaming) {
         streaming = true;
         yield { data: { sources: citations.sources }, type: 'sources' };
@@ -1586,14 +1709,71 @@ export class ChatService {
     // Una respuesta cortada por su extensión se avisa en lenguaje llano en vez
     // de mostrarse (y guardarse) como si estuviera completa.
     let finalAnswer = normalizedAnswer;
-    if (cutByLength || finishReason === 'length') {
-      finalAnswer = `${normalizedAnswer}${truncationNote}`;
+    const truncated = cutByLength || finishReason === 'length';
+    if (truncated) finalAnswer = `${normalizedAnswer}${truncationNote}`;
+
+    // La validación salarial de una tabla se hace antes de emitir el texto
+    // retenido. Si el importe no coincide con su fila, se pide la condición
+    // decisiva en vez de mostrar una cifra que podría ser de otra jornada.
+    const salaryFinding = assessSalaryAnswerCoverage(
+      finalAnswer,
+      retrieval.sources,
+      salaryQuestion,
+    );
+    const salaryRowFinding = salaryRowMismatch(
+      finalAnswer,
+      retrieval.sources,
+      salaryQuestion,
+    );
+    const specialAllocationExempt =
+      salaryProfile.isSalaryQuestion && salaryProfile.asksSpecialAllocation;
+    if (
+      deferStreaming &&
+      !specialAllocationExempt &&
+      (salaryRowFinding || salaryFinding)
+    ) {
+      const message =
+        salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
+          ?.message ?? salaryEvidenceClarificationMessage();
+      const completed = await this.historyGateway.completeTurn({
+        answer: message,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId: null,
+        detectedSubmoduleId: null,
+        qualitySignals: [],
+        replyRole: 'clarification',
+        retrievalScope,
+        sources: [],
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: 'ambiguous_request',
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield {
+        data: { message, modules: [] },
+        type: 'clarification',
+      };
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          provider: 'rule',
+        },
+        type: 'done',
+      };
+      return;
+    }
+    if (deferStreaming) {
+      yield { data: { sources: citations.sources }, type: 'sources' };
+      yield { data: { text: finalAnswer }, type: 'token' };
+    } else if (truncated) {
       yield { data: { text: truncationNote }, type: 'token' };
     }
 
     // La calidad se evalúa sobre la respuesta, sin el aviso de corte (que no
     // lleva citas y marcaría toda respuesta cortada para revisión).
-    const truncated = cutByLength || finishReason === 'length';
     const lastCompleteSentence = Math.max(
       normalizedAnswer.lastIndexOf('.'),
       normalizedAnswer.lastIndexOf('!'),
@@ -1616,11 +1796,6 @@ export class ChatService {
     // marca para revisión humana: pudo tomar una cifra que no es la general.
     // Se revisa el contenido generado también si se preguntó por la finalidad
     // de una norma: el modelo puede introducir un importe que no se le pidió.
-    const salaryProfile = salaryQuestionProfile(salaryQuestion);
-    const salaryFinding = assessSalaryAnswerCoverage(
-      finalAnswer,
-      retrieval.sources,
-    );
     if (
       salaryFinding &&
       !(salaryProfile.isSalaryQuestion && salaryProfile.asksSpecialAllocation)

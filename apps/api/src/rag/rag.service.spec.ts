@@ -1,6 +1,7 @@
 import {
   detectRetrievalScope,
   inheritedFactorQuestions,
+  isEllipticalFollowUp,
   RagService,
   resolveDetectedSubmodule,
 } from './rag.service';
@@ -73,6 +74,16 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([]);
   });
 
+  it('no hereda factores en un pedido de documentos aunque se fuerce el contexto', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿Qué documentos debo presentar?',
+        ['¿Cuánto gano yo como docente?'],
+        true,
+      ),
+    ).toEqual([]);
+  });
+
   it('no hereda sin consulta salarial previa ni sin seguimiento', () => {
     expect(
       inheritedFactorQuestions(
@@ -115,6 +126,27 @@ describe('inheritedFactorQuestions', () => {
         true,
       ),
     ).toEqual([salary]);
+  });
+});
+
+describe('isEllipticalFollowUp', () => {
+  it('trata los pedidos de documentos o requisitos como seguimientos del tema', () => {
+    expect(isEllipticalFollowUp('¿Qué documentos debo presentar?')).toBe(true);
+    expect(isEllipticalFollowUp('¿Qué archivos debo adjuntar?')).toBe(true);
+    expect(isEllipticalFollowUp('¿Qué requisitos necesito?')).toBe(true);
+    expect(isEllipticalFollowUp('Explícame los requisitos.')).toBe(true);
+  });
+
+  it('sigue tratando como elipsis una pregunta que depende del turno previo', () => {
+    expect(isEllipticalFollowUp('¿Y el plazo?')).toBe(true);
+    expect(isEllipticalFollowUp('¿Entonces qué requisitos?')).toBe(true);
+  });
+
+  it('reconoce un tema propio aunque no use un verbo de trámite', () => {
+    expect(
+      isEllipticalFollowUp('¿Qué se necesita para ser un docente nombrado?'),
+    ).toBe(false);
+    expect(isEllipticalFollowUp('¿Y para una permuta?')).toBe(false);
   });
 });
 
@@ -172,6 +204,119 @@ describe('RagService', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  it('rescata una coincidencia léxica cuando la similitud vectorial no deja candidatos', async () => {
+    const lexicalSource = {
+      ...source,
+      chunkContent:
+        'Los requisitos para el nombramiento docente incluyen el título profesional.',
+      lexicalScore: 0.4,
+      semanticScore: 0.66,
+    };
+    gateway.search
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([lexicalSource]);
+
+    const result = await service.retrieve(
+      '¿Qué se necesita para ser un docente nombrado?',
+      null,
+    );
+
+    expect(result).toMatchObject({
+      kind: 'evidence',
+      sources: [expect.objectContaining({ chunkId: lexicalSource.chunkId })],
+    });
+    expect(gateway.search).toHaveBeenCalledTimes(2);
+    const calls = gateway.search.mock.calls as Array<
+      [{ matchThreshold?: number; query?: string }]
+    >;
+    expect(calls[1]?.[0]).toMatchObject({
+      matchThreshold: 0,
+      query: '¿Qué se necesita para ser un docente nombrado?',
+    });
+  });
+
+  it.each([
+    [
+      '¿Cuál es la mejor época para sembrar papa?',
+      'La licencia se solicita en mesa de partes.',
+    ],
+    ['¿Cuál es el plazo?', 'El plazo para una permuta es de cinco días.'],
+    ['¿Cuánto gana un docente?', 'El docente gana experiencia en el aula.'],
+  ])(
+    'no rescata una coincidencia léxica débil para «%s»',
+    async (question, chunkContent) => {
+      const weakSource = {
+        ...source,
+        chunkContent,
+        lexicalScore: 0.1,
+        semanticScore: 0.4,
+      };
+      gateway.search
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([weakSource]);
+
+      await expect(service.retrieve(question, null)).resolves.toEqual({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+    },
+  );
+
+  it('no rescata una coincidencia en el borde 0.45 de la banda sin evidencia', async () => {
+    for (const [question, chunkContent] of [
+      ['¿Cuál es el plazo?', 'El plazo para una permuta es de cinco días.'],
+      ['¿Cuánto gana un docente?', 'El docente gana experiencia en el aula.'],
+    ] as const) {
+      gateway.search.mockReset();
+      gateway.search.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          ...source,
+          chunkContent,
+          lexicalScore: 0.1,
+          semanticScore: 0.45,
+        },
+      ]);
+
+      await expect(service.retrieve(question, null)).resolves.toEqual({
+        kind: 'no_evidence',
+        topRelevanceScore: null,
+      });
+    }
+  });
+
+  it('responde la ambigüedad de una consulta salarial general con la evidencia recuperada', async () => {
+    const salaryA = {
+      ...source,
+      chunkContent: 'La remuneración mensual del docente es de S/ 3 300,60.',
+      chunkId: 'salary-a',
+      documentVersionId: 'version-a',
+      moduleIds: ['module-a'],
+      moduleNames: ['Remuneraciones'],
+    };
+    const salaryB = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del docente contratado es de S/ 2 400,40.',
+      chunkId: 'salary-b',
+      documentVersionId: 'version-b',
+      moduleIds: ['module-b'],
+      moduleNames: ['Contratación docente'],
+    };
+    gateway.search.mockResolvedValue([salaryA, salaryB]);
+
+    const result = await service.retrieve('¿Cuánto gana un docente?', null);
+
+    expect(result).toMatchObject({
+      kind: 'evidence',
+      topRelevanceScore: 0.9,
+    });
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'salary-a',
+      'salary-b',
+    ]);
+  });
+
   it('separa el contexto salarial del contexto de recuperación de una propuesta aceptada', async () => {
     const salarySource = {
       ...source,
@@ -182,26 +327,25 @@ describe('RagService', () => {
     const question = '¿Qué documentos debo presentar?';
     const prior = ['¿Cuánto gana un docente de 30 horas?'];
 
-    await expect(
-      service.retrieve(question, null, prior, { forceContext: true }),
-    ).resolves.toEqual({
-      kind: 'no_evidence',
-      topRelevanceScore: null,
-    });
-    await expect(
-      service.retrieve(question, null, prior, {
-        forceContext: true,
-        salaryContextQuestions: [],
-      }),
-    ).resolves.toMatchObject({
-      kind: 'evidence',
-      sources: [
-        expect.objectContaining({
-          chunkContent:
-            'La remuneración mensual es S/ 3,500.70 para una jornada de 40 horas.',
-        }),
-      ],
-    });
+    // Un pedido de documentos corta la herencia salarial incluso si el llamador
+    // fuerza el contexto; por eso la fuente de 40 horas no se filtra por la
+    // jornada de 30 horas de la consulta previa.
+    for (const options of [
+      { forceContext: true },
+      { forceContext: true, salaryContextQuestions: [] },
+    ]) {
+      await expect(
+        service.retrieve(question, null, prior, options),
+      ).resolves.toMatchObject({
+        kind: 'evidence',
+        sources: [
+          expect.objectContaining({
+            chunkContent:
+              'La remuneración mensual es S/ 3,500.70 para una jornada de 40 horas.',
+          }),
+        ],
+      });
+    }
   });
 
   it('retrieves an explicitly named norm only through the exact route', async () => {
@@ -264,7 +408,7 @@ describe('RagService', () => {
     );
   });
 
-  it('preserves both vectors when semantic routing needs separate global and module queries', async () => {
+  it('does not contaminate a self-contained question with the previous topic in the module search', async () => {
     gateway.search.mockResolvedValue([source]);
     const question =
       '¿Cuáles son los requisitos para solicitar una licencia por enfermedad?';
@@ -272,12 +416,15 @@ describe('RagService', () => {
       '¿Cómo solicito una reasignación por salud?',
     ]);
     const calls = embeddings.embed.mock.calls as [string[]][];
-    expect(calls[0][0]).toHaveLength(2);
-    expect(calls[0][0][0]).toBe(question);
-    expect(calls[0][0][1]).toContain(
-      '¿Cómo solicito una reasignación por salud?',
-    );
+    expect(calls[0][0]).toEqual([question]);
     expect(gateway.search).toHaveBeenCalledTimes(2);
+    const searchCalls = gateway.search.mock.calls as Array<
+      [{ query?: string; selectedModuleId?: string | null }]
+    >;
+    expect(searchCalls.map(([call]) => call.query)).toEqual([
+      question,
+      question,
+    ]);
     expect(gateway.searchExactReferences).not.toHaveBeenCalled();
   });
 
@@ -812,7 +959,7 @@ describe('RagService', () => {
     expect(searchCalls[0]?.[0].query).toContain('¿Cuáles son los requisitos?');
   });
 
-  it('keeps the context in the module search for a self-contained follow-up', async () => {
+  it('does not keep the previous topic in the module search for a self-contained question', async () => {
     gateway.search.mockResolvedValue([source]);
 
     await service.retrieve('¿y para una permuta?', 'module-a', [
@@ -823,9 +970,7 @@ describe('RagService', () => {
       [Parameters<RetrievalGateway['search']>[0]]
     >;
     expect(searchCalls[0]?.[0].query).toBe('¿y para una permuta?');
-    expect(searchCalls[1]?.[0].query).toContain(
-      'requisitos para una reasignación',
-    );
+    expect(searchCalls[1]?.[0].query).toBe('¿y para una permuta?');
   });
 
   it('searches a follow-up that names its own topic without the previous questions', async () => {
@@ -1408,15 +1553,15 @@ describe('RagService', () => {
 
       await service.retrieve(question, 'module-a');
 
-      expect(gateway.search).toHaveBeenCalledTimes(2);
-      expect(gateway.search).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({ retrievalScope }),
-      );
-      expect(gateway.search).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ retrievalScope }),
-      );
+      // Dos búsquedas semánticas (global y módulo) y, al quedar vacías, las
+      // dos del rescate léxico; todas deben conservar el alcance gobernado.
+      expect(gateway.search).toHaveBeenCalledTimes(4);
+      const calls = gateway.search.mock.calls as Array<
+        [{ retrievalScope?: string }]
+      >;
+      expect(
+        calls.every((call) => call[0]?.retrievalScope === retrievalScope),
+      ).toBe(true);
     },
   );
 

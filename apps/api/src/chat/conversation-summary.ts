@@ -118,6 +118,8 @@ function cleanMessage(value: string, limit: number): string {
         /(?:^|\n)\s*(?:[-*•>#\s]*)\*{0,2}sugerencias?\*{0,2}\s*:[\s\S]*$/imu,
         ' ',
       )
+      .replace(/(?:^|\n)\s*fuente\s*:[\s\S]*$/imu, ' ')
+      .replace(/(?:^|\n)\s*relacionado con\s*:[\s\S]*$/imu, ' ')
       .replace(/\s+/gu, ' '),
   ).trim();
   return truncateAtBoundary(cleaned, limit);
@@ -132,23 +134,37 @@ function isSubstantiveQuestion(value: string): boolean {
   return normalized.length >= 3 && !NON_SUBSTANTIVE.test(normalized);
 }
 
+const NO_EVIDENCE_ANSWER =
+  /(?:no encontr[eé] informaci[oó]n suficiente|no encontr[eé] evidencia|no hay informaci[oó]n suficiente|sin evidencia suficiente)/iu;
+
+function summaryExcerpt(value: string, limit: number): string {
+  // Dos oraciones bastan para conservar el tema y su respuesta sin volver al
+  // volcado completo; una aceptación puede añadir la pregunta siguiente.
+  const excerpt = value.split(SENTENCE_SPLIT).slice(0, 2).join(' ').trim();
+  return truncateAtBoundary(excerpt, limit);
+}
+
 /**
- * Resumen determinista de respaldo: solo repite las preguntas y respuestas ya
- * guardadas, sin añadir normas, cifras ni recomendaciones nuevas. También es
- * la salida cuando el proveedor no responde o devuelve una cifra que no está
- * en la conversación.
+ * Resumen determinista de respaldo: solo repite los temas y lo ya guardado,
+ * sin añadir normas, cifras ni recomendaciones nuevas. Se presenta como una
+ * lista de puntos, no como un volcado de «pregunta / Respuesta:», para que una
+ * caída del proveedor no degrade el tono del asistente.
  */
 export function buildDeterministicConversationSummary(
   messages: readonly ChatContextMessage[],
 ): string {
-  const turns: Array<{ answer: string | null; question: string }> = [];
+  const turns: Array<{
+    answer: string | null;
+    question: string;
+    role: ChatContextMessage['role'] | null;
+  }> = [];
   let awaitingContinuation = false;
 
   for (const message of messages) {
     if (message.role === 'user') {
       const question = cleanMessage(message.content, 220);
       if (question && isSubstantiveQuestion(question)) {
-        turns.push({ answer: null, question });
+        turns.push({ answer: null, question, role: null });
         awaitingContinuation = false;
       } else if (turns.length) {
         // «Sí» después de una propuesta: la respuesta siguiente pertenece al
@@ -161,6 +177,7 @@ export function buildDeterministicConversationSummary(
     if (!current) continue;
     const answer = cleanMessage(message.content, 400);
     if (!answer) continue;
+    current.role ??= message.role;
     if (awaitingContinuation && current.answer) {
       current.answer = truncateAtBoundary(`${current.answer} ${answer}`, 800);
       awaitingContinuation = false;
@@ -174,15 +191,44 @@ export function buildDeterministicConversationSummary(
     return 'Todavía no hay consultas que resumir en esta conversación. Cuando me hagas una pregunta, podré resumirte lo que hemos hablado.';
   }
 
-  const header = 'En esta conversación hemos hablado de lo siguiente:';
+  const header = 'Estos son los puntos que tratamos en esta conversación:';
   const lines: string[] = [];
   // Se reserva espacio para el aviso de temas omitidos.
   let remaining = MAX_RAG_SUMMARY_CHARS - header.length - 2 - 32;
   let omitted = 0;
 
   for (const [index, turn] of turns.entries()) {
-    const answer = turn.answer ? ` Respuesta: ${turn.answer}` : '';
-    const line = `${index + 1}. ${turn.question}${answer}`;
+    const topic = turn.question
+      .replace(/^[¿¡\s]+/u, '')
+      .replace(/[?¿!¡.;:]+$/u, '')
+      .trim();
+    // Una respuesta puede abrir con «no encontré…» y continuar con lo que sí
+    // respondió. Se elimina solo esa primera oración, no el resto.
+    const answerWithoutOpeningRefusal = turn.answer
+      ? turn.answer
+          .replace(
+            /^(?:por ahora\s+)?(?:no encontr[eé][^.!?]*[.!?]\s*|no hay[^.!?]*[.!?]\s*|sin evidencia[^.!?]*[.!?]\s*)/iu,
+            '',
+          )
+          .trim()
+      : '';
+    let detail: string;
+    if (!turn.answer) {
+      detail = 'quedó pendiente de ampliar.';
+    } else if (
+      turn.role === 'no_evidence' ||
+      (!answerWithoutOpeningRefusal &&
+        turn.answer.length < 400 &&
+        NO_EVIDENCE_ANSWER.test(turn.answer))
+    ) {
+      detail =
+        'no había evidencia suficiente en los documentos, así que quedó pendiente.';
+    } else if (turn.role === 'clarification') {
+      detail = 'te pedí precisar un dato para orientarte.';
+    } else {
+      detail = summaryExcerpt(answerWithoutOpeningRefusal || turn.answer, 300);
+    }
+    const line = `• ${topic}: ${detail}`;
     if (line.length + 1 > remaining) {
       omitted = turns.length - index;
       break;
@@ -192,7 +238,7 @@ export function buildDeterministicConversationSummary(
   }
 
   if (omitted) {
-    lines.push(`… y ${omitted} tema${omitted === 1 ? '' : 's'} más.`);
+    lines.push(`• … y ${omitted} tema${omitted === 1 ? '' : 's'} más.`);
   }
 
   return [header, '', ...lines].join('\n');
@@ -306,8 +352,14 @@ function numericClaims(text: string): NumericClaim[] {
 }
 
 const SUMMARY_STOP_WORDS = new Set([
+  'abordo',
+  'abordan',
+  'abordaron',
   'acerca',
+  'aclaro',
+  'aclararon',
   'aclaracion',
+  'aclaraciones',
   'anual',
   'anuales',
   'ano',
@@ -443,6 +495,58 @@ const SUMMARY_STOP_WORDS = new Set([
   'usuario',
   'vigente',
   'vigentes',
+  // Verbos y etiquetas de recapitulación: describen la conversación, no un
+  // hecho que deba estar literalmente en el historial.
+  'comento',
+  'comentaron',
+  'consulto',
+  'consultaron',
+  'detallo',
+  'detallaron',
+  'dialogo',
+  'encontre',
+  'encontro',
+  'encontrar',
+  'establece',
+  'establecen',
+  'exige',
+  'exigen',
+  'explico',
+  'explicaron',
+  'giro',
+  'indico',
+  'indicaron',
+  'menciono',
+  'mencionaron',
+  'necesaria',
+  'necesario',
+  'necesita',
+  'necesito',
+  'preciso',
+  'precisaron',
+  'pregunto',
+  'preguntaron',
+  'quedo',
+  'quedaron',
+  'respondio',
+  'respondieron',
+  'reviso',
+  'revisaron',
+  'senalo',
+  'senalaron',
+  'ser',
+  'torno',
+  'trato',
+  'trataron',
+  'charla',
+  'converso',
+  'conversaron',
+  'informacion',
+  'datos',
+  'disponible',
+  'disponibles',
+  'pendiente',
+  'pendientes',
 ]);
 
 const NUMBER_WORD_TOKENS = new Set([
@@ -518,13 +622,38 @@ function summaryContentWords(text: string): string[] {
   ];
 }
 
+/**
+ * Sinónimos usuales de una recapitulación. No añaden hechos: solo permiten
+ * que el resumen use «sueldo» al recapitular una respuesta que dijo
+ * «remuneración», en vez de castigar una paráfrasis legítima.
+ */
+const SUMMARY_SYNONYMS: Readonly<Record<string, string>> = {
+  contratacion: 'contratado',
+  haber: 'remuneracion',
+  haberes: 'remuneracion',
+  nombramiento: 'nombrado',
+  nombramientos: 'nombrado',
+  paga: 'remuneracion',
+  pagos: 'remuneracion',
+  salario: 'remuneracion',
+  salarios: 'remuneracion',
+  sueldo: 'remuneracion',
+  sueldos: 'remuneracion',
+};
+
+function canonicalSummaryWord(word: string): string {
+  return SUMMARY_SYNONYMS[word] ?? word;
+}
+
 function transcriptSupportsWord(
   word: string,
   transcriptWords: readonly string[],
 ): boolean {
-  return transcriptWords.some(
-    (candidate) => candidate.startsWith(word) || word.startsWith(candidate),
-  );
+  const canonical = canonicalSummaryWord(word);
+  return transcriptWords.some((candidate) => {
+    const other = canonicalSummaryWord(candidate);
+    return other.startsWith(canonical) || canonical.startsWith(other);
+  });
 }
 
 const NEGATION = /\b(?:no|nunca|jamas|tampoco|ningun|ninguna|ninguno|sin)\b/u;
@@ -536,7 +665,11 @@ function assistantSentenceList(
 ): string[] {
   return messages
     .filter((message) => message.role !== 'user')
-    .flatMap((message) => message.content.split(SENTENCE_SPLIT))
+    .flatMap((message) =>
+      message.content
+        .split(SENTENCE_SPLIT)
+        .flatMap((sentence) => sentence.split(/\n+/u)),
+    )
     .map((sentence) => sentence.trim())
     .filter(Boolean);
 }
@@ -546,17 +679,27 @@ function hasNegation(text: string): boolean {
 }
 
 /**
- * Cada oración del resumen debe usar solo términos que existan en el historial
- * y mantener la polaridad de la respuesta del asistente. Las preguntas del
- * usuario pueden aportar el tema, pero no sustituyen una afirmación del
- * asistente.
+ * Cada palabra de contenido del resumen debe existir en el historial. Los
+ * verbos y conectores de recapitulación están en la lista de palabras vacías y
+ * algunos sinónimos usuales se normalizan; fuera de eso, un sustantivo o un
+ * adjetivo nuevo sería un hecho inventado. Las cifras, unidades y entidades
+ * con nombre propio se validan además por separado.
  */
 function summaryContentIsGrounded(
   summary: string,
   messages: readonly ChatContextMessage[],
 ): boolean {
-  const allWords = summaryContentWords(
-    messages.map((message) => message.content).join(' '),
+  const assistantWords = summaryContentWords(
+    messages
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join(' '),
+  );
+  const topicWords = summaryContentWords(
+    messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content)
+      .join(' '),
   );
   const assistantSentences = assistantSentenceList(messages);
 
@@ -564,37 +707,130 @@ function summaryContentIsGrounded(
     .split(SENTENCE_SPLIT)
     .map((item) => item.trim())
     .filter(Boolean)) {
-    const words = summaryContentWords(sentence);
-    if (!words.length) continue;
-    if (!words.every((word) => transcriptSupportsWord(word, allWords))) {
-      return false;
-    }
-    const scoredCandidates = assistantSentences
-      .map((candidate) => {
+    // Una frase de estado puede nombrar el tema que puso la persona; una
+    // afirmación factual solo puede usar lo que dijo el asistente.
+    const pendingStatement =
+      /\b(?:qued[oó] pendiente|no se encontr[oó]|sin evidencia|no hubo|no hab[ií]a)\b/iu.test(
+        sentence,
+      );
+    for (const clause of sentence.split(CLAUSE_SPLIT)) {
+      const words = summaryContentWords(clause);
+      if (!words.length) continue;
+      if (
+        !words.every(
+          (word) =>
+            transcriptSupportsWord(word, assistantWords) ||
+            (pendingStatement && transcriptSupportsWord(word, topicWords)),
+        )
+      ) {
+        return false;
+      }
+      const matchingSentences = assistantSentences.filter((candidate) => {
         const candidateWords = summaryContentWords(candidate);
-        const score = words.filter((word) =>
+        return words.every((word) =>
           transcriptSupportsWord(word, candidateWords),
-        ).length;
-        return { candidate, score };
-      })
-      .filter((entry) => entry.score > 0)
-      .sort((left, right) => right.score - left.score);
-    if (!scoredCandidates.length) return false;
-    const bestScore = scoredCandidates[0]?.score ?? 0;
-    const bestCandidates = scoredCandidates.filter(
-      (entry) => entry.score === bestScore,
-    );
-    const negation = hasNegation(sentence);
-    // La mejor oración del asistente debe coincidir en polaridad: una oración
-    // no negada no puede tapar otra que niega el mismo hecho.
-    if (
-      !bestCandidates.every(
-        (entry) => hasNegation(entry.candidate) === negation,
-      )
-    ) {
-      return false;
+        );
+      });
+      if (!pendingStatement) {
+        // Un hecho debe estar contenido en una sola oración del asistente: no
+        // se puede tomar «licencia» de una oración y «UGEL» de otra.
+        if (!matchingSentences.length) return false;
+        const negation = hasNegation(clause);
+        if (
+          !matchingSentences.some(
+            (candidate) => hasNegation(candidate) === negation,
+          )
+        ) {
+          return false;
+        }
+        continue;
+      }
+      const scoredCandidates = assistantSentences
+        .map((candidate) => {
+          const candidateWords = summaryContentWords(candidate);
+          const score = words.filter((word) =>
+            transcriptSupportsWord(word, candidateWords),
+          ).length;
+          return { candidate, score };
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((left, right) => right.score - left.score);
+      if (!scoredCandidates.length) {
+        // El tema de una frase de estado puede venir solo de la pregunta.
+        if (words.every((word) => transcriptSupportsWord(word, topicWords))) {
+          continue;
+        }
+        return false;
+      }
+      const bestScore = scoredCandidates[0]?.score ?? 0;
+      const bestCandidates = scoredCandidates.filter(
+        (entry) => entry.score === bestScore,
+      );
+      const negation = hasNegation(clause);
+      if (
+        !bestCandidates.every(
+          (entry) => hasNegation(entry.candidate) === negation,
+        )
+      ) {
+        return false;
+      }
     }
   }
+  return true;
+}
+
+const SUMMARY_NAMED_ENTITY_IGNORED = new Set(['asesor', 'avend', 'pdf']);
+
+function existsInTranscript(value: string, transcript: string): boolean {
+  const normalized = normalizeSpanishText(value).replace(/\s+/gu, ' ').trim();
+  if (!normalized) return true;
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}])${escapeRegExp(normalized)}([^\\p{L}\\p{N}]|$)`,
+    'u',
+  ).test(transcript);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+/**
+ * Una sigla, un título entre comillas o una frase de dos o más palabras
+ * capitalizadas que no exista en el historial sería un hecho nuevo, aunque la
+ * paráfrasis sea natural. Las palabras sueltas capitalizadas («Además»,
+ * «Finalmente») no se tratan como entidades para no castigar el tono normal
+ * de un resumen.
+ */
+function summaryNamedContentIsGrounded(
+  summary: string,
+  messages: readonly ChatContextMessage[],
+): boolean {
+  const transcript = normalizeSpanishText(
+    messages
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join(' \n '),
+  );
+  const cleaned = summary.replace(/```[\s\S]*?```/gu, ' ');
+
+  for (const match of cleaned.matchAll(/«([^»]{3,120})»|"([^"]{3,120})"/gu)) {
+    const quoted = match[1] ?? match[2] ?? '';
+    if (!existsInTranscript(quoted, transcript)) return false;
+  }
+
+  for (const match of cleaned.matchAll(/\b[A-ZÁÉÍÓÚÑ]{2,10}\b/gu)) {
+    const acronym = match[0];
+    const normalized = normalizeSpanishText(acronym);
+    if (SUMMARY_NAMED_ENTITY_IGNORED.has(normalized)) continue;
+    if (!existsInTranscript(acronym, transcript)) return false;
+  }
+
+  for (const match of cleaned.matchAll(
+    /\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}(?:\s+(?:de|del|la|las|los|el)\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}|\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})+/gu,
+  )) {
+    if (!existsInTranscript(match[0], transcript)) return false;
+  }
+
   return true;
 }
 
@@ -618,6 +854,7 @@ function numericClaimsAreAssociated(
     .flatMap((sentence) => sentence.split(CLAUSE_SPLIT))
     .map((clause) => clause.trim())
     .filter(Boolean);
+  const sentences = assistantSentenceList(messages);
 
   for (const clause of clauses) {
     const claims = numericClaims(clause);
@@ -657,6 +894,25 @@ function numericClaimsAreAssociated(
       }),
     );
     if (!supported) return false;
+    // Además de la cláusula, todos los conceptos del resumen deben aparecer en
+    // una misma oración del asistente que contenga la cifra. Evita mezclar el
+    // plazo de una sección con la enfermedad de otra.
+    const inSameSentence = sentences.some((sentence) => {
+      const sentenceClaims = numericClaims(sentence);
+      const sameClaim = claims.every((claim) =>
+        sentenceClaims.some(
+          (candidate) =>
+            candidate.value === claim.value &&
+            (!claim.unit ||
+              !STRICT_MEASURE.test(claim.unit) ||
+              candidate.unit === claim.unit),
+        ),
+      );
+      if (!sameClaim) return false;
+      const sentenceWords = summaryContentWords(sentence);
+      return words.every((word) => transcriptSupportsWord(word, sentenceWords));
+    });
+    if (!inSameSentence) return false;
   }
   return true;
 }
@@ -682,12 +938,21 @@ export function groundedConversationSummary(
   if (trimmed.replace(/[^\p{L}\p{N}]+/gu, '').length < 12) return null;
   if (/^(?:¿|\?)/u.test(trimmed) || /\?\s*$/u.test(trimmed)) return null;
   if (
-    /\b(?:no (?:encontr[eé]|hay|se menciona|aparece|puedo resumir|tengo acceso|tengo informacion|dispongo)|no se (?:encontr[oó]|hall[oó]|obtuv[oó]|menciona|indica)|sin informacion)(?=$|[^\p{L}\p{N}])/iu.test(
+    /(?:^|\n)\s*(?:pregunta|respuesta|usuario|asistente|user|assistant)\s*:/iu.test(
       trimmed,
     )
   ) {
     return null;
   }
+  const startsWithRefusal =
+    /^(?:no (?:encontr[eé]|hay|puedo resumir|tengo acceso|tengo informacion|dispongo)|no se (?:encontr[oó]|hall[oó]|obtuv[oó]|menciona|indica)|sin informacion)(?=$|[^\p{L}\p{N}])/iu.test(
+      trimmed,
+    );
+  // Un resumen puede decir con naturalidad que un tema quedó pendiente; lo que
+  // no puede es empezar y quedarse en una negativa o excusa del modelo.
+  if (startsWithRefusal && summaryContentWords(trimmed).length <= 3)
+    return null;
+  if (!summaryNamedContentIsGrounded(trimmed, messages)) return null;
 
   const assistantTranscript = messages
     .filter((message) => message.role !== 'user')

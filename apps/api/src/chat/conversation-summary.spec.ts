@@ -89,10 +89,10 @@ describe('resumen de la conversación', () => {
   it('genera un resumen determinista solo con lo guardado', () => {
     const summary = buildDeterministicConversationSummary(messages);
 
-    expect(summary).toContain('En esta conversación hemos hablado');
-    expect(summary).toContain('¿Cuánto gana un docente contratado?');
+    expect(summary).toContain('Estos son los puntos que tratamos');
+    expect(summary).toContain('Cuánto gana un docente contratado');
     expect(summary).toContain('S/ 3,500.70');
-    expect(summary).toContain('¿Qué documentos debo presentar?');
+    expect(summary).toContain('¿Qué documentos debo presentar');
     expect(summary).not.toContain('sí');
     expect(summary).not.toContain('[1]');
   });
@@ -121,8 +121,8 @@ describe('resumen de la conversación', () => {
     expect(summary).not.toContain('sí, por favor');
     expect(summary).not.toContain('dale!');
     expect(summary).not.toContain('sí, quiero');
-    expect(summary).toContain('¿Cuánto gana un docente contratado?');
-    expect(summary).toContain('¿Qué documentos debo presentar?');
+    expect(summary).toContain('Cuánto gana un docente contratado');
+    expect(summary).toContain('¿Qué documentos debo presentar');
   });
 
   it('no trata una negativa con puntuación como un tema nuevo', () => {
@@ -134,7 +134,7 @@ describe('resumen de la conversación', () => {
     ]);
 
     expect(summary).not.toContain('no por ahora');
-    expect(summary).toContain('¿Cuánto gana un docente contratado?');
+    expect(summary).toContain('Cuánto gana un docente contratado');
   });
 
   it('incluye respuestas también cuando hay más de doce turnos', () => {
@@ -151,7 +151,67 @@ describe('resumen de la conversación', () => {
     }
 
     expect(buildDeterministicConversationSummary(conversation)).toContain(
-      'Respuesta: Respuesta 13 con detalle.',
+      '• Consulta 13 sobre remuneraciones: Respuesta 13 con detalle.',
+    );
+  });
+
+  it('presenta los temas pendientes sin volcar «pregunta / Respuesta:»', () => {
+    const summary = buildDeterministicConversationSummary([
+      { content: '¿Cuánto gana un docente?', role: 'user' },
+      {
+        content: 'La remuneración mensual es S/ 3,500.70. [1]',
+        role: 'assistant',
+      },
+      {
+        content: '¿Qué se necesita para ser un docente nombrado?',
+        role: 'user',
+      },
+      {
+        content:
+          'Por ahora no encontré información suficiente para orientarte bien sobre esto. Cuéntame el trámite.',
+        role: 'no_evidence',
+      },
+    ]);
+
+    expect(summary).not.toContain('Respuesta:');
+    expect(summary).toContain('quedó pendiente');
+    expect(summary).toContain('evidencia suficiente');
+    expect(summary).toContain('Qué se necesita para ser un docente nombrado');
+  });
+
+  it('conserva la parte respondida de una respuesta mixta', () => {
+    const summary = buildDeterministicConversationSummary([
+      { content: '¿Qué necesito para la licencia?', role: 'user' },
+      {
+        content:
+          'La licencia por enfermedad requiere certificado médico. No encontré información suficiente sobre el plazo.',
+        role: 'assistant',
+      },
+    ]);
+
+    expect(summary).toContain(
+      'La licencia por enfermedad requiere certificado',
+    );
+    expect(summary).not.toContain(
+      'no había evidencia suficiente en los documentos',
+    );
+  });
+
+  it('conserva la parte substantiva si la negativa abre la respuesta', () => {
+    const summary = buildDeterministicConversationSummary([
+      { content: '¿Qué necesito para la licencia?', role: 'user' },
+      {
+        content:
+          'Por ahora no encontré información suficiente sobre el plazo. La licencia por enfermedad requiere certificado médico.',
+        role: 'assistant',
+      },
+    ]);
+
+    expect(summary).toContain(
+      'La licencia por enfermedad requiere certificado',
+    );
+    expect(summary).not.toContain(
+      'no había evidencia suficiente en los documentos',
     );
   });
 
@@ -204,6 +264,146 @@ describe('resumen de la conversación', () => {
     ).toBe(
       'Hablamos de la remuneración mensual de S/ 3,500.70 para las modalidades indicadas.',
     );
+  });
+
+  it('acepta una paráfrasis natural que se apoya en el historial', () => {
+    expect(
+      groundedConversationSummary(
+        'La conversación giró en torno a la remuneración mensual del docente contratado y al plazo de cinco días.',
+        [
+          {
+            content: '¿Cuál es la remuneración mensual del docente contratado?',
+            role: 'user',
+          },
+          {
+            content:
+              'La remuneración mensual del docente contratado es de S/ 3,500.70.',
+            role: 'assistant',
+          },
+          { content: '¿Cuál es el plazo?', role: 'user' },
+          { content: 'El plazo es de 5 días.', role: 'assistant' },
+        ],
+      ),
+    ).not.toBeNull();
+  });
+
+  it('acepta que un tema haya quedado pendiente por falta de evidencia', () => {
+    expect(
+      groundedConversationSummary(
+        'Sobre lo que se necesita para ser un docente nombrado, no se encontró evidencia suficiente y quedó pendiente.',
+        [
+          {
+            content: '¿Qué se necesita para ser un docente nombrado?',
+            role: 'user',
+          },
+          {
+            content:
+              'Por ahora no encontré información suficiente para orientarte bien sobre esto.',
+            role: 'no_evidence',
+          },
+        ],
+      ),
+    ).not.toBeNull();
+  });
+
+  it('descarta un hecho inventado aunque comparta el tema salarial', () => {
+    expect(
+      groundedConversationSummary(
+        'El docente debe afiliarse a un sindicato para cobrar la remuneración.',
+        [
+          {
+            content: '¿Cuánto gana un docente contratado?',
+            role: 'user',
+          },
+          {
+            content: 'La remuneración mensual del docente es S/ 3,500.70. [1]',
+            role: 'assistant',
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('descarta una entidad inventada con mayúscula inicial', () => {
+    expect(
+      groundedConversationSummary(
+        'Sunedu exige la licencia por enfermedad y la solicitud.',
+        [
+          { content: '¿Qué necesito para la licencia?', role: 'user' },
+          {
+            content:
+              'La licencia por enfermedad requiere solicitud y certificado. [1]',
+            role: 'assistant',
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('no usa una palabra de la pregunta como prueba de un hecho', () => {
+    expect(
+      groundedConversationSummary(
+        'La licencia por enfermedad requiere título.',
+        [
+          {
+            content: '¿Se necesita título para la licencia?',
+            role: 'user',
+          },
+          {
+            content:
+              'La licencia por enfermedad requiere certificado médico. [1]',
+            role: 'assistant',
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('no mezcla una cifra de una sección con el tema de otra', () => {
+    expect(
+      groundedConversationSummary(
+        'La licencia por enfermedad tiene un plazo de cinco días.',
+        [
+          {
+            content: 'Permuta. El plazo es de 5 días. Licencia por enfermedad.',
+            role: 'assistant',
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('descarta una relación falsa entre dos oraciones reales del asistente', () => {
+    expect(
+      groundedConversationSummary(
+        'La licencia por enfermedad se solicita en la UGEL.',
+        [
+          {
+            content:
+              'La licencia por enfermedad requiere certificado médico. La permuta se solicita en la UGEL.',
+            role: 'assistant',
+          },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('descarta una entidad o un título que no aparece en el historial', () => {
+    expect(
+      groundedConversationSummary('Según el MINEDU, el plazo es de 5 días.', [
+        { content: '¿Cuál es el plazo?', role: 'user' },
+        { content: 'El plazo es de 5 días. [1]', role: 'assistant' },
+      ]),
+    ).toBeNull();
+    expect(
+      groundedConversationSummary(
+        'La «Ley de Reforma Magisterial» regula el plazo.',
+        [
+          { content: '¿Cuál es el plazo?', role: 'user' },
+          { content: 'El plazo es de 5 días. [1]', role: 'assistant' },
+        ],
+      ),
+    ).toBeNull();
   });
 
   it('descarta un resumen con contenido que no está en el historial', () => {

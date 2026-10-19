@@ -12,6 +12,7 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
       RAG_MATCH_THRESHOLD: 0.5,
+      RAG_MINERU_SIDECAR_ENABLED: true,
       WEB_ORIGIN: 'http://localhost:3000',
     });
   });
@@ -33,8 +34,23 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
       RAG_MATCH_THRESHOLD: 0.5,
+      RAG_MINERU_SIDECAR_ENABLED: true,
       WEB_ORIGIN: 'http://localhost:3100',
     });
+  });
+
+  it('convierte el interruptor de MinerU a booleano y rechaza valores inválidos', () => {
+    expect(
+      validateEnvironment({ RAG_MINERU_SIDECAR_ENABLED: 'false' })
+        .RAG_MINERU_SIDECAR_ENABLED,
+    ).toBe(false);
+    expect(
+      validateEnvironment({ RAG_MINERU_SIDECAR_ENABLED: 'true' })
+        .RAG_MINERU_SIDECAR_ENABLED,
+    ).toBe(true);
+    expect(() =>
+      validateEnvironment({ RAG_MINERU_SIDECAR_ENABLED: 'yes' }),
+    ).toThrow('Invalid environment configuration.');
   });
 
   it('normalizes an optional trailing slash for the exact browser CORS origin', () => {

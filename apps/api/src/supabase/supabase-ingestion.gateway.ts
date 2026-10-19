@@ -75,6 +75,17 @@ export class SupabaseIngestionGatewayAdapter implements IngestionGateway {
     return Buffer.from(await data.arrayBuffer());
   }
 
+  async downloadOptionalObject(
+    storageBucket: string,
+    storagePath: string,
+  ): Promise<Buffer | null> {
+    const { data, error } = await this.requireClient()
+      .storage.from(storageBucket)
+      .download(storagePath);
+    if (error || !data) return null;
+    return Buffer.from(await data.arrayBuffer());
+  }
+
   async fail(
     job: ClaimedIngestionJob,
     errorCode: string,

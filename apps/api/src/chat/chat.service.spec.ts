@@ -792,9 +792,10 @@ describe('ChatService', () => {
     expect(ragService.retrieve).toHaveBeenCalledWith(
       '¿Cuánto gano con 40 horas?',
       null,
-      [expect.stringContaining('Propuesta aceptada:')],
+      ['¿Cuánto gana un docente de 30 horas?'],
       {
         forceContext: true,
+        personalSalary: true,
         salaryContextQuestions: ['¿Cuánto gana un docente de 30 horas?'],
       },
     );
@@ -877,7 +878,7 @@ describe('ChatService', () => {
     expect(ragService.retrieve).toHaveBeenCalledWith(
       '¿Cuánto gana un director?',
       null,
-      [expect.stringContaining('Propuesta aceptada:')],
+      ['¿Cuánto gana un docente en 2024?'],
       { forceContext: true, salaryContextQuestions: [] },
     );
   });
@@ -995,17 +996,101 @@ describe('ChatService', () => {
     expect(ragService.retrieve).toHaveBeenCalledWith(
       'Explícame los requisitos.',
       null,
-      [
-        expect.stringMatching(
-          /Propuesta aceptada:[\s\S]*RM N\.° 123-2024-MINEDU/u,
-        ),
-      ],
+      ['¿Cuáles son los requisitos?'],
       { forceContext: true, salaryContextQuestions: [] },
     );
     expect(snapshotGateway.getConversationContext).not.toHaveBeenCalled();
   });
 
+  it('busca por sí sola una propuesta de documentos sin arrastrar la respuesta salarial', async () => {
+    const suggestion =
+      'Según la norma, la remuneración mensual es S/ 3,300.60. [1]\n\n' +
+      'Sugerencias: ¿Te gustaría saber qué documentos debes presentar para obtener más información sobre tu situación laboral?';
+    const snapshotGateway = {
+      ...historyGateway,
+      getConversationSnapshot: jest.fn().mockResolvedValue({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        messages: [
+          { content: 'cuanto gana un docente?', role: 'user' as const },
+          { content: suggestion, role: 'assistant' as const },
+        ],
+        selectedModuleId: null,
+      }),
+    };
+    const snapshotService = new ChatService(
+      answerGateway,
+      snapshotGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+    );
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Requisitos' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los documentos son el DNI y el título. [1]';
+      })(),
+    );
+
+    await collect(snapshotService, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: 'si',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Qué documentos debo presentar para obtener más información sobre mi situación laboral?',
+      null,
+      // No arrastra la consulta salarial previa a la búsqueda de documentos.
+      [],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+  });
+
+  it('no arrastra la consulta salarial a un pedido escrito de documentos', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content: 'La remuneración mensual es S/ 3,500.70. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: '¿Qué documentos debo presentar?',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Qué documentos debo presentar?',
+      null,
+      [],
+      { forceContext: false },
+    );
+  });
+
   it('no hereda factores salariales al aceptar una propuesta de otro tema', () => {
+    // El mismo corte aplica si el pedido de documentos se escribe directamente.
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Qué documentos debo presentar?',
+        forceSalaryContext: false,
+        priorUserQuestions: ['¿Cuánto gana un docente?'],
+      }),
+    ).toEqual([]);
     const prior = [
       '¿Cuánto gana un docente de 30 horas?',
       'Propuesta aceptada: la remuneración corresponde a una jornada de 30 horas.',
@@ -1077,6 +1162,131 @@ describe('ChatService', () => {
     ).toEqual([]);
   });
 
+  it('no muestra una tabla salarial si el importe no coincide con su fila', async () => {
+    const tableSource = {
+      ...source,
+      chunkContent: [
+        '| Jornada | Remuneración |',
+        '| --- | --- |',
+        '| 30 horas | S/ 3 300,60 |',
+        '| 40 horas | S/ 4 400,80 |',
+      ].join('\n'),
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [tableSource],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Para 30 horas, la remuneración es S/ 4 400,80. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un docente?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain('jornada');
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'clarification',
+        sources: [],
+        unansweredReason: 'ambiguous_request',
+      }),
+    );
+  });
+
+  it('no muestra una cifra si la tabla no coincide con todos los factores de la pregunta', async () => {
+    const tableSource = {
+      ...source,
+      chunkContent: [
+        '| Jornada | Vínculo | Remuneración |',
+        '| --- | --- | --- |',
+        '| 30 horas | nombrado | S/ 3 300,60 |',
+        '| 30 horas | contratado | S/ 2 400,40 |',
+      ].join('\n'),
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [tableSource],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Para 30 horas, la remuneración es S/ 2 400,40. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gano yo como docente nombrado de 30 horas?',
+    });
+
+    expect(events.some((event) => event.type === 'clarification')).toBe(true);
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'clarification',
+        sources: [],
+      }),
+    );
+  });
+
+  it('no convierte una negativa del modelo en «sin evidencia» si hay salario general', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del docente es de S/ 3 300,60.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'No sería responsable darte una cifra única.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un docente?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'clarification',
+        sources: [],
+        unansweredReason: 'ambiguous_request',
+      }),
+    );
+  });
+
   it('respeta el módulo elegido si cambia mientras hay una propuesta pendiente', async () => {
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -1124,7 +1334,7 @@ describe('ChatService', () => {
     answerGateway.generate.mockReturnValue(
       (async function* () {
         await Promise.resolve();
-        yield 'Hablamos de la remuneración mensual de S/ 3,500.70 para el docente contratado.';
+        yield 'Hablamos de la remuneración mensual de S/ 3,500.70.';
       })(),
     );
 
@@ -1136,8 +1346,7 @@ describe('ChatService', () => {
     expect(events).toEqual([
       {
         data: {
-          message:
-            'Hablamos de la remuneración mensual de S/ 3,500.70 para el docente contratado.',
+          message: 'Hablamos de la remuneración mensual de S/ 3,500.70.',
         },
         type: 'conversational',
       },
@@ -1250,8 +1459,8 @@ describe('ChatService', () => {
     if (!reply || reply.type !== 'conversational') {
       throw new Error('Expected a conversational summary.');
     }
-    expect(reply.data.message).toContain('En esta conversación hemos hablado');
-    expect(reply.data.message).toContain('¿Cuánto gana un docente contratado?');
+    expect(reply.data.message).toContain('Estos son los puntos que tratamos');
+    expect(reply.data.message).toContain('Cuánto gana un docente contratado');
     expect(reply.data.message).not.toContain('[1]');
   });
 
@@ -1283,7 +1492,7 @@ describe('ChatService', () => {
     if (!reply || reply.type !== 'conversational') {
       throw new Error('Expected a conversational summary.');
     }
-    expect(reply.data.message).toContain('En esta conversación hemos hablado');
+    expect(reply.data.message).toContain('Estos son los puntos que tratamos');
     expect(reply.data.message).not.toContain('4,400.80');
   });
 
@@ -1460,9 +1669,9 @@ describe('ChatService', () => {
       expect(answerGateway.generate).not.toHaveBeenCalled();
     });
 
-    // H-3: la respuesta a una aclaración no repite la consulta salarial; el
-    // siguiente dato que decide la cifra se pide con los factores heredados.
-    it('tras responder «Sector público» pide la jornada de la consulta salarial previa', async () => {
+    // H-3: la respuesta a una aclaración conserva los factores heredados y
+    // responde con el panorama en vez de encadenar otra pregunta.
+    it('tras responder «Sector público» responde con el panorama salarial heredado', async () => {
       const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
       historyGateway.getConversationContext.mockResolvedValue({
         conversationId,
@@ -1485,20 +1694,26 @@ describe('ChatService', () => {
         })),
         topRelevanceScore: 0.9,
       });
+      answerGateway.generate.mockReturnValue(
+        (async function* () {
+          await Promise.resolve();
+          yield 'La remuneración mensual es S/ 30 000,00 para 30 horas y S/ 40 000,00 para 40 horas. [1][2]';
+        })(),
+      );
 
       const events = await collect(service, {
         conversationId,
         question: 'Sector público',
       });
-      const clarification = events.find(
-        (event) => event.type === 'clarification',
-      );
-      if (!clarification || clarification.type !== 'clarification') {
-        throw new Error('Expected a clarification event.');
-      }
 
-      expect(clarification.data.message).toContain('jornada');
-      expect(answerGateway.generate).not.toHaveBeenCalled();
+      expect(events.some((event) => event.type === 'clarification')).toBe(
+        false,
+      );
+      const generateInput = (
+        answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
+      )[0]?.[0];
+      expect(generateInput?.sources?.length).toBeGreaterThan(0);
+      expect(events.some((event) => event.type === 'token')).toBe(true);
     });
   });
 
@@ -1641,7 +1856,7 @@ describe('ChatService', () => {
       '¿Cuánto es mi remuneración mensual?',
       null,
       [],
-      { forceContext: false },
+      { forceContext: false, personalSalary: true },
     );
     // …y el historial conserva exactamente lo que escribió la persona.
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
@@ -1728,7 +1943,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('pide la jornada cuando la evidencia vigente tiene dos montos incompatibles', async () => {
+  it('responde con las dos jornadas cuando la evidencia vigente tiene dos montos', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       sources: [
@@ -1749,25 +1964,24 @@ describe('ChatService', () => {
       ],
       topRelevanceScore: 0.9,
     });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La remuneración mensual es S/ 3 300,60 para 30 horas y S/ 4 400,80 para 40 horas. [1][2]';
+      })(),
+    );
 
     const events = await collect(service, {
       question: '¿Cuánto gana un docente?',
     });
 
-    const clarification = events.find(
-      (event) => event.type === 'clarification',
-    );
-    if (!clarification || clarification.type !== 'clarification') {
-      throw new Error('Expected a clarification event.');
-    }
-    expect(clarification.data.message).toContain('30');
-    expect(clarification.data.message).toContain('40');
-    expect(
-      events.some(
-        (event) => event.type === 'token' || event.type === 'sources',
-      ),
-    ).toBe(false);
-    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(events.some((event) => event.type === 'sources')).toBe(true);
+    expect(events.some((event) => event.type === 'token')).toBe(true);
+    const generateInput = (
+      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
+    )[0]?.[0];
+    expect(generateInput?.sources?.length).toBeGreaterThan(0);
   });
 
   it.each([
@@ -1853,16 +2067,20 @@ describe('ChatService', () => {
       },
     });
 
-    await collect(service, { question: '¿Cuánto es mi remuneración mensual?' });
+    const events = await collect(service, {
+      question: '¿Cuánto es mi remuneración mensual?',
+    });
 
+    expect(events.some((event) => event.type === 'clarification')).toBe(true);
+    expect(events.some((event) => event.type === 'token')).toBe(false);
     const completionCalls = historyGateway.completeTurn.mock.calls as Array<
       [Parameters<ChatHistoryGateway['completeTurn']>[0]]
     >;
-    const completion = completionCalls[0]?.[0];
-    expect(completion?.qualitySignals).toContain('support_partial');
-    expect(completion?.qualityExcerpts?.support_partial).toBe(
-      'Tu remuneración mensual es de S/ 2 666,80. [2]',
-    );
+    expect(completionCalls[0]?.[0]).toMatchObject({
+      replyRole: 'clarification',
+      sources: [],
+      unansweredReason: 'ambiguous_request',
+    });
   });
 
   it('persists the real child association when a main module retrieves submodule evidence', async () => {

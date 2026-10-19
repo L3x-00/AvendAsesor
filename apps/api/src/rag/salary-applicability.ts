@@ -28,6 +28,8 @@ const AMOUNT_PATTERN =
   /s\/\.?\s*\d[\d .,]*|\b\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{1,2})?\b|\b\d+[.,]\d{2}\b/u;
 /** El mismo patrón con recorrido global, para extraer todas las cifras. */
 const AMOUNT_PATTERN_ALL = new RegExp(AMOUNT_PATTERN.source, 'gu');
+/** Cláusulas de una respuesta con varios importes; no corta «3 300,60». */
+const SALARY_CLAUSE_SPLIT = /,(?!\d)|\s+(?:y|e|pero|mientras|aunque)\s+|[;]/u;
 
 const SALARY_TERMS =
   /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gana|ganan|ganaria|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
@@ -116,7 +118,7 @@ const ROLE_PATTERNS: ReadonlyArray<{ role: string; pattern: RegExp }> = [
 const HOURS_PATTERN = /\b(\d{1,2})\)?\s*(?:h|horas)\b/u;
 const HOURS_PATTERN_ALL = new RegExp(HOURS_PATTERN.source, 'gu');
 const SCALE_PATTERN_ALL =
-  /\bescala\s*(?:magisterial\s+|remunerativa\s+)?(\d{1,2}|[ivx]{1,4})\b/gu;
+  /\bescala\s*:?\s*(?:(?:magisterial|remunerativa)\s*:?\s*)?(\d{1,2}|[ivx]{1,4})\b/gu;
 
 /**
  * Un plazo no es una jornada: «dentro de las 24 horas», «el plazo de 48 horas»
@@ -152,6 +154,8 @@ const RELATIVE_TIME_AFTER_HOURS =
 const JORNADA_WINDOW_MAX_WORDS = 10;
 
 const JORNADA_BEFORE_HOURS = /\b(?:contratad[oa]s?|nombrad[oa]s?)\s+por\s*$/u;
+/** «Para 30 horas», «con 40 horas»: la preposición introduce la jornada. */
+const JORNADA_PREPOSITION_BEFORE_HOURS = /\b(?:para|con|en|de)\s*$/iu;
 
 const JORNADA_AFTER_HOURS =
   /^\s*(?:semanales?|diarias?|cronologicas?|lectivas?|pedagogicas?|de\s+(?:trabajo|jornada|docencia|clase|clases|dictado|servicio|labor)|a\s+la\s+semana|al\s+dia|por\s+semana)\b/u;
@@ -219,7 +223,9 @@ function evidenceJornadaHoursIn(text: string): number[] {
     if (
       JORNADA_BEFORE_HOURS.test(clause) ||
       JORNADA_AFTER_HOURS.test(after) ||
-      jornadaBeforeHours(clause)
+      jornadaBeforeHours(clause) ||
+      (!PROCESS_TERMS_BEFORE_HOURS.test(clause) &&
+        JORNADA_PREPOSITION_BEFORE_HOURS.test(clause))
     ) {
       hours.push(value);
     }
@@ -492,6 +498,91 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
 }
 
 /**
+ * La persona pregunta por su propia remuneración, no por la regla general
+ * («¿cuánto gano yo?», «mi sueldo», «me corresponde»). En ese caso una
+ * precisión puede ser necesaria; en una consulta general sobre cuánto gana un
+ * docente, en cambio, bloquear la respuesta para pedir un dato personal
+ * oculta información que las fuentes sí sostienen.
+ */
+const PERSONAL_SALARY_MARKER =
+  /\b(?:yo|mi|mis|tengo|me corresponde(?:n)?|mi caso|mi situacion|mi remuneracion|mi sueldo|mi salario)\b/u;
+/** «Trabajo como…» es primera persona; «de 30 horas de trabajo» no. */
+const PERSONAL_SALARY_JOB = /\b(?:trabajo|laboro)\s+(?:como|en|de|para)\b/u;
+/** «Soy nombrado» es una declaración del propio vínculo, no una pregunta general. */
+const PERSONAL_SALARY_CONDITION =
+  /\bsoy\s+(?:nombrad[oa]|contratad[oa]|auxiliar|director(?:a)?|subdirector(?:a)?)\b/u;
+const LEADING_SALARY_FOLLOW_UP = /^(?:y|e|pero|entonces|ademas|tambien)\b/u;
+
+export function isPersonalSalaryQuestion(question: string): boolean {
+  if (!salaryQuestionProfile(question).isSalaryQuestion) return false;
+  const normalized = normalizeSpanishText(question);
+  const raw = question.toLocaleLowerCase('es');
+  // «Ganó» es tercera persona; sin la tilde, «gano» es primera persona.
+  const firstPersonGano = /\bgano\b/u.test(raw) && !/\bganó\b/u.test(raw);
+  return (
+    (firstPersonGano && !/\bganaria\b/u.test(normalized)) ||
+    PERSONAL_SALARY_MARKER.test(normalized) ||
+    PERSONAL_SALARY_JOB.test(normalized) ||
+    PERSONAL_SALARY_CONDITION.test(normalized)
+  );
+}
+
+/**
+ * La intención personal puede venir del turno actual («mi sueldo», «soy
+ * nombrado») o de la consulta salarial que abrió el hilo. La consulta
+ * sintética que hereda factores pierde el «yo», así que la decisión no puede
+ * depender solo de esa cadena.
+ */
+export function hasPersonalSalaryContext(
+  question: string,
+  priorQuestions: readonly string[],
+): boolean {
+  if (isPersonalSalaryQuestion(question)) return true;
+  const normalized = normalizeSpanishText(question);
+  const profile = salaryQuestionProfile(question);
+  // Una pregunta salarial general autocontenida («¿cuánto gana un director?»,
+  // «¿cuánto se gana en el sector público?») no hereda la intención personal de
+  // un turno anterior sobre el propio sueldo.
+  const leading = normalized.replace(/^[\s¿¡"'«»(]+/u, '');
+  if (
+    profile.isSalaryQuestion &&
+    !isPersonalSalaryQuestion(question) &&
+    !LEADING_SALARY_FOLLOW_UP.test(leading)
+  ) {
+    return false;
+  }
+  const hasPriorSalary = priorQuestions.some(
+    (prior) => salaryQuestionProfile(prior).isSalaryQuestion,
+  );
+  // Una respuesta de factor («Nombrado», «30 horas») o una declaración del
+  // propio vínculo («Soy nombrado») solo es personal si el hilo ya era salarial.
+  if (
+    hasPriorSalary &&
+    (PERSONAL_SALARY_CONDITION.test(normalized) ||
+      (!profile.isSalaryQuestion &&
+        (profile.condition !== null ||
+          profile.jornadaHours !== null ||
+          profile.scale !== null)))
+  ) {
+    return true;
+  }
+  return priorQuestions.some((prior) => isPersonalSalaryQuestion(prior));
+}
+
+/**
+ * Consulta salarial general, en tercera persona: pide el panorama de una
+ * categoría («cuánto gana un docente», «remuneración del director») y admite
+ * una respuesta con las condiciones que cambian la cifra. No incluye las
+ * preguntas por el caso propio, que sí pueden requerir una precisión.
+ */
+export function isBroadSalaryQuestion(question: string): boolean {
+  return (
+    salaryQuestionProfile(question).isSalaryQuestion &&
+    !isPersonalSalaryQuestion(question)
+  );
+}
+
+/**
  * Una fuente contradice un factor solo cuando el factor aparece expresamente
  * junto a una cifra comparable. La ausencia del dato no autoriza a inventar
  * incompatibilidad; en cambio, «40 horas» no puede competir por una consulta
@@ -568,16 +659,62 @@ export function canonicalAmount(value: string): string {
   return `${integer}.${decimal[1].padStart(2, '0')}`;
 }
 
-/** Identidad comparable de las cifras de un fragmento (ordenada). */
-function amountSignature(source: RetrievedChunk): string {
-  return sortedUnique(amountsIn(source.chunkContent).map(canonicalAmount)).join(
-    '|',
-  );
+export function hasMarkdownTable(text: string): boolean {
+  return /^\s*\|.*\|\s*$/mu.test(text);
+}
+
+function tableCells(line: string): string[] | null {
+  if (!/^\s*\|.*\|\s*$/u.test(line)) return null;
+  return line
+    .trim()
+    .slice(1, -1)
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+/**
+ * Convierte cada fila de una tabla Markdown en una oración con el encabezado
+ * delante: «Jornada: 30 horas; Remuneración: S/ 3 300,60». Así el factor que
+ * explica el importe queda en la misma oración que la cifra y la aplicabilidad
+ * salarial no depende de que el modelo repita la tabla completa.
+ */
+export function expandMarkdownTables(text: string): string {
+  const lines = text.replace(/\r\n?/gu, '\n').split('\n');
+  const expanded: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = tableCells(lines[index] ?? '');
+    const separator = tableCells(lines[index + 1] ?? '');
+    if (
+      !header ||
+      !separator ||
+      separator.length !== header.length ||
+      !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))
+    ) {
+      expanded.push(lines[index] ?? '');
+      continue;
+    }
+    expanded.push(lines[index] ?? '', lines[index + 1] ?? '');
+    index += 2;
+    while (index < lines.length) {
+      const row = tableCells(lines[index] ?? '');
+      if (!row) break;
+      const pairs = header
+        .map((cell, column) => {
+          const value = row[column] ?? '';
+          return cell && value ? `${cell}: ${value}` : '';
+        })
+        .filter(Boolean);
+      if (pairs.length) expanded.push(pairs.join('; '));
+      index += 1;
+    }
+    index -= 1;
+  }
+  return expanded.join('\n');
 }
 
 /** Oraciones del fragmento, ya normalizadas para comparar contra los patrones. */
 function sentencesIn(text: string): string[] {
-  return text
+  return expandMarkdownTables(text)
     .replace(/\r/gu, '')
     .split(/(?<=[.!?])\s+|\n+/u)
     .map((sentence) => normalizeSpanishText(sentence))
@@ -614,7 +751,9 @@ function factorValuesInSource(
   if (sentenceOnly) return [];
 
   return sortedUnique(
-    evidenceFactorsIn(normalizeSpanishText(source.chunkContent))[factor],
+    evidenceFactorsIn(
+      normalizeSpanishText(expandMarkdownTables(source.chunkContent)),
+    )[factor],
   );
 }
 
@@ -648,6 +787,32 @@ export function salaryEvidenceProfile(
     general: current.filter(isGeneralRemunerationSource),
     special: current.filter(isSpecialAllocationSource),
   };
+}
+
+/**
+ * Evidencia de remuneración general aplicable al alcance consultado. En el
+ * alcance vigente solo cuenta una fuente vigente; en una consulta histórica o
+ * de antecedente archivado, la fuente histórica es la que responde.
+ */
+export function hasGeneralSalaryEvidence(
+  sources: readonly RetrievedChunk[],
+  scope: 'archived_explicit' | 'current' | 'historical',
+): boolean {
+  if (scope === 'current') {
+    return salaryEvidenceProfile([...sources]).general.length > 0;
+  }
+  if (scope === 'historical') {
+    return sources.some(
+      (source) =>
+        source.documentSituation !== 'current' &&
+        isGeneralRemunerationSource(source),
+    );
+  }
+  return sources.some(
+    (source) =>
+      source.documentSituation === 'archived' &&
+      isGeneralRemunerationSource(source),
+  );
 }
 
 export interface SalaryClarification {
@@ -721,9 +886,16 @@ function factorQuestion(
 export function salaryClarificationFor(
   question: string,
   sources: RetrievedChunk[],
+  personal = isPersonalSalaryQuestion(question),
 ): SalaryClarification | null {
   const profile = salaryQuestionProfile(question);
   if (!profile.isSalaryQuestion) return null;
+  // Una consulta general («cuánto gana un docente») se responde con el
+  // panorama y sus condiciones, no con una pregunta que retrase la respuesta.
+  // La aclaración se reserva para el caso propio, donde el dato personal sí
+  // decide entre cifras que no se pueden presentar conjuntamente, o para la
+  // sustitución segura de una respuesta que mezcló filas de una tabla.
+  if (!personal && isBroadSalaryQuestion(question)) return null;
 
   const evidence = salaryEvidenceProfile(sources);
   // La remuneración general manda; los conceptos adicionales solo se comparan
@@ -731,12 +903,17 @@ export function salaryClarificationFor(
   const comparable = evidence.general.length
     ? evidence.general
     : evidence.comparable;
-  if (comparable.length < 2) return null;
+  if (!comparable.length) return null;
   // La persona ya delimitó el concepto adicional que consulta.
   if (profile.asksSpecialAllocation) return null;
-  // Dos fuentes que dicen el mismo monto no plantean ninguna disyuntiva: pedir
-  // un dato para una única cifra sería una pregunta inútil y una demora.
-  const signatures = new Set(comparable.map(amountSignature));
+  // Una sola tabla puede contener varias filas con montos distintos; no se
+  // exige más de un documento, solo más de una cifra comparable. Si todas las
+  // fuentes dicen el mismo monto, pedir un dato sería una demora inútil.
+  const signatures = new Set(
+    comparable.flatMap((source) =>
+      amountsIn(expandMarkdownTables(source.chunkContent)).map(canonicalAmount),
+    ),
+  );
   if (signatures.size < 2) return null;
 
   for (const factor of FACTOR_ORDER) {
@@ -842,7 +1019,9 @@ const CITATION_TAIL = new RegExp(
  */
 function amountSentences(answer: string): string[] {
   const sentences: string[] = [];
-  for (const line of answer.replace(/\r/gu, '').split(/\n+/u)) {
+  for (const line of expandMarkdownTables(answer)
+    .replace(/\r/gu, '')
+    .split(/\n+/u)) {
     for (const fragment of line.split(/(?<=[.!?])\s+/u)) {
       const trimmed = fragment.trim();
       if (!trimmed) continue;
@@ -857,6 +1036,147 @@ function amountSentences(answer: string): string[] {
 }
 
 /**
+ * Una respuesta salarial puede tomar el importe de una fila y la condición de
+ * otra. Se comprueba, solo en fuentes con tabla, que el importe citado y los
+ * factores decisivos (jornada, vínculo, escala o período) estén en la misma
+ * fila. El cargo se omite porque una tabla de docentes no repite el rol en cada
+ * fila; los demás factores sí cambian la cifra.
+ */
+export function salaryRowMismatch(
+  answer: string,
+  sources: RetrievedChunk[],
+  question: string | null = null,
+): SalaryAnswerFinding | null {
+  // Se valida una tabla en la respuesta o una respuesta plana sustentada en
+  // una tabla: en ambos casos el importe debe pertenecer a la misma fila que su
+  // condición. Una tabla del modelo a partir de fuentes planas también se
+  // comprueba contra las oraciones de esas fuentes.
+  const checkedFactors: readonly SalaryFactor[] = [
+    'jornada',
+    'condicion',
+    'cargo',
+    'escala',
+    'periodo',
+  ];
+  const questionProfile = question ? salaryQuestionProfile(question) : null;
+
+  for (const sentence of amountSentences(answer)) {
+    // Una oración con dos importes («30 horas: X y 40 horas: Y») se valida por
+    // cláusulas; una fila de tabla expandida conserva sus etiquetas y se valida
+    // entera.
+    const pieces =
+      matchingAmounts(sentence).size > 1
+        ? sentence.split(SALARY_CLAUSE_SPLIT)
+        : [sentence];
+    for (const piece of pieces) {
+      const amounts = matchingAmounts(piece);
+      if (!amounts.size) continue;
+      const answerFactors = evidenceFactorsIn(normalizeSpanishText(piece));
+      const declared = new Set<SalaryFactor>(
+        checkedFactors.filter((factor) => answerFactors[factor].length > 0),
+      );
+      // La pregunta puede declarar factores que la respuesta omite; se exigen
+      // todos, no solo cuando la respuesta no declara ninguno. En una
+      // asignación especial no se añaden factores de la pregunta: el concepto
+      // solicitado puede no repetir la jornada o el vínculo en la fila.
+      if (questionProfile && !questionProfile.asksSpecialAllocation) {
+        for (const factor of [
+          'jornada',
+          'condicion',
+          'escala',
+          'periodo',
+        ] as const) {
+          if (declaredFactorValue(questionProfile, factor) !== null) {
+            declared.add(factor);
+          }
+        }
+        if (questionProfile.role !== null) {
+          declared.add('cargo');
+        }
+      }
+      if (!declared.size) continue;
+      const cited = citedSourcesForSentence(piece, sources);
+      const candidates = cited.length ? cited : sources;
+      const supported = candidates.some((source) => {
+        const rows = sentencesIn(source.chunkContent).map((row) => ({
+          factors: evidenceFactorsIn(row),
+          row,
+        }));
+        const amountRows = rows.filter((entry) =>
+          [...amounts].some((amount) => matchingAmounts(entry.row).has(amount)),
+        );
+        if (!amountRows.length) return false;
+        // Solo se exigen los factores que acompañan al importe en la fuente.
+        // Un vínculo mencionado en otra oración no tiene por qué repetirse en
+        // cada fila, pero un factor declarado por la pregunta sí debe existir.
+        const sourceFactors = new Set(
+          checkedFactors.filter((factor) =>
+            amountRows.some((entry) => entry.factors[factor].length > 0),
+          ),
+        );
+        const questionCargo =
+          questionProfile && !questionProfile.asksSpecialAllocation
+            ? questionProfile.role
+            : null;
+        const required: SalaryFactor[] = [];
+        for (const factor of declared) {
+          if (factor === 'cargo') {
+            // El cargo solo se exige cuando la fuente lo distingue junto al
+            // importe; una fuente que no repite el rol no permite verificarlo.
+            if (
+              sourceFactors.has('cargo') &&
+              (answerFactors.cargo.length > 0 || questionCargo !== null)
+            ) {
+              required.push('cargo');
+            }
+            continue;
+          }
+          if (!sourceFactors.has(factor)) return false;
+          required.push(factor);
+        }
+        if (
+          sourceFactors.has('cargo') &&
+          questionCargo !== null &&
+          !required.includes('cargo')
+        ) {
+          required.push('cargo');
+        }
+        if (!required.length) return true;
+        return amountRows.some((entry) =>
+          required.every((factor) => {
+            const expected = [...answerFactors[factor]];
+            if (factor === 'cargo' && questionCargo !== null) {
+              if (!expected.includes(String(questionCargo))) {
+                expected.push(String(questionCargo));
+              }
+            } else if (questionProfile) {
+              const questionValue = declaredFactorValue(
+                questionProfile,
+                factor,
+              );
+              if (
+                questionValue !== null &&
+                !expected.includes(String(questionValue))
+              ) {
+                expected.push(String(questionValue));
+              }
+            }
+            return (
+              expected.length > 0 &&
+              expected.every((value) =>
+                entry.factors[factor].includes(String(value)),
+              )
+            );
+          }),
+        );
+      });
+      if (!supported) return { excerpt: piece.slice(0, 2_000) };
+    }
+  }
+  return null;
+}
+
+/**
  * Validación posterior de una respuesta salarial: si se entregó una
  * remuneración general vigente y la respuesta presenta un importe como sueldo
  * o remuneración citando únicamente un concepto adicional, se marca el
@@ -866,7 +1186,10 @@ function amountSentences(answer: string): string[] {
 export function assessSalaryAnswerCoverage(
   answer: string,
   sources: RetrievedChunk[],
+  question: string | null = null,
 ): SalaryAnswerFinding | null {
+  const rowMismatch = salaryRowMismatch(answer, sources, question);
+  if (rowMismatch) return rowMismatch;
   const generalSources = sources.filter(isGeneralRemunerationSource);
   for (const sentence of amountSentences(answer)) {
     const cited = citedSourcesForSentence(sentence, sources);

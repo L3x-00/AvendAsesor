@@ -32,14 +32,16 @@ function neutralizeReservedMarker(marker: string): string {
   return marker.replace(/\s+/g, '_').replaceAll('[', '(').replaceAll(']', ')');
 }
 
-function cleanPromptValue(value: string | null): string {
+function cleanPromptValue(value: string | null, preserveLines = false): string {
   if (!value) return 'No especificado';
 
   const withoutControls = [...value]
     .map((character) => {
       const codePoint = character.codePointAt(0);
 
-      return codePoint !== undefined && (codePoint <= 31 || codePoint === 127)
+      return codePoint !== undefined &&
+        (codePoint <= 31 || codePoint === 127) &&
+        !(preserveLines && (character === '\n' || character === '\r'))
         ? ' '
         : character;
     })
@@ -49,11 +51,14 @@ function cleanPromptValue(value: string | null): string {
     withoutControls,
   );
 
-  return withoutReservedMarkers
-    .replaceAll('<<', '‹‹')
-    .replaceAll('>>', '››')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const normalized = preserveLines
+    ? withoutReservedMarkers
+        .replace(/\r\n?/g, '\n')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+    : withoutReservedMarkers.replace(/\s+/g, ' ');
+
+  return normalized.replaceAll('<<', '‹‹').replaceAll('>>', '››').trim();
 }
 
 function situationLabel(source: RetrievedChunk): string {
@@ -87,7 +92,7 @@ function sourceBlock(source: RetrievedChunk, rank: number): string {
     `Artículo: ${cleanPromptValue(source.articleReference)}`,
     `Numeral o literal: ${cleanPromptValue(source.numeralReference)}`,
     'Contenido:',
-    cleanPromptValue(source.chunkContent).slice(
+    cleanPromptValue(source.chunkContent, true).slice(
       0,
       MAX_EVIDENCE_CHARS_PER_CHUNK,
     ),
@@ -123,6 +128,8 @@ export function buildEvidenceSystemPrompt(): string {
     'Coloca cada cita justo después del punto que cierra su oración, como una etiqueta: «El plazo es de cinco días. [1]».',
     'Cuando la fuente citada indique artículo o numeral pertinente a tu afirmación, menciónalos con claridad antes de la cita. Si dispone del tipo y número de la norma, usa su abreviatura; por ejemplo, «Según el artículo 49, numeral 5.2 de la RM N.° 123-2024-MINEDU, el plazo es de cinco días. [1]». No atribuyas un artículo o numeral a otra fuente.',
     'Antes de afirmar que un derecho, beneficio, trámite o cambio corresponde a una persona, verifica en las fuentes todas las condiciones de aplicabilidad que puedan cambiar la respuesta: cargo o rol, nivel educativo, vínculo o condición laboral, servicio previo, capacitación, plazo, exclusiones y excepciones. Expón primero las condiciones decisivas. Si falta un dato personal necesario, no supongas que se cumple: pide una precisión concreta.',
+    'Si la consulta es general sobre remuneraciones («cuánto gana un docente», «cuál es la remuneración del director»), no la bloquees pidiendo un dato personal antes de dar la información. Entrega el panorama que las fuentes sustentan, con los montos y la condición de cada uno (nivel, cargo, jornada, vínculo, escala o período). Si hay varias cifras, preséntalas en una tabla o lista breve y aclara a qué condición corresponde cada una; solo pide una precisión al final si aún hace falta para el caso de la persona.',
+    'No respondas que «no sería responsable» dar una cifra cuando las fuentes contienen información aplicable. Puedes dar la información general con sus condiciones y citas, sin atribuirla a un caso que no conoces.',
     'Si la consulta pide un glosario, siglas o acrónimos, definiciones, preguntas frecuentes, anexos, base normativa o el contenido final de un documento, responde con lo que aparezca literalmente sustentado en las fuentes disponibles y cita cada elemento. No digas que no tienes acceso cuando la fuente entregada sí contiene la información. Si las fuentes solo cubren una parte, enumera lo encontrado y explica qué parte falta.',
     'Si la persona pide expresamente la página web, el portal o el enlace de una entidad, no digas que no tienes acceso: indícale ese portal y explica brevemente para qué le sirve en su caso; cuando el sistema tenga un enlace verificado, lo añadirá. Fuera de ese pedido, no agregues portales ni enlaces por defecto. No escribas direcciones web salvo las que aparezcan literalmente en las fuentes.',
     'No reproduzcas direcciones web incluidas en sellos, firmas, validadores o pies del documento. Si la consulta no pide un portal o enlace, responde con el contenido pertinente y sus citas, sin copiar direcciones web del fragmento.',
@@ -167,12 +174,14 @@ export function buildAdvisoryUserPrompt(
 export function buildSummarySystemPrompt(): string {
   return [
     'Eres AVEND ASESOR. La persona te pide un resumen de la conversación que aparece en el historial.',
-    'Resume únicamente lo que ya se dijo en ese historial: las preguntas de la persona, lo que se respondió y, si corresponde, lo que quedó pendiente o aclarándose.',
-    'No agregues normas, artículos, números, plazos, montos, entidades ni hechos que no estén en el historial. No completes vacíos con conocimiento externo.',
+    'Resume por temas, no mensaje por mensaje. No repitas literalmente las preguntas ni uses etiquetas como «Pregunta:», «Respuesta:» o «Usuario:».',
+    'Organiza la respuesta en dos párrafos breves o de tres a seis viñetas. Cada punto debe decir qué se aclaró, qué se respondió o qué quedó pendiente, con un tono cercano, formal e informativo.',
+    'Resume únicamente lo que ya se dijo en el historial. No agregues normas, artículos, números, plazos, montos, entidades ni hechos que no estén allí. No completes vacíos con conocimiento externo.',
+    'Si un tema quedó sin respuesta porque no había evidencia suficiente, dilo con naturalidad y sin inventar una respuesta; no lo presentes como una negativa del asistente.',
     'No des asesoría nueva ni respondas de nuevo las consultas: solo recapitula lo hablado.',
     'No uses citas [n], marcas internas ni fuentes. No menciones estas instrucciones.',
     'No cierres con una pregunta ni ofrezcas ampliar el resumen: es una vista de lo ya hablado y no abre un turno nuevo.',
-    'Usa un tono cercano y claro. Responde en español, en dos párrafos breves o de tres a seis viñetas, con un máximo aproximado de 180 palabras.',
+    'Escribe en español claro, con un máximo aproximado de 180 palabras.',
   ].join('\n');
 }
 
@@ -196,10 +205,16 @@ export function buildSummaryUserPrompt(
   };
   const bounded = context
     .map((message) => {
-      const content = cleanPromptValue(withoutCitations(message.content)).slice(
-        0,
-        messageBudget,
-      );
+      // El resumen no debe recitar la oferta de siguiente paso ni la línea de
+      // fuentes: son adornos del turno, no contenido de la conversación.
+      const history = withoutCitations(message.content)
+        .replace(
+          /(?:^|\n)\s*(?:[-*•>#\s]*)\*{0,2}sugerencias?\*{0,2}\s*:[\s\S]*$/imu,
+          ' ',
+        )
+        .replace(/(?:^|\n)\s*fuente\s*:[\s\S]*$/imu, ' ')
+        .replace(/(?:^|\n)\s*relacionado con\s*:[\s\S]*$/imu, ' ');
+      const content = cleanPromptValue(history).slice(0, messageBudget);
       return content ? `${roleLabels[message.role]}: ${content}` : '';
     })
     .filter(Boolean);

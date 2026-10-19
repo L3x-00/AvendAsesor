@@ -385,7 +385,7 @@ describe('ChatService — lineamientos del cliente', () => {
     expect(completion()?.sources).toEqual([]);
   });
 
-  it('aclara profesionalmente una consulta amplia de remuneración sin inventar ni repetir las fuentes', async () => {
+  it('responde una consulta amplia de remuneración con el panorama y sus fuentes', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
       modules: [
@@ -416,6 +416,11 @@ describe('ChatService — lineamientos del cliente', () => {
       ],
       topRelevanceScore: 0.95,
     });
+    answerGateway.generate.mockReturnValue(
+      tokens(
+        'La remuneración mensual indicada en la fuente es S/ 2 666,80. [1]',
+      ),
+    );
 
     const events = await collect({
       question: '¿Cuánto gana un profesor del Perú?',
@@ -423,30 +428,25 @@ describe('ChatService — lineamientos del cliente', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'clarification',
+      'sources',
+      'token',
       'done',
     ]);
-    const clarification = events[1] as { data: { message: string } };
-    expect(clarification.data.message).toContain(
-      'No sería responsable darte una cifra única',
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: '¿Cuánto gana un profesor del Perú?',
+      }),
     );
-    expect(clarification.data.message).toContain('sector público o privado');
-    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
-    expect(clarification.data.message).not.toContain('nombrado o contratado');
-    expect(clarification.data.message).not.toContain('jornada, escala o cargo');
-    expect(clarification.data.message).toContain(
-      'Contratación y desplazamientos',
-    );
-    expect(clarification.data.message).toContain('Remuneraciones');
-    expect(clarification.data.message).not.toContain('S/ 2 666,80');
-    expect(clarification.data.message).not.toContain('Artículo 3');
-    expect(clarification.data.message).not.toMatch(/\[\d+\]/u);
-    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const generateInput = (
+      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
+    )[0]?.[0];
+    expect(generateInput?.sources?.length).toBeGreaterThan(0);
     expect(completion()).toMatchObject({
-      replyRole: 'clarification',
-      sources: [],
-      unansweredReason: 'ambiguous_request',
+      replyRole: 'assistant',
+      unansweredReason: null,
     });
+    expect(completion()?.sources.length).toBeGreaterThan(0);
   });
 
   it('avisa en lenguaje llano cuando el proveedor corta la respuesta por su extensión', async () => {

@@ -400,6 +400,12 @@ describe('SupabaseDocumentsGatewayAdapter', () => {
     );
 
     expect(storage.from).toHaveBeenCalledWith('normative-documents');
+    expect(storageBucket.remove).toHaveBeenCalledWith([
+      versionRow.storage_path,
+    ]);
+    expect(storageBucket.remove).toHaveBeenCalledWith([
+      `${versionRow.storage_path}.mineru.md`,
+    ]);
     expect(storageBucket.upload).toHaveBeenCalledWith(
       versionRow.storage_path,
       expect.any(Buffer),

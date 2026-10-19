@@ -460,11 +460,19 @@ export class SupabaseDocumentsGatewayAdapter implements DocumentsGateway {
   }
 
   async removePdf(storagePath: string): Promise<boolean> {
-    const { error } = await this.requireClient()
-      .storage.from(NORMATIVE_DOCUMENTS_BUCKET)
-      .remove([storagePath]);
+    const bucket = this.requireClient().storage.from(
+      NORMATIVE_DOCUMENTS_BUCKET,
+    );
+    // El PDF decide la compensación; el sidecar de MinerU es auxiliar y puede
+    // no existir. Se intenta retirar junto con la versión para no dejar
+    // objetos huérfanos en Storage, sin que un fallo auxiliar oculte el
+    // resultado del PDF.
+    const [pdf] = await Promise.allSettled([
+      bucket.remove([storagePath]),
+      bucket.remove([`${storagePath}.mineru.md`]),
+    ]);
 
-    return !error;
+    return pdf.status === 'fulfilled' && !pdf.value.error;
   }
 
   async recordDownloadUrl(

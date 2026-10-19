@@ -17,7 +17,7 @@
 
 const TOPIC_PATTERNS: readonly RegExp[] = [
   // Desplazamientos y acceso a cargos
-  /\b(destaques?|destacar(?:me|se|lo|la)?|destacad[oa]|reasignacion(?:es)?|reasignar(?:me|se)?|encargatura|encargos?|encargar(?:me|se|le)?|encargan|permutas?|permutar|rotacion(?:es)?|nombramiento|nombrar(?:me)?|contratacion|contratos?|ascensos?|ascender|reincorporacion|reingreso|permanencia|escalafon|escala magisterial|designacion(?:es)?|adjudicacion(?:es)?|cuadro de meritos|comision de servicios?|concursos?|plazas?|vacantes?|cas|traslados?|trasladar(?:me|se)?|reubicacion(?:es)?|reubicar(?:me)?|excedencia|excedentes?|nivelacion(?:es)?)\b/u,
+  /\b(destaques?|destacar(?:me|se|lo|la)?|destacad[oa]|reasignacion(?:es)?|reasignar(?:me|se)?|encargatura|encargos?|encargar(?:me|se|le)?|encargan|permutas?|permutar|rotacion(?:es)?|nombramiento|nombrar(?:me)?|nombrad[oa]s?|contratacion|contratos?|ascensos?|ascender|reincorporacion|reingreso|permanencia|escalafon|escala magisterial|designacion(?:es)?|adjudicacion(?:es)?|cuadro de meritos|comision de servicios?|concursos?|plazas?|vacantes?|cas|traslados?|trasladar(?:me|se)?|reubicacion(?:es)?|reubicar(?:me)?|excedencia|excedentes?|nivelacion(?:es)?)\b/u,
   // Licencias, permisos, asistencia y jornada
   /\b(licencias?|permisos?|inasistencias?|tardanzas?|faltas?|faltar|falte|faltado|ausencias?|justificar|justificacion|vacaciones|descansos?|subsidios?|luto|maternidad|paternidad|lactancia|fallecimiento|receta medica|certificado medico|papeletas?|horas? extras?|salir (?:temprano|antes)|carga horaria|jornadas?|horarios?|turnos?|huelgas?)\b/u,
   // Remuneraciones y beneficios
