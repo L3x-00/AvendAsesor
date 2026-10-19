@@ -554,12 +554,16 @@ export function hasPersonalSalaryContext(
   const hasPriorSalary = priorQuestions.some(
     (prior) => salaryQuestionProfile(prior).isSalaryQuestion,
   );
+  const shortFactorAnswer =
+    !normalized.includes('?') && normalized.split(/\s+/u).length <= 4;
   // Una respuesta de factor («Nombrado», «30 horas») o una declaración del
   // propio vínculo («Soy nombrado») solo es personal si el hilo ya era salarial.
+  // Una pregunta completa que menciona «docente contratado» no lo es.
   if (
     hasPriorSalary &&
     (PERSONAL_SALARY_CONDITION.test(normalized) ||
-      (!profile.isSalaryQuestion &&
+      (shortFactorAnswer &&
+        !profile.isSalaryQuestion &&
         (profile.condition !== null ||
           profile.jornadaHours !== null ||
           profile.scale !== null)))

@@ -23,6 +23,29 @@ describe('formatSalaryBulletsAsTable', () => {
     expect(formatted).not.toContain('- Modalidad / Forma:');
   });
 
+  it('convierte filas sin viñeta y separadas por líneas en blanco', () => {
+    const answer = [
+      'La remuneración varía según la modalidad:',
+      '',
+      'Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Inicial; Jornada laboral: 30; Remuneración mensual (S/): 3,300.60',
+      '',
+      'Modalidad / Forma: Educación Básica Regular – EBR; Nivel / Ciclo: Primaria; Jornada laboral: 30; Remuneración mensual (S/): 3,300.60',
+      '',
+      'Fuente: [1] DS',
+    ].join('\n');
+
+    const formatted = formatSalaryBulletsAsTable(answer);
+
+    expect(formatted).toContain(
+      '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
+    );
+    expect(formatted).toContain(
+      '| Educación Básica Regular – EBR | Inicial | 30 | 3,300.60 [1] |',
+    );
+    expect(formatted).toContain('Fuente: [1] DS');
+    expect(formatted).not.toContain('Modalidad / Forma: Educación');
+  });
+
   it('no transforma una lista normal sin campos de escala', () => {
     const answer = [
       '- La licencia requiere certificado médico.',
