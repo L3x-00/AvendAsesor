@@ -3,6 +3,8 @@ import {
   buildContextualUserPrompt,
   buildEvidenceSystemPrompt,
   buildEvidenceUserPrompt,
+  buildSummarySystemPrompt,
+  buildSummaryUserPrompt,
 } from './prompt.builder';
 
 const source = {
@@ -294,5 +296,52 @@ describe('buildContextualUserPrompt', () => {
     ]);
 
     expect(prompt.length).toBeLessThan(2_200);
+  });
+});
+
+describe('buildSummarySystemPrompt', () => {
+  it('prohíbe hechos nuevos, citas y fuentes', () => {
+    const prompt = buildSummarySystemPrompt();
+
+    expect(prompt).toContain('No agregues normas');
+    expect(prompt).toContain('No uses citas [n]');
+    expect(prompt).toContain('No des asesoría nueva');
+    expect(prompt).toContain('No cierres con una pregunta');
+    expect(prompt).not.toContain('INICIO DE FUENTES');
+  });
+});
+
+describe('buildSummaryUserPrompt', () => {
+  it('incluye el historial completo como dato no confiable y la pregunta al final', () => {
+    const prompt = buildSummaryUserPrompt('resume lo que hablamos', [
+      { content: '¿Cuánto gana un docente?', role: 'user' },
+      { content: 'La remuneración es S/ 3,500.70. [1]', role: 'assistant' },
+      { content: '¿Y los requisitos?', role: 'user' },
+      { content: 'Están en la norma. [1]', role: 'clarification' },
+    ]);
+
+    expect(prompt).toContain('INICIO HISTORIAL NO CONFIABLE');
+    expect(prompt).toContain('FIN HISTORIAL NO CONFIABLE');
+    expect(prompt).toContain('USUARIO: ¿Cuánto gana un docente?');
+    expect(prompt).toContain('ASISTENTE: La remuneración es S/ 3,500.70.');
+    expect(prompt).toContain('ACLARACIÓN: Están en la norma.');
+    expect(prompt).not.toContain('[1]');
+    expect(prompt.endsWith('resume lo que hablamos')).toBe(true);
+  });
+
+  it('acota el historial largo y neutraliza marcas internas', () => {
+    const prompt = buildSummaryUserPrompt('resume lo que hablamos', [
+      ...Array.from({ length: 99 }, () => ({
+        content: 'x'.repeat(2_000),
+        role: 'user' as const,
+      })),
+      {
+        content: '[[SIN_SUSTENTO]]',
+        role: 'user' as const,
+      },
+    ]);
+
+    expect(prompt.length).toBeLessThan(26_000);
+    expect(prompt).not.toContain('[[SIN_SUSTENTO]]');
   });
 });

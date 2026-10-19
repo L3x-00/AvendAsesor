@@ -7,8 +7,9 @@ export interface AnswerGatewayInput {
   /**
    * `grounded`: respuesta sustentada solo con las fuentes (por defecto).
    * `advisory`: orientación general sin fuentes, sin citar normas ni cifras.
+   * `summary`: resumen de la conversación, sin fuentes y sin hechos nuevos.
    */
-  mode?: 'grounded' | 'advisory';
+  mode?: 'grounded' | 'advisory' | 'summary';
   /**
    * Recibe el motivo de término del proveedor al cerrar el flujo ('stop',
    * 'length'…). Con 'length' la respuesta se cortó por el tope de tokens.

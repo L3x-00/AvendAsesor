@@ -11,10 +11,13 @@ import {
   buildAdvisoryUserPrompt,
   buildEvidenceSystemPrompt,
   buildEvidenceUserPrompt,
+  buildSummarySystemPrompt,
+  buildSummaryUserPrompt,
 } from './prompt.builder';
 import {
   MAX_RAG_ADVISORY_TOKENS,
   MAX_RAG_ANSWER_TOKENS,
+  MAX_RAG_SUMMARY_TOKENS,
 } from './rag.constants';
 
 @Injectable()
@@ -66,34 +69,44 @@ export class OpenAiAnswerGateway implements AnswerGateway {
     input: AnswerGatewayInput,
     model: string,
   ) {
-    const advisory = input.mode === 'advisory';
+    const mode = input.mode ?? 'grounded';
+    const systemPrompt =
+      mode === 'summary'
+        ? buildSummarySystemPrompt()
+        : mode === 'advisory'
+          ? buildAdvisorySystemPrompt()
+          : buildEvidenceSystemPrompt();
+    const userPrompt =
+      mode === 'summary'
+        ? buildSummaryUserPrompt(input.question, input.conversationContext)
+        : mode === 'advisory'
+          ? buildAdvisoryUserPrompt(input.question, input.conversationContext)
+          : buildEvidenceUserPrompt(
+              input.question,
+              input.conversationContext,
+              input.sources,
+            );
     return client.chat.completions.create(
       {
         messages: [
           {
-            content: advisory
-              ? buildAdvisorySystemPrompt()
-              : buildEvidenceSystemPrompt(),
+            content: systemPrompt,
             role: 'system',
           },
           {
-            content: advisory
-              ? buildAdvisoryUserPrompt(
-                  input.question,
-                  input.conversationContext,
-                )
-              : buildEvidenceUserPrompt(
-                  input.question,
-                  input.conversationContext,
-                  input.sources,
-                ),
+            content: userPrompt,
             role: 'user',
           },
         ],
         model,
         stream: true,
-        temperature: advisory ? 0.4 : 0,
-        max_tokens: advisory ? MAX_RAG_ADVISORY_TOKENS : MAX_RAG_ANSWER_TOKENS,
+        temperature: mode === 'grounded' ? 0 : mode === 'summary' ? 0.2 : 0.4,
+        max_tokens:
+          mode === 'summary'
+            ? MAX_RAG_SUMMARY_TOKENS
+            : mode === 'advisory'
+              ? MAX_RAG_ADVISORY_TOKENS
+              : MAX_RAG_ANSWER_TOKENS,
       },
       { signal: input.abortSignal },
     );

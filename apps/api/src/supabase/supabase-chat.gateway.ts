@@ -9,7 +9,9 @@ import {
 import type { PostgrestError } from '@supabase/supabase-js';
 import type {
   ActiveChatModule,
+  ChatContextMessage,
   ChatConversationContext,
+  ChatConversationSnapshot,
   ChatConversationSummary,
   ChatHistoryGateway,
   DeletedChatConversation,
@@ -154,6 +156,55 @@ function parseConversationContext(
   };
 }
 
+function parseConversationMessages(data: unknown): ChatContextMessage[] {
+  if (!isRecord(data) || !Array.isArray(data.messages)) {
+    throw new ServiceUnavailableException(
+      'The chat conversation could not be loaded.',
+    );
+  }
+
+  return data.messages.map((message) => {
+    if (
+      !isRecord(message) ||
+      typeof message.content !== 'string' ||
+      !['assistant', 'clarification', 'no_evidence', 'user'].includes(
+        String(message.role),
+      )
+    ) {
+      throw new ServiceUnavailableException(
+        'The chat conversation could not be loaded.',
+      );
+    }
+    return {
+      content: message.content,
+      role: message.role as ChatContextMessage['role'],
+    };
+  });
+}
+
+function parseConversationSnapshot(
+  data: unknown,
+  expectedConversationId: string,
+): ChatConversationSnapshot {
+  if (
+    !isRecord(data) ||
+    !isRecord(data.conversation) ||
+    data.conversation.id !== expectedConversationId ||
+    (data.conversation.selectedModuleId !== null &&
+      typeof data.conversation.selectedModuleId !== 'string')
+  ) {
+    throw new ServiceUnavailableException(
+      'The chat conversation could not be loaded.',
+    );
+  }
+
+  return {
+    conversationId: expectedConversationId,
+    messages: parseConversationMessages(data),
+    selectedModuleId: data.conversation.selectedModuleId,
+  };
+}
+
 @Injectable()
 export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
@@ -270,6 +321,32 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
 
     if (error) databaseError(error);
     return parseConversationContext(data, input.conversationId);
+  }
+
+  async getConversationSnapshot(
+    input: Parameters<
+      NonNullable<ChatHistoryGateway['getConversationSnapshot']>
+    >[0],
+  ): Promise<ChatConversationSnapshot> {
+    const data = await this.getConversation({
+      conversationId: input.conversationId,
+      limit: input.limit,
+      userId: input.userId,
+    });
+    return parseConversationSnapshot(data, input.conversationId);
+  }
+
+  async getConversationMessages(
+    input: Parameters<
+      NonNullable<ChatHistoryGateway['getConversationMessages']>
+    >[0],
+  ): Promise<ChatContextMessage[]> {
+    const snapshot = await this.getConversationSnapshot({
+      conversationId: input.conversationId,
+      limit: input.limit,
+      userId: input.userId,
+    });
+    return snapshot.messages;
   }
 
   async createSourceDownloadUrl(

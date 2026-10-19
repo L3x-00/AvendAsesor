@@ -214,4 +214,62 @@ describe('OpenAiAnswerGateway', () => {
     expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
     expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
   });
+
+  it('en modo resumen usa el historial completo y no añade fuentes ni hechos', async () => {
+    mockCreate.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield { choices: [{ delta: { content: 'Resumen.' } }] };
+      },
+    });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : 'gpt-4o-mini',
+      ),
+    } as never);
+
+    const tokens: string[] = [];
+    for await (const token of gateway.generate({
+      conversationContext: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        { content: 'La remuneración es S/ 3,500.70. [1]', role: 'assistant' },
+      ],
+      mode: 'summary',
+      question: 'resume lo que hablamos',
+      sources: [],
+    })) {
+      tokens.push(token);
+    }
+
+    expect(tokens).toEqual(['Resumen.']);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_tokens: 700,
+        temperature: 0.2,
+      }),
+      expect.any(Object),
+    );
+    const calls = mockCreate.mock.calls as Array<
+      [
+        {
+          messages: Array<{ content: string; role: string }>;
+        },
+      ]
+    >;
+    const messages = calls[0]?.[0].messages;
+    const systemMessage = messages?.find(
+      (message) => message.role === 'system',
+    );
+    const userMessage = messages?.find((message) => message.role === 'user');
+
+    expect(systemMessage?.content).toContain('resumen de la conversación');
+    expect(systemMessage?.content).toContain('No agregues normas');
+    expect(systemMessage?.content).not.toContain('INICIO DE FUENTES');
+    expect(userMessage?.content).toContain('INICIO HISTORIAL NO CONFIABLE');
+    expect(userMessage?.content).toContain('USUARIO: ¿Cuánto gana un docente?');
+    expect(userMessage?.content).toContain(
+      'ASISTENTE: La remuneración es S/ 3,500.70.',
+    );
+    expect(userMessage?.content).toContain('PREGUNTA ACTUAL (PRIORITARIA)');
+  });
 });

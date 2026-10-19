@@ -103,6 +103,19 @@ describe('inheritedFactorQuestions', () => {
       ),
     ).toEqual([salary]);
   });
+
+  it('la propuesta aceptada tampoco es una declaración de la persona', () => {
+    expect(
+      inheritedFactorQuestions(
+        'Sector público',
+        [
+          salary,
+          'Propuesta aceptada: la remuneración corresponde a una jornada de 30 horas.',
+        ],
+        true,
+      ),
+    ).toEqual([salary]);
+  });
 });
 
 function vector(value = 0.1): number[] {
@@ -157,6 +170,38 @@ describe('RagService', () => {
     await expect(
       service.retrieve('¿Qué establece la norma?', null),
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('separa el contexto salarial del contexto de recuperación de una propuesta aceptada', async () => {
+    const salarySource = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual es S/ 3,500.70 para una jornada de 40 horas.',
+    };
+    gateway.search.mockResolvedValue([salarySource]);
+    const question = '¿Qué documentos debo presentar?';
+    const prior = ['¿Cuánto gana un docente de 30 horas?'];
+
+    await expect(
+      service.retrieve(question, null, prior, { forceContext: true }),
+    ).resolves.toEqual({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+    await expect(
+      service.retrieve(question, null, prior, {
+        forceContext: true,
+        salaryContextQuestions: [],
+      }),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [
+        expect.objectContaining({
+          chunkContent:
+            'La remuneración mensual es S/ 3,500.70 para una jornada de 40 horas.',
+        }),
+      ],
+    });
   });
 
   it('retrieves an explicitly named norm only through the exact route', async () => {

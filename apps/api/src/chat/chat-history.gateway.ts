@@ -27,6 +27,12 @@ export interface ChatConversationContext {
   selectedModuleId: string | null;
 }
 
+export interface ChatConversationSnapshot {
+  conversationId: string;
+  messages: ChatContextMessage[];
+  selectedModuleId: string | null;
+}
+
 export interface ChatSourceDownload {
   expiresAt: string;
   sourceId: string;
@@ -116,6 +122,26 @@ export interface ChatHistoryGateway {
     messageLimit: number;
     userId: string;
   }): Promise<ChatConversationContext>;
+  /**
+   * Mensajes completos (sin el recorte de 2.000 caracteres del contexto) y el
+   * módulo guardado. Necesario para leer la propuesta del final de una
+   * respuesta larga. Opcional para no romper adaptadores de prueba antiguos.
+   */
+  getConversationSnapshot?(input: {
+    conversationId: string;
+    limit: number;
+    userId: string;
+  }): Promise<ChatConversationSnapshot>;
+  /**
+   * Historial completo acotado (hasta el tope de `get_chat_conversation`) para
+   * metapeticiones como «resume lo que hablamos». Opcional para no romper
+   * adaptadores de prueba antiguos: el servicio cae al contexto acotado.
+   */
+  getConversationMessages?(input: {
+    conversationId: string;
+    limit: number;
+    userId: string;
+  }): Promise<ChatContextMessage[]>;
   createSourceDownloadUrl(input: {
     disposition: 'attachment' | 'inline';
     sourceId: string;
