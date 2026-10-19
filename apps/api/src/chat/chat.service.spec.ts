@@ -912,7 +912,7 @@ describe('ChatService', () => {
     expect(historyGateway.beginTurn).not.toHaveBeenCalled();
   });
 
-  it('no acepta con «sí» una aclaración que pide un dato', async () => {
+  it('no acepta con «sí» una aclaración que pide un dato: invita a elegir', async () => {
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
       messages: [
@@ -925,10 +925,6 @@ describe('ChatService', () => {
       ],
       selectedModuleId: null,
     });
-    ragService.retrieve.mockResolvedValue({
-      kind: 'no_evidence',
-      topRelevanceScore: null,
-    });
 
     const events = await collect(service, {
       conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -936,18 +932,18 @@ describe('ChatService', () => {
     });
 
     // No se usa la pregunta de la aclaración como si fuera una propuesta
-    // aceptada: el «sí» sigue el flujo normal y no inventa la respuesta.
-    expect(ragService.retrieve).toHaveBeenCalledWith(
-      'sí',
-      null,
-      ['¿Cuánto gana un docente?'],
-      { forceContext: true },
-    );
-    expect(events.map((event) => event.type)).toEqual([
-      'conversation',
-      'no_evidence',
-      'done',
+    // aceptada ni se busca «sí» en el corpus: se invita a usar las opciones.
+    expect(events).toEqual([
+      {
+        data: {
+          message:
+            'Para continuar, elige uno de los temas que te mostré en los botones o escríbeme el trámite o proceso concreto que quieres consultar.',
+        },
+        type: 'conversational',
+      },
     ]);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).not.toHaveBeenCalled();
   });
 
   it('lee la propuesta del final de una respuesta larga sin el recorte de 2.000', async () => {

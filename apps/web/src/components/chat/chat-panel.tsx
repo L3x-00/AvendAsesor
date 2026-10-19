@@ -1171,17 +1171,19 @@ export function ChatPanel({
         message.role === "user" &&
         message.id === clarification.inReplyToMessageId,
     )?.content;
-    if (!original) {
-      changeModuleContext(module.id);
-      return;
-    }
-    setSelectedModuleId(module.id);
-    // Sin la conversación anterior: si el reenvío falla, el reintento también
-    // empieza una conversación nueva en el tema elegido.
-    setConversationId(undefined);
-    void sendQuestion(original, {
+    // La opción elegida navega al módulo padre y queda escrita en el chat. Si
+    // había una consulta original, se conserva detrás del tema elegido para no
+    // perder lo que la persona quería preguntar.
+    const parentId = resolveActiveParentId(modules, module.id) ?? module.id;
+    const parent =
+      modules.find((candidate) => candidate.id === parentId) ?? module;
+    const chosenQuestion = original
+      ? `Consultar ${parent.name}: ${original}`
+      : `Consultar ${parent.name}`;
+    changeModuleContext(parentId, true);
+    void sendQuestion(chosenQuestion, {
       fromClarification: true,
-      moduleId: module.id,
+      moduleId: parentId,
       newConversation: true,
     });
   }

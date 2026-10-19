@@ -61,6 +61,9 @@ describe('buildEvidenceSystemPrompt', () => {
     );
     expect(prompt).toContain('de tres a cinco viñetas claras');
     expect(prompt).toContain('tabla Markdown únicamente');
+    expect(prompt).toContain('panorama salarial general');
+    expect(prompt).toContain('aunque la persona no haya pedido una tabla');
+    expect(prompt).toContain('No respondas solo con CTS');
     expect(prompt).toContain(
       'ordénala de lo vigente o más reciente a lo histórico',
     );
