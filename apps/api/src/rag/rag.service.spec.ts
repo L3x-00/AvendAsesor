@@ -320,6 +320,39 @@ describe('RagService', () => {
     );
   });
 
+  it('entrega la escala salarial aunque la ruta se resuelva a otro módulo', async () => {
+    const cts = {
+      ...source,
+      chunkContent:
+        'El docente contratado recibe CTS y bonificaciones al finalizar el vínculo.',
+      chunkId: 'cts-resolved',
+      moduleIds: ['module-a'],
+      moduleNames: ['Contratación docente'],
+      semanticScore: 0.95,
+    };
+    const scale = {
+      ...source,
+      chunkContent: [
+        '| Nivel | Remuneración |',
+        '| --- | --- |',
+        '| Inicial | S/ 3 300,60 |',
+      ].join('\n'),
+      chunkId: 'scale-resolved',
+      moduleIds: ['module-b'],
+      moduleNames: ['Remuneraciones'],
+      semanticScore: 0.8,
+    };
+    gateway.search.mockResolvedValue([cts, scale]);
+
+    const result = await service.retrieve('¿Cuánto gana un docente?', null);
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual(
+      expect.arrayContaining(['scale-resolved']),
+    );
+  });
+
   it('responde la ambigüedad de una consulta salarial general con la evidencia recuperada', async () => {
     const salaryA = {
       ...source,

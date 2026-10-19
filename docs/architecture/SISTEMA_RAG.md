@@ -64,7 +64,12 @@ aclaración en lugar de elegir un tema de manera arbitraria.
 Una consulta salarial general («cuánto gana un docente») no se reemplaza por
 una aclaración: si hay montos recuperados, se responde con el panorama y las
 condiciones que cambian la cifra. La aclaración se reserva para el caso propio
-o para cuando la evidencia no permite sustentar ningún monto.
+o para cuando la evidencia no permite sustentar ningún monto. Si la primera
+búsqueda solo trae CTS, bonificaciones u otros conceptos, se busca además la
+escala de remuneraciones con una consulta canónica y se entregan las fuentes
+salariales aunque pertenezcan a módulos distintos. Cuando las fuentes incluyen
+una tabla o escala, el prompt pide mostrarla en Markdown aunque la persona no
+haya pedido una tabla.
 
 Hay tres resultados mutuamente excluyentes:
 

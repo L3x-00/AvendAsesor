@@ -389,12 +389,10 @@ function relevantSources(
   sources: RetrievedChunk[],
   limit: number,
   question?: string,
+  scoreMargin = RAG_SOURCE_SCORE_MARGIN,
 ): RetrievedChunk[] {
   const eligible = prepareDelivery(
-    withinScoreMargin(
-      uniqueSources(byScoreDescending(sources)),
-      RAG_SOURCE_SCORE_MARGIN,
-    ),
+    withinScoreMargin(uniqueSources(byScoreDescending(sources)), scoreMargin),
     question,
   );
   const distinctDocuments = new Set(
@@ -1105,6 +1103,30 @@ export class RagService {
 
     if (!selectedModuleId) {
       const route = routeSources(globalRoutingSources);
+      // En un panorama salarial general se entregan todas las fuentes
+      // salariales pertinentes, aunque la ruta se haya resuelto a un módulo
+      // dominante: la tabla de remuneraciones puede estar en otro documento.
+      if (
+        !options.personalSalary &&
+        isBroadSalaryQuestion(question) &&
+        hasGeneralSalaryEvidence(globalRoutingSources, retrievalScope)
+      ) {
+        const sources = relevantSources(
+          globalRoutingSources,
+          matchCount,
+          salaryQuestion,
+          1,
+        );
+        if (sources.length) {
+          return {
+            kind: 'evidence',
+            resolvedModule:
+              route.kind === 'resolved' ? route.resolvedModule : null,
+            sources,
+            topRelevanceScore: topScore(sources),
+          };
+        }
+      }
       if (route.kind === 'ambiguous') {
         // Una consulta salarial general no se convierte en una pregunta por el
         // caso propio: si hay montos recuperados, se responde con el panorama
@@ -1117,6 +1139,7 @@ export class RagService {
             globalRoutingSources,
             matchCount,
             salaryQuestion,
+            1,
           );
           if (
             sources.length &&
