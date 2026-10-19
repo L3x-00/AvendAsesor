@@ -29,9 +29,114 @@ interface TableLimits {
  */
 const GRID_LIMITS: TableLimits = { cellChars: 180, columns: 6, rows: 12 };
 /** Lo que aún se reconoce como tabla para leerla por filas si no cabe en la grilla. */
-const READABLE_LIMITS: TableLimits = { cellChars: 1_000, columns: 12, rows: 60 };
+const READABLE_LIMITS: TableLimits = {
+  cellChars: 1_000,
+  columns: 12,
+  rows: 60,
+};
 const TABLE_SEPARATOR_CELL = /^:?-{3,}:?$/u;
 const TABLE_CITATION = /\[\[?\s*(\d+)\s*\]\]?/gu;
+const STRUCTURED_FIELD_SEPARATOR = /\s*;\s*/u;
+const STRUCTURED_FIELD = /^([^:;]{2,80}):\s*(.+)$/u;
+const STRUCTURED_SALARY_COLUMN =
+  /\b(?:remuneraci[oó]n|monto|sueldo|salario|haber)\b/iu;
+const STRUCTURED_AMOUNT =
+  /(?:s\/|\b\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{1,2})?\b|\b\d+[.,]\d{2}\b)/iu;
+const STRUCTURED_BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/u;
+export const STRUCTURED_SALARY_MARKER =
+  "<!-- avend:structured-salary-table -->";
+
+interface StructuredRow {
+  fields: Map<string, string>;
+}
+
+function structuredRow(line: string): StructuredRow | null {
+  const bullet = STRUCTURED_BULLET.exec(line);
+  const content = (bullet?.[1] ?? line).trim();
+  if (!content) return null;
+
+  const fields = new Map<string, string>();
+  for (const segment of content.split(STRUCTURED_FIELD_SEPARATOR)) {
+    const match = STRUCTURED_FIELD.exec(segment.trim());
+    if (!match?.[1] || !match[2]) continue;
+    fields.set(match[1].trim(), match[2].trim());
+  }
+  return fields.size >= 2 ? { fields } : null;
+}
+
+function escapeStructuredCell(value: string): string {
+  return value.replace(/\|/gu, "\\|").replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * Salvaguarda visual para respuestas salariales ya guardadas o transmitidas
+ * como «Campo: valor; Campo: valor». La API aplica la misma normalización antes
+ * de persistir; esta copia acotada evita que el chat, la ficha y sus descargas
+ * vuelvan a mostrar viñetas cuando abren contenido anterior. Las citas no se
+ * reasignan: permanecen en la fila o bloque donde las produjo el modelo.
+ */
+export function structuredSalaryRowsToMarkdown(answer: string): string {
+  if (!answer.trim()) return answer;
+
+  const lines = answer.replace(/\r\n?/gu, "\n").split("\n");
+  const output: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const first = structuredRow(lines[index] ?? "");
+    if (!first) {
+      output.push(lines[index] ?? "");
+      index += 1;
+      continue;
+    }
+
+    const rows: StructuredRow[] = [];
+    let cursor = index;
+    while (cursor < lines.length) {
+      if (!lines[cursor]?.trim()) {
+        cursor += 1;
+        continue;
+      }
+      const row = structuredRow(lines[cursor] ?? "");
+      if (!row) break;
+      rows.push(row);
+      cursor += 1;
+    }
+
+    const columns = [...new Set(rows.flatMap((row) => [...row.fields.keys()]))];
+    const looksLikeSalary =
+      columns.some((column) => STRUCTURED_SALARY_COLUMN.test(column)) &&
+      rows.some((row) =>
+        [...row.fields.values()].some((value) => STRUCTURED_AMOUNT.test(value)),
+      );
+    if (
+      rows.length < 2 ||
+      columns.length < 2 ||
+      columns.length > GRID_LIMITS.columns ||
+      rows.length > GRID_LIMITS.rows ||
+      !looksLikeSalary
+    ) {
+      output.push(...lines.slice(index, cursor));
+      index = cursor;
+      continue;
+    }
+
+    output.push(
+      `| ${columns.map(escapeStructuredCell).join(" | ")} |`,
+      `| ${columns.map(() => "---").join(" | ")} |`,
+      ...rows.map((row) => {
+        const values = columns.map((column) =>
+          escapeStructuredCell(row.fields.get(column) ?? "—"),
+        );
+        return `| ${values.join(" | ")} |`;
+      }),
+      STRUCTURED_SALARY_MARKER,
+    );
+    index = cursor;
+  }
+
+  return output.join("\n");
+}
 
 function separatorAlignment(cell: string): ColumnAlignment | null {
   const left = cell.startsWith(":");
@@ -45,9 +150,7 @@ function tableCells(line: string, limits: TableLimits): string[] | null {
   const trimmed = line.trim();
   if (!trimmed.includes("|")) return null;
 
-  const withoutOuterPipes = trimmed
-    .replace(/^\|/u, "")
-    .replace(/\|$/u, "");
+  const withoutOuterPipes = trimmed.replace(/^\|/u, "").replace(/\|$/u, "");
   const cells = withoutOuterPipes.split("|").map((cell) => cell.trim());
 
   if (
@@ -88,7 +191,12 @@ function parseTableAt(
   }
 
   return rows.length
-    ? { alignments: separator.map(separatorAlignment), endIndex: index, headers, rows }
+    ? {
+        alignments: separator.map(separatorAlignment),
+        endIndex: index,
+        headers,
+        rows,
+      }
     : null;
 }
 
@@ -159,6 +267,7 @@ export function classifyTableAt(
   lines: readonly string[],
   startIndex: number,
   sourceRanks: readonly number[],
+  consolidatedSourceRank?: number,
 ): ClassifiedTable | null {
   const readable = parseTableAt(lines, startIndex, READABLE_LIMITS);
   if (!readable) return null;
@@ -168,7 +277,10 @@ export function classifyTableAt(
   const isEvidenced =
     sourceRanks.length > 0 &&
     (tableRowsCiteKnownSources(readable, sourceRanks) ||
-      singleRowTableHasAdjacentKnownCitation(lines, readable, sourceRanks));
+      singleRowTableHasAdjacentKnownCitation(lines, readable, sourceRanks) ||
+      (consolidatedSourceRank !== undefined &&
+        sourceRanks.includes(consolidatedSourceRank) &&
+        lines[readable.endIndex]?.trim() === STRUCTURED_SALARY_MARKER));
 
   return { asGrid: fitsGrid && isEvidenced, table: readable };
 }
@@ -232,8 +344,7 @@ export function isBlankCell(cell: string): boolean {
 }
 
 /** Marcas que el chat interpreta (negrita, citas [n], [1, 2], [1-2]); no son texto. */
-const CELL_MARKS =
-  /\*\*|__|\s*\[\[?\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\]\]?/gu;
+const CELL_MARKS = /\*\*|__|\s*\[\[?\s*\d+(?:\s*[,;–-]\s*\d+)*\s*\]\]?/gu;
 
 /** Texto de una celda sin negrita ni citas, para repetirlo como etiqueta. */
 function plainCellText(cell: string): string {
@@ -257,7 +368,9 @@ export interface FirstColumnLabel {
  * significar «no aplica». Solo se hereda si la fila tiene otro dato; una fila
  * vacía no inventa contenido.
  */
-export function firstColumnLabels(rows: readonly string[][]): FirstColumnLabel[] {
+export function firstColumnLabels(
+  rows: readonly string[][],
+): FirstColumnLabel[] {
   let group = "";
   return rows.map((row) => {
     const [first = "", ...rest] = row;
@@ -338,12 +451,22 @@ export function columnAlignments(
 export function markdownTablesToPlainText(
   content: string,
   sourceRanks: readonly number[] = [],
+  consolidatedSourceRank?: number,
 ): string {
   const lines = content.split(/\r?\n/u);
   const plain: string[] = [];
 
-  for (let index = 0; index < lines.length; ) {
-    const classified = classifyTableAt(lines, index, sourceRanks);
+  for (let index = 0; index < lines.length;) {
+    if (lines[index]?.trim() === STRUCTURED_SALARY_MARKER) {
+      index += 1;
+      continue;
+    }
+    const classified = classifyTableAt(
+      lines,
+      index,
+      sourceRanks,
+      consolidatedSourceRank,
+    );
     if (!classified) {
       plain.push(lines[index]);
       index += 1;

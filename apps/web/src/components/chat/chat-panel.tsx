@@ -46,6 +46,8 @@ import {
   columnAlignments,
   hasCitationColumn,
   markdownTableRowsAsText,
+  STRUCTURED_SALARY_MARKER,
+  structuredSalaryRowsToMarkdown,
   withoutCitationColumns,
   type MarkdownTableBlock,
 } from "./chat-response-tables";
@@ -499,10 +501,14 @@ function renderRichContent(
     );
   }
 
-  const lines = content.split(/\r?\n/);
-  for (let lineIndex = 0; lineIndex < lines.length; ) {
+  const lines = structuredSalaryRowsToMarkdown(content).split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length;) {
     const rawLine = lines[lineIndex];
     const line = rawLine.trim();
+    if (line === STRUCTURED_SALARY_MARKER) {
+      lineIndex += 1;
+      continue;
+    }
     if (officialLinks && !inSuggestions && startsSuggestions(line)) {
       flushParagraph();
       flushList();
@@ -512,6 +518,7 @@ function renderRichContent(
       lines,
       lineIndex,
       citations?.sources.map((source) => source.rank) ?? [],
+      citations?.consolidated?.rank,
     );
     if (classifiedTable) {
       const { asGrid } = classifiedTable;
@@ -1119,6 +1126,7 @@ export function ChatPanel({
               <CopyAnswerButton
                 content={message.content}
                 sourceRanks={message.sources.map((source) => source.rank)}
+                sources={message.sources}
               />
             ) : null}
             {canOrient ? (

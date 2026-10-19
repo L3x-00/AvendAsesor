@@ -15,6 +15,10 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import {
+  STRUCTURED_SALARY_MARKER,
+  structuredSalaryRowsToMarkdown,
+} from "@/components/chat/chat-response-tables";
 import * as fontkit from "fontkit";
 import PDFDocument from "pdfkit";
 import {
@@ -27,6 +31,72 @@ import {
 const NAVY = "0D1B3D";
 const ACCENT = "1677FF";
 const MUTED = "667085";
+const CITATION_TOKEN = /\[\[?\s*\d+(?:\s*(?:[,;–-]|y)\s*\d+)*\s*\]\]?/gu;
+const SIMPLE_CITATION = /^\[\[?\s*(\d+)\s*\]\]?$/u;
+
+type OrientationSource = OrientationDocumentContent["sources"][number];
+
+function documentKey(source: OrientationSource): string {
+  return source.documentVersionId ?? source.id;
+}
+
+function singleCitedDocumentSource(
+  text: string,
+  sources: readonly OrientationSource[],
+): OrientationSource | undefined {
+  const tokens = [...text.matchAll(CITATION_TOKEN)].map((match) => match[0]);
+  if (!tokens.length) return undefined;
+
+  const ranks = tokens.map((token) => {
+    const match = SIMPLE_CITATION.exec(token);
+    return match ? Number(match[1]) : null;
+  });
+  if (ranks.some((rank) => rank === null)) return undefined;
+
+  const cited = ranks.map((rank) =>
+    sources.find((source) => source.rank === rank),
+  );
+  const first = cited[0];
+  return first &&
+    cited.every(
+      (source) =>
+        source !== undefined && documentKey(source) === documentKey(first),
+    )
+    ? first
+    : undefined;
+}
+
+function prepareExportEvidence(
+  text: string,
+  sources: readonly OrientationSource[],
+): { answer: string; sources: OrientationSource[] } {
+  if (!singleCitedDocumentSource(text, sources)) {
+    return { answer: text, sources: [...sources] };
+  }
+
+  return {
+    answer: text
+      .replace(CITATION_TOKEN, "")
+      .replace(/[ \t]+([.,;:])/gu, "$1")
+      .replace(/[ \t]{2,}/gu, " ")
+      .replace(/^\s*(?:fuentes?|referencias?)\s*:\s*$/gimu, "")
+      .replace(/\n{3,}/gu, "\n\n")
+      .trim(),
+    sources: uniqueDocumentSources(sources),
+  };
+}
+
+function uniqueDocumentSources(
+  sources: readonly OrientationSource[],
+): OrientationSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = documentKey(source);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 // Fonts are vendored under ./fonts and referenced with static
 // `new URL(..., import.meta.url)` literals so the bundler traces and ships them
@@ -76,10 +146,7 @@ const PDF_FONT_LOOKUPS = {
 type PdfFontStyle = "bold" | "italic" | "regular";
 type PdfFontFamily = "emoji" | "latin" | "latinExt";
 
-const PDF_FONT_NAMES: Record<
-  PdfFontFamily,
-  Record<PdfFontStyle, string>
-> = {
+const PDF_FONT_NAMES: Record<PdfFontFamily, Record<PdfFontStyle, string>> = {
   emoji: {
     bold: "NotoEmoji",
     italic: "NotoEmoji",
@@ -107,9 +174,10 @@ function registerPdfFonts(document: PDFKit.PDFDocument): void {
   document.registerFont("NotoSansExtItalic", PDF_FONT_PATHS.latinExtItalic);
 }
 
-function resolvePdfCharacter(
-  character: string,
-): { character: string; family: PdfFontFamily } {
+function resolvePdfCharacter(character: string): {
+  character: string;
+  family: PdfFontFamily;
+} {
   const codePoint = character.codePointAt(0) ?? 0xfffd;
   if (codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d) {
     return { character, family: "latin" };
@@ -153,13 +221,15 @@ function writePdfText(
 }
 
 function wordTextParagraphs(text: string): Paragraph[] {
-  return sanitizeDocumentText(text).split("\n").map(
-    (line) =>
-      new Paragraph({
-        children: [new TextRun(line || " ")],
-        spacing: { after: 120, line: 330 },
-      }),
-  );
+  return sanitizeDocumentText(text)
+    .split("\n")
+    .map(
+      (line) =>
+        new Paragraph({
+          children: [new TextRun(line || " ")],
+          spacing: { after: 120, line: 330 },
+        }),
+    );
 }
 
 type OrientationBlock =
@@ -193,7 +263,9 @@ function tableCells(line: string): string[] | null {
  * reproducir la escala salarial como grilla, no como una línea de barras.
  */
 function parseOrientationBlocks(text: string): OrientationBlock[] {
-  const lines = sanitizeDocumentText(text).split("\n");
+  const lines = structuredSalaryRowsToMarkdown(
+    sanitizeDocumentText(text),
+  ).split("\n");
   const blocks: OrientationBlock[] = [];
   let paragraph: string[] = [];
 
@@ -204,6 +276,7 @@ function parseOrientationBlocks(text: string): OrientationBlock[] {
   };
 
   for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.trim() === STRUCTURED_SALARY_MARKER) continue;
     const headers = tableCells(lines[index] ?? "");
     const separator = tableCells(lines[index + 1] ?? "");
     if (
@@ -298,6 +371,10 @@ function wordField(label: string, value: string): Paragraph | null {
 export async function buildOrientationDocx(
   content: OrientationDocumentContent,
 ): Promise<Buffer> {
+  const { answer, sources } = prepareExportEvidence(
+    content.answer,
+    content.sources,
+  );
   const optionalFields = [
     wordField("Docente", content.teacherName),
     wordField("Institución", content.institution),
@@ -336,7 +413,12 @@ export async function buildOrientationDocx(
         children: [
           new Paragraph({
             children: [
-              new TextRun({ bold: true, color: ACCENT, size: 22, text: "AVEND ASESOR" }),
+              new TextRun({
+                bold: true,
+                color: ACCENT,
+                size: 22,
+                text: "AVEND ASESOR",
+              }),
             ],
             spacing: { after: 120 },
           }),
@@ -383,24 +465,34 @@ export async function buildOrientationDocx(
           ...optionalFields,
           wordField("Fecha de la orientación", content.answeredOn)!,
           new Paragraph({
-            children: [new TextRun({ bold: true, color: NAVY, text: "Consulta" })],
+            children: [
+              new TextRun({ bold: true, color: NAVY, text: "Consulta" }),
+            ],
             heading: HeadingLevel.HEADING_1,
             spacing: { before: 260, after: 100 },
           }),
           ...wordTextParagraphs(content.question),
           new Paragraph({
             children: [
-              new TextRun({ bold: true, color: NAVY, text: "Orientación recibida" }),
+              new TextRun({
+                bold: true,
+                color: NAVY,
+                text: "Orientación recibida",
+              }),
             ],
             heading: HeadingLevel.HEADING_1,
             spacing: { before: 260, after: 100 },
           }),
-          ...wordContentBlocks(content.answer),
+          ...wordContentBlocks(answer),
           ...(content.caseNotes
             ? [
                 new Paragraph({
                   children: [
-                    new TextRun({ bold: true, color: NAVY, text: "Notas del caso" }),
+                    new TextRun({
+                      bold: true,
+                      color: NAVY,
+                      text: "Notas del caso",
+                    }),
                   ],
                   heading: HeadingLevel.HEADING_1,
                   spacing: { before: 260, after: 100 },
@@ -410,12 +502,16 @@ export async function buildOrientationDocx(
             : []),
           new Paragraph({
             children: [
-              new TextRun({ bold: true, color: NAVY, text: "Fuentes consultadas" }),
+              new TextRun({
+                bold: true,
+                color: NAVY,
+                text: "Fuentes consultadas",
+              }),
             ],
             heading: HeadingLevel.HEADING_1,
             spacing: { before: 260, after: 100 },
           }),
-          ...content.sources.map(
+          ...sources.map(
             (source) =>
               new Paragraph({
                 children: [new TextRun(describeOrientationSource(source))],
@@ -474,7 +570,9 @@ function writePdfTable(
   const left = document.page.margins.left;
   const bottom = document.page.height - document.page.margins.bottom;
   const availableWidth =
-    document.page.width - document.page.margins.left - document.page.margins.right;
+    document.page.width -
+    document.page.margins.left -
+    document.page.margins.right;
   const columnWidth = availableWidth / block.headers.length;
 
   const rowHeight = (cells: string[]): number => {
@@ -508,9 +606,7 @@ function writePdfTable(
         .rect(x, y, columnWidth, height)
         .fillAndStroke(header ? "#E8F1FF" : "#FFFFFF", "#B8C4D9");
       document
-        .font(
-          header ? PDF_FONT_NAMES.latin.bold : PDF_FONT_NAMES.latin.regular,
-        )
+        .font(header ? PDF_FONT_NAMES.latin.bold : PDF_FONT_NAMES.latin.regular)
         .fontSize(fontSize)
         .fillColor("#111827")
         .text(sanitizeDocumentText(cell), x + padding, y + padding, {
@@ -545,6 +641,10 @@ export function buildOrientationPdf(
   content: OrientationDocumentContent,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const { answer, sources } = prepareExportEvidence(
+      content.answer,
+      content.sources,
+    );
     const document = new PDFDocument({
       compress: false,
       info: {
@@ -584,7 +684,7 @@ export function buildOrientationPdf(
     writePdfHeading(document, "Consulta");
     writePdfBody(document, content.question);
     writePdfHeading(document, "Orientación recibida");
-    writePdfMarkdownContent(document, content.answer);
+    writePdfMarkdownContent(document, answer);
 
     if (content.caseNotes) {
       writePdfHeading(document, "Notas del caso");
@@ -592,7 +692,7 @@ export function buildOrientationPdf(
     }
 
     writePdfHeading(document, "Fuentes consultadas");
-    for (const source of content.sources) {
+    for (const source of sources) {
       writePdfBody(document, describeOrientationSource(source));
     }
 

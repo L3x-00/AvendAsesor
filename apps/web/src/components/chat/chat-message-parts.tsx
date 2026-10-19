@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CITATION_TOKEN } from "./chat-sources";
-import { markdownTablesToPlainText } from "./chat-response-tables";
+import type { ChatSource } from "@/lib/chat-api/types";
+import { CITATION_TOKEN, singleCitedSource } from "./chat-sources";
+import {
+  markdownTablesToPlainText,
+  structuredSalaryRowsToMarkdown,
+} from "./chat-response-tables";
 
 /** Marca circular del asistente junto a su nombre, como en los chats de IA. */
 export function AssistantAvatar() {
@@ -23,10 +27,12 @@ export function AssistantAvatar() {
 export function plainAnswerText(
   content: string,
   sourceRanks: readonly number[] = [],
+  sources: readonly ChatSource[] = [],
 ): string {
   const textWithSupportedTables = markdownTablesToPlainText(
-    content,
+    structuredSalaryRowsToMarkdown(content),
     sourceRanks,
+    singleCitedSource(content, sources)?.rank,
   );
   const withoutCitations = textWithSupportedTables
     .split(CITATION_TOKEN)
@@ -57,12 +63,19 @@ export function SuggestedQuestions({
   questions: string[];
 }) {
   return (
-    <section aria-label="Preguntas recomendadas" className="avend-chat-suggested">
+    <section
+      aria-label="Preguntas recomendadas"
+      className="avend-chat-suggested"
+    >
       <p className="avend-chat-suggested-title">Preguntas recomendadas</p>
       <ul>
         {questions.map((question, index) => (
           <li key={question} style={{ animationDelay: `${index * 60}ms` }}>
-            <button disabled={disabled} onClick={() => onPick(question)} type="button">
+            <button
+              disabled={disabled}
+              onClick={() => onPick(question)}
+              type="button"
+            >
               <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
                 <path d="M5 18.5 3.5 21l3.1-1.1A8.5 8.5 0 1 0 5 18.5Z" />
               </svg>
@@ -81,9 +94,11 @@ type CopyState = "copied" | "failed" | "idle";
 export function CopyAnswerButton({
   content,
   sourceRanks = [],
+  sources = [],
 }: {
   content: string;
   sourceRanks?: readonly number[];
+  sources?: readonly ChatSource[];
 }) {
   const [state, setState] = useState<CopyState>("idle");
   const resetTimer = useRef<number | null>(null);
@@ -98,7 +113,9 @@ export function CopyAnswerButton({
   async function copy() {
     let next: CopyState = "copied";
     try {
-      await navigator.clipboard.writeText(plainAnswerText(content, sourceRanks));
+      await navigator.clipboard.writeText(
+        plainAnswerText(content, sourceRanks, sources),
+      );
     } catch {
       next = "failed";
     }

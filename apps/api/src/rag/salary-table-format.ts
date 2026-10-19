@@ -13,10 +13,10 @@ const SALARY_COLUMN = /\b(?:remuneraci[oó]n|monto|sueldo|salario|haber)\b/iu;
 const AMOUNT =
   /(?:s\/|\b\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{1,2})?\b|\b\d+[.,]\d{2}\b)/iu;
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/u;
+const STRUCTURED_SALARY_MARKER = '<!-- avend:structured-salary-table -->';
 
 interface ParsedRow {
   fields: Map<string, string>;
-  raw: string;
 }
 
 function parseRow(line: string): ParsedRow | null {
@@ -30,7 +30,7 @@ function parseRow(line: string): ParsedRow | null {
     fields.set(match[1].trim(), match[2].trim());
   }
   if (fields.size < 2) return null;
-  return { fields, raw: content };
+  return { fields };
 }
 
 function escapeCell(value: string): string {
@@ -39,14 +39,14 @@ function escapeCell(value: string): string {
 
 /**
  * Convierte un bloque de viñetas «Campo: valor; Campo: valor» en una tabla
- * Markdown. Si el texto ya tiene una tabla, o el bloque no parece una escala
- * salarial, devuelve el texto intacto.
+ * Markdown. Conserva las citas exactamente donde llegaron: una referencia de
+ * bloque no demuestra por sí sola qué rango sustenta cada fila. Si el texto ya
+ * tiene una tabla, o el bloque no parece una escala salarial, lo deja intacto.
  */
 export function formatSalaryBulletsAsTable(answer: string): string {
   if (!answer.trim() || TABLE_SEPARATOR.test(answer)) return answer;
 
   const lines = answer.replace(/\r\n?/gu, '\n').split('\n');
-  const fallbackCitation = answer.match(/\[(\d+)\]/u)?.[0] ?? null;
   const output: string[] = [];
   let index = 0;
 
@@ -84,8 +84,8 @@ export function formatSalaryBulletsAsTable(answer: string): string {
       rows.length > 12 ||
       !looksLikeSalary
     ) {
-      output.push(lines[index] ?? '');
-      index += 1;
+      output.push(...lines.slice(index, cursor));
+      index = cursor;
       continue;
     }
 
@@ -96,14 +96,9 @@ export function formatSalaryBulletsAsTable(answer: string): string {
         const values = columns.map((column) =>
           escapeCell(row.fields.get(column) ?? '—'),
         );
-        if (
-          fallbackCitation &&
-          !values.some((value) => /\[\d+\]/u.test(value))
-        ) {
-          values[values.length - 1] = `${values.at(-1)} ${fallbackCitation}`;
-        }
         return `| ${values.join(' | ')} |`;
       }),
+      STRUCTURED_SALARY_MARKER,
     );
     index = cursor;
   }

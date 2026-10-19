@@ -1,7 +1,7 @@
 import { formatSalaryBulletsAsTable } from './salary-table-format';
 
 describe('formatSalaryBulletsAsTable', () => {
-  it('convierte las filas de una escala en una tabla Markdown con citas', () => {
+  it('convierte las filas de una escala sin reasignar la cita del bloque', () => {
     const answer = [
       'La remuneración varía según la modalidad:',
       '',
@@ -18,8 +18,9 @@ describe('formatSalaryBulletsAsTable', () => {
       '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
     );
     expect(formatted).toContain(
-      '| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 [1] |',
+      '| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 |',
     );
+    expect(formatted).toContain('Fuente: [1]');
     expect(formatted).not.toContain('- Modalidad / Forma:');
   });
 
@@ -40,10 +41,41 @@ describe('formatSalaryBulletsAsTable', () => {
       '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
     );
     expect(formatted).toContain(
-      '| Educación Básica Regular – EBR | Inicial | 30 | 3,300.60 [1] |',
+      '| Educación Básica Regular – EBR | Inicial | 30 | 3,300.60 |',
     );
     expect(formatted).toContain('Fuente: [1] DS');
     expect(formatted).not.toContain('Modalidad / Forma: Educación');
+  });
+
+  it('no inventa una cita por fila aunque todo el bloque cite un documento', () => {
+    const answer = [
+      '- Modalidad: EBR; Nivel: Inicial; Remuneración: S/ 3 500,70',
+      '- Modalidad: EBR; Nivel: Primaria; Remuneración: S/ 3 500,70',
+      '',
+      'La jornada menor se paga de forma proporcional. [1][2]',
+    ].join('\n');
+
+    const formatted = formatSalaryBulletsAsTable(answer);
+
+    expect(formatted).toContain('| EBR | Inicial | S/ 3 500,70 |');
+    expect(formatted).toContain('| EBR | Primaria | S/ 3 500,70 |');
+    expect(formatted).toContain(
+      'La jornada menor se paga de forma proporcional. [1][2]',
+    );
+  });
+
+  it('no atribuye todas las filas a la primera cita si intervienen documentos distintos', () => {
+    const answer = [
+      '- Modalidad: EBR; Nivel: Inicial; Remuneración: S/ 3 500,70',
+      '- Modalidad: EBE; Nivel: Primaria; Remuneración: S/ 3 500,70',
+      '',
+      'Fuentes: [1][2]',
+    ].join('\n');
+
+    const formatted = formatSalaryBulletsAsTable(answer);
+
+    expect(formatted).toContain('| EBR | Inicial | S/ 3 500,70 |');
+    expect(formatted).not.toContain('S/ 3 500,70 [1] |');
   });
 
   it('no transforma una lista normal sin campos de escala', () => {
@@ -61,6 +93,16 @@ describe('formatSalaryBulletsAsTable', () => {
       '| --- | --- |',
       '| 30 horas | S/ 3,300.60 |',
     ].join('\n');
+
+    expect(formatSalaryBulletsAsTable(answer)).toBe(answer);
+  });
+
+  it('deja intacto de forma atómica un bloque que supera doce filas', () => {
+    const answer = Array.from(
+      { length: 13 },
+      (_, index) =>
+        `- Modalidad: EBR; Nivel: ${index + 1}; Remuneración: S/ 3 500,70`,
+    ).join('\n');
 
     expect(formatSalaryBulletsAsTable(answer)).toBe(answer);
   });

@@ -218,6 +218,41 @@
   white-space: pre-wrap;
 }
 
+.answer {
+  display: grid;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.answer p,
+.answer ul {
+  color: var(--avend-text);
+  font-size: 1rem;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.answer ul {
+  padding-inline-start: 1.35rem;
+}
+
+.answer :global(.avend-chat-table-block) {
+  margin: 0;
+  margin-inline-start: 0;
+  max-width: 100%;
+  width: auto;
+}
+
+.sourceNote {
+  color: var(--avend-text-muted) !important;
+}
+
+.sourceNote a,
+.answer a {
+  color: var(--avend-accent-strong);
+  font-weight: 700;
+}
+
 @keyframes preview-enter {
   from {
     opacity: 0;

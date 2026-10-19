@@ -84,8 +84,19 @@ describe('buildEvidenceSystemPrompt', () => {
 
   it('separa la información y su cita por fuente, con cita de bloque y corroboración', () => {
     const prompt = buildEvidenceSystemPrompt();
-    expect(prompt).toContain('cada una en su propio corchete');
-    expect(prompt).toContain('no repitas la cita en cada elemento');
+    expect(prompt).toContain('cada uno en su propio corchete');
+    expect(prompt).toContain(
+      'nunca acumules una lista de citas de documentos distintos al final',
+    );
+    expect(prompt).toContain(
+      'No repitas varios rangos que pertenezcan a una misma versión documental',
+    );
+    expect(prompt).toContain(
+      'cada elemento conserva su cita junto al dato correspondiente',
+    );
+    expect(prompt).toContain(
+      'la interfaz la mostrará una sola vez bajo la tabla',
+    );
     expect(prompt).toContain('justo después del punto');
     expect(prompt).toContain('nunca agrupada como [1, 2]');
     expect(prompt).not.toContain('Nunca escribas dos citas seguidas');
