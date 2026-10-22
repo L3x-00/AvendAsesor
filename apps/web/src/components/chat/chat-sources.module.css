@@ -665,6 +665,49 @@
   }
 }
 
+/* Despliegue hacia arriba (chat): el panel se pinta sobre el botón y crece hacia
+   arriba. El DOM conserva el orden botón → panel (foco y lector de pantalla); el
+   contenido se ancla al borde inferior para que parezca salir del botón. La
+   página compensa el desplazamiento mientras dura la transición (`holdPosition`). */
+.disclosure[data-direction="up"] {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.disclosure[data-direction="up"] .disclosurePanelInner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.disclosure[data-direction="up"] .disclosurePanelInner > * {
+  flex: none;
+}
+
+.disclosure[data-direction="up"]
+  .disclosurePanel[data-open="true"]
+  .disclosurePanelInner {
+  padding-bottom: 1rem;
+  padding-top: 0;
+}
+
+/* Abierto por una cita [n]: sin movimiento, para que el destino de su
+   desplazamiento sea el definitivo desde el primer fotograma. */
+.disclosure[data-motion="instant"] .disclosurePanel {
+  transition: none;
+}
+
+.disclosure[data-motion="instant"] .disclosurePanel[data-open="true"] .heading,
+.disclosure[data-motion="instant"]
+  .disclosurePanel[data-open="true"]
+  .tableViewport,
+.disclosure[data-motion="instant"] .disclosurePanel[data-open="true"] .others,
+.disclosure[data-motion="instant"]
+  .disclosurePanel[data-open="true"]
+  .downloads {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toggle,
   .chevron,

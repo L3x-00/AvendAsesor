@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   detectRetrievalScope,
   inheritedFactorQuestions,
@@ -1979,5 +1980,352 @@ describe('detectRetrievalScope', () => {
     expect(detectRetrievalScope('Normativa vigente de 2026', 2026)).toBe(
       'current',
     );
+  });
+});
+
+describe('RagService — preguntas por fechas', () => {
+  // Redacción real del sello SINAD (expediente y clave anonimizados) pegada a
+  // la tabla del cronograma, como la extrae el PDF del oficio del destaque.
+  const SEAL =
+    'La integridad del documento y la autoría de la(s) firma(s) pueden ser verificadas en https://apps.firmaperu.gob.pe/web/validador.xhtml EXPEDIENTE: DITEN2026-INT-0000000 CLAVE: AB12CD Esto es una copia auténtica imprimible de un documento electrónico archivado en el Ministerio de Educación, aplicando lo dispuesto por el Art. 25 de D.S. 070- 2013-PCM y la Tercera Disposición Complementaria Final del D.S. 026-2016- PCM. Su autenticidad e integridad pueden ser contrastadas a través de la siguiente dirección web: https://esinad.minedu.gob.pe/e_sinadmed_2/VDD_ConsultaDocumento.aspx';
+  const SCHEDULE =
+    'CRONOGRAMA DE DESTAQUE 2026 ACTIVIDADES RESPONSABLES INICIO FIN RENOVACIÓN DE DESTAQUE 1 Presentación de solicitudes IE/UGEL 13.01.2026 14.01.2026 2 Aplicación de la ficha de evaluación (Anexo 5) IE/UGEL 14.01.2026 15.01.2026 3 Resultados de la evaluación IE/UGEL 16.01.2026';
+  const prose = {
+    ...source,
+    articleReference: null,
+    chunkContent:
+      'Para el presente año, las solicitudes de destaque se presentan ante la UGEL o DRE de destino, de acuerdo con las fechas del cronograma que se adjunta.',
+    chunkId: 'prosa',
+    documentTitle: 'Aprobación del cronograma de destaque 2026',
+    documentVersionId: 'cronograma-v',
+    sectionTitle: null,
+    semanticScore: 0.52,
+  };
+  const row = (
+    chunkId: string,
+    chunkIndex: number,
+    chunkContent: string,
+    documentVersionId = 'cronograma-v',
+  ) => ({
+    articleReference: null,
+    chunkContent,
+    chunkId,
+    chunkIndex,
+    documentVersionId,
+    numeralReference: null,
+    pageEnd: 4,
+    pageStart: 3,
+    sectionTitle: null,
+  });
+  /** Un párrafo real del oficio: unas fechas sueltas en mucho texto. */
+  const longParagraph = (dated: string) =>
+    `${dated} ${'El procedimiento se desarrolla ante la UGEL o DRE de destino conforme a la norma técnica vigente y sus disposiciones complementarias. '.repeat(16)}`;
+
+  let embeddings: { embed: jest.Mock };
+  let gateway: { datedChunksOfVersions?: jest.Mock; search: jest.Mock };
+  let service: RagService;
+
+  function build(withDatedChunks: boolean) {
+    embeddings = {
+      embed: jest
+        .fn()
+        .mockImplementation((queries: string[]) =>
+          Promise.resolve(queries.map(() => vector())),
+        ),
+    };
+    gateway = {
+      search: jest.fn(),
+      ...(withDatedChunks ? { datedChunksOfVersions: jest.fn() } : {}),
+    };
+    service = new RagService(embeddings, gateway, {
+      get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.5)),
+    } as never);
+  }
+
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('completa «¿cuándo se dan los destaques?» con la tabla del mismo documento', async () => {
+    build(true);
+    gateway.search.mockResolvedValue([prose]);
+    gateway.datedChunksOfVersions?.mockResolvedValue([
+      row(
+        'oficio',
+        3,
+        'El destaque rige a partir del 01.03.2026; la asistencia técnica es el 16 de enero.',
+      ),
+      row('tabla', 4, `de todos los postulantes.\n\n${SEAL} ${SCHEDULE}`),
+    ]);
+
+    const result = await service.retrieve('cuando se dan los destaques?', null);
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'prosa',
+      'tabla',
+    ]);
+    const table = result.sources[1];
+    expect(table?.chunkContent).toContain(SCHEDULE);
+    expect(table?.chunkContent).not.toContain('firmaperu');
+    expect(table).toMatchObject({
+      documentTitle: 'Aprobación del cronograma de destaque 2026',
+      documentVersionId: 'cronograma-v',
+      pageStart: 3,
+      semanticScore: 0.52,
+    });
+    expect(result.topRelevanceScore).toBe(0.52);
+    expect(gateway.datedChunksOfVersions).toHaveBeenCalledWith({
+      limitPerVersion: 30,
+      versionIds: ['cronograma-v'],
+    });
+    // Sin búsqueda adicional: el cronograma estaba en un documento ya admitido.
+    expect(gateway.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('agrega el fragmento contiguo cuando la tabla continúa', async () => {
+    build(true);
+    gateway.search.mockResolvedValue([prose]);
+    gateway.datedChunksOfVersions?.mockResolvedValue([
+      row('tabla', 4, SCHEDULE),
+      row(
+        'tabla-sigue',
+        5,
+        'UNIDAD FAMILIAR DE DESTAQUE 5 Presentación de solicitudes 19.01.2026 21.01.2026 6 Revisión 19.01.2026 22.01.2026',
+      ),
+      row(
+        'lejano',
+        9,
+        'Destaque: vigencias del 01.02.2025, 01.03.2025 y 31.12.2025.',
+      ),
+    ]);
+
+    const result = await service.retrieve('¿Cuándo es el destaque?', null);
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'prosa',
+      'tabla',
+      'tabla-sigue',
+    ]);
+  });
+
+  it('no busca el cronograma si la pregunta no pide fechas', async () => {
+    build(true);
+    gateway.search.mockResolvedValue([prose]);
+
+    const result = await service.retrieve('¿Qué es el destaque?', null);
+
+    expect(result).toMatchObject({ kind: 'evidence', sources: [prose] });
+    expect(gateway.datedChunksOfVersions).not.toHaveBeenCalled();
+  });
+
+  it('no agrega nada ni busca en el módulo cuando la evidencia ya trae la tabla completa', async () => {
+    build(true);
+    const withTable = { ...prose, chunkContent: SCHEDULE, chunkId: 'tabla' };
+    gateway.search.mockResolvedValue([withTable]);
+    gateway.datedChunksOfVersions?.mockResolvedValue([
+      row('tabla', 4, SCHEDULE),
+      row(
+        'lejano',
+        9,
+        'Destaque: vigencias del 01.02.2025, 01.03.2025 y 31.12.2025.',
+      ),
+    ]);
+
+    const result = await service.retrieve('¿Cuándo es el destaque?', null);
+
+    expect(result).toMatchObject({ kind: 'evidence', sources: [withTable] });
+    expect(gateway.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('completa la tabla ya entregada con su fragmento contiguo', async () => {
+    // La «Modificación del cronograma de contratación docente» llega partida:
+    // la búsqueda entrega el fragmento #3 y la tabla sigue en #2 y #4.
+    build(true);
+    const withTable = { ...prose, chunkContent: SCHEDULE, chunkId: 'tabla' };
+    gateway.search.mockResolvedValue([withTable]);
+    gateway.datedChunksOfVersions?.mockResolvedValue([
+      row('tabla', 4, SCHEDULE),
+      row(
+        'tabla-sigue',
+        5,
+        'UNIDAD FAMILIAR 5 Presentación de solicitudes 19.01.2026 21.01.2026 6 Revisión 19.01.2026 22.01.2026',
+      ),
+    ]);
+
+    const result = await service.retrieve('¿Cuándo es el destaque?', null);
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'tabla',
+      'tabla-sigue',
+    ]);
+    expect(gateway.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('agrega la tabla aunque la evidencia traiga un párrafo con pocas fechas sueltas', async () => {
+    // «¿En qué fechas se presentan las solicitudes de destaque?» recuperaba el
+    // párrafo que remite al «cronograma que se adjunta» (tres fechas sueltas)
+    // y ese párrafo no reemplaza a la tabla.
+    build(true);
+    const reference = {
+      ...prose,
+      chunkContent: longParagraph(
+        'Las solicitudes de destaque se presentan de acuerdo con el cronograma que se adjunta. La vigencia es a partir del 01.03.2026; para directivos, desde el 01 de febrero; la asistencia técnica es el 16 de enero.',
+      ),
+      chunkId: 'remite',
+    };
+    gateway.search.mockResolvedValue([reference]);
+    gateway.datedChunksOfVersions?.mockResolvedValue([
+      row('remite', 3, reference.chunkContent),
+      row('tabla', 4, SCHEDULE),
+    ]);
+
+    const result = await service.retrieve(
+      '¿En qué fechas se presentan las solicitudes de destaque?',
+      null,
+    );
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'remite',
+      'tabla',
+    ]);
+  });
+
+  it('busca el cronograma en el módulo cuando ningún documento entregado lo trae', async () => {
+    build(false);
+    const otherProcess = {
+      ...source,
+      chunkContent:
+        'CRONOGRAMA DE REASIGNACIÓN 2026 Presentación de solicitudes 02.02.2026 06.02.2026 Resultados 20.02.2026',
+      chunkId: 'reasignacion',
+      documentVersionId: 'reasignacion-v',
+      semanticScore: 0.49,
+    };
+    const destaqueSchedule = {
+      ...source,
+      chunkContent: SCHEDULE,
+      chunkId: 'tabla-otra',
+      documentTitle: 'Cronograma de destaque 2026',
+      documentVersionId: 'cronograma-otro',
+      semanticScore: 0.46,
+    };
+    gateway.search
+      .mockResolvedValueOnce([prose])
+      .mockResolvedValueOnce([otherProcess, destaqueSchedule]);
+
+    const result = await service.retrieve(
+      '¿Cuándo se dan los destaques 2026?',
+      null,
+    );
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'prosa',
+      'tabla-otra',
+    ]);
+    expect(gateway.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        matchCount: 10,
+        matchThreshold: 0.4,
+        query:
+          'cronograma de destaques 2026: actividades, fechas de inicio y fin',
+        selectedModuleId: 'module-a',
+      }),
+    );
+  });
+
+  it('completa con sus fragmentos contiguos el cronograma hallado en el módulo', async () => {
+    build(true);
+    const destaqueSchedule = {
+      ...source,
+      chunkContent: SCHEDULE,
+      chunkId: 'tabla-otra',
+      documentTitle: 'Cronograma de destaque 2026',
+      documentVersionId: 'cronograma-otro',
+      semanticScore: 0.46,
+    };
+    gateway.search
+      .mockResolvedValueOnce([prose])
+      .mockResolvedValueOnce([destaqueSchedule]);
+    gateway.datedChunksOfVersions
+      ?.mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        row('tabla-otra', 4, SCHEDULE, 'cronograma-otro'),
+        row(
+          'tabla-otra-sigue',
+          5,
+          'UNIDAD FAMILIAR 5 Presentación de solicitudes 19.01.2026 21.01.2026 6 Revisión 19.01.2026 22.01.2026',
+          'cronograma-otro',
+        ),
+      ]);
+
+    const result = await service.retrieve(
+      '¿Cuándo se dan los destaques?',
+      null,
+    );
+
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.map((entry) => entry.chunkId)).toEqual([
+      'prosa',
+      'tabla-otra',
+      'tabla-otra-sigue',
+    ]);
+    expect(result.sources[2]).toMatchObject({
+      documentTitle: 'Cronograma de destaque 2026',
+      semanticScore: 0.46,
+    });
+    expect(gateway.datedChunksOfVersions).toHaveBeenLastCalledWith({
+      limitPerVersion: 30,
+      versionIds: ['cronograma-otro'],
+    });
+  });
+
+  it('no busca en el módulo un seguimiento sin tema propio', async () => {
+    build(false);
+    gateway.search.mockResolvedValue([prose]);
+
+    const result = await service.retrieve('¿y cuándo?', null);
+
+    expect(result).toMatchObject({ kind: 'evidence', sources: [prose] });
+    expect(gateway.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('responde con la evidencia hallada si la lectura del cronograma falla', async () => {
+    build(true);
+    gateway.search.mockResolvedValue([prose]);
+    gateway.datedChunksOfVersions?.mockRejectedValue(
+      new Error('PostgREST caído'),
+    );
+
+    await expect(
+      service.retrieve('cuando se dan los destaques?', null),
+    ).resolves.toMatchObject({ kind: 'evidence', sources: [prose] });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(Logger.prototype.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('no completa una aclaración entre temas', async () => {
+    build(true);
+    gateway.search.mockResolvedValue([
+      prose,
+      {
+        ...prose,
+        chunkId: 'otro-tema',
+        documentVersionId: 'otro-v',
+        moduleIds: ['module-b'],
+        moduleNames: ['Módulo B'],
+      },
+    ]);
+
+    await expect(
+      service.retrieve('cuando se dan los destaques?', null),
+    ).resolves.toMatchObject({ kind: 'ambiguous' });
+    expect(gateway.datedChunksOfVersions).not.toHaveBeenCalled();
   });
 });

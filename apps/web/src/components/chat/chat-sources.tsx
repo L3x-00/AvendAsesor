@@ -1,6 +1,12 @@
 "use client";
 
-import { useId, useState } from "react";
+import {
+  type MouseEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
@@ -12,7 +18,76 @@ interface ChatSourcesProps {
   messageId?: string;
   /** Abiertas desde el inicio (p. ej. en la ficha de orientación imprimible). */
   defaultOpen?: boolean;
+  /**
+   * Hacia dónde se despliega la tabla: «up» la abre por encima del botón (chat,
+   * que queda al pie de la respuesta) y «down» por debajo, como la ficha.
+   */
+  direction?: "down" | "up";
   sources: ChatSource[];
+}
+
+/** Duración de la transición del panel (ver `.disclosurePanel`) más un margen. */
+const PANEL_MOTION_MS = 420;
+/** Tope de fotogramas corregidos: cubre la transición hasta en pantallas de 240 Hz. */
+const MAX_HOLD_FRAMES = 120;
+
+function scrollContainerOf(element: HTMLElement): HTMLElement | null {
+  for (
+    let parent = element.parentElement;
+    parent;
+    parent = parent.parentElement
+  ) {
+    const { overflowY } = window.getComputedStyle(parent);
+    if (
+      /^(?:auto|scroll|overlay)$/u.test(overflowY) &&
+      parent.scrollHeight > parent.clientHeight
+    ) {
+      return parent;
+    }
+  }
+  return null;
+}
+
+/**
+ * Con el panel por encima del botón, al crecer empuja el botón hacia abajo y la
+ * tabla parecería abrirse hacia abajo. Durante la transición se corrige, en cada
+ * fotograma, el desplazamiento de la página: el botón queda donde la persona lo
+ * tocó y es la tabla la que se despliega hacia arriba. Devuelve la función que
+ * detiene la corrección.
+ */
+export function holdPosition(
+  element: HTMLElement,
+  durationMs: number,
+): () => void {
+  const scroller = scrollContainerOf(element);
+  const startTop = element.getBoundingClientRect().top;
+  let startedAt: number | null = null;
+  let frame = 0;
+  let frames = 0;
+
+  const step = (now: number) => {
+    startedAt ??= now;
+    frames += 1;
+    const drift = element.getBoundingClientRect().top - startTop;
+    if (Math.abs(drift) >= 0.5) {
+      // `instant`: la página declara `scroll-behavior: smooth` y un desplazamiento
+      // suave por fotograma iría siempre un paso por detrás del panel.
+      if (scroller) {
+        scroller.scrollTo({
+          behavior: "instant",
+          top: scroller.scrollTop + drift,
+        });
+      } else {
+        window.scrollBy({ behavior: "instant", top: drift });
+      }
+    }
+    if (frames < MAX_HOLD_FRAMES && now - startedAt < durationMs) {
+      frame = window.requestAnimationFrame(step);
+    }
+  };
+
+  frame = window.requestAnimationFrame(step);
+  return () => window.cancelAnimationFrame(frame);
 }
 
 function uniqueDocuments(sources: ChatSource[]): ChatSource[] {
@@ -432,12 +507,34 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
 export function ChatSources({
   citedRanks,
   defaultOpen = false,
+  direction = "down",
   messageId,
   sources,
 }: ChatSourcesProps) {
   const contentId = useId();
   const toggleId = useId();
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  // Una cita [n] abre el panel por código: sin animación, para que el destino de
+  // su desplazamiento ya sea el definitivo.
+  const [instant, setInstant] = useState(false);
+  const releaseHold = useRef<(() => void) | null>(null);
+  useEffect(() => () => releaseHold.current?.(), []);
+
+  function handleToggle(event: MouseEvent<HTMLButtonElement>) {
+    const button = event.currentTarget;
+    const opensFromCitation = button.hasAttribute("data-instant");
+    button.removeAttribute("data-instant");
+    releaseHold.current?.();
+    releaseHold.current = null;
+    setInstant(opensFromCitation);
+    // Solo se ancla el botón cuando la persona lo toca: una cita [n] ya decide
+    // hacia dónde se desplaza la vista.
+    if (direction === "up" && !opensFromCitation) {
+      releaseHold.current = holdPosition(button, PANEL_MOTION_MS);
+    }
+    setIsOpen((current) => !current);
+  }
+
   const cited = citedRanks?.length
     ? sources.filter((source) => citedRanks.includes(source.rank))
     : [];
@@ -450,11 +547,15 @@ export function ChatSources({
 
   // Plegadas por defecto: la respuesta se lee primero y el sustento se abre
   // a pedido ("Ver fuentes disponibles"), como en los asistentes de IA. Una cita [n]
-  // del texto las abre sola y lleva a su fila.
+  // del texto las abre sola y lleva a su fila. Con `direction="up"` el panel se
+  // pinta por encima del botón (solo CSS): el orden del DOM sigue siendo botón →
+  // panel, así el lector de pantalla y el teclado entran al panel tras activarlo.
   return (
     <section
       aria-label="Referencias verificables"
       className={`avend-chat-sources ${styles.disclosure}`}
+      data-direction={direction}
+      data-motion={instant ? "instant" : undefined}
       data-open={isOpen ? "true" : "false"}
       data-source-disclosure=""
     >
@@ -464,7 +565,7 @@ export function ChatSources({
         className={styles.toggle}
         data-source-toggle=""
         id={toggleId}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={handleToggle}
         type="button"
       >
         <span aria-hidden="true" className={styles.folderIcon}>
@@ -490,7 +591,8 @@ export function ChatSources({
           fill="none"
           viewBox="0 0 24 24"
         >
-          <path d="m6 9 6 6 6-6" />
+          {/* Apunta hacia donde se mueve el panel; al abrirse gira 180°. */}
+          <path d={direction === "up" ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"} />
         </svg>
       </button>
 

@@ -63,3 +63,20 @@ export const RAG_QUERY_TEXT_MAX_CHARS = 8_000;
  * emite el modelo. Se ajusta con `RAG_MATCH_THRESHOLD` sin desplegar código.
  */
 export const RAG_DEFAULT_MATCH_THRESHOLD = 0.5;
+/**
+ * Piso de similitud para buscar el cronograma de un tema cuando ningún
+ * documento ya admitido lo contiene. Una tabla de fechas apenas repite el tema
+ * y puntúa por debajo del umbral general (0.465–0.488 en el corpus real para la
+ * tabla del destaque 2026), así que solo se acepta con al menos tres fechas,
+ * dentro del módulo de la consulta y mencionando su tema.
+ */
+export const RAG_SCHEDULE_SEMANTIC_FLOOR = 0.4;
+/** Fragmentos de fechas que se leen por versión al completar un cronograma. */
+export const RAG_SCHEDULE_CHUNKS_PER_VERSION = 30;
+/**
+ * Fragmentos que puede sumar el cronograma a la evidencia del turno. La tabla
+ * más larga medida (contratación docente 2026) ocupa cuatro fragmentos.
+ */
+export const RAG_MAX_SCHEDULE_ADDITIONS = 4;
+/** Tope de fuentes que acepta una respuesta guardada (`complete_chat_turn`). */
+export const RAG_MAX_DELIVERED_SOURCES = 10;

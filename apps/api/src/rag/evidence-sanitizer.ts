@@ -18,6 +18,41 @@ const MINEDU_ENTRY =
 const VERIFICATION_BOILERPLATE =
   /^(?:documento electr[oó]nico firmado digitalmente|la integridad del documento y la autor[ií]a|esto es una copia aut[eé]ntica|su autenticidad e integridad pueden ser contrastadas)/iu;
 /**
+ * Frases del sello de firma digital del SINAD (MINEDU), en su redacción real.
+ * La extracción del PDF suele pegar el sello al texto siguiente sin separar el
+ * párrafo —en el oficio del destaque 2026, a la tabla completa del
+ * cronograma—, así que se quita frase por frase lo que es sello y se conserva
+ * lo que viene después. Los espacios admiten saltos de línea.
+ */
+const SIGNATURE_SEAL_SENTENCES: readonly RegExp[] = [
+  'documento electr[oó]nico firmado digitalmente en el marco de la ley n\\.?\\s*[°º]?\\s*27269\\s*, ley de firmas y certificados digitales\\s*, su reglamento y modificatorias\\s*\\.?',
+  'la integridad del documento y la autor[ií]a de la\\(s\\) firma\\(s\\) pueden ser verificadas en\\s*:?\\s*https?://\\S+',
+  'expediente\\s*:\\s*\\S+ clave\\s*:\\s*\\S+',
+  'esto es una copia aut[eé]ntica imprimible de un documento electr[oó]nico archivado en [^.]{1,120}?\\s*, aplicando lo dispuesto por el art\\.\\s*25 de d\\.\\s*s\\.\\s*070\\s*-\\s*2013\\s*-\\s*pcm y la tercera disposici[oó]n complementaria final del d\\.\\s*s\\.\\s*026\\s*-\\s*2016\\s*-\\s*pcm\\s*\\.?',
+  'su autenticidad e integridad pueden ser contrastadas a trav[eé]s de la siguiente direcci[oó]n web\\s*:?\\s*https?://\\S+',
+].map((source) => new RegExp(`^${source.replaceAll(' ', '\\s+')}`, 'iu'));
+
+/**
+ * Texto que sigue a un sello inicial reconocido por completo (vacío si el
+ * párrafo era solo sello). `null` cuando el sello no coincide con la redacción
+ * conocida: entonces se aplica la regla general, que corta por la primera
+ * entrada del MINEDU o por la oración educativa.
+ */
+function withoutLeadingSignatureSeal(paragraph: string): string | null {
+  let rest = paragraph.trimStart();
+  let removed = false;
+  for (;;) {
+    const sentence = SIGNATURE_SEAL_SENTENCES.find((pattern) =>
+      pattern.test(rest),
+    );
+    if (!sentence) break;
+    rest = rest.replace(sentence, '').replace(/^[\s.;,]+/u, '');
+    removed = true;
+  }
+  if (!removed || VERIFICATION_BOILERPLATE.test(rest)) return null;
+  return rest;
+}
+/**
  * Cabeceras de página del diario oficial. No identifican el pasaje normativo
  * que sustenta una respuesta, aun cuando hayan quedado como `section_title`
  * durante la ingesta.
@@ -73,7 +108,11 @@ function cleanParagraph(paragraph: string): string | null {
   let cleaned = trimAdjacentSector(paragraph.trim());
   if (!cleaned) return null;
 
-  if (VERIFICATION_BOILERPLATE.test(cleaned)) {
+  const afterSeal = withoutLeadingSignatureSeal(cleaned);
+  if (afterSeal !== null) {
+    if (!afterSeal) return null;
+    cleaned = afterSeal;
+  } else if (VERIFICATION_BOILERPLATE.test(cleaned)) {
     const mineduEntry = MINEDU_ENTRY.exec(cleaned);
     if (mineduEntry) {
       cleaned = cleaned.slice(mineduEntry.index).trim();

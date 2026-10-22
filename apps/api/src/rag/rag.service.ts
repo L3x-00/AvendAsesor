@@ -1,10 +1,22 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { INTERACTIVE_AI_LIMITS } from '../config/ai-gateway';
 import type { EmbeddingsGateway } from '../ingestion/embeddings.gateway';
 import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
 import { refersBack } from './anaphora';
+import {
+  asksForDates,
+  contiguousSchedule,
+  coversScheduleTopic,
+  type DatedCandidate,
+  distinctDatesIn,
+  isScheduleEvidence,
+  isScheduleTable,
+  scheduleQuery,
+  scheduleTopicTerms,
+  withScheduleEvidence,
+} from './dated-evidence';
 import { hasTopicTerm } from './domain-lexicon';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
@@ -24,8 +36,12 @@ import {
 } from './legal-reference';
 import {
   RAG_DEFAULT_MATCH_THRESHOLD,
+  RAG_MAX_DELIVERED_SOURCES,
+  RAG_MAX_SCHEDULE_ADDITIONS,
   RAG_QUERY_TEXT_MAX_CHARS,
   RAG_ROUTING_SCORE_MARGIN,
+  RAG_SCHEDULE_CHUNKS_PER_VERSION,
+  RAG_SCHEDULE_SEMANTIC_FLOOR,
   RAG_SOURCE_SCORE_MARGIN,
   RAG_TOPIC_SWITCH_SCORE_MARGIN,
 } from './rag.constants';
@@ -34,6 +50,7 @@ import type {
   RetrievedChunk,
   RetrievedModuleAssociation,
   RetrievalScope,
+  VersionChunk,
 } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -811,8 +828,46 @@ export function detectRetrievalScope(
   return 'current';
 }
 
+/**
+ * Otro fragmento de una versión ya entregada: hereda los datos del documento
+ * (título, tipo, situación, módulos) y conserva su propia ubicación. Su
+ * relevancia es la del documento que lo ancla: entra porque su archivo ya
+ * sustenta la respuesta, no por parecerse a la pregunta.
+ */
+function chunkFromDeliveredVersion(
+  anchor: RetrievedChunk,
+  row: VersionChunk,
+): RetrievedChunk {
+  return {
+    ...anchor,
+    articleReference: row.articleReference,
+    chunkContent: row.chunkContent,
+    chunkId: row.chunkId,
+    lexicalScore: 0,
+    numeralReference: row.numeralReference,
+    pageEnd: row.pageEnd,
+    pageStart: row.pageStart,
+    sectionTitle: row.sectionTitle,
+    semanticScore: anchor.semanticScore,
+  };
+}
+
+interface RetrieveOptions {
+  forceContext?: boolean;
+  /**
+   * Consultas que pueden aportar factores salariales. Se separa del contexto
+   * de recuperación para que una propuesta aceptada de otro tema no herede la
+   * jornada o la escala de una consulta anterior.
+   */
+  salaryContextQuestions?: readonly string[];
+  /** La persona pregunta por su propio caso; no se usa el atajo de panorama. */
+  personalSalary?: boolean;
+}
+
 @Injectable()
 export class RagService {
+  private readonly logger = new Logger(RagService.name);
+
   constructor(
     @Inject(EMBEDDINGS_GATEWAY) private readonly embeddings: EmbeddingsGateway,
     @Inject(SUPABASE_RETRIEVAL_GATEWAY)
@@ -820,21 +875,217 @@ export class RagService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Evidencia del turno. Una pregunta por fechas («¿cuándo se dan los
+   * destaques?») se completa además con el cronograma del tema: una tabla de
+   * fechas casi nunca es el fragmento más parecido a la pregunta y, sin ella,
+   * el modelo respondía con la definición del trámite en lugar de las fechas.
+   */
   async retrieve(
     question: string,
     selectedModuleId: string | null,
     priorUserQuestions: string[] = [],
-    options: {
-      forceContext?: boolean;
-      /**
-       * Consultas que pueden aportar factores salariales. Se separa del
-       * contexto de recuperación para que una propuesta aceptada de otro tema
-       * no herede la jornada o la escala de una consulta anterior.
-       */
-      salaryContextQuestions?: readonly string[];
-      /** La persona pregunta por su propio caso; no se usa el atajo de panorama. */
-      personalSalary?: boolean;
-    } = {},
+    options: RetrieveOptions = {},
+  ): Promise<RetrievalResult> {
+    const result = await this.retrieveEvidence(
+      question,
+      selectedModuleId,
+      priorUserQuestions,
+      options,
+    );
+    if (
+      (result.kind !== 'evidence' && result.kind !== 'topic_change') ||
+      !asksForDates(question)
+    ) {
+      return result;
+    }
+    const sources = await this.withScheduleSources(
+      question,
+      result.sources,
+      result.resolvedModule?.id ?? selectedModuleId,
+    );
+    return sources === result.sources ? result : { ...result, sources };
+  }
+
+  /**
+   * Primero se completa con el cronograma de los documentos ya admitidos como
+   * evidencia; si ninguno trae una tabla de fechas del tema, se busca en el
+   * módulo de la consulta. Es una mejora: si la lectura falla, la respuesta
+   * sigue con la evidencia ya hallada.
+   */
+  private async withScheduleSources(
+    question: string,
+    delivered: RetrievedChunk[],
+    moduleId: string | null,
+  ): Promise<RetrievedChunk[]> {
+    const room = Math.min(
+      RAG_MAX_SCHEDULE_ADDITIONS,
+      RAG_MAX_DELIVERED_SOURCES - delivered.length,
+    );
+    if (!delivered.length || room <= 0) return delivered;
+    const terms = scheduleTopicTerms(question);
+    try {
+      const additions =
+        (await this.scheduleFromDeliveredDocuments(delivered, terms)) ??
+        (await this.scheduleFromModule(question, delivered, terms, moduleId));
+      return additions.length
+        ? withScheduleEvidence(delivered, additions.slice(0, room))
+        : delivered;
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No se pudo completar el cronograma de una consulta por fechas: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return delivered;
+    }
+  }
+
+  /** Fragmentos con fechas de los documentos dados, ya saneados. */
+  private async datedCandidates(
+    sources: RetrievedChunk[],
+  ): Promise<DatedCandidate[]> {
+    if (!this.gateway.datedChunksOfVersions) return [];
+    const anchors = new Map<string, RetrievedChunk>();
+    for (const source of sources) {
+      if (!anchors.has(source.documentVersionId)) {
+        anchors.set(source.documentVersionId, source);
+      }
+    }
+    const versionOrder = [...anchors.keys()];
+    const rows = await this.gateway.datedChunksOfVersions({
+      limitPerVersion: RAG_SCHEDULE_CHUNKS_PER_VERSION,
+      versionIds: versionOrder,
+    });
+    return rows.flatMap((row) => {
+      const anchor = anchors.get(row.documentVersionId);
+      const chunk = anchor
+        ? sanitizeRetrievedEvidence(chunkFromDeliveredVersion(anchor, row))
+        : null;
+      if (!chunk) return [];
+      return [
+        {
+          chunk,
+          chunkIndex: row.chunkIndex,
+          dates: distinctDatesIn(chunk.chunkContent).length,
+          table: isScheduleTable(chunk.chunkContent),
+          version: versionOrder.indexOf(row.documentVersionId),
+        },
+      ];
+    });
+  }
+
+  /**
+   * Cronograma de los documentos ya entregados. Si la evidencia ya trae una
+   * tabla de fechas, se completa con sus fragmentos contiguos (el fragmentado
+   * suele partirla); si no, se toma la tabla del tema con más fechas de esos
+   * documentos. Un párrafo que remite al «cronograma que se adjunta» trae
+   * pocas fechas sueltas y no cuenta como tabla. `null` cuando esos documentos
+   * no tienen ninguna tabla del tema: entonces se busca en el módulo.
+   */
+  private async scheduleFromDeliveredDocuments(
+    delivered: RetrievedChunk[],
+    terms: string[],
+  ): Promise<RetrievedChunk[] | null> {
+    const deliveredChunks = new Set(delivered.map((source) => source.chunkId));
+    const candidates = await this.datedCandidates(delivered);
+    const deliveredTables = candidates.filter(
+      (candidate) =>
+        candidate.table && deliveredChunks.has(candidate.chunk.chunkId),
+    );
+    if (deliveredTables.length) {
+      return contiguousSchedule(
+        deliveredTables,
+        candidates,
+        deliveredChunks,
+        terms,
+      );
+    }
+    if (
+      delivered.some((source) => isScheduleEvidence(source.chunkContent, terms))
+    ) {
+      return [];
+    }
+    const [best] = candidates
+      .filter(
+        (candidate) =>
+          candidate.table &&
+          !deliveredChunks.has(candidate.chunk.chunkId) &&
+          coversScheduleTopic(candidate.chunk.chunkContent, terms, 'any'),
+      )
+      .sort(
+        (left, right) =>
+          right.dates - left.dates ||
+          left.version - right.version ||
+          left.chunkIndex - right.chunkIndex,
+      );
+    return best
+      ? contiguousSchedule([best], candidates, deliveredChunks, terms)
+      : null;
+  }
+
+  /**
+   * Cronograma de otro documento del módulo de la consulta, con una búsqueda
+   * canónica («cronograma de destaque 2026: actividades, fechas de inicio y
+   * fin»). Solo se acepta una tabla de fechas que nombre cada término del
+   * tema —el piso de similitud es más bajo que el general porque una tabla de
+   * fechas apenas repite el tema— y se completa con sus fragmentos contiguos.
+   */
+  private async scheduleFromModule(
+    question: string,
+    delivered: RetrievedChunk[],
+    terms: string[],
+    moduleId: string | null,
+  ): Promise<RetrievedChunk[]> {
+    if (!moduleId || !terms.length) return [];
+    const retrievalScope = detectRetrievalScope(question);
+    const year = Number(
+      normalizeSpanishText(question).match(/\b(?:19|20)\d{2}\b/u)?.[0] ??
+        new Date().getUTCFullYear(),
+    );
+    const query = scheduleQuery(terms, year);
+    const [embedding] = await this.embeddings.embed(
+      [query],
+      INTERACTIVE_AI_LIMITS,
+    );
+    if (embedding?.length !== 1536) return [];
+    const deliveredChunks = new Set(delivered.map((source) => source.chunkId));
+    const found = sourcesEligibleForQuestion(
+      (
+        (await this.gateway.search({
+          embedding,
+          matchCount: 10,
+          matchThreshold: RAG_SCHEDULE_SEMANTIC_FLOOR,
+          query,
+          retrievalScope,
+          selectedModuleId: moduleId,
+        })) ?? []
+      )
+        .map(sanitizeRetrievedEvidence)
+        .filter((source): source is RetrievedChunk => Boolean(source)),
+      question,
+      retrievalScope,
+    ).find(
+      (source) =>
+        !deliveredChunks.has(source.chunkId) &&
+        source.semanticScore >= RAG_SCHEDULE_SEMANTIC_FLOOR &&
+        isScheduleEvidence(source.chunkContent, terms, 'all'),
+    );
+    if (!found) return [];
+    const candidates = await this.datedCandidates([found]);
+    const seed = candidates.find(
+      (candidate) => candidate.chunk.chunkId === found.chunkId,
+    );
+    return seed
+      ? contiguousSchedule([seed], candidates, deliveredChunks, terms)
+      : [found];
+  }
+
+  private async retrieveEvidence(
+    question: string,
+    selectedModuleId: string | null,
+    priorUserQuestions: string[],
+    options: RetrieveOptions,
   ): Promise<RetrievalResult> {
     const directReferences = exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
