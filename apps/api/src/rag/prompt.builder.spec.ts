@@ -383,3 +383,59 @@ describe('tablas en el prompt de evidencia', () => {
     );
   });
 });
+
+describe('preguntas por fechas', () => {
+  it('solo añade la política de fechas cuando la pregunta las pide', () => {
+    const general = buildEvidenceSystemPrompt();
+    const dated = buildEvidenceSystemPrompt({ asksForDates: true });
+
+    expect(general).not.toContain('pide una fecha');
+    expect(buildEvidenceSystemPrompt({ asksForDates: false })).toBe(general);
+    expect(dated.startsWith(general)).toBe(true);
+    expect(dated).toContain(
+      'Abre la respuesta con las fechas o los periodos exactos',
+    );
+    expect(dated).toContain('Copia cada fecha tal como aparece en la fuente.');
+    expect(dated).toContain('ACTIVIDADES RESPONSABLES INICIO FIN');
+    expect(dated).toContain(
+      'No reemplaces las fechas por una definición del proceso',
+    );
+    expect(dated).toContain('no inventes fechas');
+  });
+});
+
+describe('fragmentos que empiezan a mitad de una oración', () => {
+  it.each([
+    'considera para destaque las siguientes plazas: declaradas como excedentes.',
+    'de todos los postulantes. Sin otro en particular.',
+  ])('marca «%s» y explica la marca al modelo', (chunkContent) => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Qué plazas se consideran para destaque?',
+      [],
+      [{ ...source, chunkContent }],
+    );
+
+    expect(prompt).toContain(`Contenido:\n[…] ${chunkContent}`);
+    expect(prompt).toContain(
+      'Si el contenido de una fuente empieza con «[…]», su primera oración está cortada',
+    );
+    expect(prompt).toContain('pueden incluir una negación («No se…»)');
+  });
+
+  it.each([
+    'Artículo 5. La plaza vacante se adjudica.',
+    'a) Sus despachos deberán considerar las plazas vacantes.',
+    'ii. No encontrarse incurso en prohibiciones.',
+    'y secundaria con jornada de 30 horas: S/ 3 300,60.',
+    '| Primaria | 30 horas | S/ 3 300,60 |',
+  ])('no marca «%s»', (chunkContent) => {
+    const prompt = buildEvidenceUserPrompt(
+      '¿Qué dice la norma?',
+      [],
+      [{ ...source, chunkContent }],
+    );
+
+    expect(prompt).toContain(`Contenido:\n${chunkContent}`);
+    expect(prompt).not.toContain('[…]');
+  });
+});

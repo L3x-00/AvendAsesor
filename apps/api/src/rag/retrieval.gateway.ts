@@ -40,6 +40,19 @@ export interface RetrievedChunk {
   versionNumber: number;
 }
 
+/** Fragmento persistido de una versión, sin los datos del documento. */
+export interface VersionChunk {
+  articleReference: string | null;
+  chunkContent: string;
+  chunkId: string;
+  chunkIndex: number;
+  documentVersionId: string;
+  numeralReference: string | null;
+  pageEnd: number;
+  pageStart: number;
+  sectionTitle: string | null;
+}
+
 export interface RetrievalGateway {
   search(input: {
     embedding: number[];
@@ -60,4 +73,14 @@ export interface RetrievalGateway {
     referenceKeys: string[];
     retrievalScope: RetrievalScope;
   }): Promise<RetrievedChunk[]>;
+  /**
+   * Fragmentos con alguna fecha explícita de versiones que la búsqueda de este
+   * mismo turno ya admitió como evidencia (por eso no repite los filtros de
+   * elegibilidad). Completa una pregunta por fechas con el cronograma del
+   * documento. Opcional: sin él, la respuesta sigue con la evidencia hallada.
+   */
+  datedChunksOfVersions?(input: {
+    limitPerVersion: number;
+    versionIds: string[];
+  }): Promise<VersionChunk[]>;
 }

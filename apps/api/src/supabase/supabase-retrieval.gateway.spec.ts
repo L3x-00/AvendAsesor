@@ -112,6 +112,100 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
     );
   });
 
+  describe('datedChunksOfVersions', () => {
+    function tableClient(result: { data: unknown; error: unknown }) {
+      const query = {
+        eq: jest.fn(),
+        filter: jest.fn(),
+        limit: jest.fn().mockResolvedValue(result),
+        order: jest.fn(),
+        select: jest.fn(),
+      };
+      query.select.mockReturnValue(query);
+      query.eq.mockReturnValue(query);
+      query.filter.mockReturnValue(query);
+      query.order.mockReturnValue(query);
+      const from = jest.fn().mockReturnValue(query);
+      return { from, query };
+    }
+
+    it('lee por versión solo los fragmentos con fechas, en orden', async () => {
+      const { from, query } = tableClient({
+        data: [
+          {
+            article_reference: null,
+            chunk_content: 'CRONOGRAMA 13.01.2026 14.01.2026 15.01.2026',
+            chunk_index: 4,
+            document_version_id: 'version',
+            id: 'chunk-4',
+            numeral_reference: null,
+            page_end: 4,
+            page_start: 3,
+            section_title: null,
+          },
+        ],
+        error: null,
+      });
+      const gateway = new SupabaseRetrievalGatewayAdapter({
+        from,
+      } as unknown as SupabaseServerClient);
+
+      await expect(
+        gateway.datedChunksOfVersions({
+          limitPerVersion: 30,
+          versionIds: ['version', 'version'],
+        }),
+      ).resolves.toEqual([
+        {
+          articleReference: null,
+          chunkContent: 'CRONOGRAMA 13.01.2026 14.01.2026 15.01.2026',
+          chunkId: 'chunk-4',
+          chunkIndex: 4,
+          documentVersionId: 'version',
+          numeralReference: null,
+          pageEnd: 4,
+          pageStart: 3,
+          sectionTitle: null,
+        },
+      ]);
+      // Una versión repetida se lee una sola vez.
+      expect(from).toHaveBeenCalledTimes(1);
+      expect(from).toHaveBeenCalledWith('document_chunks');
+      expect(query.eq).toHaveBeenCalledWith('document_version_id', 'version');
+      expect(query.filter).toHaveBeenCalledWith(
+        'chunk_content',
+        'imatch',
+        expect.stringContaining('[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4}'),
+      );
+      expect(query.order).toHaveBeenCalledWith('chunk_index', {
+        ascending: true,
+      });
+      expect(query.limit).toHaveBeenCalledWith(30);
+    });
+
+    it('oculta el error de la base detrás de un error de servicio', async () => {
+      const { from } = tableClient({ data: null, error: { code: 'XX000' } });
+
+      await expect(
+        new SupabaseRetrievalGatewayAdapter({
+          from,
+        } as unknown as SupabaseServerClient).datedChunksOfVersions({
+          limitPerVersion: 30,
+          versionIds: ['version'],
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('falla cerrado sin cliente configurado', async () => {
+      await expect(
+        new SupabaseRetrievalGatewayAdapter(null).datedChunksOfVersions({
+          limitPerVersion: 30,
+          versionIds: ['version'],
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
+
   it('hides database errors behind a service error', async () => {
     const rpc = jest
       .fn()

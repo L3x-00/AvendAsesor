@@ -72,6 +72,34 @@ function situationLabel(source: RetrievedChunk): string {
   }
 }
 
+/**
+ * El fragmentado corta por longitud: un contenido que empieza con minúscula
+ * comienza a mitad de una oración y pudo perder palabras previas, como la
+ * negación de «No se considera para destaque las siguientes plazas…», que
+ * llegó al modelo como «considera para destaque…» y se respondió al revés. Un
+ * literal («a)», «ii.») abre su propia oración. Si esa primera oración trae
+ * cifras (montos, fechas, plazos) no se marca, para no restarle peso a un dato.
+ */
+export function startsMidSentence(content: string): boolean {
+  const text = content.trimStart();
+  if (!/^\p{Ll}/u.test(text)) return false;
+  if (/^(?:[a-z]|[ivxl]{1,5})[).]\s/u.test(text)) return false;
+  const firstSentence = text.split(/(?<=[.!?:;])\s|\n/u)[0] ?? text;
+  return !/\d/u.test(firstSentence);
+}
+
+const MID_SENTENCE_MARK = '[…]';
+
+function sourceContent(source: RetrievedChunk): string {
+  const content = cleanPromptValue(source.chunkContent, true).slice(
+    0,
+    MAX_EVIDENCE_CHARS_PER_CHUNK,
+  );
+  return startsMidSentence(content)
+    ? `${MID_SENTENCE_MARK} ${content}`
+    : content;
+}
+
 function sourceBlock(source: RetrievedChunk, rank: number): string {
   const isPdf =
     source.mimeType == null ||
@@ -92,16 +120,26 @@ function sourceBlock(source: RetrievedChunk, rank: number): string {
     `Artículo: ${cleanPromptValue(source.articleReference)}`,
     `Numeral o literal: ${cleanPromptValue(source.numeralReference)}`,
     'Contenido:',
-    cleanPromptValue(source.chunkContent, true).slice(
-      0,
-      MAX_EVIDENCE_CHARS_PER_CHUNK,
-    ),
+    sourceContent(source),
     `FIN FUENTE [${rank}]`,
   ].join('\n');
 }
 
+/**
+ * Política adicional para una pregunta por fechas («¿cuándo se dan los
+ * destaques?»). Sin ella el modelo respondía con la definición del trámite y
+ * no con las fechas del cronograma que tenía entre las fuentes.
+ */
+const DATE_QUESTION_POLICY = [
+  'La pregunta actual pide una fecha, un plazo o el momento de un proceso («¿cuándo…?», fechas, cronograma). Abre la respuesta con las fechas o los periodos exactos que indiquen las fuentes para lo preguntado: qué actividad, desde qué fecha y hasta qué fecha, cada dato con su cita. Copia cada fecha tal como aparece en la fuente.',
+  'Si hay varias actividades o etapas con fechas, preséntalas en orden cronológico en una tabla breve o en viñetas, con su cita. Un cronograma puede llegar aplanado en una sola línea («ACTIVIDADES RESPONSABLES INICIO FIN …»): cada fila numerada trae la actividad, el responsable y sus fechas de inicio y de fin.',
+  'No reemplaces las fechas por una definición del proceso ni por requisitos o condiciones que no se preguntaron. Si las fuentes solo remiten a un cronograma o anexo que no aparece entre ellas, o no indican fechas para lo preguntado, dilo con claridad, menciona la referencia temporal que sí aparezca y no inventes fechas.',
+];
+
 /** Builds only trusted policy. Retrieved material never receives system role. */
-export function buildEvidenceSystemPrompt(): string {
+export function buildEvidenceSystemPrompt(
+  options: { asksForDates?: boolean } = {},
+): string {
   return [
     'Eres AVEND ASESOR, una IA especializada en orientar consultas del ámbito educativo, principalmente de docentes, auxiliares de educación y directivos.',
     'Tu ámbito abarca procesos, procedimientos, actuaciones, derechos, obligaciones y situaciones vinculadas al ejercicio de sus funciones y a su situación laboral o profesional en el sector educativo.',
@@ -138,6 +176,7 @@ export function buildEvidenceSystemPrompt(): string {
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',
+    ...(options.asksForDates ? DATE_QUESTION_POLICY : []),
   ].join('\n');
 }
 
@@ -282,9 +321,17 @@ export function buildEvidenceUserPrompt(
           `Grupos de fuentes: ${current.length} vigente(s) y ${historical.length} antecedente(s) histórico(s). Usa las vigentes como regla actual y los antecedentes solo como referencia histórica rotulada.`,
         ]
       : [];
+  const midSentence = sources.some((source) =>
+    sourceContent(source).startsWith(MID_SENTENCE_MARK),
+  )
+    ? [
+        `Si el contenido de una fuente empieza con «${MID_SENTENCE_MARK}», su primera oración está cortada: le faltan palabras anteriores, que pueden incluir una negación («No se…»). No la presentes como una regla afirmativa salvo que otra parte de las fuentes lo confirme.`,
+      ]
+    : [];
   return [
     'INICIO DE FUENTES',
     ...separation,
+    ...midSentence,
     sources.map((source, index) => sourceBlock(source, index + 1)).join('\n\n'),
     'FIN DE FUENTES',
     '',

@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { DATE_SQL_PATTERN } from '../rag/dated-evidence';
 import {
   EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
   RETRIEVAL_RPC_NAME,
@@ -6,6 +7,7 @@ import {
 import type {
   RetrievalGateway,
   RetrievedChunk,
+  VersionChunk,
 } from '../rag/retrieval.gateway';
 import type { SupabaseServerClient } from './supabase.server-client';
 
@@ -159,5 +161,53 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       );
     }
     return (data ?? []).map(toRetrievedChunk);
+  }
+
+  /**
+   * Lee en la base solo los fragmentos con alguna fecha (`~*`) de cada versión,
+   * en orden de aparición. Las versiones vienen de la búsqueda protegida del
+   * mismo turno, que ya comprobó que son evidencia aprobada y vigente.
+   */
+  async datedChunksOfVersions(input: {
+    limitPerVersion: number;
+    versionIds: string[];
+  }): Promise<VersionChunk[]> {
+    const client = this.client;
+    if (!client) {
+      throw new ServiceUnavailableException(
+        'Document retrieval is not configured.',
+      );
+    }
+    const results = await Promise.all(
+      [...new Set(input.versionIds)].map((versionId) =>
+        client
+          .from('document_chunks')
+          .select(
+            'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+          )
+          .eq('document_version_id', versionId)
+          .filter('chunk_content', 'imatch', DATE_SQL_PATTERN)
+          .order('chunk_index', { ascending: true })
+          .limit(input.limitPerVersion),
+      ),
+    );
+    if (results.some((result) => result.error)) {
+      throw new ServiceUnavailableException(
+        'Dated document evidence is temporarily unavailable.',
+      );
+    }
+    return results.flatMap((result) =>
+      (result.data ?? []).map((row) => ({
+        articleReference: row.article_reference,
+        chunkContent: row.chunk_content,
+        chunkId: row.id,
+        chunkIndex: row.chunk_index,
+        documentVersionId: row.document_version_id,
+        numeralReference: row.numeral_reference,
+        pageEnd: row.page_end,
+        pageStart: row.page_start,
+        sectionTitle: row.section_title,
+      })),
+    );
   }
 }

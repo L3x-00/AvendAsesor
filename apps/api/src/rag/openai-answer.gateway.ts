@@ -6,6 +6,7 @@ import {
   createAiGatewayClient,
 } from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
+import { asksForDates } from './dated-evidence';
 import {
   buildAdvisorySystemPrompt,
   buildAdvisoryUserPrompt,
@@ -75,7 +76,9 @@ export class OpenAiAnswerGateway implements AnswerGateway {
         ? buildSummarySystemPrompt()
         : mode === 'advisory'
           ? buildAdvisorySystemPrompt()
-          : buildEvidenceSystemPrompt();
+          : buildEvidenceSystemPrompt({
+              asksForDates: asksForDates(input.question),
+            });
     const userPrompt =
       mode === 'summary'
         ? buildSummaryUserPrompt(input.question, input.conversationContext)

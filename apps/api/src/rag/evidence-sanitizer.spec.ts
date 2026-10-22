@@ -179,4 +179,75 @@ describe('sanitizeRetrievedEvidence', () => {
   it('deja intacta la evidencia educativa ordinaria', () => {
     expect(sanitizeRetrievedEvidence(source)).toEqual(source);
   });
+
+  describe('sello de firma digital del SINAD pegado al texto siguiente', () => {
+    // Redacción real del sello del MINEDU; expediente y clave anonimizados.
+    const SEAL_FIRST_SENTENCE =
+      'Documento electrónico firmado digitalmente en el marco de la Ley N° 27269, Ley de Firmas y Certificados Digitales, su Reglamento y modificatorias.';
+    const SEAL_VALIDATION =
+      'La integridad del documento y la autoría de la(s) firma(s) pueden ser verificadas en https://apps.firmaperu.gob.pe/web/validador.xhtml EXPEDIENTE: DITEN2026-INT-0000000 CLAVE: AB12CD Esto es una copia auténtica imprimible de un documento electrónico archivado en el Ministerio de Educación, aplicando lo dispuesto por el Art. 25 de D.S. 070- 2013-PCM y la Tercera Disposición Complementaria Final del D.S. 026-2016- PCM. Su autenticidad e integridad pueden ser contrastadas a través de la siguiente dirección web: https://esinad.minedu.gob.pe/e_sinadmed_2/VDD_ConsultaDocumento.aspx';
+    const SCHEDULE =
+      'CRONOGRAMA DE DESTAQUE 2026 ACTIVIDADES RESPONSABLES INICIO FIN RENOVACIÓN DE DESTAQUE 1 Presentación de solicitudes IE/UGEL 13.01.2026 14.01.2026 2 Aplicación de la ficha de evaluación (Anexo 5) IE/UGEL 14.01.2026 15.01.2026';
+
+    it('conserva la tabla del cronograma que el PDF pegó al sello', () => {
+      // Fragmento #4 del oficio del destaque 2026: antes se descartaba el
+      // párrafo entero (1724 → 285 caracteres) y con él todas las fechas.
+      const cleaned = sanitizeRetrievedEvidence({
+        ...source,
+        articleReference: null,
+        chunkContent: [
+          'de todos los postulantes. Sin otro en particular, hago propicia la oportunidad. Atentamente, Dirección General de Desarrollo Docente',
+          SEAL_FIRST_SENTENCE,
+          `${SEAL_VALIDATION} ${SCHEDULE}`,
+        ].join('\n\n'),
+        sectionTitle: null,
+      });
+
+      expect(cleaned?.chunkContent).toContain(SCHEDULE);
+      expect(cleaned?.chunkContent).not.toContain('firmaperu');
+      expect(cleaned?.chunkContent).not.toContain('EXPEDIENTE');
+      expect(cleaned?.chunkContent).not.toContain('VDD_ConsultaDocumento');
+      expect(cleaned?.chunkContent).not.toContain('firmado digitalmente');
+    });
+
+    it('conserva la fecha, el número y el asunto del oficio que siguen al sello', () => {
+      const cleaned = sanitizeRetrievedEvidence({
+        ...source,
+        articleReference: null,
+        chunkContent: `${SEAL_VALIDATION} "Decenio de la Igualdad de oportunidades para mujeres y hombres" Lima, 12 de enero de 2026 OFICIO MÚLTIPLE N.º 00014-2026-MINEDU/VMGP-DIGEDD Asunto : Precisiones y cronograma para la implementación del procedimiento para el destaque. Referencia : Resolución Viceministerial N° 009-2026-MINEDU`,
+        sectionTitle: null,
+      });
+
+      expect(cleaned?.chunkContent).toMatch(/^"Decenio de la Igualdad/u);
+      expect(cleaned?.chunkContent).toContain('Lima, 12 de enero de 2026');
+      expect(cleaned?.chunkContent).toContain(
+        'Asunto : Precisiones y cronograma',
+      );
+    });
+
+    it('descarta un párrafo que solo es sello', () => {
+      expect(
+        sanitizeRetrievedEvidence({
+          ...source,
+          articleReference: null,
+          chunkContent: [SEAL_FIRST_SENTENCE, SEAL_VALIDATION].join('\n\n'),
+          sectionTitle: null,
+        }),
+      ).toBeNull();
+    });
+
+    it('reconoce el sello aunque la extracción parta sus frases en líneas', () => {
+      const cleaned = sanitizeRetrievedEvidence({
+        ...source,
+        articleReference: null,
+        chunkContent: `${SEAL_FIRST_SENTENCE.replace(
+          'Ley de Firmas',
+          'Ley\nde Firmas',
+        )} ${SCHEDULE}`,
+        sectionTitle: null,
+      });
+
+      expect(cleaned?.chunkContent).toBe(SCHEDULE);
+    });
+  });
 });

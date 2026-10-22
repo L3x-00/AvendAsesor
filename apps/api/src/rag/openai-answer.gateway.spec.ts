@@ -103,6 +103,46 @@ describe('OpenAiAnswerGateway', () => {
     );
   });
 
+  it('pide abrir con las fechas solo cuando la pregunta es por fechas', async () => {
+    mockCreate.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield { choices: [{ delta: { content: 'Del 13.01.2026 [1]' } }] };
+      },
+    });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) =>
+        key === 'OPENAI_API_KEY' ? 'test-key' : 'gpt-4o-mini',
+      ),
+    } as never);
+    const systemPromptFor = async (question: string) => {
+      mockCreate.mockClear();
+      for await (const token of gateway.generate({
+        conversationContext: [],
+        question,
+        sources: [source],
+      })) {
+        expect(token).toBeTruthy();
+      }
+      const calls = mockCreate.mock.calls as Array<
+        [{ messages: Array<{ content: string; role: string }> }]
+      >;
+      return (
+        calls[0]?.[0].messages.find((message) => message.role === 'system')
+          ?.content ?? ''
+      );
+    };
+
+    await expect(
+      systemPromptFor('cuando se dan los destaques?'),
+    ).resolves.toContain(
+      'Abre la respuesta con las fechas o los periodos exactos',
+    );
+    await expect(
+      systemPromptFor('¿Qué es el destaque?'),
+    ).resolves.not.toContain('Abre la respuesta con las fechas');
+  });
+
   it('reports the provider finish reason (e.g. length) when the stream ends', async () => {
     mockCreate.mockResolvedValue({
       async *[Symbol.asyncIterator]() {
