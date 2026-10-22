@@ -124,9 +124,7 @@ describe("ChatSources", () => {
       name: "Fuentes documentales, ubicación y descarga",
     });
     expect(table).toBeVisible();
-    const downloadsHeading = screen.getByRole("heading", {
-      name: "Documentos disponibles",
-    });
+    const downloadsHeading = screen.getByText("Documentos disponibles (1)");
     expect(
       table.compareDocumentPosition(downloadsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -146,6 +144,22 @@ describe("ChatSources", () => {
     expect(within(table).getByText("Página PDF:")).toBeInTheDocument();
     expect(within(table).getByText("33 de 47")).toBeVisible();
     expect(within(table).getByText("Versión 1")).toBeVisible();
+    const downloads = downloadsHeading.closest("details");
+    expect(downloads).not.toHaveAttribute("open");
+    expect(
+      screen.getByRole("link", {
+        name: "Descargar Ley de Reforma Magisterial",
+      }),
+    ).not.toBeVisible();
+    fireEvent.click(downloadsHeading);
+    expect(downloads).toHaveAttribute("open");
+    expect(
+      screen.getByRole("link", {
+        name: "Descargar Ley de Reforma Magisterial",
+      }),
+    ).toBeVisible();
+    fireEvent.click(downloadsHeading);
+    expect(downloads).not.toHaveAttribute("open");
     expect(
       screen.getByRole("link", {
         name: /Abrir fuente \[1\]: Ley de Reforma Magisterial/i,
@@ -553,6 +567,9 @@ describe("ChatSources", () => {
 });
 
 describe("ChatDownloads", () => {
+  function openDownloads() {
+    fireEvent.click(screen.getByText(/^Documentos disponibles \(/u));
+  }
   const base = {
     articleReference: null,
     documentSituation: "current" as const,
@@ -589,6 +606,7 @@ describe("ChatDownloads", () => {
       />,
     );
 
+    openDownloads();
     expect(screen.getAllByText("Anexo de requisitos")).toHaveLength(1);
     expect(
       screen.getByRole("link", { name: "Descargar Anexo de requisitos" }),
@@ -627,6 +645,7 @@ describe("ChatDownloads", () => {
       />,
     );
 
+    openDownloads();
     const titles = within(screen.getByRole("list"))
       .getAllByRole("listitem")
       .map((item) => within(item).getByRole("strong").textContent);
@@ -662,6 +681,7 @@ describe("ChatDownloads", () => {
       />,
     );
 
+    openDownloads();
     expect(
       screen.getAllByRole("link", { name: "Descargar Anexo de requisitos" }),
     ).toHaveLength(2);

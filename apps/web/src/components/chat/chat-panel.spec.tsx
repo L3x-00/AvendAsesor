@@ -831,6 +831,9 @@ describe("ChatPanel", () => {
     });
     expect(citedSource).toHaveFocus();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    const downloads = screen.getByText("Documentos disponibles (1)");
+    expect(downloads.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(downloads);
     expect(
       screen.getByRole("region", {
         name: "Documentos disponibles para descargar",
