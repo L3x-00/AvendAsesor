@@ -147,6 +147,8 @@ export const chatStreamPayloadSchemas = {
     message: z.string().min(1),
     modules: z.array(clarificationModuleSchema).max(10),
   }),
+  /** Respuesta definitiva: sustituye el texto transmitido (citas por bloque). */
+  answer: z.object({ text: z.string().min(1).max(20_000) }),
   conversation: z.object({
     conversationId: z.string().uuid(),
     moduleId: z.string().uuid().nullable().optional(),

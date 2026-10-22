@@ -1848,6 +1848,146 @@ describe('ChatService', () => {
     });
   });
 
+  it('coloca la cita de una lista en su introducción y sustituye el texto ya transmitido', async () => {
+    const cronograma = {
+      ...source,
+      chunkContent:
+        'Cronograma del destaque 2026. Presentación de solicitudes: 13.01.2026 al 14.01.2026. Resultados de la evaluación: 16.01.2026.',
+      chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+      documentTitle: 'Cronograma del destaque 2026',
+      documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source, cronograma],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Según el cronograma de destaque 2026, estas son las fechas principales:\n';
+        yield '- Presentación de solicitudes: del 13 al 14 de enero de 2026.\n';
+        yield '- Resultados de la evaluación: el 16 de enero de 2026. [2]';
+      },
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuándo se dan los destaques?',
+    });
+
+    const placed = [
+      'Según el cronograma de destaque 2026, estas son las fechas principales. [2]',
+      '- Presentación de solicitudes: del 13 al 14 de enero de 2026.',
+      '- Resultados de la evaluación: el 16 de enero de 2026.',
+    ].join('\n');
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'answer',
+      'done',
+    ]);
+    expect(events.find((event) => event.type === 'answer')).toEqual({
+      data: { text: placed },
+      type: 'answer',
+    });
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    expect(completionCalls[0]?.[0]).toMatchObject({
+      answer: placed,
+      qualitySignals: [],
+    });
+  });
+
+  it('envía la respuesta sustituta antes del aviso de corte y guarda ambos', async () => {
+    const cronograma = {
+      ...source,
+      chunkContent:
+        'Cronograma del destaque 2026. Presentación de solicitudes: 13.01.2026 al 14.01.2026.',
+      chunkId: 'cc8b56af-6d0c-4fef-881e-7c00907540dd',
+      documentVersionId: 'dc8b56af-6d0c-4fef-881e-7c00907540dd',
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source, cronograma],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockImplementation(
+      (input: { onFinish?: (reason: string) => void }) => ({
+        async *[Symbol.asyncIterator]() {
+          await Promise.resolve();
+          yield 'Según el cronograma de destaque 2026, estas son las fechas:\n';
+          yield '- Presentación de solicitudes: del 13 al 14 de enero de 2026. [2]';
+          input.onFinish?.('length');
+        },
+      }),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuándo se dan los destaques?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'answer',
+      'token',
+      'done',
+    ]);
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    expect(completionCalls[0]?.[0].answer).toMatch(
+      /^Según el cronograma de destaque 2026, estas son las fechas\. \[2\]\n- Presentación de solicitudes: del 13 al 14 de enero de 2026\.\n\n/u,
+    );
+  });
+
+  it('no coloca citas en una respuesta salarial', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración del docente se fija según el nivel y la jornada de trabajo.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Estos son los factores de la remuneración:\n- La remuneración del docente depende del nivel.\n- La remuneración del docente depende de la jornada de trabajo. [1]';
+      },
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un docente contratado de 30 horas?',
+    });
+
+    expect(events.map((event) => event.type)).not.toContain('answer');
+  });
+
+  it('no emite una respuesta sustituta cuando las citas ya están en su lugar', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Estos son los pasos de la licencia. [1]\n- Presenta la solicitud.\n- Espera la respuesta.';
+      },
+    });
+
+    const events = await collect(service);
+
+    expect(events.map((event) => event.type)).not.toContain('answer');
+  });
+
   it('infers the module from an educational query that names no module (point 3)', async () => {
     const inferredModule = { id: source.moduleIds[0], name: 'Licencias' };
     ragService.retrieve.mockResolvedValue({
@@ -3067,6 +3207,23 @@ describe('evaluateAnswerCitationQuality', () => {
     expect(
       evaluateAnswerCitationQuality(answer, [schedule, conditions]),
     ).toEqual([]);
+  });
+
+  it('comprueba el mes de una fecha completa escrita en lenguaje natural', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque 2026: presentación de solicitudes 13.01.2026 al 14.01.2026.',
+    };
+    const inJanuary =
+      'Según el cronograma de destaque, la presentación de solicitudes es del 13 al 14 de enero de 2026. [1]';
+    const inFebruary =
+      'Según el cronograma de destaque, la presentación de solicitudes es del 13 al 14 de febrero de 2026. [1]';
+
+    expect(evaluateAnswerCitationQuality(inJanuary, [schedule])).toEqual([]);
+    expect(evaluateAnswerCitationQuality(inFebruary, [schedule])).toContain(
+      'citation_insufficient',
+    );
   });
 
   it('usa la introducción de cada lista cuando hay dos en el mismo párrafo', () => {

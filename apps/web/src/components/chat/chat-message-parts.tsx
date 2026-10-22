@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatSource } from "@/lib/chat-api/types";
 import { CITATION_TOKEN, singleCitedSource } from "./chat-sources";
+import { friendlyDates } from "./friendly-dates";
 import {
   markdownTablesToPlainText,
   structuredSalaryRowsToMarkdown,
@@ -39,7 +40,7 @@ export function plainAnswerText(
     .filter((_, index) => index % 2 === 0)
     .join("");
 
-  return withoutCitations
+  return friendlyDates(withoutCitations)
     .replace(/^#{1,6}[ \t]+/gmu, "")
     .replace(/\*\*(.+?)\*\*/gu, "$1")
     .replace(/__(.+?)__/gu, "$1")

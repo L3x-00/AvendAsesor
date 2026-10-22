@@ -52,6 +52,7 @@ import {
   type MarkdownTableBlock,
 } from "./chat-response-tables";
 import { ChatTable } from "./chat-table";
+import { friendlyDates } from "./friendly-dates";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
   CITATION_TOKEN,
@@ -1399,6 +1400,20 @@ export function ChatPanel({
             continue;
           }
 
+          if (frame.event === "answer") {
+            const result = chatStreamPayloadSchemas.answer.safeParse(payload);
+            if (!result.success) {
+              discardCurrentRequest(FRIENDLY_ERRORS.malformed);
+              return;
+            }
+            // Mismo mensaje con las citas ya colocadas en su bloque.
+            replacePendingResponseMessage((message) => ({
+              ...message,
+              content: result.data.text,
+            }));
+            continue;
+          }
+
           if (frame.event === "clarification") {
             const result =
               chatStreamPayloadSchemas.clarification.safeParse(payload);
@@ -1674,7 +1689,12 @@ export function ChatPanel({
                 )}
                 <div className="avend-chat-message-content">
                   {renderRichContent(
-                    message.content,
+                    // «14.01.2026» se lee «14 de enero de 2026», aunque el
+                    // modelo copie la fuente. La consulta de la persona no se
+                    // reescribe.
+                    message.role === "user"
+                      ? message.content
+                      : friendlyDates(message.content),
                     (message.role === "assistant" ||
                       message.role === "clarification") &&
                       message.id !== "streaming"

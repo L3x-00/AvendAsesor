@@ -382,6 +382,9 @@ async function main(): Promise<void> {
     let sources: TurnResult['sources'] = [];
     for (const event of events) {
       if (event.type === 'token') answer += event.data.text;
+      // Texto definitivo con la cita de cada lista en su introducción: sustituye
+      // lo transmitido, como hace la interfaz.
+      if (event.type === 'answer') answer = event.data.text;
       if (
         event.type === 'conversational' ||
         event.type === 'no_evidence' ||

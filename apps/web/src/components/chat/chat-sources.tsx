@@ -1,6 +1,13 @@
 "use client";
 
-import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
@@ -446,6 +453,39 @@ function newestSourcesFirst(sources: ChatSource[]): ChatSource[] {
   );
 }
 
+/**
+ * Cabecera de un bloque plegable secundario: icono, nombre, cuántos elementos
+ * trae y una flecha que gira al abrir. Sigue siendo el `<summary>` nativo de un
+ * `<details>`: teclado, foco y lector de pantalla no cambian.
+ */
+function FoldSummary({
+  count,
+  icon,
+  label,
+}: {
+  count: number;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <summary aria-label={`${label} (${count})`} className={styles.foldToggle}>
+      <span aria-hidden="true" className={styles.foldIcon}>
+        {icon}
+      </span>
+      <span className={styles.foldLabel}>{label}</span>
+      <span className={styles.foldCount}>{count}</span>
+      <svg
+        aria-hidden="true"
+        className={styles.foldChevron}
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </summary>
+  );
+}
+
 /** Archivos visibles de la respuesta, separados de las citas y sin duplicados. */
 export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
   const documents = newestSourcesFirst(uniqueDocuments(sources));
@@ -453,7 +493,15 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
 
   return (
     <details className={`${styles.others} ${styles.downloads}`}>
-      <summary>Documentos disponibles ({documents.length})</summary>
+      <FoldSummary
+        count={documents.length}
+        icon={
+          <svg fill="none" viewBox="0 0 24 24">
+            <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
+          </svg>
+        }
+        label="Documentos disponibles"
+      />
       <section aria-label="Documentos disponibles para descargar">
         <h2 className="avend-visually-hidden">Documentos disponibles</h2>
         <p className={styles.downloadsDescription}>
@@ -613,7 +661,17 @@ export function ChatSources({
 
           {others.length ? (
             <details className={styles.others}>
-              <summary>Otros fragmentos revisados ({others.length})</summary>
+              <FoldSummary
+                count={others.length}
+                icon={
+                  <svg fill="none" viewBox="0 0 24 24">
+                    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+                    <path d="m3 12.5 9 5 9-5" />
+                    <path d="m3 17 9 5 9-5" />
+                  </svg>
+                }
+                label="Otros fragmentos revisados"
+              />
               <SourceTable
                 caption="Fragmentos revisados no citados"
                 messageId={messageId}
