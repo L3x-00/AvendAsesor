@@ -276,7 +276,12 @@ function revealSource(targetId: string) {
   const toggle = disclosure?.querySelector<HTMLButtonElement>(
     "[data-source-toggle]",
   );
-  if (toggle?.getAttribute("aria-expanded") === "false") toggle.click();
+  if (toggle?.getAttribute("aria-expanded") === "false") {
+    // Se abre sin animación ni anclaje del botón: el destino del desplazamiento
+    // siguiente se calcula sobre la disposición definitiva.
+    toggle.setAttribute("data-instant", "");
+    toggle.click();
+  }
 
   window.requestAnimationFrame(() => {
     const revealedTarget = document.getElementById(targetId);
@@ -1755,6 +1760,7 @@ export function ChatPanel({
                         ? citedSourceRanks(message.content)
                         : undefined
                     }
+                    direction="up"
                     messageId={message.id}
                     sources={message.sources}
                   />
