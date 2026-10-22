@@ -154,6 +154,9 @@ describe("ChatSources", () => {
     fireEvent.click(downloadsHeading);
     expect(downloads).toHaveAttribute("open");
     expect(
+      screen.getByRole("heading", { name: "Documentos disponibles" }),
+    ).toBeVisible();
+    expect(
       screen.getByRole("link", {
         name: "Descargar Ley de Reforma Magisterial",
       }),

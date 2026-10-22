@@ -455,6 +455,7 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
     <details className={`${styles.others} ${styles.downloads}`}>
       <summary>Documentos disponibles ({documents.length})</summary>
       <section aria-label="Documentos disponibles para descargar">
+        <h2 className="avend-visually-hidden">Documentos disponibles</h2>
         <p className={styles.downloadsDescription}>
           Descarga los archivos usados para preparar esta respuesta.
         </p>
