@@ -453,19 +453,108 @@
   margin-top: 0.875rem;
 }
 
-.others summary {
-  color: var(--avend-accent-strong);
+/* Cabecera plegable: tarjeta con icono, nombre, cantidad y una flecha que gira.
+   Sustituye al triángulo del navegador por un control que se ve pulsable. */
+.foldToggle {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  color: var(--avend-navy);
   cursor: pointer;
+  display: flex;
   font-size: 1rem;
   font-weight: 600;
-  line-height: 1.5;
-  min-height: 2.75rem;
-  padding: 0.5rem 0;
+  gap: 0.75rem;
+  list-style: none;
+  min-height: 3rem;
+  padding: 0.375rem 0.75rem;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 220ms var(--avend-ease-interaction);
+  user-select: none;
 }
 
-.others summary:focus-visible {
+.foldToggle::-webkit-details-marker {
+  display: none;
+}
+
+.foldToggle:hover {
+  background: var(--avend-soft-blue);
+  border-color: rgb(22 119 255 / 35%);
+  box-shadow: 0 6px 16px rgb(13 27 61 / 8%);
+}
+
+.foldToggle:focus-visible {
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
+}
+
+.foldIcon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.foldIcon svg {
+  height: 1.125rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.125rem;
+}
+
+.foldLabel {
+  flex: 1 1 auto;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.foldCount {
+  background: var(--avend-soft-blue);
+  border-radius: 999px;
+  color: var(--avend-accent-strong);
+  flex: 0 0 auto;
+  font-weight: 700;
+  line-height: 1.35;
+  min-width: 1.75rem;
+  padding: 0.0625rem 0.5rem;
+  text-align: center;
+}
+
+.foldChevron {
+  color: var(--avend-text-muted);
+  flex: 0 0 auto;
+  height: 1.25rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 200ms ease-out;
+  width: 1.25rem;
+}
+
+.others[open] > .foldToggle {
+  background: linear-gradient(135deg, #ffffff 0%, var(--avend-soft-blue) 100%);
+  border-color: rgb(22 119 255 / 30%);
+}
+
+.others[open] > .foldToggle .foldChevron {
+  transform: rotate(180deg);
+}
+
+/* El contenido aparece con el mismo movimiento que el panel de referencias. */
+.others[open] > :not(summary) {
+  animation: sources-float-in 300ms var(--avend-ease-interaction) both;
+  margin-top: 0.625rem;
 }
 
 /* ---------- Fuentes plegables con movimiento tipo Folder Float ---------- */
@@ -722,10 +811,16 @@
 @media (prefers-reduced-motion: reduce) {
   .toggle,
   .chevron,
+  .foldToggle,
+  .foldChevron,
   .folderPaper,
   .folderFront,
   .disclosurePanel {
     transition: none;
+  }
+
+  .others[open] > :not(summary) {
+    animation: none;
   }
 
   .toggle:hover {

@@ -124,7 +124,9 @@ describe("ChatSources", () => {
       name: "Fuentes documentales, ubicación y descarga",
     });
     expect(table).toBeVisible();
-    const downloadsHeading = screen.getByText("Documentos disponibles (1)");
+    const downloadsHeading = screen.getByText("Documentos disponibles", {
+      selector: "summary span",
+    });
     expect(
       table.compareDocumentPosition(downloadsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -571,7 +573,9 @@ describe("ChatSources", () => {
 
 describe("ChatDownloads", () => {
   function openDownloads() {
-    fireEvent.click(screen.getByText(/^Documentos disponibles \(/u));
+    fireEvent.click(
+      screen.getByText("Documentos disponibles", { selector: "summary span" }),
+    );
   }
   const base = {
     articleReference: null,
@@ -617,6 +621,52 @@ describe("ChatDownloads", () => {
       "href",
       "/api/chat/sources/11111111-1111-4111-8111-111111111111/download?descargar=1",
     );
+  });
+
+  it("presenta el plegable con icono, cantidad y flecha en lugar del triángulo nativo", () => {
+    const { container } = render(
+      <ChatDownloads
+        sources={[
+          {
+            ...base,
+            documentVersionId: "33333333-3333-4333-8333-333333333333",
+            documentTitle: "Anexo de requisitos",
+            id: "11111111-1111-4111-8111-111111111111",
+            rank: 1,
+          },
+          {
+            ...base,
+            documentVersionId: "44444444-4444-4444-8444-444444444444",
+            documentTitle: "Directiva de licencias",
+            id: "22222222-2222-4222-8222-222222222222",
+            rank: 2,
+          },
+        ]}
+      />,
+    );
+
+    const summary = container.querySelector("summary");
+    expect(summary).not.toBeNull();
+    // La cantidad va en una insignia propia y el nombre queda sin paréntesis.
+    expect(within(summary as HTMLElement).getByText("2")).toBeVisible();
+    expect(
+      within(summary as HTMLElement).getByText("Documentos disponibles"),
+    ).toBeVisible();
+    expect(summary?.textContent).not.toContain("(");
+    // Icono y flecha son decorativos: el lector de pantalla lee solo nombre y cantidad.
+    expect(summary?.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(
+      1,
+    );
+    expect(
+      summary?.querySelector('span[aria-hidden="true"] svg'),
+    ).not.toBeNull();
+    // El lector de pantalla anuncia nombre y cantidad con el mismo formato de siempre.
+    expect(summary).toHaveAttribute("aria-label", "Documentos disponibles (2)");
+    // Sigue siendo un <details> nativo: se abre sin JavaScript propio.
+    const details = container.querySelector("details");
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(summary as HTMLElement);
+    expect(details).toHaveAttribute("open");
   });
 
   it("lista las descargas del documento más nuevo al más antiguo, con los que no tienen año al final", () => {
@@ -734,7 +784,9 @@ describe("ChatSources — fuentes citadas", () => {
         .getElementById("fuente-m-1-1")
         ?.querySelector('[data-label="Ubicación"]'),
     ).toHaveTextContent("Página 1 del PDF");
-    const otherFragments = screen.getByText("Otros fragmentos revisados (1)");
+    const otherFragments = screen.getByText("Otros fragmentos revisados", {
+      selector: "summary span",
+    });
     expect(otherFragments).toBeInTheDocument();
     expect(otherFragments.closest("details")).not.toHaveAttribute("open");
   });

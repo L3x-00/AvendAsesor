@@ -63,6 +63,12 @@ import {
   citesAnySource,
   withoutCitations,
 } from '../rag/citations';
+import { placeBlockCitations } from '../rag/block-citations';
+import {
+  LIST_ITEM_LINE,
+  claimNumbersAppearInSources,
+  sourceSupportsClaim,
+} from '../rag/claim-support';
 import {
   SUPABASE_CHAT_GATEWAY,
   SUPABASE_TEACHER_UPDATES_GATEWAY,
@@ -212,6 +218,8 @@ export type ChatStreamEvent =
     }
   | { data: { sources: ChatSource[] }; type: 'sources' }
   | { data: { text: string }; type: 'token' }
+  /** Respuesta definitiva cuando difiere del texto ya transmitido (citas por bloque). */
+  | { data: { text: string }; type: 'answer' }
   | {
       data: { message: string; modules: ResolvedModule[] };
       type: 'clarification';
@@ -249,8 +257,6 @@ interface CitationBundle {
 }
 
 const MIN_SUBSTANTIVE_CLAIM_CHARS = 30;
-/** Viñeta: guion, asterisco, viñeta, raya o número de orden seguidos de espacio. */
-const LIST_ITEM_LINE = /^[ \t\u00A0]*(?:[-*•–—]|\d+[.)])[ \t\u00A0]+/u;
 type CitationQualitySignal =
   'citation_insufficient' | 'support_insufficient' | 'support_partial';
 
@@ -263,91 +269,8 @@ const CLAIM_PATTERN = new RegExp(
   `[^.!?]+(?:[.!?]+(?:\\s*${CITATION_GROUP.source})*|\\s*$)`,
   'gu',
 );
-const QUALITY_STOP_WORDS = new Set([
-  'acerca',
-  'ademas',
-  'como',
-  'conforme',
-  'cuando',
-  'desde',
-  'donde',
-  'esta',
-  'este',
-  'estos',
-  'fuente',
-  'informacion',
-  'norma',
-  'para',
-  'porque',
-  'puede',
-  'respuesta',
-  'segun',
-  'sobre',
-  'tambien',
-]);
-
 function clampScore(value: number): number {
   return Math.min(1, Math.max(0, value));
-}
-
-function normalizedTerms(value: string): string[] {
-  return [
-    ...new Set(
-      (
-        value
-          .normalize('NFD')
-          .replace(/\p{Diacritic}/gu, '')
-          .toLocaleLowerCase('es')
-          .match(/[\p{L}\p{N}]{4,}/gu) ?? []
-      ).filter((term) => !QUALITY_STOP_WORDS.has(term)),
-    ),
-  ];
-}
-
-function sourceSupportsClaim(claim: string, source: RetrievedChunk): boolean {
-  const claimTerms = normalizedTerms(withoutCitations(claim));
-  if (!claimTerms.length) return true;
-
-  const sourceTerms = normalizedTerms(source.chunkContent);
-  return claimTerms.some((claimTerm) =>
-    sourceTerms.some(
-      (sourceTerm) =>
-        sourceTerm === claimTerm ||
-        (claimTerm.length >= 6 &&
-          sourceTerm.length >= 6 &&
-          (sourceTerm.startsWith(claimTerm.slice(0, 6)) ||
-            claimTerm.startsWith(sourceTerm.slice(0, 6)))),
-    ),
-  );
-}
-
-/**
- * Cifras de la afirmación (días, plazos, N.° de ley o artículo) que no figuran en
- * ninguna fuente citada: señal de que el modelo pudo completar de memoria. Solo
- * marca el caso para revisión humana; no decide la verdad jurídica.
- */
-function claimNumbersAppearInSources(
-  claim: string,
-  citedSources: RetrievedChunk[],
-): boolean {
-  const numbers =
-    withoutCitations(claim)
-      // El número de orden no es un dato. Solo se retira si va seguido de
-      // espacio, para no cortar una fecha o un decimal («13.01.2026»).
-      .replace(LIST_ITEM_LINE, '')
-      .match(/\d+(?:[.,]\d+)*/gu) ?? [];
-  return numbers.every((number) =>
-    citedSources.some((source) =>
-      [
-        source.chunkContent,
-        source.articleReference,
-        source.numeralReference,
-        source.resolutionNumber,
-        source.issuanceYear?.toString(),
-        source.documentTitle,
-      ].some((value) => value?.includes(number)),
-    ),
-  );
 }
 
 /**
@@ -1822,9 +1745,21 @@ export class ChatService {
     // de mostrarse (y guardarse) como si estuviera completa. En un panorama
     // salarial, las filas «Campo: valor» se convierten en tabla aunque el
     // modelo haya ignorado la instrucción de formato.
+    // La cita de cada lista se coloca en la frase que la introduce cuando el
+    // modelo la dejó al final del mensaje o tras la última viñeta. Las
+    // respuestas salariales conservan su formato validado.
+    const withBlockCitations = salaryProfile.isSalaryQuestion
+      ? normalizedAnswer
+      : placeBlockCitations(normalizedAnswer, retrieval.sources);
+    // Las citas añadidas no pueden empujar la respuesta guardada por encima del
+    // tope que la base acepta (el espacio del aviso de corte ya está reservado).
+    const placedAnswer =
+      withBlockCitations.length + truncationNote.length <= MAX_RAG_ANSWER_CHARS
+        ? withBlockCitations
+        : normalizedAnswer;
     let finalAnswer = salaryProfile.isSalaryQuestion
       ? formatSalaryBulletsAsTable(normalizedAnswer)
-      : normalizedAnswer;
+      : placedAnswer;
     const truncated = cutByLength || finishReason === 'length';
     if (truncated) finalAnswer = `${finalAnswer}${truncationNote}`;
 
@@ -1884,22 +1819,27 @@ export class ChatService {
     if (deferStreaming) {
       yield { data: { sources: citations.sources }, type: 'sources' };
       yield { data: { text: finalAnswer }, type: 'token' };
-    } else if (truncated) {
-      yield { data: { text: truncationNote }, type: 'token' };
+    } else {
+      // El texto ya se transmitió tal como lo escribió el modelo: si las citas
+      // cambiaron de lugar, la interfaz sustituye el mensaje por el definitivo.
+      if (placedAnswer !== normalizedAnswer) {
+        yield { data: { text: placedAnswer }, type: 'answer' };
+      }
+      if (truncated) yield { data: { text: truncationNote }, type: 'token' };
     }
 
     // La calidad se evalúa sobre la respuesta, sin el aviso de corte (que no
     // lleva citas y marcaría toda respuesta cortada para revisión).
     const lastCompleteSentence = Math.max(
-      normalizedAnswer.lastIndexOf('.'),
-      normalizedAnswer.lastIndexOf('!'),
-      normalizedAnswer.lastIndexOf('?'),
-      normalizedAnswer.lastIndexOf(']'),
+      placedAnswer.lastIndexOf('.'),
+      placedAnswer.lastIndexOf('!'),
+      placedAnswer.lastIndexOf('?'),
+      placedAnswer.lastIndexOf(']'),
     );
     const citationQuality = evaluateAnswerCitationQualityDetails(
       truncated && lastCompleteSentence > 0
-        ? normalizedAnswer.slice(0, lastCompleteSentence + 1)
-        : normalizedAnswer,
+        ? placedAnswer.slice(0, lastCompleteSentence + 1)
+        : placedAnswer,
       retrieval.sources,
     );
     const qualityExcerpts: Partial<Record<CitationQualitySignal, string>> = {

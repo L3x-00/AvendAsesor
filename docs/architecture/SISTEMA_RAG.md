@@ -105,9 +105,14 @@ fuentes parciales.
 
 NestJS es la frontera de autorización. `docente`, `admin` y `superadmin` usan
 el chat autenticado mediante `POST /chat/stream`; el endpoint aplica límite de
-consultas y emite SSE tipados (`conversation`, `sources`, `token`,
+consultas y emite SSE tipados (`conversation`, `sources`, `token`, `answer`,
 `clarification`, `no_evidence`, `done` o un error seguro). Las conversaciones
 e historial están siempre acotados y se consultan solo por su propietario.
+
+`answer` es opcional: llega después de los `token` cuando la API colocó la cita
+de una lista en la frase que la introduce (`placeBlockCitations`) y trae el
+texto definitivo, que sustituye al ya transmitido y es el que se guarda. Un
+cliente que lo ignora ve el texto sin reubicar hasta recargar la conversación.
 
 Next.js usa un BFF server-only: verifica la sesión y el rol del perfil antes de
 reenviar el bearer a NestJS. La interfaz solo muestra eventos SSE, mensajes y

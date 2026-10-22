@@ -806,6 +806,37 @@ describe("ChatPanel", () => {
     });
   }, 10_000);
 
+  it("sustituye el texto transmitido por la respuesta definitiva y escribe las fechas en lenguaje natural", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            [
+              conversationEvent(),
+              'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentSituation":"current","documentTitle":"Cronograma del destaque","moduleName":"Destaques","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":null,"articleReference":null,"numeralReference":null,"relevanceScore":0.91}]}\n\n',
+              'event: token\ndata: {"text":"Estas son las fechas:\\n- Del 13.01.2026 al 14.01.2026. [1]"}\n\n',
+              'event: answer\ndata: {"text":"Estas son las fechas. [1]\\n- Del 13.01.2026 al 14.01.2026."}\n\n',
+              doneEvent("openai"),
+            ].join(""),
+            { status: 200 },
+          ),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText("Del 13 al 14 de enero de 2026."),
+    ).toBeVisible();
+    expect(screen.getByText("Estas son las fechas.")).toBeVisible();
+    expect(screen.queryByText(/fechas:/u)).not.toBeInTheDocument();
+    expect(screen.queryByText(/13\.01\.2026/u)).not.toBeInTheDocument();
+  });
+
   it("renders streamed text and references only after receiving SSE events", async () => {
     const user = userEvent.setup();
     const scrollIntoView = vi.fn();
@@ -879,7 +910,9 @@ describe("ChatPanel", () => {
     });
     expect(citedSource).toHaveFocus();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
-    const downloads = screen.getByText("Documentos disponibles (1)");
+    const downloads = screen.getByText("Documentos disponibles", {
+      selector: "summary span",
+    });
     expect(downloads.closest("details")).not.toHaveAttribute("open");
     fireEvent.click(downloads);
     expect(

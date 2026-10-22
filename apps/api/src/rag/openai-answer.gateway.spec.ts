@@ -103,7 +103,7 @@ describe('OpenAiAnswerGateway', () => {
     );
   });
 
-  it('pide abrir con las fechas solo cuando la pregunta es por fechas', async () => {
+  it('pide responder con las fechas solo cuando la pregunta es por fechas', async () => {
     mockCreate.mockResolvedValue({
       async *[Symbol.asyncIterator]() {
         await Promise.resolve();
@@ -135,12 +135,10 @@ describe('OpenAiAnswerGateway', () => {
 
     await expect(
       systemPromptFor('cuando se dan los destaques?'),
-    ).resolves.toContain(
-      'Abre la respuesta con las fechas o los periodos exactos',
-    );
+    ).resolves.toContain('Responde con las fechas o los periodos exactos');
     await expect(
       systemPromptFor('¿Qué es el destaque?'),
-    ).resolves.not.toContain('Abre la respuesta con las fechas');
+    ).resolves.not.toContain('Responde con las fechas o los periodos');
   });
 
   it('reports the provider finish reason (e.g. length) when the stream ends', async () => {

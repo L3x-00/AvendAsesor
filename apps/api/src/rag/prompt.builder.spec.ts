@@ -75,6 +75,17 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('explica brevemente para qué le sirve en su caso');
   });
 
+  it('pide una respuesta cálida, fechas en lenguaje natural y la cita en cada bloque', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('Responde con calidez y sin sonar telegráfico');
+    expect(prompt).not.toContain('Sé breve y directo');
+    expect(prompt).toContain('«13 de enero de 2026», nunca «13.01.2026»');
+    expect(prompt).toContain('«del 14 al 15 de enero de 2026»');
+    expect(prompt).toContain('«el 16 de enero de 2026»');
+    expect(prompt).toContain('ninguna lista queda sin su cita de bloque');
+  });
+
   it('asks for the no-support marker and for clarification when the sources admit several readings', () => {
     const prompt = buildEvidenceSystemPrompt();
 
@@ -405,10 +416,11 @@ describe('preguntas por fechas', () => {
     expect(general).not.toContain('pide una fecha');
     expect(buildEvidenceSystemPrompt({ asksForDates: false })).toBe(general);
     expect(dated.startsWith(general)).toBe(true);
-    expect(dated).toContain(
-      'Abre la respuesta con las fechas o los periodos exactos',
-    );
-    expect(dated).toContain('Copia cada fecha tal como aparece en la fuente.');
+    expect(dated).toContain('Responde con las fechas o los periodos exactos');
+    expect(dated).toContain('escríbelos en lenguaje natural');
+    expect(dated).not.toContain('Copia cada fecha tal como aparece');
+    expect(dated).toContain('Plantilla obligatoria para esta respuesta');
+    expect(dated).toContain('Nunca dejes las citas para el final del mensaje');
     expect(dated).toContain('ACTIVIDADES RESPONSABLES INICIO FIN');
     expect(dated).toContain(
       'No reemplaces las fechas por una definición del proceso',
