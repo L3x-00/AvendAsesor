@@ -249,6 +249,8 @@ interface CitationBundle {
 }
 
 const MIN_SUBSTANTIVE_CLAIM_CHARS = 30;
+/** Viñeta: guion, asterisco, viñeta, raya o número de orden seguidos de espacio. */
+const LIST_ITEM_LINE = /^[ \t\u00A0]*(?:[-*•–—]|\d+[.)])[ \t\u00A0]+/u;
 type CitationQualitySignal =
   'citation_insufficient' | 'support_insufficient' | 'support_partial';
 
@@ -328,7 +330,12 @@ function claimNumbersAppearInSources(
   claim: string,
   citedSources: RetrievedChunk[],
 ): boolean {
-  const numbers = withoutCitations(claim).match(/\d+(?:[.,]\d+)*/gu) ?? [];
+  const numbers =
+    withoutCitations(claim)
+      // El número de orden no es un dato. Solo se retira si va seguido de
+      // espacio, para no cortar una fecha o un decimal («13.01.2026»).
+      .replace(LIST_ITEM_LINE, '')
+      .match(/\d+(?:[.,]\d+)*/gu) ?? [];
   return numbers.every((number) =>
     citedSources.some((source) =>
       [
@@ -348,12 +355,82 @@ function claimNumbersAppearInSources(
  * prompt. It cannot decide legal truth, so it flags a case for human review
  * whenever a substantive claim lacks a source marker or its cited evidence has
  * no meaningful lexical bridge to the claim. Una lista sustentada por una sola
- * fuente se cubre con la cita de bloque (al inicio o al cierre), y dos citas
+ * fuente se cubre con la cita en su introducción, y dos citas
  * individuales contiguas ([1][2]) son válidas: la corroboración entre el
  * documento oficial y otro que coincide es el formato esperado.
  */
 function normalizedReviewExcerpt(claim: string): string {
   return claim.replace(/\s+/gu, ' ').trim().slice(0, 2_000);
+}
+
+interface AnswerSegment {
+  text: string;
+  isListItem: boolean;
+}
+
+interface QualityClaim {
+  claim: string;
+  isListItem: boolean;
+  blockCitations: number[];
+}
+
+/**
+ * Divide un párrafo en segmentos de prosa y de lista. Cada viñeta empieza un
+ * segmento propio aunque no lleve punto final, para verificar su cita por
+ * separado; las líneas indentadas continúan la viñeta anterior.
+ */
+function paragraphSegments(paragraph: string): AnswerSegment[] {
+  const segments: AnswerSegment[] = [];
+  let current: string[] = [];
+  let currentIsListItem = false;
+  const flush = () => {
+    if (!current.length) return;
+    segments.push({ text: current.join('\n'), isListItem: currentIsListItem });
+    current = [];
+    currentIsListItem = false;
+  };
+
+  for (const line of paragraph.split('\n')) {
+    if (LIST_ITEM_LINE.test(line)) {
+      flush();
+      currentIsListItem = true;
+      current.push(line);
+      continue;
+    }
+    if (currentIsListItem && /^[ \t\u00A0]+/u.test(line)) {
+      current.push(line);
+      continue;
+    }
+    if (currentIsListItem) flush();
+    current.push(line);
+  }
+  flush();
+  return segments;
+}
+
+/**
+ * Afirmaciones de un párrafo con la cita de bloque que las cubre, si la hay.
+ * La introducción es el bloque de prosa inmediatamente anterior a cada lista;
+ * se recogen sus citas aunque la frase esté partida en varias líneas.
+ */
+function paragraphClaims(paragraph: string): QualityClaim[] {
+  const segments = paragraphSegments(paragraph);
+  return segments.flatMap((segment, index) => {
+    let blockCitations: number[] = [];
+    if (segment.isListItem) {
+      let runStart = index;
+      while (runStart > 0 && segments[runStart - 1].isListItem) {
+        runStart -= 1;
+      }
+      const intro = runStart > 0 ? segments[runStart - 1] : null;
+      blockCitations = intro ? [...new Set(citedIndexes(intro.text))] : [];
+    }
+    return [...segment.text.matchAll(CLAIM_PATTERN)].map((match) => ({
+      claim: match[0].replace(/∶/gu, '.').trim(),
+      isListItem: segment.isListItem,
+      blockCitations,
+    }));
+  });
 }
 
 export function evaluateAnswerCitationQualityDetails(
@@ -372,35 +449,31 @@ export function evaluateAnswerCitationQualityDetails(
     .replace(/N\.\s*°/giu, 'N°')
     .replace(/(?<=\d)\.(?=\d)/gu, '∶')
     // Los modelos separan los elementos de una lista con líneas en blanco; se
-    // tratan como un solo bloque para que una cita de cierre los cubra.
-    .replace(/\n{2,}(?=[ \t]*(?:[-*•]|\d+[.)])[ \t])/gu, '\n');
+    // tratan como un solo bloque para reconocer la introducción de cada lista.
+    .replace(/\n{2,}(?=[ \t\u00A0]*(?:[-*•–—]|\d+[.)])[ \t\u00A0])/gu, '\n');
   const claims = normalizedAnswer
     .split(/\n{2,}/gu)
-    .flatMap((paragraph) =>
-      [...paragraph.matchAll(CLAIM_PATTERN)].map((match) => {
-        // La afirmación puede cruzar saltos de línea (una oración envuelta):
-        // se mantiene entera y el ítem de lista se decide por la línea donde
-        // empieza, no por donde termina.
-        const lineStart = paragraph.lastIndexOf('\n', match.index) + 1;
-        const lineBreak = paragraph.indexOf('\n', lineStart);
-        const startLine = paragraph.slice(
-          lineStart,
-          lineBreak === -1 ? undefined : lineBreak,
-        );
-        return {
-          claim: match[0].replace(/∶/gu, '.').trim(),
-          isListItem: /^[ \t]*(?:[-*•]|\d+[.)])[ \t]/u.test(startLine),
-          paragraph,
-        };
-      }),
-    )
-    .filter(
-      ({ claim }) =>
-        withoutCitations(claim).replace(/\s+/gu, '').length >=
-        MIN_SUBSTANTIVE_CLAIM_CHARS,
-    );
+    .flatMap(paragraphClaims)
+    .filter(({ claim, isListItem }) => {
+      const withoutCitation = withoutCitations(claim);
+      const text = withoutCitation.replace(LIST_ITEM_LINE, '');
+      // La longitud se mide antes de retirar el marcador, como antes: una
+      // viñeta de 30 caracteres no deja de revisarse por el guion.
+      return (
+        withoutCitation.replace(/\s+/gu, '').length >=
+          MIN_SUBSTANTIVE_CLAIM_CHARS ||
+        // Una viñeta breve con una fecha o una cifra también es verificable;
+        // «Sí» o «No» no añaden ruido a la revisión.
+        (isListItem &&
+          (/\d{2,}/u.test(text) ||
+            (/\d/u.test(text) && /\p{L}{2}/u.test(text))))
+      );
+    });
 
-  for (const [index, { claim, isListItem, paragraph }] of claims.entries()) {
+  for (const [
+    index,
+    { claim, isListItem, blockCitations },
+  ] of claims.entries()) {
     // Solo la pregunta de cierre (la última del mensaje) no exige cita: es una
     // invitación al siguiente paso, no una afirmación.
     if (
@@ -412,9 +485,27 @@ export function evaluateAnswerCitationQualityDetails(
 
     const citationIndexes = citedIndexes(claim);
     if (!citationIndexes.length) {
-      // Cita de bloque: la cita única de una lista cubre sus ítems, nunca la
-      // prosa del párrafo (una afirmación suelta debe llevar su propia cita).
-      if (isListItem && citesAnySource(paragraph, sources.length)) continue;
+      // Cita de bloque: la cita de la introducción de la lista cubre sus
+      // ítems, nunca la prosa del párrafo (una afirmación suelta debe llevar
+      // su propia cita).
+      const blockSources = (isListItem ? blockCitations : [])
+        .map((rank) => sources[rank - 1])
+        .filter((source): source is RetrievedChunk => Boolean(source));
+      if (blockSources.length) {
+        // Cada ítem debe quedar respaldado por una sola fuente del bloque: no
+        // se combinan el puente léxico de una con las cifras de otra.
+        if (
+          !blockSources.some(
+            (source) =>
+              sourceSupportsClaim(claim, source) &&
+              claimNumbersAppearInSources(claim, [source]),
+          )
+        ) {
+          signals.add('citation_insufficient');
+          excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
+        }
+        continue;
+      }
       signals.add('support_partial');
       excerpts.support_partial ??= normalizedReviewExcerpt(claim);
       continue;

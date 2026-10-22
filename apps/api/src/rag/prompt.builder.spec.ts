@@ -97,12 +97,25 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain(
       'la interfaz la mostrará una sola vez bajo la tabla',
     );
+    expect(prompt).toContain('cítalos juntos en esa frase');
+    expect(prompt).toContain('no interpongas líneas en blanco ni rótulos');
     expect(prompt).toContain('justo después del punto');
     expect(prompt).toContain('nunca agrupada como [1, 2]');
     expect(prompt).not.toContain('Nunca escribas dos citas seguidas');
     expect(prompt).not.toContain(
       'Cada oración debe apoyarse en una sola fuente',
     );
+  });
+
+  it('mantiene la cita por bloque también en cronogramas y conserva citas por fila en tablas', () => {
+    const prompt = buildEvidenceSystemPrompt({ asksForDates: true });
+    expect(prompt).toContain('coloca su cita en la frase que las introduce');
+    expect(prompt).toContain('o dos que se corroboren');
+    expect(prompt).toContain('en una tabla mantén una cita por fila');
+    expect(prompt).toContain(
+      'atribuyas datos a una fuente que no los respalde',
+    );
+    expect(prompt).not.toContain('cada dato con su cita');
   });
 
   it('propone una pregunta de cierre al final cuando las fuentes la sustentan', () => {

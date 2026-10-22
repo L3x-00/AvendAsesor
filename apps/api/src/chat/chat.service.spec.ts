@@ -2947,7 +2947,7 @@ describe('evaluateAnswerCitationQuality', () => {
     const requisitosSource = {
       ...source,
       chunkContent:
-        'Para postular como auxiliar de educación debes cumplir los requisitos generales de estudios, salud y edad que exige la norma.',
+        'Para postular como auxiliar de educación debes cumplir los requisitos generales. Estudios superiores y sexto ciclo de estudios pedagógicos. Salud física y mental y declaración jurada original. Edad: menos de 70 años y declaración jurada.',
     };
     const answer = [
       'Para postular como auxiliar de educación debes cumplir los requisitos generales. [1]',
@@ -2961,6 +2961,267 @@ describe('evaluateAnswerCitationQuality', () => {
 
     expect(evaluateAnswerCitationQuality(answer, [requisitosSource])).toEqual(
       [],
+    );
+  });
+
+  it('comprueba cada dato de una lista cubierta por una cita en la introducción', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque: presentación del 13 al 14 de enero. Evaluación del 14 al 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas principales. [1]\n\n- Presentación de solicitudes: del 13 al 14 de enero.\n- Evaluación de solicitudes: del 14 al 15 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toEqual([]);
+    expect(
+      evaluateAnswerCitationQuality(
+        answer.replace('15 de enero', '30 de enero'),
+        [schedule],
+      ),
+    ).toContain('citation_insufficient');
+  });
+
+  it('acepta una cita compartida corroborada por dos fuentes', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque: presentación del 13 al 14 de enero. Evaluación del 14 al 15 de enero.',
+    };
+    const copy = {
+      ...source,
+      chunkContent:
+        'El cronograma de destaque fija la presentación del 13 al 14 de enero y la evaluación del 14 al 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas principales. [1][2]\n\n- Presentación de solicitudes: del 13 al 14 de enero.\n- Evaluación de solicitudes: del 14 al 15 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule, copy])).toEqual([]);
+    expect(
+      evaluateAnswerCitationQuality(
+        answer.replace('15 de enero', '30 de enero'),
+        [schedule, copy],
+      ),
+    ).toContain('citation_insufficient');
+  });
+
+  it('acepta una viñeta respaldada solo por la segunda fuente corroborante', () => {
+    const presentation = {
+      ...source,
+      chunkContent: 'Cronograma de destaque: presentación el 13 de enero.',
+    };
+    const evaluation = {
+      ...source,
+      chunkContent: 'Cronograma de destaque: evaluación el 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas. [1][2]\n\n- Presentación: 13 de enero.\n- Evaluación: 15 de enero.';
+    expect(
+      evaluateAnswerCitationQuality(answer, [presentation, evaluation]),
+    ).toEqual([]);
+  });
+
+  it('no deja pasar un dato sin respaldo cuando la lista no lleva puntos finales', () => {
+    const schedule = {
+      ...source,
+      chunkContent: 'Cronograma de destaque: presentación el 13 de enero.',
+    };
+    const other = {
+      ...source,
+      chunkContent: 'Plazo de 30 días para subsanar.',
+    };
+    const answer =
+      'Según el cronograma de destaque [1][2]:\n- Presentación: 13 de enero\n- Evaluación: 30 de enero';
+    expect(evaluateAnswerCitationQuality(answer, [schedule, other])).toContain(
+      'citation_insufficient',
+    );
+  });
+
+  it('no combina dos fuentes para cubrir un solo dato del bloque', () => {
+    const lexicalSource = {
+      ...source,
+      chunkContent: 'La evaluación de solicitudes se realiza en enero.',
+    };
+    const numericSource = {
+      ...source,
+      chunkContent: 'El cronograma fija el 15 para la etapa final.',
+    };
+    const answer =
+      'Según el cronograma, estas son las fechas principales. [1][2]\n\n- Evaluación de solicitudes: 15 de enero.';
+    expect(
+      evaluateAnswerCitationQuality(answer, [lexicalSource, numericSource]),
+    ).toContain('citation_insufficient');
+  });
+
+  it('no pierde la cita de bloque por una fuente citada después de la lista', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque: presentación del 13 al 14 de enero. Evaluación del 14 al 15 de enero.',
+    };
+    const conditions = {
+      ...source,
+      chunkContent:
+        'Los supuestos se solicitan durante el año conforme a las condiciones aplicables.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas principales. [1]\n- Presentación de solicitudes: del 13 al 14 de enero.\n- Evaluación de solicitudes: del 14 al 15 de enero.\nAdemás, existen supuestos que se solicitan durante el año conforme a las condiciones aplicables. [2]';
+    expect(
+      evaluateAnswerCitationQuality(answer, [schedule, conditions]),
+    ).toEqual([]);
+  });
+
+  it('usa la introducción de cada lista cuando hay dos en el mismo párrafo', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque: presentación el 13 de enero y evaluación el 15 de enero.',
+    };
+    const conditions = {
+      ...source,
+      chunkContent:
+        'Los supuestos se solicitan durante el año; la licencia por estudios es uno de ellos.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas. [1]\n- Presentación: 13 de enero.\n- Evaluación: 15 de enero.\nOtros supuestos se solicitan durante el año. [2]\n- Supuesto de licencia por estudios.';
+    expect(
+      evaluateAnswerCitationQuality(answer, [schedule, conditions]),
+    ).toEqual([]);
+  });
+
+  it('reconoce la cita de una introducción partida en varias líneas', () => {
+    const schedule = {
+      ...source,
+      chunkContent: 'Cronograma de destaque: presentación el 13 de enero.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas [1]\nprincipales del proceso.\n- Presentación: 13 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toEqual([]);
+  });
+
+  it('reconoce viñetas con raya y espacio duro', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma: presentación el 13 de enero. Evaluación el 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma, estas son las fechas. [1]\n–\u00A0Presentación: 13 de enero.\n1.\u00A0Evaluación: 15 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toEqual([]);
+  });
+
+  it('revisa las cifras de viñetas cortas cubiertas por una cita de bloque', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma: presentación el 13 de enero. Evaluación el 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma, estas son las fechas principales. [1]\n\n- Presentación: 13 de enero.\n- Evaluación: 30 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toContain(
+      'citation_insufficient',
+    );
+  });
+
+  it('sigue revisando una viñeta breve sin cita', () => {
+    const answer = '- Presentar la solicitud en la UGEL.';
+    expect(evaluateAnswerCitationQuality(answer, [source])).toContain(
+      'support_partial',
+    );
+  });
+
+  it('no confunde el número de orden con una fecha en una lista citada', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma: presentación el 13 de enero. Evaluación el 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma, estas son las fechas principales. [1]\n\n1) Presentación: 13 de enero.\n2) Evaluación: 15 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toEqual([]);
+  });
+
+  it('no confunde una fecha con puntos con el número de orden', () => {
+    const schedule = {
+      ...source,
+      chunkContent: 'La presentación de solicitudes es el 14.01.2026.',
+    };
+    const answer = '13.01.2026 es la fecha de presentación de solicitudes. [1]';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toContain(
+      'citation_insufficient',
+    );
+    expect(
+      evaluateAnswerCitationQuality(
+        answer.replace('13.01.2026', '14.01.2026'),
+        [schedule],
+      ),
+    ).toEqual([]);
+  });
+
+  it('revisa una viñeta que solo contiene una fecha', () => {
+    const schedule = {
+      ...source,
+      chunkContent: 'Cronograma de presentación de solicitudes: 13/01/2026.',
+    };
+    const answer =
+      'Según el cronograma, estas son las fechas principales. [1]\n\n- 30/01/2026';
+    expect(evaluateAnswerCitationQuality(answer, [schedule])).toContain(
+      'citation_insufficient',
+    );
+    expect(
+      evaluateAnswerCitationQuality(
+        answer.replace('30/01/2026', '13/01/2026'),
+        [schedule],
+      ),
+    ).toEqual([]);
+  });
+
+  it('una cita fuera de rango en una viñeta no invalida la cita de bloque', () => {
+    const schedule = {
+      ...source,
+      chunkContent:
+        'Cronograma de destaque: presentación del 13 al 14 de enero. Evaluación del 14 al 15 de enero.',
+    };
+    const answer =
+      'Según el cronograma de destaque, estas son las fechas principales. [1]\n\n- Presentación de solicitudes: del 13 al 14 de enero. [9]\n- Evaluación de solicitudes: del 14 al 15 de enero.';
+    const signals = evaluateAnswerCitationQuality(answer, [schedule]);
+    expect(signals).toContain('citation_insufficient');
+    expect(signals).not.toContain('support_partial');
+  });
+
+  it('no marca como afirmaciones sustantivas viñetas breves sin cifras', () => {
+    expect(evaluateAnswerCitationQuality('- Sí.\n- No.', [source])).toEqual([]);
+    expect(evaluateAnswerCitationQuality('1. Sí.\n2. No.', [source])).toEqual(
+      [],
+    );
+    expect(evaluateAnswerCitationQuality('1) Sí.\n2) No.', [source])).toEqual(
+      [],
+    );
+  });
+
+  it('no usa una cita de otra viñeta para cubrir una lista con fuentes distintas', () => {
+    const second = {
+      ...source,
+      chunkContent: 'La evaluación de solicitudes es el 15 de enero.',
+    };
+    const answer =
+      '- La licencia se solicita por procedimiento institucional. [1]\n- La evaluación se realiza el 15 de enero. [2]\n- La presentación se realiza el 13 de enero.';
+    expect(evaluateAnswerCitationQuality(answer, [source, second])).toContain(
+      'support_partial',
+    );
+  });
+
+  it('no interpreta la cita intermedia de una viñeta como cita de toda la lista', () => {
+    const answer =
+      '- Primera condición de la licencia sin referencia.\n- La licencia se solicita mediante procedimiento institucional. [1]\n- Última condición de la licencia sin referencia.';
+    expect(evaluateAnswerCitationQuality(answer, [source])).toContain(
+      'support_partial',
+    );
+  });
+
+  it('no interpreta la cita de la última viñeta como cita de toda la lista', () => {
+    const answer =
+      '- Primera condición de la licencia sin referencia.\n- La licencia se solicita mediante procedimiento institucional. [1]';
+    expect(evaluateAnswerCitationQuality(answer, [source])).toContain(
+      'support_partial',
     );
   });
 

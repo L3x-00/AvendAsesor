@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  type MouseEvent,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
@@ -458,44 +452,38 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
   if (!documents.length) return null;
 
   return (
-    <section
-      aria-label="Documentos disponibles para descargar"
-      className={styles.downloads}
-    >
-      <div className={styles.downloadsHeading}>
-        <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-          <path d="M7 3.75h7L18 7.7v12.55H7z" />
-          <path d="M14 3.75V8h4M12.5 11v5m0 0-2-2m2 2 2-2" />
-        </svg>
-        <div>
-          <h2>Documentos disponibles</h2>
-          <p>Descarga los archivos usados para preparar esta respuesta.</p>
-        </div>
-      </div>
-      <ul className={styles.downloadList}>
-        {documents.map((source) => (
-          <li key={source.id}>
-            <span>
-              <strong>{source.documentTitle}</strong>
-              <small>
-                {normReference(source) ?? `Versión ${source.versionNumber}`}
-              </small>
-            </span>
-            <a
-              aria-label={`Descargar ${source.documentTitle}`}
-              href={`/api/chat/sources/${encodeURIComponent(source.id)}/download?descargar=1`}
-              rel="noopener noreferrer"
-              target="_blank"
-              title="Descargar"
-            >
-              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-                <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
-              </svg>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <details className={`${styles.others} ${styles.downloads}`}>
+      <summary>Documentos disponibles ({documents.length})</summary>
+      <section aria-label="Documentos disponibles para descargar">
+        <h2 className="avend-visually-hidden">Documentos disponibles</h2>
+        <p className={styles.downloadsDescription}>
+          Descarga los archivos usados para preparar esta respuesta.
+        </p>
+        <ul className={styles.downloadList}>
+          {documents.map((source) => (
+            <li key={source.id}>
+              <span>
+                <strong>{source.documentTitle}</strong>
+                <small>
+                  {normReference(source) ?? `Versión ${source.versionNumber}`}
+                </small>
+              </span>
+              <a
+                aria-label={`Descargar ${source.documentTitle}`}
+                href={`/api/chat/sources/${encodeURIComponent(source.id)}/download?descargar=1`}
+                rel="noopener noreferrer"
+                target="_blank"
+                title="Descargar"
+              >
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                  <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
+                </svg>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </details>
   );
 }
 

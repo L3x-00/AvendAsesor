@@ -138,6 +138,54 @@ function requestBody(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
+  it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {
+    const first = eligibleConversation.messages[1].sources[0];
+    const answer = {
+      ...eligibleConversation.messages[1],
+      content:
+        "Según el cronograma, estas son las fechas principales. [1]\n\n- Presentación: 13 de enero.\n- Evaluación: 15 de enero.\n\nOtros supuestos se solicitan durante el año. [2]",
+      sources: [
+        {
+          ...first,
+          documentTitle: "Cronograma",
+          documentVersionId: "version-1",
+        },
+        {
+          ...first,
+          documentTitle: "Norma de destaque",
+          documentVersionId: "version-2",
+          id: "otra-fuente",
+          rank: 2,
+        },
+      ],
+    };
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [eligibleConversation.messages[0], answer],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+    const schedule = screen.getByRole("link", {
+      name: "Ver fuente 1: Cronograma",
+    });
+    const other = screen.getByRole("link", {
+      name: "Ver fuente 2: Norma de destaque",
+    });
+    expect(schedule.closest("p")).toHaveTextContent(
+      "Según el cronograma, estas son las fechas principales.",
+    );
+    expect(other.closest("p")).toHaveTextContent(
+      "Otros supuestos se solicitan durante el año.",
+    );
+    expect(screen.getByText("Presentación: 13 de enero.")).toBeVisible();
+    const bullet = screen.getByText("Presentación: 13 de enero.").closest("li");
+    expect(bullet).not.toBeNull();
+    expect(within(bullet as HTMLElement).queryByRole("link")).toBeNull();
+  });
+
   it("offers the orientation sheet only for a completed sourced assistant message", () => {
     render(
       <ChatPanel
@@ -831,6 +879,9 @@ describe("ChatPanel", () => {
     });
     expect(citedSource).toHaveFocus();
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    const downloads = screen.getByText("Documentos disponibles (1)");
+    expect(downloads.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(downloads);
     expect(
       screen.getByRole("region", {
         name: "Documentos disponibles para descargar",
