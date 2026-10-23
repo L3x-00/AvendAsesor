@@ -1052,7 +1052,7 @@ function exactSalaryAmounts(clause: string): Set<string> {
   )
     return new Set();
   const direct =
-    /(?:\b(?:es(?:\s+de)?|asciende\s+a|equivale\s+a|sera(?:\s+de)?|se\s+fija\s+en)\s+|\bremuneracion[^:;]*:\s*)(?:s\/?\.?\s*)?\d[\d .,]*/gu;
+    /(?:\b(?:es(?:\s+de)?|asciende\s+a|equivale\s+a|sera(?:\s+de)?|se\s+fija\s+en)\s+|\b(?:remuneracion|sueldo|salario)[^:;]*:\s*)(?:s\/?\.?\s*)?\d[\d .,]*/gu;
   return new Set(
     [...clause.matchAll(direct)].flatMap((match) => [
       ...matchingAmounts(match[0]),
@@ -1337,7 +1337,7 @@ export function assessSalaryAnswerCoverage(
           sentencesIn(source.chunkContent)
             .flatMap((row) =>
               ((hasMarkdownTable(source.chunkContent) &&
-                /\bremuneracion[^:]*:/u.test(row) &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(row) &&
                 row.includes(';')) ||
               /\bcargo\s*:/u.test(row)
                 ? [row]
@@ -1346,10 +1346,18 @@ export function assessSalaryAnswerCoverage(
             )
             .some(({ row, clause }) => {
               const sectors = salarySectors(clause);
+              // Una condición puede seguir a la cifra tras una coma; no se
+              // considera un importe general cuando se perdería esa reserva.
+              if (
+                /\b(?:si|cuando|unicamente|solo|solamente|siempre que|en caso de|para quienes|a condicion de|salvo|maxim[oa]s?|minim[oa]s?)\b/u.test(
+                  row,
+                )
+              )
+                return false;
               const tableRole =
                 hasMarkdownTable(source.chunkContent) &&
                 !/\bcargo\s*:/u.test(clause) &&
-                /\bremuneracion[^:]*:/u.test(clause) &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(clause) &&
                 role &&
                 rolesIn(normalizeSpanishText(source.documentTitle)).includes(
                   role,

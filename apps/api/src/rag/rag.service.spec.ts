@@ -51,6 +51,17 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([salary]);
   });
 
+  it('hereda cargo y sector a través de un turno salarial elíptico', () => {
+    const history = [
+      '¿Cuánto gana un auxiliar de educación?',
+      'privado',
+      '¿Y cuánto gana por 30 horas?',
+    ];
+    expect(
+      inheritedFactorQuestions('¿y para 40 horas?', history, false),
+    ).toEqual(history);
+  });
+
   it('no hereda tras una consulta de otro tema', () => {
     expect(
       inheritedFactorQuestions(

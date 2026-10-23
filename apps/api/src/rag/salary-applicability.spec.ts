@@ -175,6 +175,25 @@ describe('salaryQuestionProfile', () => {
     }
   });
 
+  it.each([
+    'si trabaja 30 horas',
+    'para quienes trabajan 30 horas',
+    'únicamente para el año 2023',
+    'como máximo',
+    'salvo que sea contratado',
+  ])('no omite la condición %s después del importe', (condition) => {
+    const source = chunk({
+      chunkContent: `La remuneración del auxiliar privado es de S/ 2 000,00, ${condition}.`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
+  });
+
   it('mantiene la aclaración para una pregunta por el propio sueldo', () => {
     expect(
       salaryClarificationFor('¿Cuánto gano yo como profesor?', [

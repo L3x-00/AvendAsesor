@@ -740,7 +740,19 @@ export function inheritedFactorQuestions(
   const inherited: string[] = [];
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     inherited.unshift(turns[index]);
-    if (salaryQuestionProfile(turns[index]).isSalaryQuestion) return inherited;
+    const turnProfile = salaryQuestionProfile(turns[index]);
+    if (turnProfile.isSalaryQuestion) {
+      // Una pregunta salarial elíptica también puede necesitar el cargo y el
+      // sector del inicio del hilo: «¿y cuánto gana por 30 horas?» no es una
+      // consulta completa por sí sola.
+      const ellipticalSalary =
+        turnProfile.role === null &&
+        /^(?:¿\s*)?(?:y|e|pero|entonces|ademas|tambien|o)\b/u.test(
+          normalizeSpanishText(turns[index]),
+        );
+      if (!ellipticalSalary) return inherited;
+      continue;
+    }
     if (!continuesSalaryThread(turns[index])) return [];
   }
   return [];
