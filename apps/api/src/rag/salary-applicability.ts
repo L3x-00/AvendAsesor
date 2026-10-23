@@ -853,10 +853,13 @@ export function hasSalaryPanoramaEvidence(
     }
     if (!GENERAL_REMUNERATION_TERMS.test(text)) return false;
     if (profile?.role === null || profile?.role === undefined) return true;
-    const roles = rolesIn(text);
-    // Una fuente sin cargo explícito puede ser la regla general; una que solo
-    // nombra otro cargo no responde por el rol consultado.
-    return roles.length === 0 || roles.includes(profile.role);
+    const roles = rolesIn(
+      normalizeSpanishText(
+        `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
+      ),
+    );
+    // No se infiere que una norma sin cargo conocido aplique al consultado.
+    return roles.includes(profile.role);
   });
 }
 
@@ -1023,6 +1026,14 @@ function presentsAllocationAsSalary(sentence: string): boolean {
 }
 
 const CURRENT_SALARY_CLAIM = /\b(?:vigente|actual|actualmente|hoy)\b/u;
+
+function salarySectors(text: string): string[] {
+  const normalized = normalizeSpanishText(text);
+  return [
+    ...(/\b(?:sector\s+)?public[oa]s?\b/u.test(normalized) ? ['publico'] : []),
+    ...(/\b(?:sector\s+)?privad[oa]s?\b/u.test(normalized) ? ['privado'] : []),
+  ];
+}
 
 function citedSourcesForSentence(
   sentence: string,
@@ -1252,6 +1263,54 @@ export function assessSalaryAnswerCoverage(
   for (const sentence of answerAmounts) {
     const cited = citedSourcesForSentence(sentence, sources);
     if (!cited.length) continue;
+
+    const role = question ? salaryQuestionProfile(question).role : null;
+    if (role && isBroadSalaryQuestion(question ?? '')) {
+      const amounts = matchingAmounts(sentence);
+      const supported = [...amounts].every((amount) =>
+        cited.some(
+          (source) =>
+            rolesIn(
+              normalizeSpanishText(
+                `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
+              ),
+            ).includes(role) &&
+            matchingAmounts(source.chunkContent).has(amount),
+        ),
+      );
+      if (!supported) return { excerpt: sentence.slice(0, 2_000) };
+    }
+
+    // Una cifra de un sector no acredita la remuneración del otro. Cuando el
+    // sector es explícito, exigimos evidencia de ese sector junto al importe.
+    const statedSectors = salarySectors(sentence);
+    const questionSectors = question ? salarySectors(question) : [];
+    // Una misma oración con cifras y ambos sectores no permite asociar cada
+    // importe inequívocamente; se pide al modelo separarlos con su fuente.
+    if (statedSectors.length > 1) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+    const sector =
+      statedSectors.length === 1
+        ? statedSectors[0]
+        : statedSectors.length === 0 && questionSectors.length === 1
+          ? questionSectors[0]
+          : null;
+    if (sector) {
+      const amounts = matchingAmounts(sentence);
+      const supported = [...amounts].every((amount) =>
+        cited.some((source) => {
+          const sourceText = `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`;
+          const sectors = salarySectors(sourceText);
+          return (
+            sectors.length === 1 &&
+            sectors[0] === sector &&
+            matchingAmounts(source.chunkContent).has(amount)
+          );
+        }),
+      );
+      if (!supported) return { excerpt: sentence.slice(0, 2_000) };
+    }
 
     // Un documento reemplazado nunca se presenta como regla vigente. No basta
     // con que el fragmento use la palabra «remuneración»: su situación

@@ -1819,6 +1819,64 @@ describe('ChatService', () => {
     });
   });
 
+  it('abre chat general al responder un panorama ambiguo desde otro módulo', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [],
+      selectedModuleId: source.moduleIds[0],
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del auxiliar de educación se regula por la normativa vigente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        yield 'La remuneración del auxiliar se regula por la normativa vigente. [1]';
+      })(),
+    );
+    await collect(service, {
+      conversationId,
+      selectedModuleId: source.moduleIds[0],
+      question: '¿Cuánto gana un auxiliar de educación?',
+    });
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: null, selectedModuleId: null }),
+    );
+  });
+
+  it('retiene una cifra inventada incluso cuando la ruta es evidencia', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración del auxiliar de educación se establece en la normativa vigente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        yield 'El auxiliar gana S/ 2 000,00. [1]';
+      })(),
+    );
+    const events = await collect(service, {
+      question: '¿Cuánto gana un auxiliar de educación?',
+    });
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(events.some((event) => event.type === 'clarification')).toBe(true);
+  });
+
   describe('aclaración de una sola condición en la ruta de ambigüedad y de cambio de tema', () => {
     const causalSources = [
       {
@@ -1910,7 +1968,7 @@ describe('ChatService', () => {
         kind: 'evidence',
         sources: [30, 40].map((hours) => ({
           ...source,
-          chunkContent: `La remuneración mensual del profesor de jornada de ${hours} horas es de S/ ${hours} 000,00.`,
+          chunkContent: `La remuneración mensual del profesor del sector público de jornada de ${hours} horas es de S/ ${hours} 000,00.`,
           chunkId: `${hours}c8b56af-6d0c-4fef-881e-7c00907540dd`,
           documentVersionId: `${hours}d8b56af-6d0c-4fef-881e-7c00907540dd`,
         })),

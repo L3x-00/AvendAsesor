@@ -794,7 +794,7 @@ describe('hasSalaryPanoramaEvidence', () => {
     ).toBe(false);
   });
 
-  it('acepta una regla general que no nombra ningún cargo', () => {
+  it('no presume que una regla sin cargo identificado aplique al auxiliar', () => {
     const generalRule = chunk({
       chunkContent:
         'La remuneración mensual se fija en la normativa vigente correspondiente.',
@@ -805,7 +805,7 @@ describe('hasSalaryPanoramaEvidence', () => {
         'current',
         '¿cuánto gana un auxiliar de educación?',
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('no habilita el panorama con un concepto adicional ni fuera del alcance', () => {
@@ -1469,6 +1469,40 @@ describe('salaryClarificationFor', () => {
 });
 
 describe('assessSalaryAnswerCoverage', () => {
+  it('no atribuye al sector privado una cifra documentada para el público', () => {
+    const publico = chunk({
+      chunkContent:
+        'La remuneración mensual del auxiliar de educación del sector público es S/ 2 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'En el sector privado un auxiliar de educación gana S/ 2 000,00. [1]',
+        [publico],
+        '¿Cuánto gana un auxiliar de educación en el sector privado?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'En el sector público un auxiliar de educación gana S/ 2 000,00. [1]',
+        [publico],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).toBeNull();
+  });
+
+  it('no atribuye al auxiliar una cifra de personal administrativo', () => {
+    const administrativo = chunk({
+      chunkContent:
+        'La remuneración mensual del personal administrativo es S/ 3 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar de educación gana S/ 3 000,00. [1]',
+        [administrativo],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).not.toBeNull();
+  });
   // Requisito 4: una asignación especial no se presenta como remuneración general.
   it('marca la respuesta que presenta una asignación como si fuera el sueldo', () => {
     const finding = assessSalaryAnswerCoverage(

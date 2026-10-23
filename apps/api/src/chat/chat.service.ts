@@ -29,7 +29,6 @@ import {
   assessSalaryAnswerCoverage,
   hasAmount,
   hasGeneralSalaryEvidence,
-  hasMarkdownTable,
   hasPersonalSalaryContext,
   hasSalaryPanoramaEvidence,
   isBroadSalaryQuestion,
@@ -1329,7 +1328,9 @@ export class ChatService {
     // que consta y explicar qué monto falta. Sin evidencia del tema, la
     // aclaración sigue siendo la salida correcta.
     const broadSalaryAnswerTurn =
-      retrieval.kind === 'ambiguous' &&
+      (retrieval.kind === 'ambiguous' ||
+        retrieval.kind === 'evidence' ||
+        retrieval.kind === 'topic_change') &&
       !personalSalary &&
       isBroadSalaryQuestion(salaryQuestion) &&
       hasSalaryPanoramaEvidence(
@@ -1357,8 +1358,7 @@ export class ChatService {
     } else if (
       retrieval.kind === 'ambiguous' &&
       selectedModuleId &&
-      !acceptedQuestion &&
-      !broadSalaryAnswerTurn
+      !acceptedQuestion
     ) {
       conversationId = null;
       conversationContext = [];
@@ -1643,14 +1643,7 @@ export class ChatService {
     // única forma de impedir que una cifra inventada llegue a la pantalla
     // cuando ninguna fuente trae un importe que la respalde.
     const salaryProfile = salaryQuestionProfile(salaryQuestion);
-    const deferStreaming =
-      broadSalaryAnswerTurn ||
-      (salaryProfile.isSalaryQuestion &&
-        retrieval.sources.some(
-          (candidate) =>
-            hasAmount(candidate.chunkContent) ||
-            hasMarkdownTable(candidate.chunkContent),
-        ));
+    const deferStreaming = salaryProfile.isSalaryQuestion;
 
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
