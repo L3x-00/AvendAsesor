@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
@@ -17,78 +10,7 @@ interface ChatSourcesProps {
   citedRanks?: number[];
   /** Mensaje al que pertenecen: permite enlazar cada cita [n] con su fila. */
   messageId?: string;
-  /** Abiertas desde el inicio (p. ej. en la ficha de orientación imprimible). */
-  defaultOpen?: boolean;
-  /**
-   * Hacia dónde se despliega la tabla: «up» la abre por encima del botón (chat,
-   * que queda al pie de la respuesta) y «down» por debajo, como la ficha.
-   */
-  direction?: "down" | "up";
   sources: ChatSource[];
-}
-
-/** Duración de la transición del panel (ver `.disclosurePanel`) más un margen. */
-const PANEL_MOTION_MS = 420;
-/** Tope de fotogramas corregidos: cubre la transición hasta en pantallas de 240 Hz. */
-const MAX_HOLD_FRAMES = 120;
-
-function scrollContainerOf(element: HTMLElement): HTMLElement | null {
-  for (
-    let parent = element.parentElement;
-    parent;
-    parent = parent.parentElement
-  ) {
-    const { overflowY } = window.getComputedStyle(parent);
-    if (
-      /^(?:auto|scroll|overlay)$/u.test(overflowY) &&
-      parent.scrollHeight > parent.clientHeight
-    ) {
-      return parent;
-    }
-  }
-  return null;
-}
-
-/**
- * Con el panel por encima del botón, al crecer empuja el botón hacia abajo y la
- * tabla parecería abrirse hacia abajo. Durante la transición se corrige, en cada
- * fotograma, el desplazamiento de la página: el botón queda donde la persona lo
- * tocó y es la tabla la que se despliega hacia arriba. Devuelve la función que
- * detiene la corrección.
- */
-export function holdPosition(
-  element: HTMLElement,
-  durationMs: number,
-): () => void {
-  const scroller = scrollContainerOf(element);
-  const startTop = element.getBoundingClientRect().top;
-  let startedAt: number | null = null;
-  let frame = 0;
-  let frames = 0;
-
-  const step = (now: number) => {
-    startedAt ??= now;
-    frames += 1;
-    const drift = element.getBoundingClientRect().top - startTop;
-    if (Math.abs(drift) >= 0.5) {
-      // `instant`: la página declara `scroll-behavior: smooth` y un desplazamiento
-      // suave por fotograma iría siempre un paso por detrás del panel.
-      if (scroller) {
-        scroller.scrollTo({
-          behavior: "instant",
-          top: scroller.scrollTop + drift,
-        });
-      } else {
-        window.scrollBy({ behavior: "instant", top: drift });
-      }
-    }
-    if (frames < MAX_HOLD_FRAMES && now - startedAt < durationMs) {
-      frame = window.requestAnimationFrame(step);
-    }
-  };
-
-  frame = window.requestAnimationFrame(step);
-  return () => window.cancelAnimationFrame(frame);
 }
 
 function uniqueDocuments(sources: ChatSource[]): ChatSource[] {
@@ -331,11 +253,11 @@ function SourceTable({
                   <span className={styles.rank}>{source.rank}</span>
                 </td>
                 <td data-label="Tipo">
-                  <strong className={styles.documentType}>
+                  <span className={styles.documentType}>
                     {source.documentType
                       ? documentTypeLabel(source.documentType)
                       : "Documento"}
-                  </strong>
+                  </span>
                   {source.resolutionNumber ? (
                     <span className={styles.documentMeta}>
                       {source.resolutionNumber}
@@ -343,9 +265,9 @@ function SourceTable({
                   ) : null}
                 </td>
                 <td data-label="Documento">
-                  <strong className={styles.documentTitle}>
+                  <span className={styles.documentTitle}>
                     {source.documentTitle}
-                  </strong>
+                  </span>
                   <span className={styles.documentMeta}>
                     Proceso: {source.moduleName ?? "No especificado"}
                   </span>
@@ -353,18 +275,17 @@ function SourceTable({
                 <td data-label="Ubicación">
                   {sectionTitle ? (
                     <span className={styles.referenceLine}>
-                      <strong>Sección o subtítulo:</strong> {sectionTitle}
+                      <span>Sección o subtítulo:</span> {sectionTitle}
                     </span>
                   ) : null}
                   {source.articleReference ? (
                     <span className={styles.referenceLine}>
-                      <strong>Artículo:</strong> {source.articleReference}
+                      <span>Artículo:</span> {source.articleReference}
                     </span>
                   ) : null}
                   {source.numeralReference ? (
                     <span className={styles.referenceLine}>
-                      <strong>Numeral o literal:</strong>{" "}
-                      {source.numeralReference}
+                      <span>Numeral o literal:</span> {source.numeralReference}
                     </span>
                   ) : null}
                   {!sectionTitle &&
@@ -403,9 +324,9 @@ function SourceTable({
                   )}
                 </td>
                 <td data-label="Estado">
-                  <strong className={styles.situation}>
+                  <span className={styles.situation}>
                     {situationLabel(source)}
-                  </strong>
+                  </span>
                   <span className={styles.documentMeta}>
                     Versión {source.versionNumber}
                   </span>
@@ -535,154 +456,39 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
   );
 }
 
-/**
- * Referencias de una respuesta (Hito 3, punto 8). Primero las fuentes que la
- * respuesta cita con [n] —las que sustentan lo afirmado—; los demás fragmentos
- * revisados quedan plegados para no presentarse como sustento.
- */
+/** Muestra las fuentes citadas y conserva los archivos disponibles para descargar. */
 export function ChatSources({
   citedRanks,
-  defaultOpen = false,
-  direction = "down",
   messageId,
   sources,
 }: ChatSourcesProps) {
-  const contentId = useId();
-  const toggleId = useId();
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  // Una cita [n] abre el panel por código: sin animación, para que el destino de
-  // su desplazamiento ya sea el definitivo.
-  const [instant, setInstant] = useState(false);
-  const releaseHold = useRef<(() => void) | null>(null);
-  useEffect(() => () => releaseHold.current?.(), []);
-
-  function handleToggle(event: MouseEvent<HTMLButtonElement>) {
-    const button = event.currentTarget;
-    const opensFromCitation = button.hasAttribute("data-instant");
-    button.removeAttribute("data-instant");
-    releaseHold.current?.();
-    releaseHold.current = null;
-    setInstant(opensFromCitation);
-    // Solo se ancla el botón cuando la persona lo toca: una cita [n] ya decide
-    // hacia dónde se desplaza la vista.
-    if (direction === "up" && !opensFromCitation) {
-      releaseHold.current = holdPosition(button, PANEL_MOTION_MS);
-    }
-    setIsOpen((current) => !current);
-  }
-
   const cited = citedRanks?.length
     ? sources.filter((source) => citedRanks.includes(source.rank))
     : [];
   const hasCitations = cited.length > 0;
   const primary = hasCitations ? cited : sources;
-  const others = hasCitations
-    ? sources.filter((source) => !citedRanks?.includes(source.rank))
-    : [];
-  const documents = uniqueDocuments(sources);
 
-  // Plegadas por defecto: la respuesta se lee primero y el sustento se abre
-  // a pedido ("Ver fuentes disponibles"), como en los asistentes de IA. Una cita [n]
-  // del texto las abre sola y lleva a su fila. Con `direction="up"` el panel se
-  // pinta por encima del botón (solo CSS): el orden del DOM sigue siendo botón →
-  // panel, así el lector de pantalla y el teclado entran al panel tras activarlo.
   return (
     <section
       aria-label="Referencias verificables"
       className={`avend-chat-sources ${styles.disclosure}`}
-      data-direction={direction}
-      data-motion={instant ? "instant" : undefined}
-      data-open={isOpen ? "true" : "false"}
-      data-source-disclosure=""
     >
-      <button
-        aria-controls={contentId}
-        aria-expanded={isOpen}
-        className={styles.toggle}
-        data-source-toggle=""
-        id={toggleId}
-        onClick={handleToggle}
-        type="button"
-      >
-        <span aria-hidden="true" className={styles.folderIcon}>
-          <span className={styles.folderBack} />
-          <span className={styles.folderPaper} />
-          <span className={styles.folderFront} />
-        </span>
-        <span className={styles.toggleCopy}>
-          <strong>
-            {isOpen ? "Ocultar fuentes" : "Ver fuentes disponibles"}
-          </strong>
-          <span>
-            {primary.length}{" "}
-            {primary.length === 1 ? "referencia" : "referencias"}
-            {" · "}
-            {documents.length}{" "}
-            {documents.length === 1 ? "documento" : "documentos"}
-          </span>
-        </span>
-        <svg
-          aria-hidden="true"
-          className={styles.chevron}
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          {/* Apunta hacia donde se mueve el panel; al abrirse gira 180°. */}
-          <path d={direction === "up" ? "m6 15 6-6 6 6" : "m6 9 6 6 6-6"} />
-        </svg>
-      </button>
-
-      <div
-        aria-hidden={!isOpen}
-        aria-labelledby={toggleId}
-        className={styles.disclosurePanel}
-        data-open={isOpen ? "true" : "false"}
-        id={contentId}
-        inert={!isOpen}
-        role="region"
-      >
-        <div className={styles.disclosurePanelInner}>
-          <header className={styles.heading}>
-            <div>
-              <h2>Referencias</h2>
-              <p className={styles.sourceHint}>
-                {hasCitations
-                  ? "Toca [1], [2] para ver la fuente."
-                  : "Fuentes consultadas."}
-              </p>
-            </div>
-          </header>
-
-          <SourceTable
-            caption="Fuentes documentales, ubicación y descarga"
-            messageId={messageId}
-            sources={primary}
-          />
-
-          {others.length ? (
-            <details className={styles.others}>
-              <FoldSummary
-                count={others.length}
-                icon={
-                  <svg fill="none" viewBox="0 0 24 24">
-                    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
-                    <path d="m3 12.5 9 5 9-5" />
-                    <path d="m3 17 9 5 9-5" />
-                  </svg>
-                }
-                label="Otros fragmentos revisados"
-              />
-              <SourceTable
-                caption="Fragmentos revisados no citados"
-                messageId={messageId}
-                sources={others}
-              />
-            </details>
-          ) : null}
-
-          <ChatDownloads sources={sources} />
+      <header className={styles.heading}>
+        <div>
+          <h2>Referencias</h2>
+          <p className={styles.sourceHint}>
+            {hasCitations
+              ? "Toca [1], [2] para ver la fuente."
+              : "Fuentes consultadas."}
+          </p>
         </div>
-      </div>
+      </header>
+      <SourceTable
+        caption="Fuentes documentales, ubicación y descarga"
+        messageId={messageId}
+        sources={primary}
+      />
+      <ChatDownloads sources={sources} />
     </section>
   );
 }

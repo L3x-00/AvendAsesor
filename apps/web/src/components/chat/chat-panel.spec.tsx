@@ -889,19 +889,12 @@ describe("ChatPanel", () => {
       name: "Ver fuente 1: Norma de licencias",
     });
     expect(citation).toHaveAttribute("href", `#fuente-${messageId}-1`);
-    // Las referencias nacen plegadas; tocar la cita [1] las abre.
-    const references = screen.getByLabelText("Referencias verificables");
-    const sourceToggle = within(references).getByRole("button", {
-      name: /Ver fuentes disponibles/u,
-    });
-    expect(sourceToggle).toHaveAttribute("aria-expanded", "false");
+    // Las referencias ya están visibles y la cita lleva a su fila.
+    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
     expect(
-      screen.queryByRole("region", {
-        name: "Documentos disponibles para descargar",
-      }),
+      screen.queryByRole("button", { name: /Ver fuentes disponibles/u }),
     ).not.toBeInTheDocument();
     fireEvent.click(citation);
-    expect(sourceToggle).toHaveAttribute("aria-expanded", "true");
     const citedSource = document.getElementById(`fuente-${messageId}-1`);
     expect(window.location.hash).toBe(`#fuente-${messageId}-1`);
     expect(scrollIntoView).toHaveBeenCalledWith({
@@ -1020,11 +1013,6 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
 
     act(() => finishStream());
-    await user.click(
-      await screen.findByRole("button", {
-        name: /Ver fuentes disponibles/u,
-      }),
-    );
     expect(
       await screen.findByRole("heading", { name: "Referencias" }),
     ).toBeVisible();
@@ -1463,7 +1451,9 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".avend-chat-message-content table"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
     expect(
       screen.getByText(
@@ -1493,7 +1483,9 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".avend-chat-message-content table"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
     expect(
       screen.getByText("Modalidad: EBR; Nivel: Primaria; Monto: 3,300.60"),
@@ -1523,7 +1515,9 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".avend-chat-message-content table"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/\|/u)).not.toBeInTheDocument();
     expect(
       screen.getByText(/^Nivel: Nivel 14; Monto: S\/ 3013/u),
@@ -1553,7 +1547,9 @@ describe("ChatPanel", () => {
         "El tramo A | B es una referencia literal del documento.",
       ),
     ).toBeVisible();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".avend-chat-message-content table"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not present a Markdown grid without source citations as evidence", () => {
@@ -1574,7 +1570,9 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".avend-chat-message-content table"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the known citation beside its paragraph when a grouped rank is unknown", () => {
@@ -1726,7 +1724,9 @@ describe("ChatPanel", () => {
         sameDocument,
       );
 
-      const table = screen.getByRole("table");
+      const table = screen
+        .getByRole("columnheader", { name: "Escala" })
+        .closest("table") as HTMLTableElement;
       expect(
         within(table).queryByRole("columnheader", { name: "Cita" }),
       ).not.toBeInTheDocument();
@@ -1746,7 +1746,11 @@ describe("ChatPanel", () => {
       expect(screen.getByRole("columnheader", { name: "Cita" })).toBeVisible();
       // Sus citas siguen visibles: la celda no queda vacía.
       expect(
-        within(screen.getByRole("table")).getByRole("link", {
+        within(
+          screen
+            .getByRole("columnheader", { name: "Cita" })
+            .closest("table") as HTMLTableElement,
+        ).getByRole("link", {
           name: /Ver fuente 1/u,
         }),
       ).toBeVisible();

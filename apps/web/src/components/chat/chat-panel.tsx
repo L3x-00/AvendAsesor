@@ -267,23 +267,8 @@ interface CitationContext {
   sources: ChatSource[];
 }
 
-/**
- * Las referencias viven plegadas: antes de saltar a la fila de una cita se
- * activa su control accesible (el ancla sola no revela paneles colapsados).
- */
+/** Lleva la cita a su fila visible y le da foco. */
 function revealSource(targetId: string) {
-  const target = document.getElementById(targetId);
-  const disclosure = target?.closest<HTMLElement>("[data-source-disclosure]");
-  const toggle = disclosure?.querySelector<HTMLButtonElement>(
-    "[data-source-toggle]",
-  );
-  if (toggle?.getAttribute("aria-expanded") === "false") {
-    // Se abre sin animación ni anclaje del botón: el destino del desplazamiento
-    // siguiente se calcula sobre la disposición definitiva.
-    toggle.setAttribute("data-instant", "");
-    toggle.click();
-  }
-
   window.requestAnimationFrame(() => {
     const revealedTarget = document.getElementById(targetId);
     if (!revealedTarget) return;
@@ -1780,7 +1765,6 @@ export function ChatPanel({
                         ? citedSourceRanks(message.content)
                         : undefined
                     }
-                    direction="up"
                     messageId={message.id}
                     sources={message.sources}
                   />
