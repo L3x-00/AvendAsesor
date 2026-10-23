@@ -113,9 +113,20 @@ describe('inheritedFactorQuestions', () => {
     '¿Y cuánto gana al mes?',
     '¿Y cuánto ganaría en régimen privado?',
     '¿Y cuál sería el sueldo mensual?',
+    '¿Cuánto ganaría si trabaja medio tiempo?',
   ])('conserva el contexto salarial en %s', (question) => {
     const history = ['¿Cuánto gana un auxiliar?', 'público'];
     expect(inheritedFactorQuestions(question, history, true)).toEqual(history);
+  });
+
+  it('no atribuye el cargo anterior a otra profesión aunque trabaje medio tiempo', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿Cuánto ganaría un ingeniero si trabaja medio tiempo?',
+        ['¿Cuánto gana un auxiliar?', 'privado'],
+        true,
+      ),
+    ).toEqual([]);
   });
 
   it('no hereda tras una consulta de otro tema', () => {
