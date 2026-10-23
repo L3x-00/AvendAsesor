@@ -524,7 +524,6 @@ export function OrientationPreview({
           ) : null}
 
           <ChatSources
-            defaultOpen
             messageId={context.messageId}
             sources={context.sources}
           />

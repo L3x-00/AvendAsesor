@@ -1,11 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   ChatDownloads,
   ChatSources,
   citationRanks,
   citedSourceRanks,
-  holdPosition,
   singleCitedSource,
   sourceCitationLabel,
 } from "./chat-sources";
@@ -104,22 +103,10 @@ describe("ChatSources", () => {
       />,
     );
 
-    // Plegadas por defecto: primero se lee la respuesta.
-    expect(
-      screen.queryByRole("heading", { name: "Referencias" }),
-    ).not.toBeInTheDocument();
-    const toggle = screen.getByRole("button", {
-      name: /Ver fuentes disponibles.*1 referencia.*1 documento/u,
-    });
-    const panel = document.getElementById(
-      toggle.getAttribute("aria-controls") as string,
-    );
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(panel).toHaveAttribute("inert");
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(panel).not.toHaveAttribute("inert");
     expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Ver fuentes disponibles/u }),
+    ).not.toBeInTheDocument();
     const table = screen.getByRole("table", {
       name: "Fuentes documentales, ubicación y descarga",
     });
@@ -207,9 +194,6 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
-    );
     const table = screen.getByRole("table", {
       name: "Fuentes documentales, ubicación y descarga",
     });
@@ -238,7 +222,6 @@ describe("ChatSources", () => {
   it("muestra solo los campos presentes del sustento", () => {
     render(
       <ChatSources
-        defaultOpen
         sources={[
           {
             articleReference: null,
@@ -273,7 +256,6 @@ describe("ChatSources", () => {
   it("muestra el sustento derivado de la sección cuando existe", () => {
     render(
       <ChatSources
-        defaultOpen
         sources={[
           {
             articleReference: null,
@@ -330,9 +312,6 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
-    );
     const table = screen.getByRole("table", {
       name: "Fuentes documentales, ubicación y descarga",
     });
@@ -371,9 +350,6 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
-    );
     const row = within(
       screen.getByRole("table", {
         name: "Fuentes documentales, ubicación y descarga",
@@ -414,9 +390,6 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
-    );
     expect(
       screen.getByText("Fragmento interno · sin paginación PDF"),
     ).toBeVisible();
@@ -426,7 +399,6 @@ describe("ChatSources", () => {
   it("ubica un fragmento sin estructura por su página PDF sin inventar el total", () => {
     render(
       <ChatSources
-        defaultOpen
         sources={[
           {
             articleReference: null,
@@ -462,7 +434,6 @@ describe("ChatSources", () => {
   it("mantiene una ubicación honesta para Word sin sección ni paginación física", () => {
     render(
       <ChatSources
-        defaultOpen
         sources={[
           {
             articleReference: null,
@@ -531,9 +502,6 @@ describe("ChatSources", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ver fuentes disponibles/u }),
-    );
     const table = screen.getByRole("table", {
       name: "Fuentes documentales, ubicación y descarga",
     });
@@ -754,306 +722,39 @@ describe("ChatSources — fuentes citadas", () => {
     versionNumber: 1,
   };
 
-  it("shows the cited sources first, anchored, and folds the uncited ones", () => {
-    render(
-      <ChatSources
-        citedRanks={[2]}
-        messageId="m-1"
-        sources={[
-          { ...base, documentTitle: "Norma revisada", id: "a", rank: 1 },
-          { ...base, documentTitle: "Norma citada", id: "b", rank: 2 },
-        ]}
-      />,
-    );
-
-    const toggle = screen.getByRole("button", {
-      name: /Ver fuentes disponibles.*1 referencia.*2 documentos/u,
-    });
-    fireEvent.click(toggle);
-    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
-    expect(document.getElementById("fuente-m-1-2")).toHaveTextContent(
-      "Norma citada",
-    );
-    expect(
-      document
-        .getElementById("fuente-m-1-2")
-        ?.querySelector('[data-label="Ubicación"]'),
-    ).toHaveTextContent("Página 1 del PDF");
-    expect(
-      document
-        .getElementById("fuente-m-1-1")
-        ?.querySelector('[data-label="Ubicación"]'),
-    ).toHaveTextContent("Página 1 del PDF");
-    const otherFragments = screen.getByText("Otros fragmentos revisados", {
-      selector: "summary span",
-    });
-    expect(otherFragments).toBeInTheDocument();
-    expect(otherFragments.closest("details")).not.toHaveAttribute("open");
-  });
-});
-
-/** Cola de fotogramas controlada por la prueba: ninguno corre solo. */
-function frameQueue() {
-  const queue: FrameRequestCallback[] = [];
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-    queue.push(callback);
-    return queue.length;
-  });
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  return {
-    pending: () => queue.length,
-    run: (timestamp: number) => queue.shift()?.(timestamp),
-  };
-}
-
-/**
- * Elemento cuyo borde superior depende de cuánto creció el panel y de cuánto se
- * desplazó la página: lo que mide `getBoundingClientRect` en el navegador.
- */
-function measuredElement(element: HTMLElement, startTop = 400) {
-  const layout = { grown: 0, scrolled: 0 };
-  vi.spyOn(element, "getBoundingClientRect").mockImplementation(
-    () => ({ top: startTop + layout.grown - layout.scrolled }) as DOMRect,
+  it.each([1, 2, 4])(
+    "muestra %i referencias citadas sin desplegar y conserva las descargas",
+    (count) => {
+      const sources = Array.from({ length: count + 1 }, (_, index) => ({
+        ...base,
+        documentTitle: `Norma ${index + 1}`,
+        id: `id-${index + 1}`,
+        rank: index + 1,
+      }));
+      render(
+        <ChatSources
+          citedRanks={sources.slice(0, count).map((source) => source.rank)}
+          messageId="m-1"
+          sources={sources}
+        />,
+      );
+      const table = screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      });
+      expect(within(table).getAllByRole("row")).toHaveLength(count + 1);
+      expect(document.getElementById(`fuente-m-1-${count}`)).toHaveTextContent(
+        `Norma ${count}`,
+      );
+      expect(document.getElementById(`fuente-m-1-${count + 1}`)).toBeNull();
+      expect(
+        screen.queryByText("Otros fragmentos revisados"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen
+          .getByText("Documentos disponibles", { selector: "summary span" })
+          .closest("details"),
+      ).not.toHaveAttribute("open");
+      expect(table.querySelectorAll("tbody strong, tbody b")).toHaveLength(0);
+    },
   );
-  const scrollBy = vi.fn((options: ScrollToOptions) => {
-    layout.scrolled += options.top ?? 0;
-  });
-  Object.defineProperty(window, "scrollBy", {
-    configurable: true,
-    value: scrollBy,
-    writable: true,
-  });
-  return { layout, scrollBy };
-}
-
-describe("holdPosition", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    document.body.replaceChildren();
-  });
-
-  it("compensa en cada fotograma lo que el panel empuja el botón", () => {
-    const frames = frameQueue();
-    const button = document.createElement("button");
-    document.body.append(button);
-    const { layout, scrollBy } = measuredElement(button);
-
-    holdPosition(button, 420);
-    layout.grown = 40;
-    frames.run(0);
-    layout.grown = 100;
-    frames.run(16);
-    layout.grown = 100;
-    frames.run(32);
-
-    expect(scrollBy.mock.calls.map(([options]) => options)).toEqual([
-      { behavior: "instant", top: 40 },
-      { behavior: "instant", top: 60 },
-    ]);
-    // El botón terminó donde empezó: es la tabla la que se abrió hacia arriba.
-    expect(button.getBoundingClientRect().top).toBe(400);
-  });
-
-  it("también compensa al plegar: el botón vuelve a su sitio sin saltar", () => {
-    const frames = frameQueue();
-    const button = document.createElement("button");
-    document.body.append(button);
-    const { layout, scrollBy } = measuredElement(button, 700);
-
-    holdPosition(button, 420);
-    layout.grown = -120;
-    frames.run(0);
-
-    expect(scrollBy).toHaveBeenCalledWith({ behavior: "instant", top: -120 });
-  });
-
-  it("deja de corregir al terminar la transición", () => {
-    const frames = frameQueue();
-    const button = document.createElement("button");
-    document.body.append(button);
-    measuredElement(button);
-
-    holdPosition(button, 420);
-    frames.run(0);
-    expect(frames.pending()).toBe(1);
-    frames.run(200);
-    expect(frames.pending()).toBe(1);
-    frames.run(430);
-    expect(frames.pending()).toBe(0);
-  });
-
-  it("no se queda en bucle si el navegador entrega siempre la misma marca de tiempo", () => {
-    const button = document.createElement("button");
-    document.body.append(button);
-    measuredElement(button);
-    // Doble síncrono (como el de otras pruebas del chat): cada llamada ejecuta ya.
-    const requestFrame = vi.fn((callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
-    vi.stubGlobal("requestAnimationFrame", requestFrame);
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-
-    holdPosition(button, 420);
-
-    expect(requestFrame.mock.calls.length).toBeLessThanOrEqual(120);
-  });
-
-  it("devuelve la función que cancela el fotograma pendiente", () => {
-    frameQueue();
-    const button = document.createElement("button");
-    document.body.append(button);
-    measuredElement(button);
-
-    const stop = holdPosition(button, 420);
-    stop();
-
-    expect(window.cancelAnimationFrame).toHaveBeenCalled();
-  });
-
-  it("desplaza el contenedor con scroll propio cuando lo hay", () => {
-    const frames = frameQueue();
-    const scroller = document.createElement("div");
-    scroller.setAttribute("style", "overflow-y: auto");
-    Object.defineProperty(scroller, "scrollHeight", { value: 2000 });
-    Object.defineProperty(scroller, "clientHeight", { value: 600 });
-    Object.defineProperty(scroller, "scrollTop", { value: 50 });
-    const scrollTo = vi.fn();
-    scroller.scrollTo = scrollTo;
-    const button = document.createElement("button");
-    scroller.append(button);
-    document.body.append(scroller);
-    const { layout, scrollBy } = measuredElement(button);
-
-    holdPosition(button, 420);
-    layout.grown = 90;
-    frames.run(0);
-
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: "instant", top: 140 });
-    expect(scrollBy).not.toHaveBeenCalled();
-  });
-});
-
-describe("ChatSources — despliegue hacia arriba", () => {
-  const source = {
-    articleReference: null,
-    documentSituation: "current" as const,
-    documentTitle: "Aprobación del cronograma de destaque 2026",
-    id: "11111111-1111-4111-8111-111111111111",
-    moduleName: "Destaque",
-    numeralReference: null,
-    pageEnd: 2,
-    pageStart: 1,
-    rank: 1,
-    relevanceScore: 0.8,
-    sectionTitle: null,
-    versionNumber: 1,
-  };
-
-  function toggleOf(direction?: "down" | "up") {
-    render(<ChatSources direction={direction} sources={[source]} />);
-    const section = screen.getByLabelText("Referencias verificables");
-    const toggle = within(section).getByRole("button", {
-      name: /Ver fuentes disponibles/u,
-    });
-    return { section, toggle };
-  }
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
-  it("por defecto se despliega hacia abajo, como en la ficha de orientación", () => {
-    const { section, toggle } = toggleOf();
-
-    expect(section).toHaveAttribute("data-direction", "down");
-    expect(toggle.querySelector("svg path")).toHaveAttribute(
-      "d",
-      "m6 9 6 6 6-6",
-    );
-  });
-
-  it("con direction=up pinta el panel sobre el botón y conserva el orden del DOM", () => {
-    const { section, toggle } = toggleOf("up");
-    const panel = document.getElementById(
-      toggle.getAttribute("aria-controls") as string,
-    ) as HTMLElement;
-
-    expect(section).toHaveAttribute("data-direction", "up");
-    // El orden visual lo da el CSS; el foco y el lector de pantalla siguen
-    // entrando al panel después de activar el botón.
-    expect(
-      toggle.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(toggle.querySelector("svg path")).toHaveAttribute(
-      "d",
-      "m6 15 6-6 6 6",
-    );
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(panel).not.toHaveAttribute("inert");
-    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
-  });
-
-  it("al tocar el botón ancla su posición mientras el panel crece hacia arriba", () => {
-    const frames = frameQueue();
-    const { toggle } = toggleOf("up");
-    const { layout, scrollBy } = measuredElement(toggle);
-
-    fireEvent.click(toggle);
-    layout.grown = 150;
-    frames.run(0);
-
-    expect(scrollBy).toHaveBeenCalledWith({ behavior: "instant", top: 150 });
-  });
-
-  it("hacia abajo no toca el desplazamiento de la página", () => {
-    const frames = frameQueue();
-    const { toggle } = toggleOf("down");
-    measuredElement(toggle);
-
-    fireEvent.click(toggle);
-
-    expect(frames.pending()).toBe(0);
-    expect(window.scrollBy).not.toHaveBeenCalled();
-  });
-
-  it("una cita [n] abre sin animación ni anclaje, y el siguiente toque vuelve a animar", () => {
-    const frames = frameQueue();
-    const { section, toggle } = toggleOf("up");
-    const { scrollBy } = measuredElement(toggle);
-
-    toggle.setAttribute("data-instant", "");
-    fireEvent.click(toggle);
-
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(section).toHaveAttribute("data-motion", "instant");
-    expect(toggle).not.toHaveAttribute("data-instant");
-    expect(frames.pending()).toBe(0);
-    expect(scrollBy).not.toHaveBeenCalled();
-
-    fireEvent.click(toggle);
-
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(section).not.toHaveAttribute("data-motion");
-    expect(frames.pending()).toBe(1);
-  });
-
-  it("detiene el anclaje si el componente se desmonta durante la transición", () => {
-    frameQueue();
-    const view = render(<ChatSources direction="up" sources={[source]} />);
-    const toggle = screen.getByRole("button", {
-      name: /Ver fuentes disponibles/u,
-    });
-    measuredElement(toggle);
-
-    fireEvent.click(toggle);
-    view.unmount();
-
-    expect(window.cancelAnimationFrame).toHaveBeenCalled();
-  });
 });

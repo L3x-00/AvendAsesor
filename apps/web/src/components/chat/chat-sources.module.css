@@ -115,6 +115,7 @@
 
 .table td {
   color: var(--avend-text);
+  font-weight: 400;
   line-height: 1.5;
 }
 
@@ -133,7 +134,7 @@
   color: var(--avend-navy);
   display: inline-flex;
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 400;
   height: 1.75rem;
   justify-content: center;
   min-width: 1.75rem;
@@ -155,10 +156,6 @@
   line-height: 1.4;
 }
 
-.situation {
-  font-weight: 600;
-}
-
 .documentMeta,
 .referenceLine {
   color: var(--avend-text-muted);
@@ -169,11 +166,6 @@
   overflow-wrap: anywhere;
 }
 
-.referenceLine strong {
-  color: var(--avend-text);
-  font-weight: 600;
-}
-
 .sourceLink {
   align-items: center;
   border: 1px solid var(--avend-border);
@@ -181,7 +173,7 @@
   color: var(--avend-accent-strong);
   display: inline-flex;
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 400;
   justify-content: center;
   line-height: 1;
   min-height: 2.75rem;
@@ -272,7 +264,7 @@
   .table td::before {
     color: var(--avend-text-muted);
     content: attr(data-label);
-    font-weight: 600;
+    font-weight: 400;
   }
 
   /* Todo el contenido de la celda va en la columna de valores, uno bajo otro:
@@ -447,8 +439,7 @@
   outline-offset: 2px;
 }
 
-/* Fragmentos revisados que la respuesta no cita: plegados, sin presentarse
-   como sustento. */
+/* Espaciado del desplegable de documentos disponibles. */
 .others {
   margin-top: 0.875rem;
 }
@@ -557,7 +548,6 @@
   margin-top: 0.625rem;
 }
 
-/* ---------- Fuentes plegables con movimiento tipo Folder Float ---------- */
 .disclosure {
   border-top: 0 !important;
   container: sources / inline-size;
@@ -567,197 +557,6 @@
   width: 100%;
 }
 
-.toggle {
-  align-items: center;
-  background: linear-gradient(
-    135deg,
-    #ffffff 0%,
-    var(--avend-surface-muted) 100%
-  );
-  border: 1px solid var(--avend-border);
-  border-radius: 0.875rem;
-  box-shadow: 0 6px 18px rgb(13 27 61 / 6%);
-  color: var(--avend-navy);
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-size: 1rem;
-  font-weight: 600;
-  gap: 0.75rem;
-  min-height: 3.75rem;
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  transition:
-    background-color 150ms ease-out,
-    border-color 150ms ease-out,
-    box-shadow 220ms var(--avend-ease-interaction),
-    transform 220ms var(--avend-ease-interaction);
-  user-select: none;
-  width: 100%;
-}
-
-.toggle:hover {
-  background: linear-gradient(135deg, #ffffff 0%, var(--avend-soft-blue) 100%);
-  border-color: rgb(22 119 255 / 35%);
-  box-shadow: 0 10px 26px rgb(13 27 61 / 10%);
-  transform: translateY(-1px);
-}
-
-.toggle:focus-visible {
-  outline: 3px solid var(--avend-focus);
-  outline-offset: 2px;
-}
-
-.toggleCopy {
-  display: grid;
-  flex: 1 1 auto;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.toggleCopy strong {
-  font-size: 1rem;
-  line-height: 1.35;
-}
-
-.toggleCopy span {
-  color: var(--avend-text-muted);
-  font-size: 1rem;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.chevron {
-  flex: none;
-  height: 1.25rem;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-  width: 1.25rem;
-}
-
-.chevron {
-  transition: transform 200ms ease-out;
-}
-
-.disclosure[data-open="true"] .chevron {
-  transform: rotate(180deg);
-}
-
-.disclosure[data-open="true"] > .toggle {
-  background: linear-gradient(135deg, #ffffff 0%, var(--avend-soft-blue) 100%);
-  border-color: rgb(22 119 255 / 30%);
-  box-shadow: 0 10px 26px rgb(13 27 61 / 9%);
-}
-
-.folderIcon {
-  flex: 0 0 auto;
-  height: 2.65rem;
-  perspective: 12rem;
-  position: relative;
-  width: 3rem;
-}
-
-.folderBack,
-.folderFront,
-.folderPaper {
-  display: block;
-  position: absolute;
-}
-
-.folderBack {
-  background: var(--avend-accent-strong);
-  border-radius: 0.45rem;
-  inset: 0.45rem 0.1rem 0.2rem;
-}
-
-.folderBack::before {
-  background: inherit;
-  border-radius: 0.45rem 0.45rem 0 0;
-  content: "";
-  height: 0.6rem;
-  left: 0;
-  position: absolute;
-  top: -0.35rem;
-  width: 45%;
-}
-
-.folderPaper {
-  background: #ffffff;
-  border: 1px solid rgb(13 27 61 / 12%);
-  border-radius: 0.3rem;
-  inset: 0.7rem 0.35rem 0.45rem;
-  transform: translateY(0.35rem) scale(0.92);
-  transition: transform 420ms cubic-bezier(0.34, 1.45, 0.64, 1);
-}
-
-.folderFront {
-  background: linear-gradient(180deg, #4f9bff 0%, #1677ff 100%);
-  border-radius: 0.5rem;
-  bottom: 0.15rem;
-  height: 1.65rem;
-  left: 0;
-  right: 0;
-  transform: rotateX(-12deg);
-  transform-origin: 50% 100%;
-  transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.disclosure[data-open="true"] .folderPaper {
-  transform: translateY(-0.25rem) scale(1);
-}
-
-.disclosure[data-open="true"] .folderFront {
-  transform: rotateX(-34deg);
-}
-
-.disclosurePanel {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    grid-template-rows 360ms var(--avend-ease-interaction),
-    opacity 220ms ease-out,
-    visibility 0s linear 360ms;
-  visibility: hidden;
-}
-
-.disclosurePanel[data-open="true"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition-delay: 0s;
-  visibility: visible;
-}
-
-.disclosurePanelInner {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.disclosurePanel[data-open="true"] .disclosurePanelInner {
-  padding-top: 1rem;
-}
-
-.disclosurePanel[data-open="true"] .heading,
-.disclosurePanel[data-open="true"] .tableViewport,
-.disclosurePanel[data-open="true"] .others,
-.disclosurePanel[data-open="true"] .downloads {
-  animation: sources-float-in 360ms var(--avend-ease-interaction) both;
-}
-
-.disclosurePanel[data-open="true"] .tableViewport {
-  animation-delay: 45ms;
-}
-
-.disclosurePanel[data-open="true"] .others {
-  animation-delay: 70ms;
-}
-
-.disclosurePanel[data-open="true"] .downloads {
-  animation-delay: 90ms;
-}
-
 @keyframes sources-float-in {
   from {
     opacity: 0;
@@ -765,72 +564,13 @@
   }
 }
 
-/* Despliegue hacia arriba (chat): el panel se pinta sobre el botón y crece hacia
-   arriba. El DOM conserva el orden botón → panel (foco y lector de pantalla); el
-   contenido se ancla al borde inferior para que parezca salir del botón. La
-   página compensa el desplazamiento mientras dura la transición (`holdPosition`). */
-.disclosure[data-direction="up"] {
-  display: flex;
-  flex-direction: column-reverse;
-}
-
-.disclosure[data-direction="up"] .disclosurePanelInner {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.disclosure[data-direction="up"] .disclosurePanelInner > * {
-  flex: none;
-}
-
-.disclosure[data-direction="up"]
-  .disclosurePanel[data-open="true"]
-  .disclosurePanelInner {
-  padding-bottom: 1rem;
-  padding-top: 0;
-}
-
-/* Abierto por una cita [n]: sin movimiento, para que el destino de su
-   desplazamiento sea el definitivo desde el primer fotograma. */
-.disclosure[data-motion="instant"] .disclosurePanel {
-  transition: none;
-}
-
-.disclosure[data-motion="instant"] .disclosurePanel[data-open="true"] .heading,
-.disclosure[data-motion="instant"]
-  .disclosurePanel[data-open="true"]
-  .tableViewport,
-.disclosure[data-motion="instant"] .disclosurePanel[data-open="true"] .others,
-.disclosure[data-motion="instant"]
-  .disclosurePanel[data-open="true"]
-  .downloads {
-  animation: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .toggle,
-  .chevron,
   .foldToggle,
-  .foldChevron,
-  .folderPaper,
-  .folderFront,
-  .disclosurePanel {
+  .foldChevron {
     transition: none;
   }
 
   .others[open] > :not(summary) {
-    animation: none;
-  }
-
-  .toggle:hover {
-    transform: none;
-  }
-
-  .disclosurePanel[data-open="true"] .heading,
-  .disclosurePanel[data-open="true"] .tableViewport,
-  .disclosurePanel[data-open="true"] .others,
-  .disclosurePanel[data-open="true"] .downloads {
     animation: none;
   }
 }

@@ -141,7 +141,7 @@ describe("contratos de presentación del chat en teléfono", () => {
       ".downloadsHeading p",
       ".downloadList strong",
       ".downloadList small",
-      ".toggleCopy span",
+      ".foldToggle",
       ".rank",
     ]) {
       expect(remValue(ruleBody(sourceStyles, selector))).toBeGreaterThanOrEqual(
