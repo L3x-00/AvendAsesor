@@ -1262,27 +1262,29 @@ export function assessSalaryAnswerCoverage(
   const generalSources = sources.filter(isGeneralRemunerationSource);
   for (const sentence of answerAmounts) {
     const cited = citedSourcesForSentence(sentence, sources);
-    if (!cited.length) continue;
-
-    const role = question ? salaryQuestionProfile(question).role : null;
-    if (role && isBroadSalaryQuestion(question ?? '')) {
-      const amounts = matchingAmounts(sentence);
-      const supported = [...amounts].every((amount) =>
-        cited.some(
-          (source) =>
-            rolesIn(
-              normalizeSpanishText(
-                `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
-              ),
-            ).includes(role) &&
-            matchingAmounts(source.chunkContent).has(amount),
-        ),
-      );
-      if (!supported) return { excerpt: sentence.slice(0, 2_000) };
+    if (!cited.length) {
+      // Una tabla con fuente única puede llevar la cita antes de las filas.
+      // Con varias fuentes no se puede adivinar cuál respalda la cifra.
+      if (sources.length !== 1 || !sources[0])
+        return { excerpt: sentence.slice(0, 2_000) };
+      cited.push(sources[0]);
     }
 
-    // Una cifra de un sector no acredita la remuneración del otro. Cuando el
-    // sector es explícito, exigimos evidencia de ese sector junto al importe.
+    if (
+      [...matchingAmounts(sentence)].some(
+        (amount) =>
+          !cited.some((source) =>
+            matchingAmounts(source.chunkContent).has(amount),
+          ),
+      )
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+
+    const role =
+      question && isBroadSalaryQuestion(question)
+        ? salaryQuestionProfile(question).role
+        : null;
     const statedSectors = salarySectors(sentence);
     const questionSectors = question ? salarySectors(question) : [];
     // Una misma oración con cifras y ambos sectores no permite asociar cada
@@ -1296,18 +1298,40 @@ export function assessSalaryAnswerCoverage(
         : statedSectors.length === 0 && questionSectors.length === 1
           ? questionSectors[0]
           : null;
-    if (sector) {
+    if (sector || role) {
       const amounts = matchingAmounts(sentence);
       const supported = [...amounts].every((amount) =>
-        cited.some((source) => {
-          const sourceText = `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`;
-          const sectors = salarySectors(sourceText);
-          return (
-            sectors.length === 1 &&
-            sectors[0] === sector &&
-            matchingAmounts(source.chunkContent).has(amount)
-          );
-        }),
+        cited.some((source) =>
+          sentencesIn(source.chunkContent)
+            .flatMap((row) =>
+              (/\bcargo\s*:/u.test(row)
+                ? [row]
+                : row.split(SALARY_CLAUSE_SPLIT)
+              ).map((clause) => ({ row, clause })),
+            )
+            .some(({ row, clause }) => {
+              const sectors = salarySectors(clause);
+              const tableRole =
+                hasMarkdownTable(source.chunkContent) &&
+                !/\bcargo\s*:/u.test(clause) &&
+                /\bremuneracion[^:]*:/u.test(clause) &&
+                role &&
+                rolesIn(normalizeSpanishText(source.documentTitle)).includes(
+                  role,
+                ) &&
+                !/\b(?:administrativ[oa]s?|auxiliar(?:es)?|docentes?|profesor(?:a|es|as)?|director(?:a|es|as)?)\b/u.test(
+                  row,
+                );
+              return (
+                matchingAmounts(clause).has(amount) &&
+                !/\b(?:no|ni|excepto|excluid[oa]s?)\b/u.test(clause) &&
+                (!role ||
+                  ((rolesIn(clause).includes(role) || tableRole) &&
+                    GENERAL_REMUNERATION_TERMS.test(clause))) &&
+                (!sector || (sectors.length === 1 && sectors[0] === sector))
+              );
+            }),
+        ),
       );
       if (!supported) return { excerpt: sentence.slice(0, 2_000) };
     }

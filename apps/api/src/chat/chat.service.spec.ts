@@ -1286,6 +1286,7 @@ describe('ChatService', () => {
   it('convierte las filas salariales en tabla aunque el modelo use viñetas', async () => {
     const tableSource = {
       ...source,
+      documentTitle: 'Escala de remuneración docente',
       chunkContent: [
         '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
         '| --- | --- | --- | --- |',
