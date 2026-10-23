@@ -1283,15 +1283,15 @@ describe('ChatService', () => {
     );
   });
 
-  it('convierte las filas salariales en tabla aunque el modelo use viñetas', async () => {
+  it('muestra solo las filas recuperadas que declaran cargo y sector', async () => {
     const tableSource = {
       ...source,
       documentTitle: 'Escala de remuneración docente',
       chunkContent: [
-        '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
-        '| --- | --- | --- | --- |',
-        '| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 |',
-        '| Educación Básica Regular – EBR | Primaria | 30 | 3,500.70 |',
+        '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) | Cargo | Sector |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| Educación Básica Regular – EBR | Inicial | 30 | 3,500.70 | Docente | Público |',
+        '| Educación Básica Regular – EBR | Primaria | 30 | 3,500.70 | Docente | Privado |',
       ].join('\n'),
     };
     ragService.retrieve.mockResolvedValue({
@@ -1319,19 +1319,17 @@ describe('ChatService', () => {
     });
 
     const token = events.find((event) => event.type === 'token');
-    expect(token?.data.text).toContain(
-      '| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual (S/) |',
-    );
+    expect(token?.data.text).toContain('Cargo: Docente; Sector: Público');
     expect(token?.data.text).not.toContain('- Modalidad / Forma:');
     const completion = (
       historyGateway.completeTurn.mock.calls as Array<
         [Parameters<ChatHistoryGateway['completeTurn']>[0]]
       >
     )[0]?.[0];
-    expect(completion?.answer).toContain('| Nivel / Ciclo |');
+    expect(completion?.answer).toContain('Cargo: Docente; Sector: Público');
   });
 
-  it('no convierte una negativa del modelo en «sin evidencia» si hay salario general', async () => {
+  it('muestra el fragmento salarial sin depender de una negativa del modelo', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
@@ -1357,17 +1355,22 @@ describe('ChatService', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'clarification',
+      'sources',
+      'token',
       'done',
     ]);
     expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        replyRole: 'clarification',
-        sources: [],
-        unansweredReason: 'ambiguous_request',
-      }),
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const completion = (
+      historyGateway.completeTurn.mock.calls as Array<
+        [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+      >
+    )[0]?.[0];
+    expect(completion?.answer).toContain(
+      'La remuneración mensual del docente es de S/ 3 300,60.',
     );
+    expect(completion?.replyRole).toBe('assistant');
+    expect(completion?.unansweredReason).toBeNull();
   });
 
   it('respeta el módulo elegido si cambia mientras hay una propuesta pendiente', async () => {
@@ -1706,14 +1709,14 @@ describe('ChatService', () => {
 
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     expect(events.some((event) => event.type === 'token')).toBe(true);
-    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
         inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
         messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
         modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
-        provider: 'openai',
+        provider: 'rule',
       },
       type: 'done',
     });
@@ -1743,25 +1746,12 @@ describe('ChatService', () => {
       question: '¿Cuánto gana un auxiliar de educación?',
     });
 
-    expect(events.some((event) => event.type === 'token')).toBe(false);
-    expect(events.some((event) => event.type === 'sources')).toBe(false);
-    const clarification = events.find(
-      (event) => event.type === 'clarification',
+    const answer = events.find((event) => event.type === 'token');
+    expect(answer?.data.text).toContain(
+      'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida',
     );
-    if (!clarification || clarification.type !== 'clarification') {
-      throw new Error('Expected a clarification event.');
-    }
-    expect(clarification.data.message).toContain('no incluyen el monto');
-    expect(clarification.data.message).not.toContain('S/ 2 000,00');
-    expect(events.at(-1)).toEqual({
-      data: {
-        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
-        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
-        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
-        provider: 'rule',
-      },
-      type: 'done',
-    });
+    expect(answer?.data.text).not.toContain('S/ 2 000,00');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   it('responde «privado» como seguimiento del panorama de auxiliar en vez de repetir la pregunta', async () => {
@@ -1803,18 +1793,19 @@ describe('ChatService', () => {
     });
 
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
-    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
-    const generateInput = (
-      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
-    )[0]?.[0];
-    expect(generateInput?.sources?.length).toBeGreaterThan(0);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const answer = events.find((event) => event.type === 'token');
+    expect(answer?.data.text).toContain('no puedo darte una cifra');
+    expect(answer?.data.text).not.toContain('sector público');
+    const sources = events.find((event) => event.type === 'sources');
+    expect(sources).toEqual({ data: { sources: [] }, type: 'sources' });
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
         inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
         messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
         modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
-        provider: 'openai',
+        provider: 'rule',
       },
       type: 'done',
     });
@@ -1876,8 +1867,9 @@ describe('ChatService', () => {
     const events = await collect(service, {
       question: '¿Cuánto gana un auxiliar de educación?',
     });
-    expect(events.some((event) => event.type === 'token')).toBe(false);
-    expect(events.some((event) => event.type === 'clarification')).toBe(true);
+    expect(events.some((event) => event.type === 'token')).toBe(true);
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   describe('aclaración de una sola condición en la ruta de ambigüedad y de cambio de tema', () => {
@@ -1992,10 +1984,7 @@ describe('ChatService', () => {
       expect(events.some((event) => event.type === 'clarification')).toBe(
         false,
       );
-      const generateInput = (
-        answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
-      )[0]?.[0];
-      expect(generateInput?.sources?.length).toBeGreaterThan(0);
+      expect(answerGateway.generate).not.toHaveBeenCalled();
       expect(events.some((event) => event.type === 'token')).toBe(true);
     });
   });
@@ -2401,10 +2390,7 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     expect(events.some((event) => event.type === 'sources')).toBe(true);
     expect(events.some((event) => event.type === 'token')).toBe(true);
-    const generateInput = (
-      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
-    )[0]?.[0];
-    expect(generateInput?.sources?.length).toBeGreaterThan(0);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -2642,6 +2628,37 @@ describe('ChatService', () => {
     // Las fuentes se emiten con el primer fragmento visible; si el cliente se
     // desconecta antes, no se transmiten ni se guarda nada.
     expect(events.map((event) => event.type)).toEqual(['conversation']);
+    expect(historyGateway.completeTurn).not.toHaveBeenCalled();
+  });
+
+  it('no persiste un panorama salarial extractivo si el cliente se desconecta', async () => {
+    const controller = new AbortController();
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del auxiliar de educación del sector público es S/ 2 000,00.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    historyGateway.beginTurn.mockImplementation(() => {
+      controller.abort();
+      return Promise.resolve({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+      });
+    });
+
+    const events = await collect(service, {
+      abortSignal: controller.signal,
+      question: '¿Cuánto gana un auxiliar de educación?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual(['conversation']);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });
 

@@ -245,6 +245,11 @@ function rolesIn(text: string): string[] {
   );
 }
 
+/** Cargos nombrados expresamente en una misma unidad de evidencia. */
+export function salaryRoles(text: string): string[] {
+  return rolesIn(normalizeSpanishText(text));
+}
+
 const ROMAN_SCALES: ReadonlyMap<string, string> = new Map([
   ['i', '1'],
   ['ii', '2'],
@@ -1024,7 +1029,7 @@ function presentsAllocationAsSalary(sentence: string): boolean {
 
 const CURRENT_SALARY_CLAIM = /\b(?:vigente|actual|actualmente|hoy)\b/u;
 
-function salarySectors(text: string): string[] {
+export function salarySectors(text: string): string[] {
   const normalized = normalizeSpanishText(text);
   return [
     ...(/\b(?:sector\s+)?public[oa]s?\b/u.test(normalized) ? ['publico'] : []),

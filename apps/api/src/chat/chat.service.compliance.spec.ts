@@ -433,15 +433,11 @@ describe('ChatService — lineamientos del cliente', () => {
       'done',
     ]);
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        question: '¿Cuánto gana un profesor del Perú?',
-      }),
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const answer = events.find((event) => event.type === 'token');
+    expect(answer?.data.text).toContain(
+      'La remuneración mensual del profesor es de S/ 2 666,80.',
     );
-    const generateInput = (
-      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
-    )[0]?.[0];
-    expect(generateInput?.sources?.length).toBeGreaterThan(0);
     expect(completion()).toMatchObject({
       replyRole: 'assistant',
       unansweredReason: null,

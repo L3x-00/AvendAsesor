@@ -25,6 +25,7 @@ import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
 import { normalizeDomainQuery } from '../rag/query-normalization';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
+import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
   assessSalaryAnswerCoverage,
   hasAmount,
@@ -1597,12 +1598,61 @@ export class ChatService {
       }
     }
 
+    const extractiveSalary = broadSalaryAnswerTurn
+      ? buildExtractiveSalaryAnswer(
+          retrieval.sources,
+          salaryQuestion,
+          retrievalScope,
+        )
+      : null;
+    const responseSources = broadSalaryAnswerTurn
+      ? (extractiveSalary?.sources ?? [])
+      : retrieval.sources;
     const citations = toCitationBundle(
-      retrieval.sources,
+      responseSources,
       selectedModuleId,
       relatedModule,
       relatedSubmodule,
     );
+
+    // Las cifras, períodos y condiciones de un panorama general no se
+    // reformulan con texto generado. Esta respuesta muestra el fragmento que
+    // recuperó el RAG y la cita creada por el servidor, para no convertir una
+    // remuneración mensual en anual, ni extenderla a otro cargo o sector.
+    if (broadSalaryAnswerTurn) {
+      if (input.abortSignal?.aborted) return;
+      const finalAnswer =
+        extractiveSalary?.answer ??
+        'No recuperé un fragmento salarial que pueda atribuirse con seguridad al sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.';
+      const completed = await this.historyGateway.completeTurn({
+        answer: finalAnswer,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId: relatedModule?.id ?? null,
+        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        qualitySignals: [],
+        replyRole: 'assistant',
+        retrievalScope,
+        sources: citations.inputs,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield { data: { sources: citations.sources }, type: 'sources' };
+      yield { data: { text: finalAnswer }, type: 'token' };
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          ...(broadSalaryModules.length ? { modules: broadSalaryModules } : {}),
+          provider: 'rule',
+        },
+        type: 'done',
+      };
+      return;
+    }
 
     // Las fuentes se emiten junto con el primer fragmento real de la respuesta:
     // si el modelo declara que ninguna fuente responde (marca de «sin
