@@ -1785,7 +1785,7 @@ describe('ChatService', () => {
         {
           ...source,
           chunkContent:
-            'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+            'La remuneración mensual del auxiliar de educación del sector público es aquella que se encuentra establecida en la normativa vigente correspondiente.',
         },
       ],
       topRelevanceScore: 0.9,
@@ -1841,6 +1841,7 @@ describe('ChatService', () => {
     });
     answerGateway.generate.mockReturnValue(
       (async function* () {
+        await Promise.resolve();
         yield 'La remuneración del auxiliar se regula por la normativa vigente. [1]';
       })(),
     );
@@ -1868,6 +1869,7 @@ describe('ChatService', () => {
     });
     answerGateway.generate.mockReturnValue(
       (async function* () {
+        await Promise.resolve();
         yield 'El auxiliar gana S/ 2 000,00. [1]';
       })(),
     );

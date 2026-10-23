@@ -458,6 +458,11 @@ export function withInheritedSalaryFactors(
     .reduce(mergeSalaryTurn, EMPTY_SALARY_PROFILE);
   if (!accumulated.isSalaryQuestion) return question;
 
+  const priorSector = [...priorQuestions]
+    .reverse()
+    .map(salarySectors)
+    .find((sectors) => sectors.length > 0);
+
   const fragments = [
     !current.isSalaryQuestion ? 'remuneración' : null,
     !current.isSalaryQuestion && accumulated.asksSpecialAllocation
@@ -468,6 +473,9 @@ export function withInheritedSalaryFactors(
       : null,
     current.condition === null ? accumulated.condition : null,
     current.role === null ? accumulated.role : null,
+    salarySectors(question).length === 0 && priorSector?.length === 1
+      ? `sector ${priorSector[0]}`
+      : null,
     current.scale === null && accumulated.scale !== null
       ? `escala ${accumulated.scale}`
       : null,
@@ -1035,6 +1043,23 @@ function salarySectors(text: string): string[] {
   ];
 }
 
+/** Un límite o comparación no demuestra que ese importe sea la cifra exacta. */
+function exactSalaryAmounts(clause: string): Set<string> {
+  if (
+    /\b(?:maxim[oa]s?|minim[oa]s?|hasta|supera|inferior|superior|solamente|siempre que|solo si|en caso de|si)\b/u.test(
+      clause,
+    )
+  )
+    return new Set();
+  const direct =
+    /(?:\b(?:es(?:\s+de)?|asciende\s+a|equivale\s+a|sera(?:\s+de)?|se\s+fija\s+en)\s+|\bremuneracion[^:;]*:\s*)(?:s\/?\.?\s*)?\d[\d .,]*/gu;
+  return new Set(
+    [...clause.matchAll(direct)].flatMap((match) => [
+      ...matchingAmounts(match[0]),
+    ]),
+  );
+}
+
 function citedSourcesForSentence(
   sentence: string,
   sources: RetrievedChunk[],
@@ -1292,6 +1317,13 @@ export function assessSalaryAnswerCoverage(
     if (statedSectors.length > 1) {
       return { excerpt: sentence.slice(0, 2_000) };
     }
+    if (
+      questionSectors.length === 1 &&
+      statedSectors.length === 1 &&
+      questionSectors[0] !== statedSectors[0]
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
     const sector =
       statedSectors.length === 1
         ? statedSectors[0]
@@ -1304,7 +1336,10 @@ export function assessSalaryAnswerCoverage(
         cited.some((source) =>
           sentencesIn(source.chunkContent)
             .flatMap((row) =>
-              (/\bcargo\s*:/u.test(row)
+              ((hasMarkdownTable(source.chunkContent) &&
+                /\bremuneracion[^:]*:/u.test(row) &&
+                row.includes(';')) ||
+              /\bcargo\s*:/u.test(row)
                 ? [row]
                 : row.split(SALARY_CLAUSE_SPLIT)
               ).map((clause) => ({ row, clause })),
@@ -1323,7 +1358,7 @@ export function assessSalaryAnswerCoverage(
                   row,
                 );
               return (
-                matchingAmounts(clause).has(amount) &&
+                exactSalaryAmounts(clause).has(amount) &&
                 !/\b(?:no|ni|excepto|excluid[oa]s?)\b/u.test(clause) &&
                 (!role ||
                   ((rolesIn(clause).includes(role) || tableRole) &&

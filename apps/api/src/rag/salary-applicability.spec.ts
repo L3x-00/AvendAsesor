@@ -496,6 +496,17 @@ describe('salaryApplicabilityTier', () => {
 });
 
 describe('withInheritedSalaryFactors', () => {
+  it('conserva el último sector en un seguimiento y permite cambiarlo', () => {
+    const history = ['¿Cuánto gana un auxiliar de educación?', 'privado'];
+    expect(
+      withInheritedSalaryFactors('¿y con jornada de 30 horas?', history),
+    ).toContain('sector privado');
+    const changed = withInheritedSalaryFactors(
+      '¿y en el sector público?',
+      history,
+    );
+    expect(changed).not.toContain('sector privado');
+  });
   it('completa la respuesta a una aclaración con la consulta salarial previa', () => {
     const effective = withInheritedSalaryFactors('Sector público', [
       '¿Cuánto gana un profesor en el Perú?',
@@ -1469,6 +1480,20 @@ describe('salaryClarificationFor', () => {
 });
 
 describe('assessSalaryAnswerCoverage', () => {
+  it('admite una tabla con sector y monto en la misma fila y cargo en su título', () => {
+    const table = chunk({
+      documentTitle: 'Remuneraciones del auxiliar de educación',
+      chunkContent:
+        '| Sector | Remuneración |\n| --- | --- |\n| Privado | S/ 2 000,00 |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Un auxiliar privado gana S/ 2 000,00. [1]',
+        [table],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
   it('no atribuye al sector privado una cifra documentada para el público', () => {
     const publico = chunk({
       chunkContent:
@@ -1557,6 +1582,27 @@ describe('assessSalaryAnswerCoverage', () => {
         'La normativa establece el salario. [1] Se gana S/ 9 000,00.',
         [publico],
         '¿Cuánto gana?',
+      ),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    'supera',
+    'es distinta de',
+    'excluye',
+    'tiene un máximo de',
+    'máxima es',
+    'es de hasta',
+    'es solamente en caso de',
+  ])('no presenta %s como un importe salarial exacto', (relation) => {
+    const limit = chunk({
+      chunkContent: `La remuneración del auxiliar privado ${relation} S/ 2 000,00.`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [limit],
+        '¿Cuánto gana un auxiliar privado?',
       ),
     ).not.toBeNull();
   });
