@@ -62,6 +62,24 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual(history);
   });
 
+  it('hereda también cuando la pregunta salarial omite el conector y al cambiar de sector', () => {
+    const history = [
+      '¿Cuánto gana un auxiliar de educación?',
+      'privado',
+      '¿Cuánto gana por 30 horas?',
+    ];
+    expect(
+      inheritedFactorQuestions('¿cuánto gana por 40 horas?', history, false),
+    ).toEqual(history);
+    expect(
+      inheritedFactorQuestions(
+        '¿y cuánto gana en el sector público?',
+        history,
+        false,
+      ),
+    ).toEqual(history);
+  });
+
   it('no hereda tras una consulta de otro tema', () => {
     expect(
       inheritedFactorQuestions(

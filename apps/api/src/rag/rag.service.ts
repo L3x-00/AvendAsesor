@@ -746,10 +746,7 @@ export function inheritedFactorQuestions(
       // sector del inicio del hilo: «¿y cuánto gana por 30 horas?» no es una
       // consulta completa por sí sola.
       const ellipticalSalary =
-        turnProfile.role === null &&
-        /^(?:¿\s*)?(?:y|e|pero|entonces|ademas|tambien|o)\b/u.test(
-          normalizeSpanishText(turns[index]),
-        );
+        turnProfile.role === null && continuesSalaryThread(turns[index]);
       if (!ellipticalSalary) return inherited;
       continue;
     }
@@ -784,6 +781,17 @@ function continuesSalaryThread(turn: string): boolean {
   const declaresFactor =
     profile.jornadaHours !== null || profile.scale !== null;
   const normalized = normalizeSpanishText(turn);
+  if (
+    profile.isSalaryQuestion &&
+    profile.role === null &&
+    !profile.asksSpecialAllocation
+  ) {
+    const remainingTopic = normalized.replace(
+      /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
+      ' ',
+    );
+    if (!hasTopicTerm(remainingTopic)) return true;
+  }
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return false;
   }

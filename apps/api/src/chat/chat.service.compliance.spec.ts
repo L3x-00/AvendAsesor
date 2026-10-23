@@ -397,7 +397,7 @@ describe('ChatService — lineamientos del cliente', () => {
           ...source,
           articleReference: 'Artículo 3',
           chunkContent:
-            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+            'La remuneración mensual del profesor es de S/ 2 666,80.',
           numeralReference: 'Literal h)',
           semanticScore: 0.95,
         },
@@ -406,7 +406,7 @@ describe('ChatService — lineamientos del cliente', () => {
           articleReference: 'Artículo 3',
           chunkId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
           chunkContent:
-            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+            'La remuneración mensual del profesor es de S/ 2 666,80.',
           documentVersionId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
           moduleIds: ['b'],
           moduleNames: ['Remuneraciones'],

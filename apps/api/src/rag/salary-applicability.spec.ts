@@ -181,6 +181,9 @@ describe('salaryQuestionProfile', () => {
     'únicamente para el año 2023',
     'como máximo',
     'salvo que sea contratado',
+    'exclusivamente para el año 2023',
+    'hasta diciembre de 2023',
+    'para el año 2023',
   ])('no omite la condición %s después del importe', (condition) => {
     const source = chunk({
       chunkContent: `La remuneración del auxiliar privado es de S/ 2 000,00, ${condition}.`,
@@ -318,6 +321,20 @@ describe('salaryApplicabilityTier', () => {
       ).toBe(false);
     },
   );
+
+  it('admite una condición posterior si la respuesta la conserva', () => {
+    const source = chunk({
+      chunkContent:
+        'La remuneración del auxiliar privado es de S/ 2 000,00, si trabaja 30 horas.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00 si trabaja 30 horas. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
 
   it('no interviene en una consulta que no es salarial', () => {
     expect(salaryApplicabilityTier('¿Cuál es el plazo?', allocation)).toBe(0);
@@ -728,7 +745,10 @@ describe('intención personal de una consulta salarial', () => {
     ).toBe(true);
     expect(
       hasPersonalSalaryContext('Nombrado', ['¿Cuánto gana un docente?']),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      hasPersonalSalaryContext('40 horas', ['¿Cuánto gana un auxiliar?']),
+    ).toBe(false);
   });
 
   it('no trata una pregunta completa de requisitos como intención personal', () => {

@@ -562,20 +562,9 @@ export function hasPersonalSalaryContext(
   const hasPriorSalary = priorQuestions.some(
     (prior) => salaryQuestionProfile(prior).isSalaryQuestion,
   );
-  const shortFactorAnswer =
-    !normalized.includes('?') && normalized.split(/\s+/u).length <= 4;
-  // Una respuesta de factor («Nombrado», «30 horas») o una declaración del
-  // propio vínculo («Soy nombrado») solo es personal si el hilo ya era salarial.
-  // Una pregunta completa que menciona «docente contratado» no lo es.
-  if (
-    hasPriorSalary &&
-    (PERSONAL_SALARY_CONDITION.test(normalized) ||
-      (shortFactorAnswer &&
-        !profile.isSalaryQuestion &&
-        (profile.condition !== null ||
-          profile.jornadaHours !== null ||
-          profile.scale !== null)))
-  ) {
+  // Responder un factor no convierte una consulta general en un caso propio.
+  // Una declaración explícita como «soy nombrado» sí lo hace.
+  if (hasPriorSalary && PERSONAL_SALARY_CONDITION.test(normalized)) {
     return true;
   }
   return priorQuestions.some((prior) => isPersonalSalaryQuestion(prior));
@@ -1060,6 +1049,40 @@ function exactSalaryAmounts(clause: string): Set<string> {
   );
 }
 
+/** Conserva las reservas de la oración y los factores de una fila salarial. */
+function retainsSalaryConditions(
+  row: string,
+  amount: string,
+  answer: string,
+  table: boolean,
+): boolean {
+  const answerText = normalizeSpanishText(answer);
+  const sourceFactors = evidenceFactorsIn(row);
+  const answerFactors = evidenceFactorsIn(answerText);
+  for (const factor of ['jornada', 'condicion', 'escala', 'periodo'] as const) {
+    if (
+      sourceFactors[factor].some(
+        (value) => !answerFactors[factor].includes(value),
+      )
+    )
+      return false;
+  }
+  if (table) return true;
+  const entry = [...row.matchAll(new RegExp(AMOUNT_PATTERN.source, 'gu'))].find(
+    (match) => matchingAmounts(match[0]).has(amount),
+  );
+  if (!entry || entry.index === undefined) return false;
+  const tail = row
+    .slice(entry.index + entry[0].length)
+    .replace(/^[\s,;:.]+|[\s,;:.]+$/gu, '');
+  if (/[a-z]/u.test(tail) && !answerText.includes(tail)) return false;
+  const prefix = row.slice(0, entry.index);
+  const condition = prefix.match(
+    /\b(?:si|cuando|unicamente|solo|solamente|siempre que|en caso de|para quienes|a condicion de|salvo)\b[^,;]*/u,
+  )?.[0];
+  return !condition || answerText.includes(condition.trim());
+}
+
 function citedSourcesForSentence(
   sentence: string,
   sources: RetrievedChunk[],
@@ -1346,13 +1369,11 @@ export function assessSalaryAnswerCoverage(
             )
             .some(({ row, clause }) => {
               const sectors = salarySectors(clause);
-              // Una condición puede seguir a la cifra tras una coma; no se
-              // considera un importe general cuando se perdería esa reserva.
-              if (
-                /\b(?:si|cuando|unicamente|solo|solamente|siempre que|en caso de|para quienes|a condicion de|salvo|maxim[oa]s?|minim[oa]s?)\b/u.test(
-                  row,
-                )
-              )
+              const table =
+                hasMarkdownTable(source.chunkContent) &&
+                row.includes(';') &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(row);
+              if (!retainsSalaryConditions(row, amount, sentence, table))
                 return false;
               const tableRole =
                 hasMarkdownTable(source.chunkContent) &&
