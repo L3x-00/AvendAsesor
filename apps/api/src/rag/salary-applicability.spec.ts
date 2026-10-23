@@ -1565,6 +1565,37 @@ describe('assessSalaryAnswerCoverage', () => {
       ),
     ).not.toBeNull();
   });
+
+  it.each([
+    '| Cargo | Remuneración | Sector aplicable |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Solo para escuelas rurales |',
+    '| Cargo | Remuneración en zona rural |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |',
+    'Para auxiliares privados de zona rural.\n| Cargo | Remuneración |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |',
+  ])(
+    'no presenta como general una cifra con restricciones en tabla o contexto',
+    (chunkContent) => {
+      expect(
+        assessSalaryAnswerCoverage(
+          'El auxiliar privado gana S/ 2 000,00. [1]',
+          [chunk({ chunkContent })],
+          '¿Cuánto gana un auxiliar privado?',
+        ),
+      ).not.toBeNull();
+    },
+  );
+
+  it('admite la periodicidad mensual expresada de forma equivalente en una tabla', () => {
+    const source = chunk({
+      chunkContent:
+        '| Cargo | Remuneración | Periodicidad |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Mensuales |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00 al mes. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
   it('no atribuye al sector privado una cifra documentada para el público', () => {
     const publico = chunk({
       chunkContent:

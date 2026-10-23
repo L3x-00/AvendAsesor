@@ -730,7 +730,13 @@ export function inheritedFactorQuestions(
   ) {
     return [];
   }
-  if (!forceContext && !continuesSalaryThread(question)) return [];
+  // Forzar contexto por una aclaración no debe convertir una nueva pregunta
+  // salarial con cargo propio en una continuación de la anterior.
+  if (
+    (!forceContext || salaryQuestionProfile(question).isSalaryQuestion) &&
+    !continuesSalaryThread(question)
+  )
+    return [];
   const turns = priorUserQuestions.filter(
     (prior) => !SYNTHETIC_CONTEXT_PREFIX.test(prior),
   );
@@ -790,11 +796,16 @@ function continuesSalaryThread(turn: string): boolean {
       /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
       ' ',
     );
-    const explicitOccupation =
-      /\b(?:un|una|el|la|los|las)\s+(?!sector\b|jornada\b|escala\b|ano\b|peru\b)[a-z]+/u.test(
-        remainingTopic,
-      );
-    if (!hasTopicTerm(remainingTopic) && !explicitOccupation) return true;
+    // Solo formularios sin sujeto/cargo identificable heredan la consulta.
+    // Cualquier palabra no reconocida se trata como tema propio, incluso sin
+    // artículo («cuánto gana ingeniero»).
+    const residue = remainingTopic
+      .replace(
+        /\b(?:y|e|o|pero|entonces|ademas|tambien|cuanto|gana|ganan|gano|ganaria|se|es|de|del|la|el|los|las|un|una|en|por|para|con|al|ano|anos|horas?|laboral|peru)\b|\d+|[^a-z]+/gu,
+        ' ',
+      )
+      .trim();
+    if (!hasTopicTerm(remainingTopic) && !residue) return true;
   }
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return false;

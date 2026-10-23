@@ -93,6 +93,20 @@ describe('inheritedFactorQuestions', () => {
     },
   );
 
+  it.each([
+    '¿Cuánto gana ingeniero?',
+    '¿Cuánto gana un ingeniero?',
+    '¿Cuánto gana un docente?',
+  ])('no fuerza la herencia ante otra pregunta completa: %s', (question) => {
+    expect(
+      inheritedFactorQuestions(
+        question,
+        ['¿Cuánto gana un auxiliar?', 'privado'],
+        true,
+      ),
+    ).toEqual([]);
+  });
+
   it('no hereda tras una consulta de otro tema', () => {
     expect(
       inheritedFactorQuestions(

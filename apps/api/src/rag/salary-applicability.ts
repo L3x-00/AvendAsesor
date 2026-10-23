@@ -1055,6 +1055,8 @@ function retainsSalaryConditions(
   amount: string,
   answer: string,
   table: boolean,
+  sourceText: string,
+  question: string | null,
 ): boolean {
   const equivalent = (text: string) =>
     normalizeSpanishText(text)
@@ -1072,19 +1074,41 @@ function retainsSalaryConditions(
       return false;
   }
   if (table) {
-    // En una tabla cada celda de alcance puede restringir el importe. No
-    // descartamos columnas desconocidas: sus valores deben aparecer también.
+    // Las frases fuera de la tabla pueden limitar todas sus filas. Sin una
+    // asociación inequívoca, exigimos conservarlas en la respuesta.
+    const context = sourceText
+      .split(/\r?\n/u)
+      .filter((line) => !/^\s*\|/u.test(line))
+      .join(' ')
+      .trim();
+    if (context && !answerText.includes(equivalent(context))) return false;
     return row.split(';').every((cell) => {
       const separator = cell.indexOf(':');
       if (separator < 0) return false;
       const label = cell.slice(0, separator).trim();
       const value = cell.slice(separator + 1).trim();
+      if (!value) return true;
       if (
-        !value ||
-        /\b(?:cargo|sector|remuneracion|sueldo|salario)\b/u.test(label)
+        matchingAmounts(value).has(amount) &&
+        /\b(?:remuneracion|sueldo|salario)\b/u.test(label)
+      ) {
+        const qualifier = label
+          .replace(/\b(?:remuneracion|sueldo|salario|mensuales?|s)\b/gu, ' ')
+          .replace(/[^a-z0-9]+/gu, ' ')
+          .trim()
+          .replace(/\s+/gu, ' ');
+        return !qualifier || answerText.includes(equivalent(qualifier));
+      }
+      if (
+        /^cargo$/u.test(label) &&
+        /^(?:docentes?|profesor(?:a|es|as)?|auxiliar(?: de educacion)?|director(?:a|es|as)?|directivos?)$/u.test(
+          value,
+        ) &&
+        question &&
+        rolesIn(value).includes(salaryQuestionProfile(question).role ?? '')
       )
         return true;
-      return answerText.includes(value);
+      return answerText.includes(equivalent(value));
     });
   }
   const entry = [...row.matchAll(new RegExp(AMOUNT_PATTERN.source, 'gu'))].find(
@@ -1393,7 +1417,16 @@ export function assessSalaryAnswerCoverage(
                 hasMarkdownTable(source.chunkContent) &&
                 row.includes(';') &&
                 /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(row);
-              if (!retainsSalaryConditions(row, amount, sentence, table))
+              if (
+                !retainsSalaryConditions(
+                  row,
+                  amount,
+                  sentence,
+                  table,
+                  source.chunkContent,
+                  question,
+                )
+              )
                 return false;
               const tableRole =
                 hasMarkdownTable(source.chunkContent) &&
