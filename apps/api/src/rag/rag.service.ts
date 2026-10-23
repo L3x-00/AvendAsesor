@@ -790,7 +790,11 @@ function continuesSalaryThread(turn: string): boolean {
       /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
       ' ',
     );
-    if (!hasTopicTerm(remainingTopic)) return true;
+    const explicitOccupation =
+      /\b(?:un|una|el|la|los|las)\s+(?!sector\b|jornada\b|escala\b|ano\b|peru\b)[a-z]+/u.test(
+        remainingTopic,
+      );
+    if (!hasTopicTerm(remainingTopic) && !explicitOccupation) return true;
   }
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return false;

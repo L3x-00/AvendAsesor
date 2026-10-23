@@ -1177,7 +1177,8 @@ export function ChatPanel({
       originalIndex > 1 &&
       original &&
       original.trim().split(/\s+/u).length <= 3 &&
-      messages[originalIndex - 1]?.role === "clarification"
+      (messages[originalIndex - 1]?.role === "clarification" ||
+        messages[originalIndex - 1]?.role === "assistant")
         ? [...messages.slice(0, originalIndex - 1)]
             .reverse()
             .find((message) => message.role === "user")?.content

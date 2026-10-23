@@ -336,6 +336,24 @@ describe('salaryApplicabilityTier', () => {
     ).toBeNull();
   });
 
+  it('reconoce equivalencias mensuales y una condición rural conservada', () => {
+    for (const [tail, description] of [
+      ['mensuales', 'al mes'],
+      ['para quienes trabajan en zona rural', 'que trabajan en zona rural'],
+    ]) {
+      const source = chunk({
+        chunkContent: `La remuneración del auxiliar privado es de S/ 2 000,00 ${tail}.`,
+      });
+      expect(
+        assessSalaryAnswerCoverage(
+          `El auxiliar privado gana S/ 2 000,00 ${description}. [1]`,
+          [source],
+          '¿Cuánto gana un auxiliar privado?',
+        ),
+      ).toBeNull();
+    }
+  });
+
   it('no interviene en una consulta que no es salarial', () => {
     expect(salaryApplicabilityTier('¿Cuál es el plazo?', allocation)).toBe(0);
   });
@@ -1532,6 +1550,20 @@ describe('assessSalaryAnswerCoverage', () => {
         '¿Cuánto gana un auxiliar privado?',
       ),
     ).toBeNull();
+  });
+
+  it('no elimina condiciones de alcance incluidas en una fila salarial', () => {
+    const source = chunk({
+      chunkContent:
+        '| Cargo | Remuneración | Alcance |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Solo para escuelas rurales |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
   });
   it('no atribuye al sector privado una cifra documentada para el público', () => {
     const publico = chunk({

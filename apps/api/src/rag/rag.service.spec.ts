@@ -80,6 +80,19 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual(history);
   });
 
+  it.each(['ingeniero', 'administrativo', 'abogado'])(
+    'no hereda un cargo anterior al preguntar por un %s',
+    (occupation) => {
+      expect(
+        inheritedFactorQuestions(
+          `¿Cuánto gana un ${occupation}?`,
+          ['¿Cuánto gana un auxiliar?', 'privado'],
+          false,
+        ),
+      ).toEqual([]);
+    },
+  );
+
   it('no hereda tras una consulta de otro tema', () => {
     expect(
       inheritedFactorQuestions(

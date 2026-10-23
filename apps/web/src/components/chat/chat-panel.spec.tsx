@@ -1930,7 +1930,7 @@ describe("ChatPanel", () => {
               id: "2c8b56af-6d0c-4fef-881e-7c00907540dd",
               inReplyToMessageId: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
               content: "¿Sector público o privado?",
-              role: "clarification",
+              role: "assistant",
               sources: [],
             },
           ],

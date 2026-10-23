@@ -1056,7 +1056,11 @@ function retainsSalaryConditions(
   answer: string,
   table: boolean,
 ): boolean {
-  const answerText = normalizeSpanishText(answer);
+  const equivalent = (text: string) =>
+    normalizeSpanishText(text)
+      .replace(/\b(?:mensuales?|por mes|al mes)\b/gu, 'mensual')
+      .replace(/\bpara quienes\b/gu, 'que');
+  const answerText = equivalent(answer);
   const sourceFactors = evidenceFactorsIn(row);
   const answerFactors = evidenceFactorsIn(answerText);
   for (const factor of ['jornada', 'condicion', 'escala', 'periodo'] as const) {
@@ -1067,7 +1071,22 @@ function retainsSalaryConditions(
     )
       return false;
   }
-  if (table) return true;
+  if (table) {
+    // En una tabla cada celda de alcance puede restringir el importe. No
+    // descartamos columnas desconocidas: sus valores deben aparecer también.
+    return row.split(';').every((cell) => {
+      const separator = cell.indexOf(':');
+      if (separator < 0) return false;
+      const label = cell.slice(0, separator).trim();
+      const value = cell.slice(separator + 1).trim();
+      if (
+        !value ||
+        /\b(?:cargo|sector|remuneracion|sueldo|salario)\b/u.test(label)
+      )
+        return true;
+      return answerText.includes(value);
+    });
+  }
   const entry = [...row.matchAll(new RegExp(AMOUNT_PATTERN.source, 'gu'))].find(
     (match) => matchingAmounts(match[0]).has(amount),
   );
@@ -1075,12 +1094,13 @@ function retainsSalaryConditions(
   const tail = row
     .slice(entry.index + entry[0].length)
     .replace(/^[\s,;:.]+|[\s,;:.]+$/gu, '');
-  if (/[a-z]/u.test(tail) && !answerText.includes(tail)) return false;
+  if (/[a-z]/u.test(tail) && !answerText.includes(equivalent(tail)))
+    return false;
   const prefix = row.slice(0, entry.index);
   const condition = prefix.match(
     /\b(?:si|cuando|unicamente|solo|solamente|siempre que|en caso de|para quienes|a condicion de|salvo)\b[^,;]*/u,
   )?.[0];
-  return !condition || answerText.includes(condition.trim());
+  return !condition || answerText.includes(equivalent(condition.trim()));
 }
 
 function citedSourcesForSentence(
