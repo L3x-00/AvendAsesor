@@ -792,15 +792,10 @@ function continuesSalaryThread(turn: string): boolean {
     profile.role === null &&
     !profile.asksSpecialAllocation
   ) {
-    const remainingTopic = normalized
-      .replace(
-        /\b(?:si\s+)?(?:trabaja|trabajase|trabajara)\s+(?:a\s+)?medio tiempo\b/gu,
-        ' ',
-      )
-      .replace(
-        /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
-        ' ',
-      );
+    const remainingTopic = normalized.replace(
+      /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
+      ' ',
+    );
     // Solo formularios sin sujeto/cargo identificable heredan la consulta.
     // Cualquier palabra no reconocida se trata como tema propio, incluso sin
     // artículo («cuánto gana ingeniero»).
