@@ -96,6 +96,8 @@ describe('inheritedFactorQuestions', () => {
   it.each([
     '¿Cuánto gana ingeniero?',
     '¿Cuánto gana un ingeniero?',
+    '¿Cuánto percibe un ingeniero?',
+    '¿Cuánto cobra un ingeniero?',
     '¿Cuánto gana un docente?',
   ])('no fuerza la herencia ante otra pregunta completa: %s', (question) => {
     expect(
@@ -105,6 +107,15 @@ describe('inheritedFactorQuestions', () => {
         true,
       ),
     ).toEqual([]);
+  });
+
+  it.each([
+    '¿Y cuánto gana al mes?',
+    '¿Y cuánto ganaría en régimen privado?',
+    '¿Y cuál sería el sueldo mensual?',
+  ])('conserva el contexto salarial en %s', (question) => {
+    const history = ['¿Cuánto gana un auxiliar?', 'público'];
+    expect(inheritedFactorQuestions(question, history, true)).toEqual(history);
   });
 
   it('no hereda tras una consulta de otro tema', () => {

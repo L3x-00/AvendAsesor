@@ -1596,6 +1596,31 @@ describe('assessSalaryAnswerCoverage', () => {
       ),
     ).toBeNull();
   });
+
+  it('no exige repetir una nota de publicación y admite una condición equivalente', () => {
+    const table =
+      '| Cargo | Remuneración |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |';
+    const publication = chunk({
+      chunkContent: `La norma fue publicada en el diario oficial.\n${table}`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [publication],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+    const restricted = chunk({
+      chunkContent: `Para auxiliares privados de zona rural.\n${table}`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Los auxiliares privados en zonas rurales reciben S/ 2 000,00. [1]',
+        [restricted],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
   it('no atribuye al sector privado una cifra documentada para el público', () => {
     const publico = chunk({
       chunkContent:

@@ -801,11 +801,11 @@ function continuesSalaryThread(turn: string): boolean {
     // artículo («cuánto gana ingeniero»).
     const residue = remainingTopic
       .replace(
-        /\b(?:y|e|o|pero|entonces|ademas|tambien|cuanto|gana|ganan|gano|ganaria|se|es|de|del|la|el|los|las|un|una|en|por|para|con|al|ano|anos|horas?|laboral|peru)\b|\d+|[^a-z]+/gu,
+        /\b(?:y|e|o|pero|entonces|ademas|tambien|cuanto|cual|seria|gana|ganan|gano|ganaria|percibe|perciben|cobra|cobran|se|es|de|del|la|el|los|las|un|una|en|por|para|con|al|ano|anos|horas?|laboral|peru|mes|mensual(?:es)?|regimen)\b|\d+|[^a-z]+/gu,
         ' ',
       )
       .trim();
-    if (!hasTopicTerm(remainingTopic) && !residue) return true;
+    return !hasTopicTerm(remainingTopic) && !residue;
   }
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return false;

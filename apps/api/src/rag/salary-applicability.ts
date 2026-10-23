@@ -1060,8 +1060,21 @@ function retainsSalaryConditions(
 ): boolean {
   const equivalent = (text: string) =>
     normalizeSpanishText(text)
-      .replace(/\b(?:mensuales?|por mes|al mes)\b/gu, 'mensual')
-      .replace(/\bpara quienes\b/gu, 'que');
+      .replace(/\b(?:mensual(?:es)?|por mes|al mes)\b/gu, 'mensual')
+      .replace(/\bpara quienes\b/gu, 'que')
+      .replace(
+        /\b(auxiliares|privados|privadas|publicos|publicas|zonas|rurales)\b/gu,
+        (word) =>
+          ({
+            auxiliares: 'auxiliar',
+            privados: 'privado',
+            privadas: 'privada',
+            publicos: 'publico',
+            publicas: 'publica',
+            zonas: 'zona',
+            rurales: 'rural',
+          })[word] ?? word,
+      );
   const answerText = equivalent(answer);
   const sourceFactors = evidenceFactorsIn(row);
   const answerFactors = evidenceFactorsIn(answerText);
@@ -1081,7 +1094,29 @@ function retainsSalaryConditions(
       .filter((line) => !/^\s*\|/u.test(line))
       .join(' ')
       .trim();
-    if (context && !answerText.includes(equivalent(context))) return false;
+    if (context) {
+      const contextualSentences = sentencesIn(context);
+      const comparable = (text: string) =>
+        (equivalent(text).match(/[a-z0-9]+/gu) ?? [])
+          .filter(
+            (word) =>
+              !/^(?:para|los|las|el|la|de|del|en|por|a|un|una)$/u.test(word),
+          )
+          .join(' ');
+      const comparableAnswer = ` ${comparable(answerText)} `;
+      for (const contextSentence of contextualSentences) {
+        // La mención de publicación describe el documento, no una condición
+        // de la cifra. Otros textos deben quedar reflejados en la respuesta.
+        if (
+          /^(?:la )?norma fue publicada en el diario oficial[.]?$/u.test(
+            contextSentence,
+          )
+        )
+          continue;
+        if (!comparableAnswer.includes(` ${comparable(contextSentence)} `))
+          return false;
+      }
+    }
     return row.split(';').every((cell) => {
       const separator = cell.indexOf(':');
       if (separator < 0) return false;
