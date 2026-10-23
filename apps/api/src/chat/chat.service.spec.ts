@@ -1679,6 +1679,146 @@ describe('ChatService', () => {
     expect(clarification.data.message).not.toContain('nombrado o contratado');
   });
 
+  it('responde el panorama de auxiliar aunque falte el monto y conserva los temas sugeridos', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La remuneración del auxiliar de educación se rige por la normativa vigente, que en este documento no fija un monto. [1] ¿Quieres saber de qué depende esa remuneración?';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un auxiliar de educación?',
+    });
+
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(events.some((event) => event.type === 'token')).toBe(true);
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
+        modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+        provider: 'openai',
+      },
+      type: 'done',
+    });
+  });
+
+  it('no muestra una cifra inventada cuando el panorama no trae ningún monto', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La remuneración del auxiliar de educación es de S/ 2 000,00. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un auxiliar de educación?',
+    });
+
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(events.some((event) => event.type === 'sources')).toBe(false);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected a clarification event.');
+    }
+    expect(clarification.data.message).toContain('no incluyen el monto');
+    expect(clarification.data.message).not.toContain('S/ 2 000,00');
+    expect(events.at(-1)).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
+        provider: 'rule',
+      },
+      type: 'done',
+    });
+  });
+
+  it('responde «privado» como seguimiento del panorama de auxiliar en vez de repetir la pregunta', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: '¿Cuánto gana un auxiliar de educación?', role: 'user' },
+        {
+          content:
+            'Puedo darte el panorama de la remuneración educativa. ¿Tu consulta es del sector público o privado?',
+          role: 'clarification',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los documentos entregados regulan la remuneración del auxiliar de educación en el sector público y no contienen información del sector privado. [1] ¿Quieres revisar los requisitos del sector público?';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId,
+      question: 'privado',
+    });
+
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    const generateInput = (
+      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
+    )[0]?.[0];
+    expect(generateInput?.sources?.length).toBeGreaterThan(0);
+    expect(events.at(-1)).toEqual({
+      data: {
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        inReplyToMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
+        messageId: 'bc8b56af-6d0c-4fef-881e-7c00907540dd',
+        modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+        provider: 'openai',
+      },
+      type: 'done',
+    });
+  });
+
   describe('aclaración de una sola condición en la ruta de ambigüedad y de cambio de tema', () => {
     const causalSources = [
       {

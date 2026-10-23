@@ -107,6 +107,19 @@ function doneEvent(provider: "openai" | "rule"): string {
   return `event: done\ndata: {"conversationId":"${conversationId}","inReplyToMessageId":"${questionMessageId}","messageId":"${messageId}","provider":"${provider}"}\n\n`;
 }
 
+function doneEventWithModules(
+  provider: "openai" | "rule",
+  modules: Array<{ id: string; name: string }>,
+): string {
+  return `event: done\ndata: ${JSON.stringify({
+    conversationId,
+    inReplyToMessageId: questionMessageId,
+    messageId,
+    modules,
+    provider,
+  })}\n\n`;
+}
+
 async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
   fireEvent.change(
     screen.getByRole("textbox", { name: "Escribe tu consulta" }),
@@ -1842,6 +1855,36 @@ describe("ChatPanel", () => {
     expect(window.location.pathname).toMatch(/^\/chat\//u);
     expect(
       await screen.findByText("No hay sustento suficiente."),
+    ).toBeVisible();
+  });
+
+  it("shows the recommended topics that arrive with a panorama answer in done", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentSituation":"current","documentTitle":"Norma de remuneraciones","moduleName":"Remuneraciones","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":null,"articleReference":null,"numeralReference":null,"relevanceScore":0.91}]}\n\n',
+          'event: token\ndata: {"text":"La remuneración del auxiliar de educación se rige por la normativa vigente. [1]"}\n\n',
+          doneEventWithModules("openai", [
+            { id: childModule.id, name: childModule.name },
+          ]),
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule, childModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText(
+        "La remuneración del auxiliar de educación se rige por la normativa vigente.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Consultar Licencia por salud" }),
     ).toBeVisible();
   });
 

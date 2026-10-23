@@ -4,6 +4,7 @@ import {
   canonicalAmount,
   hasGeneralSalaryEvidence,
   hasPersonalSalaryContext,
+  hasSalaryPanoramaEvidence,
   isBroadSalaryQuestion,
   isGeneralRemunerationSource,
   isPersonalSalaryQuestion,
@@ -749,6 +750,108 @@ describe('hasGeneralSalaryEvidence', () => {
   });
 });
 
+describe('hasSalaryPanoramaEvidence', () => {
+  const auxiliarRule = chunk({
+    chunkContent:
+      'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+    documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+  });
+
+  it('acepta una regla de remuneración del rol aunque no contenga el monto', () => {
+    expect(
+      hasSalaryPanoramaEvidence(
+        [auxiliarRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(true);
+  });
+
+  it('no acepta una fuente que solo nombra otro cargo', () => {
+    const docenteRule = chunk({
+      chunkContent:
+        'La remuneración mensual del docente se establece según la escala magisterial.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [docenteRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+  });
+
+  it('tampoco acepta un monto que corresponde exclusivamente a otro cargo', () => {
+    const docenteRule = chunk({
+      chunkContent: 'La remuneración mensual del docente es de S/ 3 300,60.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [docenteRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+  });
+
+  it('acepta una regla general que no nombra ningún cargo', () => {
+    const generalRule = chunk({
+      chunkContent:
+        'La remuneración mensual se fija en la normativa vigente correspondiente.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [generalRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(true);
+  });
+
+  it('no habilita el panorama con un concepto adicional ni fuera del alcance', () => {
+    const bonusOnly = chunk({
+      chunkContent:
+        'La bonificación por escolaridad se abona una vez al año al personal.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [bonusOnly],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+
+    const historicalRule = chunk({
+      ...auxiliarRule,
+      documentSituation: 'replaced',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [historicalRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+    expect(
+      hasSalaryPanoramaEvidence(
+        [historicalRule],
+        'historical',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(true);
+  });
+
+  it('mantiene el panorama cuando la evidencia general sí trae monto', () => {
+    expect(
+      hasSalaryPanoramaEvidence(
+        [general30],
+        'current',
+        '¿cuánto gana un docente?',
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('tablas salariales multicondición', () => {
   const table = chunk({
     chunkContent: [
@@ -1394,6 +1497,21 @@ describe('assessSalaryAnswerCoverage', () => {
         allocation,
       ]),
     ).toBeNull();
+  });
+
+  it('marca una cifra que ninguna fuente con monto respalda', () => {
+    const rule = chunk({
+      chunkContent:
+        'La remuneración del auxiliar de educación se establece en la normativa vigente.',
+    });
+
+    const finding = assessSalaryAnswerCoverage(
+      'La remuneración del auxiliar de educación es de S/ 2 000,00. [1]',
+      [rule],
+      '¿Cuánto gana un auxiliar de educación?',
+    );
+
+    expect(finding?.excerpt).toContain('S/ 2 000,00');
   });
 
   // Hallazgo del cross-review: una oración que separa el concepto adicional de

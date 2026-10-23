@@ -1507,6 +1507,9 @@ export function ChatPanel({
               ...message,
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
+              ...(result.data.modules?.length
+                ? { modules: result.data.modules }
+                : {}),
               thoughtSeconds: answeredSeconds,
             }));
             setStatus(completionStatus);

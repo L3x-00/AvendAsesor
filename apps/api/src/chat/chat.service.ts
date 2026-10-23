@@ -31,6 +31,7 @@ import {
   hasGeneralSalaryEvidence,
   hasMarkdownTable,
   hasPersonalSalaryContext,
+  hasSalaryPanoramaEvidence,
   isBroadSalaryQuestion,
   salaryClarificationFor,
   salaryQuestionProfile,
@@ -241,6 +242,8 @@ export type ChatStreamEvent =
         conversationId: string;
         inReplyToMessageId: string;
         messageId: string;
+        /** Temas recomendados al pie de una respuesta con panorama. */
+        modules?: ResolvedModule[];
         provider: 'openai' | 'rule';
       };
       type: 'done';
@@ -575,6 +578,28 @@ function moduleMention(modules: ResolvedModule[]): string | null {
   if (names.length === 1) return `el tema ${names[0]}`;
   if (names.length === 2) return `los temas ${names[0]} y ${names[1]}`;
   return `los temas ${names.slice(0, -1).join(', ')} y ${names.at(-1)}`;
+}
+
+/**
+ * Temas recomendados al pie de una respuesta. En una ruta ambigua se ofrecen
+ * los módulos en conflicto; en una respuesta ya resuelta, los módulos de las
+ * fuentes recuperadas. Así el panorama salarial conserva los botones que antes
+ * solo acompañaban a la aclaración.
+ */
+function recommendedModules(
+  modules: readonly ResolvedModule[] | null,
+  sources: readonly RetrievedChunk[],
+): ResolvedModule[] {
+  if (modules?.length) return [...modules].slice(0, 4);
+  const found = new Map<string, ResolvedModule>();
+  for (const source of sources) {
+    source.moduleIds.forEach((id, index) => {
+      const name = source.moduleNames[index];
+      if (!id || !name || found.has(id)) return;
+      found.set(id, { id, name });
+    });
+  }
+  return [...found.values()].slice(0, 4);
 }
 
 /**
@@ -1299,11 +1324,30 @@ export class ChatService {
     if (input.abortSignal?.aborted) return;
 
     const retrievalScope = detectRetrievalScope(effectiveQuestion);
-    const broadSalaryTurn =
+    // Un panorama salarial no exige una cifra en la evidencia: una norma que
+    // dice de qué depende la remuneración del cargo ya permite responder lo
+    // que consta y explicar qué monto falta. Sin evidencia del tema, la
+    // aclaración sigue siendo la salida correcta.
+    const broadSalaryAnswerTurn =
       retrieval.kind === 'ambiguous' &&
       !personalSalary &&
       isBroadSalaryQuestion(salaryQuestion) &&
-      hasGeneralSalaryEvidence(retrieval.sources, retrievalScope);
+      hasSalaryPanoramaEvidence(
+        retrieval.sources,
+        retrievalScope,
+        salaryQuestion,
+      );
+
+    // Los botones de temas que antes acompañaban a la aclaración se conservan en
+    // la respuesta: el panorama salarial no debe dejar la conversación sin una
+    // ruta sugerida. Se prefieren las rutas en conflicto y, si no las hay, los
+    // módulos de las fuentes recuperadas.
+    const broadSalaryModules = broadSalaryAnswerTurn
+      ? recommendedModules(
+          retrieval.kind === 'ambiguous' ? retrieval.modules : null,
+          retrieval.sources,
+        )
+      : [];
 
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
@@ -1314,7 +1358,7 @@ export class ChatService {
       retrieval.kind === 'ambiguous' &&
       selectedModuleId &&
       !acceptedQuestion &&
-      !broadSalaryTurn
+      !broadSalaryAnswerTurn
     ) {
       conversationId = null;
       conversationContext = [];
@@ -1454,10 +1498,11 @@ export class ChatService {
 
     if (retrieval.kind === 'ambiguous') {
       // Una consulta salarial general no se bloquea por la sola ambigüedad de
-      // ruta: si hay cifras recuperadas, se responde con el panorama y sus
-      // condiciones. La aclaración se reserva para el caso propio o cuando la
-      // evidencia recuperada no contiene ningún monto que sustentar.
-      if (!broadSalaryTurn) {
+      // ruta: si la evidencia trata la remuneración del cargo, se responde con
+      // el panorama y sus condiciones, aunque falte la cifra. La aclaración se
+      // reserva para el caso propio o cuando la evidencia recuperada no trata
+      // el tema consultado.
+      if (!broadSalaryAnswerTurn) {
         // La ambigüedad identifica rutas posibles, pero no demuestra que alguno
         // de sus extractos sea aplicable al caso. No se muestran citas ni
         // fuentes hasta que la persona precise la condición que permite
@@ -1594,15 +1639,18 @@ export class ChatService {
     // Una respuesta salarial sustentada en tablas se retiene hasta comprobar
     // que cada importe quedó asociado a su fila. Si el modelo mezcla una
     // jornada o un vínculo, se sustituye por una precisión en vez de mostrar
-    // una cifra equivocada.
+    // una cifra equivocada. El panorama sin monto también se retiene: es la
+    // única forma de impedir que una cifra inventada llegue a la pantalla
+    // cuando ninguna fuente trae un importe que la respalde.
     const salaryProfile = salaryQuestionProfile(salaryQuestion);
     const deferStreaming =
-      salaryProfile.isSalaryQuestion &&
-      retrieval.sources.some(
-        (candidate) =>
-          hasAmount(candidate.chunkContent) ||
-          hasMarkdownTable(candidate.chunkContent),
-      );
+      broadSalaryAnswerTurn ||
+      (salaryProfile.isSalaryQuestion &&
+        retrieval.sources.some(
+          (candidate) =>
+            hasAmount(candidate.chunkContent) ||
+            hasMarkdownTable(candidate.chunkContent),
+        ));
 
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
@@ -1783,9 +1831,17 @@ export class ChatService {
       !specialAllocationExempt &&
       (salaryRowFinding || salaryFinding)
     ) {
+      // Si el panorama se habilitó sin ningún importe en las fuentes y el modelo
+      // aun así escribió una cifra, no se pide un factor que no puede resolverlo:
+      // se declara que los documentos tratan el tema pero no traen el monto.
+      const noSalaryAmountEvidence = !retrieval.sources.some((source) =>
+        hasAmount(source.chunkContent),
+      );
       const message =
-        salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
-          ?.message ?? salaryEvidenceClarificationMessage();
+        broadSalaryAnswerTurn && noSalaryAmountEvidence
+          ? 'Los documentos disponibles tratan la remuneración del cargo consultado, pero no incluyen el monto. Para no apartarme de las fuentes, no puedo darte una cifra. ¿Quieres que te explique qué regla sí consta?'
+          : (salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
+              ?.message ?? salaryEvidenceClarificationMessage());
       const completed = await this.historyGateway.completeTurn({
         answer: message,
         conversationId: turn.conversationId,
@@ -1896,6 +1952,7 @@ export class ChatService {
         conversationId: turn.conversationId,
         inReplyToMessageId: turn.userMessageId,
         messageId: completed.answerMessageId,
+        ...(broadSalaryModules.length ? { modules: broadSalaryModules } : {}),
         provider: 'openai',
       },
       type: 'done',

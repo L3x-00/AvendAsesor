@@ -172,6 +172,18 @@ describe('buildEvidenceSystemPrompt', () => {
       'No lo presentes, ni lo sumes, como remuneración general',
     );
   });
+
+  it('responde el panorama aunque falte el monto y no mezcla sectores', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain('no contienen el monto, no bloquees la respuesta');
+    expect(prompt).toContain(
+      'el importe no aparece en los documentos entregados',
+    );
+    expect(prompt).toContain('No estimes ni completes la cifra');
+    expect(prompt).toContain('Si las fuentes cubren solo un sector');
+    expect(prompt).toContain('Nunca apliques al sector privado');
+  });
 });
 
 describe('no-support marker injection', () => {

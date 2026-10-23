@@ -819,6 +819,47 @@ export function hasGeneralSalaryEvidence(
   );
 }
 
+/**
+ * Evidencia que permite responder un panorama salarial aunque todavía no
+ * incluya una cifra: una fuente del alcance consultado que trata la
+ * remuneración del cargo o rol preguntado. Sirve para no bloquear la respuesta
+ * con una pregunta cuando lo que falta es el monto y no el tema: en ese caso
+ * corresponde decir qué regla sí consta y qué dato no está en los documentos.
+ * Una fuente que solo presenta un concepto adicional (CTS, bonificación) no
+ * habilita el panorama general.
+ */
+export function hasSalaryPanoramaEvidence(
+  sources: readonly RetrievedChunk[],
+  scope: 'archived_explicit' | 'current' | 'historical',
+  question?: string,
+): boolean {
+  const profile = question ? salaryQuestionProfile(question) : null;
+  return sources.some((source) => {
+    const inScope =
+      scope === 'current'
+        ? source.documentSituation === 'current'
+        : scope === 'historical'
+          ? source.documentSituation !== 'current'
+          : source.documentSituation === 'archived';
+    if (!inScope) return false;
+    const text = normalizeSpanishText(source.chunkContent);
+    // Un concepto adicional (CTS, bonificación, asignación) no habilita por sí
+    // solo el panorama de la remuneración general, tenga o no un monto.
+    if (
+      SPECIAL_ALLOCATION_TERMS.test(text) &&
+      !GENERAL_REMUNERATION_TERMS.test(text)
+    ) {
+      return false;
+    }
+    if (!GENERAL_REMUNERATION_TERMS.test(text)) return false;
+    if (profile?.role === null || profile?.role === undefined) return true;
+    const roles = rolesIn(text);
+    // Una fuente sin cargo explícito puede ser la regla general; una que solo
+    // nombra otro cargo no responde por el rol consultado.
+    return roles.length === 0 || roles.includes(profile.role);
+  });
+}
+
 export interface SalaryClarification {
   factor: SalaryFactor;
   message: string;
@@ -1194,8 +1235,21 @@ export function assessSalaryAnswerCoverage(
 ): SalaryAnswerFinding | null {
   const rowMismatch = salaryRowMismatch(answer, sources, question);
   if (rowMismatch) return rowMismatch;
+  const answerAmounts = amountSentences(answer);
+  const asksSalary =
+    question === null || salaryQuestionProfile(question).isSalaryQuestion;
+  // Una respuesta salarial no puede aportar un importe que ninguna fuente tenga:
+  // si ninguna trae un monto, cualquier cifra es inventada o externa. Se marca
+  // para que el turno no la presente como evidencia.
+  if (
+    asksSalary &&
+    answerAmounts.length &&
+    !sources.some((source) => hasAmount(source.chunkContent))
+  ) {
+    return { excerpt: answerAmounts[0].slice(0, 2_000) };
+  }
   const generalSources = sources.filter(isGeneralRemunerationSource);
-  for (const sentence of amountSentences(answer)) {
+  for (const sentence of answerAmounts) {
     const cited = citedSourcesForSentence(sentence, sources);
     if (!cited.length) continue;
 
