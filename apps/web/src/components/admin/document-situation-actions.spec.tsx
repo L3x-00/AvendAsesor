@@ -38,6 +38,23 @@ describe("DocumentSituationActions", () => {
     ).toBeNull();
   });
 
+  it("se integra sin tarjeta ni encabezado duplicados cuando la ficha ya los muestra", () => {
+    const { container } = render(
+      <DocumentSituationActions
+        documentId="d60530ac-6fba-46bd-bac7-940c0655db54"
+        embedded
+        replacementCandidates={replacementCandidates}
+        situation="current"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Gestión documental" }),
+    ).not.toBeInTheDocument();
+    expect(container.querySelector("section")).toHaveClass("mt-4");
+    expect(container.querySelector("section")).not.toHaveClass("rounded-xl");
+  });
+
   it("al abrir Archivar/Desactivar enfoca y resalta el motivo", async () => {
     const user = userEvent.setup();
     render(
@@ -214,40 +231,108 @@ describe("DocumentSituationActions", () => {
   it("marks replacement fields together and accepts either date or year reactively", async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<DocumentSituationActions documentId="document-id" replacementCandidates={replacementCandidates} situation="current" />);
+    render(
+      <DocumentSituationActions
+        documentId="document-id"
+        replacementCandidates={replacementCandidates}
+        situation="current"
+      />,
+    );
     await user.click(screen.getByText("Archivar / Desactivar"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "REPLACED_BY_NEWER");
-    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
-    expect(screen.getByLabelText("Fecha del reemplazo")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("spinbutton", { name: "Año del reemplazo" })).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("textbox", { name: /Motivo del cambio/ })).toHaveAttribute("aria-invalid", "true");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Motivo" }),
+      "REPLACED_BY_NEWER",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Registrar reemplazo" }),
+    );
+    expect(screen.getByLabelText("Fecha del reemplazo")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(
+      screen.getByRole("spinbutton", { name: "Año del reemplazo" }),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByRole("textbox", { name: /Motivo del cambio/ }),
+    ).toHaveAttribute("aria-invalid", "true");
     expect(confirm).not.toHaveBeenCalled();
     expect(setDocumentSituationAction).not.toHaveBeenCalled();
 
-    await user.type(screen.getByRole("spinbutton", { name: "Año del reemplazo" }), "2026");
+    await user.type(
+      screen.getByRole("spinbutton", { name: "Año del reemplazo" }),
+      "2026",
+    );
     await waitFor(() => {
-      expect(screen.getByLabelText("Fecha del reemplazo")).not.toHaveAttribute("aria-invalid");
-      expect(screen.getByRole("spinbutton", { name: "Año del reemplazo" })).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByLabelText("Fecha del reemplazo")).not.toHaveAttribute(
+        "aria-invalid",
+      );
+      expect(
+        screen.getByRole("spinbutton", { name: "Año del reemplazo" }),
+      ).not.toHaveAttribute("aria-invalid");
     });
-    expect(screen.getByRole("textbox", { name: /Motivo del cambio/ })).toHaveAttribute("aria-invalid", "true");
-    await user.type(screen.getByRole("textbox", { name: /Motivo del cambio/ }), "Norma sustituida");
-    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
-    await waitFor(() => expect(setDocumentSituationAction).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("textbox", { name: /Motivo del cambio/ }),
+    ).toHaveAttribute("aria-invalid", "true");
+    await user.type(
+      screen.getByRole("textbox", { name: /Motivo del cambio/ }),
+      "Norma sustituida",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Registrar reemplazo" }),
+    );
+    await waitFor(() =>
+      expect(setDocumentSituationAction).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("validates the Other reason and removes hidden replacement errors when the reason changes", async () => {
     const user = userEvent.setup();
-    render(<DocumentSituationActions documentId="document-id" replacementCandidates={replacementCandidates} situation="current" />);
+    render(
+      <DocumentSituationActions
+        documentId="document-id"
+        replacementCandidates={replacementCandidates}
+        situation="current"
+      />,
+    );
     await user.click(screen.getByText("Archivar / Desactivar"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "REPLACED_BY_NEWER");
-    await user.click(screen.getByRole("button", { name: "Registrar reemplazo" }));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Motivo" }), "OTHER");
-    expect(screen.queryByText("El motivo del cambio es obligatorio.")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Archivar documento" }));
-    expect(screen.getByText("El motivo del archivo es obligatorio.")).toBeVisible();
-    await user.type(screen.getByRole("textbox", { name: /Especificar motivo/ }), "A");
-    expect(screen.getByText("El motivo del archivo debe tener al menos 2 caracteres.")).toBeVisible();
-    await user.type(screen.getByRole("textbox", { name: /Especificar motivo/ }), "rchivo revisado");
-    await waitFor(() => expect(screen.getByRole("textbox", { name: /Especificar motivo/ })).not.toHaveAttribute("aria-invalid"));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Motivo" }),
+      "REPLACED_BY_NEWER",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Registrar reemplazo" }),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Motivo" }),
+      "OTHER",
+    );
+    expect(
+      screen.queryByText("El motivo del cambio es obligatorio."),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Archivar documento" }),
+    );
+    expect(
+      screen.getByText("El motivo del archivo es obligatorio."),
+    ).toBeVisible();
+    await user.type(
+      screen.getByRole("textbox", { name: /Especificar motivo/ }),
+      "A",
+    );
+    expect(
+      screen.getByText(
+        "El motivo del archivo debe tener al menos 2 caracteres.",
+      ),
+    ).toBeVisible();
+    await user.type(
+      screen.getByRole("textbox", { name: /Especificar motivo/ }),
+      "rchivo revisado",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: /Especificar motivo/ }),
+      ).not.toHaveAttribute("aria-invalid"),
+    );
   });
 });

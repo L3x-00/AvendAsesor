@@ -13,12 +13,15 @@ import { AdminActionForm } from "./admin-action-form";
 
 interface DocumentSituationActionsProps {
   documentId: string;
+  /** Se integra visualmente en otra tarjeta, sin crear una tarjeta anidada. */
+  embedded?: boolean;
   replacementCandidates: { id: string; title: string }[];
   situation: DocumentSituation;
 }
 
 export function DocumentSituationActions({
   documentId,
+  embedded = false,
   replacementCandidates,
   situation,
 }: DocumentSituationActionsProps) {
@@ -62,22 +65,36 @@ export function DocumentSituationActions({
       { kind: "maxLength", label: "El motivo del cambio", max: 500 },
     ];
     if (!replacementYear) {
-      rules.replacementDate = [{ kind: "required", label: "La fecha o el año del reemplazo" }];
+      rules.replacementDate = [
+        { kind: "required", label: "La fecha o el año del reemplazo" },
+      ];
     }
     if (!replacementDate) {
-      rules.replacementYear = [{ kind: "required", label: "El año o la fecha del reemplazo" }];
+      rules.replacementYear = [
+        { kind: "required", label: "El año o la fecha del reemplazo" },
+      ];
     }
   }
 
   return (
-    <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
-      <h2 className="text-xl font-bold">Gestión documental</h2>
-      <p className="mt-1 text-base leading-7 text-avend-text-muted">
-        Cambia la vigencia o archiva el documento. Al archivar o reemplazar, el
-        documento deja de alimentar las respuestas del chat y se conserva como
-        antecedente histórico. El motivo y la observación quedarán registrados
-        en su historial.
-      </p>
+    <section
+      className={
+        embedded
+          ? "mt-4"
+          : "rounded-xl border border-avend-border bg-avend-surface p-5"
+      }
+    >
+      {!embedded ? (
+        <>
+          <h2 className="text-xl font-bold">Gestión documental</h2>
+          <p className="mt-1 text-base leading-7 text-avend-text-muted">
+            Cambia la vigencia o archiva el documento. Al archivar o reemplazar,
+            el documento deja de alimentar las respuestas del chat y se conserva
+            como antecedente histórico. El motivo y la observación quedarán
+            registrados en su historial.
+          </p>
+        </>
+      ) : null}
 
       {situation !== "current" ? (
         <AdminActionForm
