@@ -13,6 +13,7 @@ import { DocumentAuditHistory } from "@/components/admin/document-audit-history"
 import { DocumentEditButton } from "@/components/admin/document-edit-button";
 import { DocumentEditCancelButton } from "@/components/admin/document-edit-cancel-button";
 import { DocumentEditSection } from "@/components/admin/document-edit-section";
+import { DocumentHistoryDialog } from "@/components/admin/document-history-dialog";
 import { DocumentIngestionRecovery } from "@/components/admin/document-ingestion-recovery";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
 import { DocumentPdfUploadForm } from "@/components/admin/document-pdf-upload-form";
@@ -50,7 +51,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-PE", {
   timeZone: "America/Lima",
 });
 
-
 function accessHref(
   documentId: string,
   disposition: "attachment" | "inline",
@@ -66,8 +66,6 @@ function fileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-// Solo el PDF se puede previsualizar en un iframe; Word y Markdown se ofrecen
-// para descarga. La extensión del nombre original es la fuente fiable.
 function isPdfVersion(version: ManagedDocumentVersion): boolean {
   return version.originalFileName.toLocaleLowerCase("en").endsWith(".pdf");
 }
@@ -133,9 +131,6 @@ export default async function DocumentDetailPage({
     listReplacementDocumentCandidates(client, document.id),
   ]);
 
-  // El documento que reemplaza se muestra por su título y con enlace directo.
-  // Puede haber sido eliminado después de registrarse el reemplazo, así que su
-  // ausencia no debe romper la ficha ni dejar un vínculo muerto.
   let replacementDocument: { id: string; title: string } | null = null;
   if (document.replacementDocumentId) {
     try {
@@ -158,6 +153,13 @@ export default async function DocumentDetailPage({
     currentVersion;
   const status = technicalStatus(document, currentVersion);
   const technicalContent = getDocumentTechnicalStatusContent(status);
+  const statusColorClass =
+    status === "ready"
+      ? "text-emerald-700"
+      : status === "pending_approval"
+        ? "text-amber-800"
+        : "text-red-700";
+
   const associatedModules = document.moduleIds
     .map((moduleId) => modules.find((module) => module.id === moduleId))
     .filter((module): module is ManagedModuleSummary => Boolean(module));
@@ -236,34 +238,13 @@ export default async function DocumentDetailPage({
           </ol>
         </nav>
 
-        <div aria-label="Acciones principales" className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <DocumentEditButton />
-          <a className="avend-button" href="#pdf-viewer">
-            Ver PDF
-          </a>
-          {currentVersion ? (
-            <a
-              className="avend-button"
-              href={accessHref(document.id, "attachment", currentVersion.id)}
-            >
-              Descargar PDF
-              {currentVersion.id !== document.approvedVersionId
-                ? " (versión más reciente)"
-                : ""}
-            </a>
-          ) : null}
-          <a className="avend-button" href="#version-history">
-            Ver historial de versiones
-          </a>
-          <a className="avend-button" href="#new-version">
-            Nueva versión
-          </a>
-          <a className="avend-button" href="#document-lifecycle">
-            Archivar / Desactivar
-          </a>
-          <a className="avend-button" href="#delete-document">
-            Eliminar
-          </a>
+          <HistoryModal
+            document={document}
+            modules={modules}
+            replacementDocument={replacementDocument}
+          />
         </div>
 
         <section
@@ -285,13 +266,14 @@ export default async function DocumentDetailPage({
             <h3 className="text-base font-semibold text-avend-text-muted">
               Estado técnico
             </h3>
-            <p className="mt-2 text-lg font-bold text-avend-navy">
+            <p className={`mt-2 text-lg font-bold ${statusColorClass}`}>
               {technicalContent.label}
             </p>
             <p className="mt-1 text-base text-avend-text-muted">
               {technicalContent.description}
             </p>
           </article>
+
           <article className="rounded-xl border border-avend-border bg-avend-surface p-4">
             <h3 className="text-base font-semibold text-avend-text-muted">
               Versión para consultas
@@ -521,359 +503,207 @@ export default async function DocumentDetailPage({
                 </AdminActionForm>
               </DocumentEditSection>
             </section>
-
-            <section
-              className="rounded-xl border border-avend-border bg-avend-surface p-5"
-              id="version-history"
-            >
-              <h2 className="text-xl font-bold">Historial de versiones</h2>
-              <p className="mt-1 text-base text-avend-text-muted">
-                Cada PDF anterior se conserva y puede verse o descargarse.
-              </p>
-              {document.versions.length ? (
-                <ol className="mt-4 space-y-4">
-                  {document.versions.map((version) => {
-                    const ingestion = getDocumentIngestionStatusContent(
-                      version.ingestionStatus,
-                    );
-                    return (
-                      <li
-                        className="rounded-lg border border-avend-border p-4"
-                        key={version.id}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <h3 className="text-base font-bold">
-                              Versión {version.versionNumber} ·{" "}
-                              {version.originalFileName}
-                            </h3>
-                            <p className="mt-1 text-base text-avend-text-muted">
-                              {isPdfVersion(version)
-                                ? version.pageCount
-                                  ? `${version.pageCount} páginas · `
-                                  : "Total de páginas por verificar · "
-                                : ""}
-                              {fileSize(version.fileSizeBytes)}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap justify-end gap-2">
-                            {version.id === document.currentVersionId ? (
-                              <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-base font-semibold text-blue-900">
-                                Versión más reciente
-                              </span>
-                            ) : null}
-                            {version.id === document.approvedVersionId ? (
-                              <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-base font-semibold text-emerald-900">
-                                Aprobada para consultas
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <p className="mt-3 text-base">
-                          <strong>{ingestion.label}.</strong>{" "}
-                          {ingestion.description}
-                        </p>
-                        {/* Fecha y Administrador son dos de las cinco columnas
-                            que el cliente pide: van rotuladas y a 16px, no como
-                            texto secundario sin etiqueta. */}
-                        <dl className="mt-3 grid gap-2 text-base sm:grid-cols-2">
-                          <div>
-                            <dt className="font-semibold text-avend-text-muted">
-                              Fecha
-                            </dt>
-                            <dd>
-                              <time dateTime={version.uploadedAt}>
-                                {dateTimeFormatter.format(
-                                  new Date(version.uploadedAt),
-                                )}
-                              </time>
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="font-semibold text-avend-text-muted">
-                              Administrador
-                            </dt>
-                            <dd>
-                              {version.uploadedByName ?? "Cuenta no disponible"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="font-semibold text-avend-text-muted">
-                              Año del documento
-                            </dt>
-                            <dd>{version.issuanceYear ?? "No registrado"}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-semibold text-avend-text-muted">
-                              Relación con la versión anterior
-                            </dt>
-                            <dd>
-                              {version.versionRelation === "replaces"
-                                ? "Reemplaza a la versión anterior"
-                                : version.versionRelation === "complements"
-                                  ? "Complementa la versión anterior"
-                                  : "No registrada"}
-                            </dd>
-                          </div>
-                        </dl>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <Link
-                            aria-label={`Ver la versión ${version.versionNumber} de ${document.title}`}
-                            className="avend-button"
-                            href={`/admin/documents/${document.id}?versionId=${encodeURIComponent(version.id)}#pdf-viewer`}
-                          >
-                            Ver
-                          </Link>
-                          <a
-                            aria-label={`Descargar la versión ${version.versionNumber} de ${document.title}`}
-                            className="avend-button"
-                            href={accessHref(
-                              document.id,
-                              "attachment",
-                              version.id,
-                            )}
-                          >
-                            Descargar
-                          </a>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <p className="mt-4 text-base text-avend-text-muted">
-                  No hay versiones registradas.
-                </p>
-              )}
-            </section>
-
-            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
-              <h2 className="text-xl font-bold">Uso del documento</h2>
-              <p className="mt-1 text-base text-avend-text-muted">
-                Veces abierto y descargado desde la plataforma, y la última
-                descarga registrada.
-              </p>
-              <dl className="mt-4 grid gap-4 text-base sm:grid-cols-3">
-                <div>
-                  <dt className="font-semibold">Veces abierto</dt>
-                  <dd className="mt-1">{document.usage?.opens ?? 0}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold">Veces descargado</dt>
-                  <dd className="mt-1">{document.usage?.downloads ?? 0}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold">Última descarga</dt>
-                  <dd className="mt-1">
-                    {document.usage?.lastDownloadAt
-                      ? dateTimeFormatter.format(
-                          new Date(document.usage.lastDownloadAt),
-                        )
-                      : "Aún sin descargas"}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-            <DocumentAuditHistory
-              context={{
-                documentTitleById: new Map(
-                  replacementDocument
-                    ? [[replacementDocument.id, replacementDocument.title]]
-                    : [],
-                ),
-                moduleNameById: new Map(
-                  modules.map((module) => [module.id, module.name]),
-                ),
-              }}
-              events={document.auditEvents}
-            />
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
-              <h2 className="text-xl font-bold">Estado técnico</h2>
-              {status === "error" ? (
-                <DocumentIngestionRecovery
-                  canRetry={currentVersion?.ingestionStatus === "failed"}
-                  cause={currentVersion?.ingestionFailureCause}
-                  documentId={document.id}
-                />
-              ) : (
-                <DocumentTechnicalStatusForm
-                  approvalStatus={document.approvalStatus}
-                  approvedVersionId={document.approvedVersionId}
-                  currentIngestionStatus={currentVersion?.ingestionStatus}
-                  documentId={document.id}
-                />
-              )}
-            </section>
-
-            <div id="document-lifecycle">
-              <DocumentSituationActions
-                documentId={document.id}
-                replacementCandidates={replacementCandidates}
-                situation={document.situation}
-              />
-            </div>
-
-            <section
-              className="rounded-xl border border-avend-border bg-avend-surface p-5"
-              id="new-version"
-            >
-              <h2 className="text-xl font-bold">Nueva versión</h2>
-              <p className="mt-1 text-base text-avend-text-muted">
-                La versión anterior permanecerá intacta y disponible en el
-                historial.
-              </p>
-              <DocumentPdfUploadForm
-                apiBaseUrl={getAdminApiUrl()}
-                className="mt-4 space-y-3"
-                endpoint={`/admin/documents/${encodeURIComponent(document.id)}/versions`}
-                submitLabel="Subir nueva versión"
-                successMessage="Nueva versión creada."
-              >
-                <label className="block" htmlFor="detail-file">
-                  <span className="text-base font-semibold avend-field-label--required">
-                    Archivo (PDF, Word o Markdown)
-                  </span>
-                  <input
-                    accept=".pdf,.docx,.doc,.md,application/pdf"
-                    className="mt-1 block min-h-11 w-full text-base"
-                    id="detail-file"
-                    name="file"
-                    required
-                    type="file"
+            <section className="divide-y divide-avend-border rounded-xl border border-avend-border bg-avend-surface">
+              <div className="p-5">
+                <h2 className="text-xl font-bold">Estado técnico</h2>
+                {status === "error" ? (
+                  <DocumentIngestionRecovery
+                    canRetry={currentVersion?.ingestionStatus === "failed"}
+                    cause={currentVersion?.ingestionFailureCause}
+                    documentId={document.id}
                   />
-                </label>
-                <label className="block" htmlFor="detail-version-year">
-                  <span className="text-base font-semibold avend-field-label--required">
-                    Año del documento
-                  </span>
-                  <input
-                    className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                    defaultValue={
-                      currentVersion?.issuanceYear ??
-                      document.issuanceYear ??
-                      ""
-                    }
-                    id="detail-version-year"
-                    max={2100}
-                    min={1900}
-                    name="issuanceYear"
-                    required
-                    type="number"
+                ) : (
+                  <DocumentTechnicalStatusForm
+                    approvalStatus={document.approvalStatus}
+                    approvedVersionId={document.approvedVersionId}
+                    currentIngestionStatus={currentVersion?.ingestionStatus}
+                    documentId={document.id}
                   />
-                </label>
-                <label className="block" htmlFor="detail-version-relation">
-                  <span className="text-base font-semibold avend-field-label--required">
-                    Relación con la versión anterior
-                  </span>
-                  <select
-                    className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                    defaultValue="complements"
-                    id="detail-version-relation"
-                    name="versionRelation"
-                    required
-                  >
-                    <option value="complements">
-                      Complementa (aporta información adicional)
-                    </option>
-                    <option value="replaces">
-                      Reemplaza (sustituye a la versión anterior)
-                    </option>
-                  </select>
-                </label>
-              </DocumentPdfUploadForm>
-            </section>
+                )}
+              </div>
 
-            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
-              <h2 className="text-xl font-bold">Módulos y submódulos</h2>
-              {associatedModules.length ? (
-                <ul className="mt-3 space-y-2">
-                  {associatedModules.map((module) => (
-                    <li
-                      className="rounded-md bg-avend-surface-muted p-3 text-base"
-                      key={module.id}
-                    >
-                      <Link
-                        className="font-semibold hover:underline"
-                        href={`/admin/modules/${module.id}`}
-                      >
-                        {modulePath(module, modules)}
-                      </Link>
-                      {associatedModules.length > 1 ? (
-                        <div className="mt-2">
-                        <DeleteDisclosure
-                          description={
-                            <p>
-                              El documento dejará de estar en este módulo. El
-                              PDF y sus demás asociaciones se conservan.
-                            </p>
-                          }
-                          size="compact"
-                          title="¿Quitar esta asociación?"
-                          triggerLabel="Quitar asociación"
-                        >
-                        <AdminActionForm
-                          action={unlinkDocumentModuleAction}
-                          className="space-y-2"
-                          submitLabel="Sí, quitar asociación"
-                          tone="danger"
-                        >
-                          <input
-                            name="documentId"
-                            type="hidden"
-                            value={document.id}
-                          />
-                          <input
-                            name="moduleId"
-                            type="hidden"
-                            value={module.id}
-                          />
-                        </AdminActionForm>
-                        </DeleteDisclosure>
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-base text-avend-text-muted">
-                          Asociación principal; agrega otra antes de quitarla.
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-base text-red-800">
-                  Sin asociaciones. Corrige el registro agregando una ubicación.
+              <div className="p-5" id="document-lifecycle">
+                <h2 className="text-xl font-bold">Gestión documental</h2>
+                <p className="mt-1 text-base text-avend-text-muted">
+                  Cambia la vigencia o archiva el documento. Al archivar o
+                  reemplazar, el documento deja de alimentar las respuestas del
+                  chat y se conserva como antecedente histórico. El motivo y la
+                  observación quedarán registrados en su historial.
                 </p>
-              )}
-              {validAssociationTargets.length ? (
-                <AdminActionForm
-                  action={linkDocumentModuleAction}
+                <DocumentSituationActions
+                  documentId={document.id}
+                  embedded
+                  replacementCandidates={replacementCandidates}
+                  situation={document.situation}
+                />
+              </div>
+
+              <div className="p-5" id="new-version">
+                <h2 className="text-xl font-bold">Nueva versión</h2>
+                <p className="mt-1 text-base text-avend-text-muted">
+                  La versión anterior permanecerá intacta y disponible en el
+                  historial.
+                </p>
+                <DocumentPdfUploadForm
+                  apiBaseUrl={getAdminApiUrl()}
                   className="mt-4 space-y-3"
-                  submitLabel="Agregar asociación"
-                  rules={{ moduleId: [{ kind: "required", label: "La ubicación" }] }}
+                  endpoint={`/admin/documents/${encodeURIComponent(document.id)}/versions`}
+                  submitLabel="Subir nueva versión"
+                  successMessage="Nueva versión creada."
                 >
-                  <input name="documentId" type="hidden" value={document.id} />
-                  <label className="block" htmlFor="detail-module">
-                    <span className="text-base font-semibold">Ubicación</span>
+                  <label className="block" htmlFor="detail-file">
+                    <span className="text-base font-semibold avend-field-label--required">
+                      Archivo (PDF, Word o Markdown)
+                    </span>
+                    <input
+                      accept=".pdf,.docx,.doc,.md,application/pdf"
+                      className="mt-1 block min-h-11 w-full text-base"
+                      id="detail-file"
+                      name="file"
+                      required
+                      type="file"
+                    />
+                  </label>
+                  <label className="block" htmlFor="detail-version-year">
+                    <span className="text-base font-semibold avend-field-label--required">
+                      Año del documento
+                    </span>
+                    <input
+                      className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                      defaultValue={
+                        currentVersion?.issuanceYear ??
+                        document.issuanceYear ??
+                        ""
+                      }
+                      id="detail-version-year"
+                      max={2100}
+                      min={1900}
+                      name="issuanceYear"
+                      required
+                      type="number"
+                    />
+                  </label>
+                  <label className="block" htmlFor="detail-version-relation">
+                    <span className="text-base font-semibold avend-field-label--required">
+                      Relación con la versión anterior
+                    </span>
                     <select
                       className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-                      id="detail-module"
-                      name="moduleId"
+                      defaultValue="complements"
+                      id="detail-version-relation"
+                      name="versionRelation"
                       required
                     >
-                      {validAssociationTargets.map((module) => (
-                        <option key={module.id} value={module.id}>
-                          {modulePath(module, modules)}
-                        </option>
-                      ))}
+                      <option value="complements">
+                        Complementa (aporta información adicional)
+                      </option>
+                      <option value="replaces">
+                        Reemplaza (sustituye a la versión anterior)
+                      </option>
                     </select>
                   </label>
-                </AdminActionForm>
-              ) : null}
+                </DocumentPdfUploadForm>
+              </div>
+
+              <div className="p-5">
+                <h2 className="text-xl font-bold">Módulos y submódulos</h2>
+                {associatedModules.length ? (
+                  <ul className="mt-3 space-y-2">
+                    {associatedModules.map((module) => (
+                      <li
+                        className="rounded-md bg-avend-surface-muted p-3 text-base"
+                        key={module.id}
+                      >
+                        <Link
+                          className="font-semibold hover:underline"
+                          href={`/admin/modules/${module.id}`}
+                        >
+                          {modulePath(module, modules)}
+                        </Link>
+                        {associatedModules.length > 1 ? (
+                          <div className="mt-2">
+                            <DeleteDisclosure
+                              description={
+                                <p>
+                                  El documento dejará de estar en este módulo.
+                                  El PDF y sus demás asociaciones se conservan.
+                                </p>
+                              }
+                              size="compact"
+                              title="¿Quitar esta asociación?"
+                              triggerLabel="Quitar asociación"
+                            >
+                              <AdminActionForm
+                                action={unlinkDocumentModuleAction}
+                                className="space-y-2"
+                                submitLabel="Sí, quitar asociación"
+                                tone="danger"
+                              >
+                                <input
+                                  name="documentId"
+                                  type="hidden"
+                                  value={document.id}
+                                />
+                                <input
+                                  name="moduleId"
+                                  type="hidden"
+                                  value={module.id}
+                                />
+                              </AdminActionForm>
+                            </DeleteDisclosure>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-base text-avend-text-muted">
+                            Asociación principal; agrega otra antes de quitarla.
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-base text-red-800">
+                    Sin asociaciones. Corrige el registro agregando una
+                    ubicación.
+                  </p>
+                )}
+                {validAssociationTargets.length ? (
+                  <AdminActionForm
+                    action={linkDocumentModuleAction}
+                    className="mt-4 space-y-3"
+                    submitLabel="Agregar asociación"
+                    rules={{
+                      moduleId: [{ kind: "required", label: "La ubicación" }],
+                    }}
+                  >
+                    <input
+                      name="documentId"
+                      type="hidden"
+                      value={document.id}
+                    />
+                    <label className="block" htmlFor="detail-module">
+                      <span className="text-base font-semibold">Ubicación</span>
+                      <select
+                        className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+                        id="detail-module"
+                        name="moduleId"
+                        required
+                      >
+                        {validAssociationTargets.map((module) => (
+                          <option key={module.id} value={module.id}>
+                            {modulePath(module, modules)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </AdminActionForm>
+                ) : null}
+              </div>
             </section>
 
+            {/* Bloque Eliminar Documento (se mantiene separado por ser acción destructiva) */}
             <section
               aria-label="Eliminar documento"
               className="rounded-xl border border-avend-border bg-avend-surface p-5"
@@ -890,35 +720,212 @@ export default async function DocumentDetailPage({
                 title="¿Eliminar este documento?"
                 triggerLabel="Eliminar documento"
               >
-              <AdminActionForm
-                action={deleteDocumentAction}
-                className="space-y-3"
-                submitLabel="Sí, eliminar documento"
-                tone="danger"
-                rules={{ reason: [
-                  { kind: "required", label: "El motivo" },
-                  { kind: "minLength", label: "El motivo", min: 2 },
-                ] }}
-              >
-                <input name="documentId" type="hidden" value={document.id} />
-                <label className="block" htmlFor="detail-delete-reason">
-                  <span className="text-base font-semibold text-red-900">
-                    Motivo
-                  </span>
-                  <input
-                    className="mt-1 min-h-11 w-full rounded-md border border-red-400 px-3 text-base"
-                    id="detail-delete-reason"
-                    minLength={2}
-                    name="reason"
-                    required
-                  />
-                </label>
-              </AdminActionForm>
+                <AdminActionForm
+                  action={deleteDocumentAction}
+                  className="space-y-3"
+                  submitLabel="Sí, eliminar documento"
+                  tone="danger"
+                  rules={{
+                    reason: [
+                      { kind: "required", label: "El motivo" },
+                      { kind: "minLength", label: "El motivo", min: 2 },
+                    ],
+                  }}
+                >
+                  <input name="documentId" type="hidden" value={document.id} />
+                  <label className="block" htmlFor="detail-delete-reason">
+                    <span className="text-base font-semibold text-red-900">
+                      Motivo
+                    </span>
+                    <input
+                      className="mt-1 min-h-11 w-full rounded-md border border-red-400 px-3 text-base"
+                      id="detail-delete-reason"
+                      minLength={2}
+                      name="reason"
+                      required
+                    />
+                  </label>
+                </AdminActionForm>
               </DeleteDisclosure>
             </section>
           </div>
         </div>
       </div>
     </AdminPage>
+  );
+}
+
+function HistoryModal({
+  document,
+  modules,
+  replacementDocument,
+}: {
+  document: ManagedDocumentDetails;
+  modules: ManagedModuleSummary[];
+  replacementDocument: { id: string; title: string } | null;
+}) {
+  return (
+    <DocumentHistoryDialog documentTitle={document.title}>
+      <div className="space-y-6">
+        <section id="version-history">
+          <h3 className="text-xl font-bold">Historial de versiones</h3>
+          <p className="mt-1 text-base text-avend-text-muted">
+            Cada PDF anterior se conserva y puede verse o descargarse.
+          </p>
+          {document.versions.length ? (
+            <ol className="mt-4 space-y-4">
+              {document.versions.map((version) => {
+                const ingestion = getDocumentIngestionStatusContent(
+                  version.ingestionStatus,
+                );
+                return (
+                  <li
+                    className="rounded-lg border border-avend-border p-4"
+                    key={version.id}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-base font-bold">
+                          Versión {version.versionNumber} ·{" "}
+                          {version.originalFileName}
+                        </h4>
+                        <p className="mt-1 text-base text-avend-text-muted">
+                          {isPdfVersion(version)
+                            ? version.pageCount
+                              ? `${version.pageCount} páginas · `
+                              : "Total de páginas por verificar · "
+                            : ""}
+                          {fileSize(version.fileSizeBytes)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {version.id === document.currentVersionId ? (
+                          <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-base font-semibold text-blue-900">
+                            Versión más reciente
+                          </span>
+                        ) : null}
+                        {version.id === document.approvedVersionId ? (
+                          <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-base font-semibold text-emerald-900">
+                            Aprobada para consultas
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="mt-3 text-base">
+                      <strong>{ingestion.label}.</strong>{" "}
+                      {ingestion.description}
+                    </p>
+                    <dl className="mt-3 grid gap-2 text-base sm:grid-cols-2">
+                      <div>
+                        <dt className="font-semibold text-avend-text-muted">
+                          Fecha
+                        </dt>
+                        <dd>
+                          <time dateTime={version.uploadedAt}>
+                            {dateTimeFormatter.format(
+                              new Date(version.uploadedAt),
+                            )}
+                          </time>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold text-avend-text-muted">
+                          Administrador
+                        </dt>
+                        <dd>
+                          {version.uploadedByName ?? "Cuenta no disponible"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold text-avend-text-muted">
+                          Año del documento
+                        </dt>
+                        <dd>{version.issuanceYear ?? "No registrado"}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold text-avend-text-muted">
+                          Relación con la versión anterior
+                        </dt>
+                        <dd>
+                          {version.versionRelation === "replaces"
+                            ? "Reemplaza a la versión anterior"
+                            : version.versionRelation === "complements"
+                              ? "Complementa la versión anterior"
+                              : "No registrada"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Link
+                        aria-label={`Ver la versión ${version.versionNumber} de ${document.title}`}
+                        className="avend-button"
+                        href={`/admin/documents/${document.id}?versionId=${encodeURIComponent(version.id)}#pdf-viewer`}
+                      >
+                        Ver
+                      </Link>
+                      <a
+                        aria-label={`Descargar la versión ${version.versionNumber} de ${document.title}`}
+                        className="avend-button"
+                        href={accessHref(document.id, "attachment", version.id)}
+                      >
+                        Descargar
+                      </a>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="mt-4 text-base text-avend-text-muted">
+              No hay versiones registradas.
+            </p>
+          )}
+        </section>
+
+        <section className="border-t border-avend-border pt-6">
+          <h3 className="text-xl font-bold">Uso del documento</h3>
+          <p className="mt-1 text-base text-avend-text-muted">
+            Veces abierto y descargado desde la plataforma, y la última descarga
+            registrada.
+          </p>
+          <dl className="mt-4 grid gap-4 text-base sm:grid-cols-3">
+            <div>
+              <dt className="font-semibold">Veces abierto</dt>
+              <dd className="mt-1">{document.usage?.opens ?? 0}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold">Veces descargado</dt>
+              <dd className="mt-1">{document.usage?.downloads ?? 0}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold">Última descarga</dt>
+              <dd className="mt-1">
+                {document.usage?.lastDownloadAt
+                  ? dateTimeFormatter.format(
+                      new Date(document.usage.lastDownloadAt),
+                    )
+                  : "Aún sin descargas"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <div className="border-t border-avend-border pt-6">
+          <DocumentAuditHistory
+            context={{
+              documentTitleById: new Map(
+                replacementDocument
+                  ? [[replacementDocument.id, replacementDocument.title]]
+                  : [],
+              ),
+              moduleNameById: new Map(
+                modules.map((module) => [module.id, module.name]),
+              ),
+            }}
+            events={document.auditEvents}
+          />
+        </div>
+      </div>
+    </DocumentHistoryDialog>
   );
 }
