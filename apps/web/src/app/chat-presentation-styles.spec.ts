@@ -166,6 +166,21 @@ describe("contratos de presentación del chat en teléfono", () => {
     expect(topic).toMatch(/border-left:\s*0\.1875rem solid transparent/u);
   });
 
+  it("los documentos se despliegan con una transición breve y reducible", () => {
+    expect(sourceStyles).toMatch(
+      /\.others\[open\]\s*>\s*:not\(summary\)\s*\{[^}]*animation:\s*sources-unfold\s+280ms/u,
+    );
+    expect(sourceStyles).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.others\[open\]\s*>\s*:not\(summary\)\s*\{\s*animation:\s*none/u,
+    );
+  });
+
+  it("mantiene los cuatro atajos de consulta disponibles también en teléfono", () => {
+    expect(teacherStyles).not.toMatch(
+      /\.avend-chat-suggestions li:nth-child\(n \+ 3\)\s*\{\s*display:\s*none/u,
+    );
+  });
+
   it("en la tarjeta de referencias cada dato va en la columna de valores", () => {
     // Sin esto el segundo dato de una celda caía en la columna estrecha de la
     // etiqueta y partía palabras («Remuneracio-nes»).

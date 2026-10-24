@@ -8,6 +8,13 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./chat-aero-shards-background", () => ({
+  ChatAeroShardsBackground: () => (
+    <div aria-hidden="true" data-testid="chat-aero-shards-background" />
+  ),
+}));
+
 import { ChatPanel, FRIENDLY_ERRORS } from "./chat-panel";
 
 const chatModule = {
@@ -151,6 +158,13 @@ function requestBody(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
+  it("integra el fondo decorativo sin alterar la bienvenida", () => {
+    render(<ChatPanel modules={[chatModule]} />);
+
+    expect(screen.getByTestId("chat-aero-shards-background")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Chat general" })).toBeVisible();
+  });
+
   it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {
     const first = eligibleConversation.messages[1].sources[0];
     const answer = {
@@ -934,7 +948,10 @@ describe("ChatPanel", () => {
     );
   });
 
-  it("saluda por el nombre y deja el cuadro listo, sin atajos adicionales", () => {
+  it("saluda por el nombre y un ejemplo solo rellena el cuadro, sin enviar", async () => {
+    const user = userEvent.setup();
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
     render(<ChatPanel fullName="MARÍA pérez" modules={[chatModule]} />);
 
     expect(
@@ -942,12 +959,19 @@ describe("ChatPanel", () => {
         name: "Hola, María. ¿En qué te ayudo hoy?",
       }),
     ).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "¿Qué requisitos necesito para…?" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
-    ).toHaveValue("");
+    await user.click(
+      screen.getByRole("button", {
+        name: "¿Qué requisitos necesito para…?",
+      }),
+    );
+
+    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
+    expect(box).toHaveValue("¿Qué requisitos necesito para ");
+    expect(box).toHaveFocus();
+    expect(request).not.toHaveBeenCalledWith(
+      "/api/chat/stream",
+      expect.anything(),
+    );
   });
 
   it("keeps the empty module state explicit instead of inventing a category", () => {

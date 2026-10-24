@@ -538,10 +538,12 @@
   transform: translateY(-0.125rem) rotate(-4deg) scale(1.04);
 }
 
-/* El contenido aparece con el mismo movimiento que el panel de referencias. */
+/* El contenido se despliega desde el resumen sin perder el comportamiento
+   nativo de <details>: teclado, lector de pantalla y cierre siguen intactos. */
 .others[open] > :not(summary) {
-  animation: sources-float-in 300ms var(--avend-ease-interaction) both;
+  animation: sources-unfold 280ms var(--avend-ease-interaction) both;
   margin-top: 0.625rem;
+  transform-origin: top;
 }
 
 .disclosure {
@@ -553,10 +555,15 @@
   width: 100%;
 }
 
-@keyframes sources-float-in {
+@keyframes sources-unfold {
   from {
     opacity: 0;
-    transform: translateY(0.5rem) scale(0.99);
+    transform: translateY(-0.25rem) scaleY(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
   }
 }
 
