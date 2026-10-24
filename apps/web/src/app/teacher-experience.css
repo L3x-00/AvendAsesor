@@ -1502,7 +1502,7 @@ ul.avend-chat-list {
   isolation: isolate;
   margin-inline: auto;
   max-width: 50rem;
-  padding: clamp(0.75rem, 2vw, 1.25rem) 0 1rem;
+  padding: clamp(0.75rem, 2vw, 1.25rem) 0 clamp(1.25rem, 2.5vw, 2rem);
   position: relative;
   width: 100%;
 }
@@ -1544,15 +1544,15 @@ ul.avend-chat-list {
 /* Óvalo inscrito en la banda: la escena no muestra bordes rectos que
    parezcan un contenedor invisible. */
 .avend-chat-aero-shards {
-  opacity: 0.5;
+  opacity: 0.85;
   -webkit-mask-image: radial-gradient(
     ellipse 50% 38% at 50% 38%,
-    #000 26%,
+    #000 38%,
     transparent 100%
   );
   mask-image: radial-gradient(
     ellipse 50% 38% at 50% 38%,
-    #000 26%,
+    #000 38%,
     transparent 100%
   );
   z-index: -1;
@@ -1566,7 +1566,7 @@ ul.avend-chat-list {
 
 @media (max-width: 47.99rem) {
   .avend-chat-aero-shards {
-    opacity: 0.4;
+    opacity: 0.68;
   }
 }
 
