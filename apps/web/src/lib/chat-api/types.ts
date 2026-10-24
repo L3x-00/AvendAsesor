@@ -166,6 +166,8 @@ export const chatStreamPayloadSchemas = {
     conversationId: z.string().uuid(),
     inReplyToMessageId: z.string().uuid(),
     messageId: z.string().uuid(),
+    /** Temas recomendados al pie de una respuesta con panorama. */
+    modules: z.array(clarificationModuleSchema).max(10).optional(),
     provider: z.enum(["openai", "rule"]),
   }),
   error: z.object({ code: z.string().min(1).max(100) }),

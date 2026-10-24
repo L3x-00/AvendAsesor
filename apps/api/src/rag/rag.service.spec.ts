@@ -51,6 +51,73 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([salary]);
   });
 
+  it('hereda cargo y sector a través de un turno salarial elíptico', () => {
+    const history = [
+      '¿Cuánto gana un auxiliar de educación?',
+      'privado',
+      '¿Y cuánto gana por 30 horas?',
+    ];
+    expect(
+      inheritedFactorQuestions('¿y para 40 horas?', history, false),
+    ).toEqual(history);
+  });
+
+  it('hereda también cuando la pregunta salarial omite el conector y al cambiar de sector', () => {
+    const history = [
+      '¿Cuánto gana un auxiliar de educación?',
+      'privado',
+      '¿Cuánto gana por 30 horas?',
+    ];
+    expect(
+      inheritedFactorQuestions('¿cuánto gana por 40 horas?', history, false),
+    ).toEqual(history);
+    expect(
+      inheritedFactorQuestions(
+        '¿y cuánto gana en el sector público?',
+        history,
+        false,
+      ),
+    ).toEqual(history);
+  });
+
+  it.each(['ingeniero', 'administrativo', 'abogado'])(
+    'no hereda un cargo anterior al preguntar por un %s',
+    (occupation) => {
+      expect(
+        inheritedFactorQuestions(
+          `¿Cuánto gana un ${occupation}?`,
+          ['¿Cuánto gana un auxiliar?', 'privado'],
+          false,
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    '¿Cuánto gana ingeniero?',
+    '¿Cuánto gana un ingeniero?',
+    '¿Cuánto percibe un ingeniero?',
+    '¿Cuánto cobra un ingeniero?',
+    '¿Cuánto gana un docente?',
+  ])('no fuerza la herencia ante otra pregunta completa: %s', (question) => {
+    expect(
+      inheritedFactorQuestions(
+        question,
+        ['¿Cuánto gana un auxiliar?', 'privado'],
+        true,
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    '¿Y cuánto gana al mes?',
+    '¿Y cuánto ganaría en régimen privado?',
+    '¿Y cuál sería el sueldo mensual?',
+  ])('conserva el contexto salarial en %s', (question) => {
+    const history = ['¿Cuánto gana un auxiliar?', 'público'];
+    expect(inheritedFactorQuestions(question, history, true)).toEqual(history);
+  });
+
   it('no hereda tras una consulta de otro tema', () => {
     expect(
       inheritedFactorQuestions(

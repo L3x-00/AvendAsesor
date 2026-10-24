@@ -168,7 +168,7 @@ const remunerationPage3 = remunerationChunk({
   articleReference: 'Artículo 12',
   chunkId: '00000000-0000-0000-0000-000000000207',
   content:
-    'Artículo 12.- La remuneración mensual del docente corresponde a su escala y a su jornada.',
+    'Artículo 12.- La remuneración mensual del docente, según su escala y jornada, es de S/ 3 300,60.',
   page: 3,
   score: 0.93,
 });

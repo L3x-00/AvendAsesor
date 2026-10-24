@@ -1165,11 +1165,24 @@ export function ChatPanel({
     module: ClarificationModule,
   ) {
     if (isStreaming) return;
-    const original = messages.find(
+    const originalIndex = messages.findIndex(
       (message) =>
         message.role === "user" &&
         message.id === clarification.inReplyToMessageId,
-    )?.content;
+    );
+    const original = messages[originalIndex]?.content;
+    // Una precisión breve (por ejemplo «privado») necesita la pregunta que
+    // respondió para que el nuevo chat conserve el tema y el cargo.
+    const previous =
+      originalIndex > 1 &&
+      original &&
+      original.trim().split(/\s+/u).length <= 3 &&
+      (messages[originalIndex - 1]?.role === "clarification" ||
+        messages[originalIndex - 1]?.role === "assistant")
+        ? [...messages.slice(0, originalIndex - 1)]
+            .reverse()
+            .find((message) => message.role === "user")?.content
+        : undefined;
     // La opción elegida navega al módulo padre y queda escrita en el chat. Si
     // había una consulta original, se conserva detrás del tema elegido para no
     // perder lo que la persona quería preguntar.
@@ -1177,7 +1190,7 @@ export function ChatPanel({
     const parent =
       modules.find((candidate) => candidate.id === parentId) ?? module;
     const chosenQuestion = original
-      ? `Consultar ${parent.name}: ${original}`
+      ? `Consultar ${parent.name}: ${previous ? `${previous} ${original}` : original}`
       : `Consultar ${parent.name}`;
     changeModuleContext(parentId, true);
     void sendQuestion(chosenQuestion, {
@@ -1507,6 +1520,9 @@ export function ChatPanel({
               ...message,
               id: result.data.messageId,
               inReplyToMessageId: result.data.inReplyToMessageId,
+              ...(result.data.modules?.length
+                ? { modules: result.data.modules }
+                : {}),
               thoughtSeconds: answeredSeconds,
             }));
             setStatus(completionStatus);

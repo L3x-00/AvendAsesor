@@ -4,6 +4,7 @@ import {
   canonicalAmount,
   hasGeneralSalaryEvidence,
   hasPersonalSalaryContext,
+  hasSalaryPanoramaEvidence,
   isBroadSalaryQuestion,
   isGeneralRemunerationSource,
   isPersonalSalaryQuestion,
@@ -174,6 +175,28 @@ describe('salaryQuestionProfile', () => {
     }
   });
 
+  it.each([
+    'si trabaja 30 horas',
+    'para quienes trabajan 30 horas',
+    'únicamente para el año 2023',
+    'como máximo',
+    'salvo que sea contratado',
+    'exclusivamente para el año 2023',
+    'hasta diciembre de 2023',
+    'para el año 2023',
+  ])('no omite la condición %s después del importe', (condition) => {
+    const source = chunk({
+      chunkContent: `La remuneración del auxiliar privado es de S/ 2 000,00, ${condition}.`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
+  });
+
   it('mantiene la aclaración para una pregunta por el propio sueldo', () => {
     expect(
       salaryClarificationFor('¿Cuánto gano yo como profesor?', [
@@ -298,6 +321,38 @@ describe('salaryApplicabilityTier', () => {
       ).toBe(false);
     },
   );
+
+  it('admite una condición posterior si la respuesta la conserva', () => {
+    const source = chunk({
+      chunkContent:
+        'La remuneración del auxiliar privado es de S/ 2 000,00, si trabaja 30 horas.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00 si trabaja 30 horas. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
+
+  it('reconoce equivalencias mensuales y una condición rural conservada', () => {
+    for (const [tail, description] of [
+      ['mensuales', 'al mes'],
+      ['para quienes trabajan en zona rural', 'que trabajan en zona rural'],
+    ]) {
+      const source = chunk({
+        chunkContent: `La remuneración del auxiliar privado es de S/ 2 000,00 ${tail}.`,
+      });
+      expect(
+        assessSalaryAnswerCoverage(
+          `El auxiliar privado gana S/ 2 000,00 ${description}. [1]`,
+          [source],
+          '¿Cuánto gana un auxiliar privado?',
+        ),
+      ).toBeNull();
+    }
+  });
 
   it('no interviene en una consulta que no es salarial', () => {
     expect(salaryApplicabilityTier('¿Cuál es el plazo?', allocation)).toBe(0);
@@ -495,6 +550,17 @@ describe('salaryApplicabilityTier', () => {
 });
 
 describe('withInheritedSalaryFactors', () => {
+  it('conserva el último sector en un seguimiento y permite cambiarlo', () => {
+    const history = ['¿Cuánto gana un auxiliar de educación?', 'privado'];
+    expect(
+      withInheritedSalaryFactors('¿y con jornada de 30 horas?', history),
+    ).toContain('sector privado');
+    const changed = withInheritedSalaryFactors(
+      '¿y en el sector público?',
+      history,
+    );
+    expect(changed).not.toContain('sector privado');
+  });
   it('completa la respuesta a una aclaración con la consulta salarial previa', () => {
     const effective = withInheritedSalaryFactors('Sector público', [
       '¿Cuánto gana un profesor en el Perú?',
@@ -697,7 +763,10 @@ describe('intención personal de una consulta salarial', () => {
     ).toBe(true);
     expect(
       hasPersonalSalaryContext('Nombrado', ['¿Cuánto gana un docente?']),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      hasPersonalSalaryContext('40 horas', ['¿Cuánto gana un auxiliar?']),
+    ).toBe(false);
   });
 
   it('no trata una pregunta completa de requisitos como intención personal', () => {
@@ -746,6 +815,108 @@ describe('hasGeneralSalaryEvidence', () => {
     expect(hasGeneralSalaryEvidence([historical], 'archived_explicit')).toBe(
       false,
     );
+  });
+});
+
+describe('hasSalaryPanoramaEvidence', () => {
+  const auxiliarRule = chunk({
+    chunkContent:
+      'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida en la normativa vigente correspondiente.',
+    documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+  });
+
+  it('acepta una regla de remuneración del rol aunque no contenga el monto', () => {
+    expect(
+      hasSalaryPanoramaEvidence(
+        [auxiliarRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(true);
+  });
+
+  it('no acepta una fuente que solo nombra otro cargo', () => {
+    const docenteRule = chunk({
+      chunkContent:
+        'La remuneración mensual del docente se establece según la escala magisterial.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [docenteRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+  });
+
+  it('tampoco acepta un monto que corresponde exclusivamente a otro cargo', () => {
+    const docenteRule = chunk({
+      chunkContent: 'La remuneración mensual del docente es de S/ 3 300,60.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [docenteRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+  });
+
+  it('no presume que una regla sin cargo identificado aplique al auxiliar', () => {
+    const generalRule = chunk({
+      chunkContent:
+        'La remuneración mensual se fija en la normativa vigente correspondiente.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [generalRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+  });
+
+  it('no habilita el panorama con un concepto adicional ni fuera del alcance', () => {
+    const bonusOnly = chunk({
+      chunkContent:
+        'La bonificación por escolaridad se abona una vez al año al personal.',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [bonusOnly],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+
+    const historicalRule = chunk({
+      ...auxiliarRule,
+      documentSituation: 'replaced',
+    });
+    expect(
+      hasSalaryPanoramaEvidence(
+        [historicalRule],
+        'current',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(false);
+    expect(
+      hasSalaryPanoramaEvidence(
+        [historicalRule],
+        'historical',
+        '¿cuánto gana un auxiliar de educación?',
+      ),
+    ).toBe(true);
+  });
+
+  it('mantiene el panorama cuando la evidencia general sí trae monto', () => {
+    expect(
+      hasSalaryPanoramaEvidence(
+        [general30],
+        'current',
+        '¿cuánto gana un docente?',
+      ),
+    ).toBe(true);
   });
 });
 
@@ -1366,6 +1537,202 @@ describe('salaryClarificationFor', () => {
 });
 
 describe('assessSalaryAnswerCoverage', () => {
+  it('admite una tabla con sector y monto en la misma fila y cargo en su título', () => {
+    const table = chunk({
+      documentTitle: 'Remuneraciones del auxiliar de educación',
+      chunkContent:
+        '| Sector | Remuneración |\n| --- | --- |\n| Privado | S/ 2 000,00 |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Un auxiliar privado gana S/ 2 000,00. [1]',
+        [table],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
+
+  it('no elimina condiciones de alcance incluidas en una fila salarial', () => {
+    const source = chunk({
+      chunkContent:
+        '| Cargo | Remuneración | Alcance |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Solo para escuelas rurales |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    '| Cargo | Remuneración | Sector aplicable |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Solo para escuelas rurales |',
+    '| Cargo | Remuneración en zona rural |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |',
+    'Para auxiliares privados de zona rural.\n| Cargo | Remuneración |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |',
+  ])(
+    'no presenta como general una cifra con restricciones en tabla o contexto',
+    (chunkContent) => {
+      expect(
+        assessSalaryAnswerCoverage(
+          'El auxiliar privado gana S/ 2 000,00. [1]',
+          [chunk({ chunkContent })],
+          '¿Cuánto gana un auxiliar privado?',
+        ),
+      ).not.toBeNull();
+    },
+  );
+
+  it('admite la periodicidad mensual expresada de forma equivalente en una tabla', () => {
+    const source = chunk({
+      chunkContent:
+        '| Cargo | Remuneración | Periodicidad |\n| --- | --- | --- |\n| Auxiliar privado | S/ 2 000,00 | Mensuales |',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00 al mes. [1]',
+        [source],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
+
+  it('no exige repetir una nota de publicación y admite una condición equivalente', () => {
+    const table =
+      '| Cargo | Remuneración |\n| --- | --- |\n| Auxiliar privado | S/ 2 000,00 |';
+    const publication = chunk({
+      chunkContent: `La norma fue publicada en el diario oficial.\n${table}`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [publication],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+    const restricted = chunk({
+      chunkContent: `Para auxiliares privados de zona rural.\n${table}`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'Los auxiliares privados en zonas rurales reciben S/ 2 000,00. [1]',
+        [restricted],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).toBeNull();
+  });
+  it('no atribuye al sector privado una cifra documentada para el público', () => {
+    const publico = chunk({
+      chunkContent:
+        'La remuneración mensual del auxiliar de educación del sector público es S/ 2 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'En el sector privado un auxiliar de educación gana S/ 2 000,00. [1]',
+        [publico],
+        '¿Cuánto gana un auxiliar de educación en el sector privado?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'En el sector público un auxiliar de educación gana S/ 2 000,00. [1]',
+        [publico],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).toBeNull();
+  });
+
+  it('no atribuye al auxiliar una cifra de personal administrativo', () => {
+    const administrativo = chunk({
+      chunkContent:
+        'La remuneración mensual del personal administrativo es S/ 3 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar de educación gana S/ 3 000,00. [1]',
+        [administrativo],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).not.toBeNull();
+  });
+
+  it('no mezcla cargo, concepto o sector entre cláusulas y fuentes', () => {
+    const mixed = chunk({
+      chunkContent:
+        'La norma establece la remuneración del auxiliar de educación. La remuneración del personal administrativo asciende a S/ 3 000,00.',
+    });
+    const benefit = chunk({
+      chunkContent:
+        'La remuneración del auxiliar es S/ 2 000,00 y el beneficio es S/ 300,00.',
+    });
+    const publico = chunk({
+      chunkContent:
+        'La remuneración del auxiliar de educación del sector público es S/ 2 000,00.',
+    });
+    const privado = chunk({
+      chunkContent:
+        'La remuneración del profesor del sector privado es S/ 2 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar gana S/ 3 000,00. [1]',
+        [mixed],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar gana S/ 300,00. [1]',
+        [benefit],
+        '¿Cuánto gana un auxiliar de educación?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1] [2]',
+        [publico, privado],
+        '¿Cuánto gana un auxiliar de educación privado?',
+      ),
+    ).not.toBeNull();
+    const negada = chunk({
+      chunkContent: 'La remuneración del auxiliar privado no es S/ 2 000,00.',
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [negada],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
+    expect(
+      assessSalaryAnswerCoverage(
+        'La normativa establece el salario. [1] Se gana S/ 9 000,00.',
+        [publico],
+        '¿Cuánto gana?',
+      ),
+    ).not.toBeNull();
+  });
+
+  it.each([
+    'supera',
+    'es distinta de',
+    'excluye',
+    'tiene un máximo de',
+    'máxima es',
+    'es de hasta',
+    'es solamente en caso de',
+  ])('no presenta %s como un importe salarial exacto', (relation) => {
+    const limit = chunk({
+      chunkContent: `La remuneración del auxiliar privado ${relation} S/ 2 000,00.`,
+    });
+    expect(
+      assessSalaryAnswerCoverage(
+        'El auxiliar privado gana S/ 2 000,00. [1]',
+        [limit],
+        '¿Cuánto gana un auxiliar privado?',
+      ),
+    ).not.toBeNull();
+  });
   // Requisito 4: una asignación especial no se presenta como remuneración general.
   it('marca la respuesta que presenta una asignación como si fuera el sueldo', () => {
     const finding = assessSalaryAnswerCoverage(
@@ -1394,6 +1761,21 @@ describe('assessSalaryAnswerCoverage', () => {
         allocation,
       ]),
     ).toBeNull();
+  });
+
+  it('marca una cifra que ninguna fuente con monto respalda', () => {
+    const rule = chunk({
+      chunkContent:
+        'La remuneración del auxiliar de educación se establece en la normativa vigente.',
+    });
+
+    const finding = assessSalaryAnswerCoverage(
+      'La remuneración del auxiliar de educación es de S/ 2 000,00. [1]',
+      [rule],
+      '¿Cuánto gana un auxiliar de educación?',
+    );
+
+    expect(finding?.excerpt).toContain('S/ 2 000,00');
   });
 
   // Hallazgo del cross-review: una oración que separa el concepto adicional de

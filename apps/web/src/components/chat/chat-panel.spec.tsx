@@ -107,6 +107,19 @@ function doneEvent(provider: "openai" | "rule"): string {
   return `event: done\ndata: {"conversationId":"${conversationId}","inReplyToMessageId":"${questionMessageId}","messageId":"${messageId}","provider":"${provider}"}\n\n`;
 }
 
+function doneEventWithModules(
+  provider: "openai" | "rule",
+  modules: Array<{ id: string; name: string }>,
+): string {
+  return `event: done\ndata: ${JSON.stringify({
+    conversationId,
+    inReplyToMessageId: questionMessageId,
+    messageId,
+    modules,
+    provider,
+  })}\n\n`;
+}
+
 async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
   fireEvent.change(
     screen.getByRole("textbox", { name: "Escribe tu consulta" }),
@@ -1843,6 +1856,105 @@ describe("ChatPanel", () => {
     expect(
       await screen.findByText("No hay sustento suficiente."),
     ).toBeVisible();
+  });
+
+  it("shows the recommended topics that arrive with a panorama answer in done", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: sources\ndata: {"sources":[{"id":"9c8b56af-6d0c-4fef-881e-7c00907540dd","rank":1,"documentSituation":"current","documentTitle":"Norma de remuneraciones","moduleName":"Remuneraciones","versionNumber":1,"pageStart":1,"pageEnd":1,"sectionTitle":null,"articleReference":null,"numeralReference":null,"relevanceScore":0.91}]}\n\n',
+          'event: token\ndata: {"text":"La remuneración del auxiliar de educación se rige por la normativa vigente. [1]"}\n\n',
+          doneEventWithModules("openai", [
+            { id: childModule.id, name: childModule.name },
+          ]),
+        ]),
+      ),
+    );
+    render(<ChatPanel modules={[chatModule, childModule]} />);
+
+    await submitQuestion(user);
+
+    expect(
+      await screen.findByText(
+        "La remuneración del auxiliar de educación se rige por la normativa vigente.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Consultar Licencia por salud" }),
+    ).toBeVisible();
+  });
+
+  it("conserva la pregunta inicial al elegir un tema tras precisar el sector", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: token\ndata: {"text":"No tengo un monto privado acreditado. [1]"}\n\n',
+          doneEventWithModules("openai", [
+            { id: childModule.id, name: childModule.name },
+          ]),
+        ]),
+      )
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEvent(),
+          'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+          doneEvent("rule"),
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ChatPanel
+        modules={[chatModule, childModule]}
+        initialConversation={{
+          ...initialConversation,
+          conversation: {
+            ...initialConversation.conversation,
+            selectedModuleId: null,
+          },
+          messages: [
+            {
+              ...eligibleConversation.messages[0],
+              id: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
+              content: "¿Cuánto gana un auxiliar de educación?",
+            },
+            {
+              ...eligibleConversation.messages[1],
+              id: "2c8b56af-6d0c-4fef-881e-7c00907540dd",
+              inReplyToMessageId: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
+              content: "¿Sector público o privado?",
+              role: "assistant",
+              sources: [],
+            },
+          ],
+        }}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+      { target: { value: "privado" } },
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar consulta" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Consultar Licencia por salud",
+      }),
+    );
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
+    expect(
+      requestBody(chatCalls(fetchMock)[1] as [RequestInfo, RequestInit]),
+    ).toEqual({
+      moduleId: chatModule.id,
+      question:
+        "Consultar Licencias: ¿Cuánto gana un auxiliar de educación? privado",
+    });
   });
 
   it("replaces text already shown when the turn closes as no evidence", async () => {

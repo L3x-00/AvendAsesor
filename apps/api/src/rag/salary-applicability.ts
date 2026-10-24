@@ -245,6 +245,11 @@ function rolesIn(text: string): string[] {
   );
 }
 
+/** Cargos nombrados expresamente en una misma unidad de evidencia. */
+export function salaryRoles(text: string): string[] {
+  return rolesIn(normalizeSpanishText(text));
+}
+
 const ROMAN_SCALES: ReadonlyMap<string, string> = new Map([
   ['i', '1'],
   ['ii', '2'],
@@ -458,6 +463,11 @@ export function withInheritedSalaryFactors(
     .reduce(mergeSalaryTurn, EMPTY_SALARY_PROFILE);
   if (!accumulated.isSalaryQuestion) return question;
 
+  const priorSector = [...priorQuestions]
+    .reverse()
+    .map(salarySectors)
+    .find((sectors) => sectors.length > 0);
+
   const fragments = [
     !current.isSalaryQuestion ? 'remuneración' : null,
     !current.isSalaryQuestion && accumulated.asksSpecialAllocation
@@ -468,6 +478,9 @@ export function withInheritedSalaryFactors(
       : null,
     current.condition === null ? accumulated.condition : null,
     current.role === null ? accumulated.role : null,
+    salarySectors(question).length === 0 && priorSector?.length === 1
+      ? `sector ${priorSector[0]}`
+      : null,
     current.scale === null && accumulated.scale !== null
       ? `escala ${accumulated.scale}`
       : null,
@@ -554,20 +567,9 @@ export function hasPersonalSalaryContext(
   const hasPriorSalary = priorQuestions.some(
     (prior) => salaryQuestionProfile(prior).isSalaryQuestion,
   );
-  const shortFactorAnswer =
-    !normalized.includes('?') && normalized.split(/\s+/u).length <= 4;
-  // Una respuesta de factor («Nombrado», «30 horas») o una declaración del
-  // propio vínculo («Soy nombrado») solo es personal si el hilo ya era salarial.
-  // Una pregunta completa que menciona «docente contratado» no lo es.
-  if (
-    hasPriorSalary &&
-    (PERSONAL_SALARY_CONDITION.test(normalized) ||
-      (shortFactorAnswer &&
-        !profile.isSalaryQuestion &&
-        (profile.condition !== null ||
-          profile.jornadaHours !== null ||
-          profile.scale !== null)))
-  ) {
+  // Responder un factor no convierte una consulta general en un caso propio.
+  // Una declaración explícita como «soy nombrado» sí lo hace.
+  if (hasPriorSalary && PERSONAL_SALARY_CONDITION.test(normalized)) {
     return true;
   }
   return priorQuestions.some((prior) => isPersonalSalaryQuestion(prior));
@@ -819,6 +821,50 @@ export function hasGeneralSalaryEvidence(
   );
 }
 
+/**
+ * Evidencia que permite responder un panorama salarial aunque todavía no
+ * incluya una cifra: una fuente del alcance consultado que trata la
+ * remuneración del cargo o rol preguntado. Sirve para no bloquear la respuesta
+ * con una pregunta cuando lo que falta es el monto y no el tema: en ese caso
+ * corresponde decir qué regla sí consta y qué dato no está en los documentos.
+ * Una fuente que solo presenta un concepto adicional (CTS, bonificación) no
+ * habilita el panorama general.
+ */
+export function hasSalaryPanoramaEvidence(
+  sources: readonly RetrievedChunk[],
+  scope: 'archived_explicit' | 'current' | 'historical',
+  question?: string,
+): boolean {
+  const profile = question ? salaryQuestionProfile(question) : null;
+  return sources.some((source) => {
+    const inScope =
+      scope === 'current'
+        ? source.documentSituation === 'current'
+        : scope === 'historical'
+          ? source.documentSituation !== 'current'
+          : source.documentSituation === 'archived';
+    if (!inScope) return false;
+    const text = normalizeSpanishText(source.chunkContent);
+    // Un concepto adicional (CTS, bonificación, asignación) no habilita por sí
+    // solo el panorama de la remuneración general, tenga o no un monto.
+    if (
+      SPECIAL_ALLOCATION_TERMS.test(text) &&
+      !GENERAL_REMUNERATION_TERMS.test(text)
+    ) {
+      return false;
+    }
+    if (!GENERAL_REMUNERATION_TERMS.test(text)) return false;
+    if (profile?.role === null || profile?.role === undefined) return true;
+    const roles = rolesIn(
+      normalizeSpanishText(
+        `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
+      ),
+    );
+    // No se infiere que una norma sin cargo conocido aplique al consultado.
+    return roles.includes(profile.role);
+  });
+}
+
 export interface SalaryClarification {
   factor: SalaryFactor;
   message: string;
@@ -982,6 +1028,144 @@ function presentsAllocationAsSalary(sentence: string): boolean {
 }
 
 const CURRENT_SALARY_CLAIM = /\b(?:vigente|actual|actualmente|hoy)\b/u;
+
+export function salarySectors(text: string): string[] {
+  const normalized = normalizeSpanishText(text);
+  return [
+    ...(/\b(?:sector\s+)?public[oa]s?\b/u.test(normalized) ? ['publico'] : []),
+    ...(/\b(?:sector\s+)?privad[oa]s?\b/u.test(normalized) ? ['privado'] : []),
+  ];
+}
+
+/** Un límite o comparación no demuestra que ese importe sea la cifra exacta. */
+function exactSalaryAmounts(clause: string): Set<string> {
+  if (
+    /\b(?:maxim[oa]s?|minim[oa]s?|hasta|supera|inferior|superior|solamente|siempre que|solo si|en caso de|si)\b/u.test(
+      clause,
+    )
+  )
+    return new Set();
+  const direct =
+    /(?:\b(?:es(?:\s+de)?|asciende\s+a|equivale\s+a|sera(?:\s+de)?|se\s+fija\s+en)\s+|\b(?:remuneracion|sueldo|salario)[^:;]*:\s*)(?:s\/?\.?\s*)?\d[\d .,]*/gu;
+  return new Set(
+    [...clause.matchAll(direct)].flatMap((match) => [
+      ...matchingAmounts(match[0]),
+    ]),
+  );
+}
+
+/** Conserva las reservas de la oración y los factores de una fila salarial. */
+function retainsSalaryConditions(
+  row: string,
+  amount: string,
+  answer: string,
+  table: boolean,
+  sourceText: string,
+  question: string | null,
+): boolean {
+  const equivalent = (text: string) =>
+    normalizeSpanishText(text)
+      .replace(/\b(?:mensual(?:es)?|por mes|al mes)\b/gu, 'mensual')
+      .replace(/\bpara quienes\b/gu, 'que')
+      .replace(
+        /\b(auxiliares|privados|privadas|publicos|publicas|zonas|rurales)\b/gu,
+        (word) =>
+          ({
+            auxiliares: 'auxiliar',
+            privados: 'privado',
+            privadas: 'privada',
+            publicos: 'publico',
+            publicas: 'publica',
+            zonas: 'zona',
+            rurales: 'rural',
+          })[word] ?? word,
+      );
+  const answerText = equivalent(answer);
+  const sourceFactors = evidenceFactorsIn(row);
+  const answerFactors = evidenceFactorsIn(answerText);
+  for (const factor of ['jornada', 'condicion', 'escala', 'periodo'] as const) {
+    if (
+      sourceFactors[factor].some(
+        (value) => !answerFactors[factor].includes(value),
+      )
+    )
+      return false;
+  }
+  if (table) {
+    // Las frases fuera de la tabla pueden limitar todas sus filas. Sin una
+    // asociación inequívoca, exigimos conservarlas en la respuesta.
+    const context = sourceText
+      .split(/\r?\n/u)
+      .filter((line) => !/^\s*\|/u.test(line))
+      .join(' ')
+      .trim();
+    if (context) {
+      const contextualSentences = sentencesIn(context);
+      const comparable = (text: string) =>
+        (equivalent(text).match(/[a-z0-9]+/gu) ?? [])
+          .filter(
+            (word) =>
+              !/^(?:para|los|las|el|la|de|del|en|por|a|un|una)$/u.test(word),
+          )
+          .join(' ');
+      const comparableAnswer = ` ${comparable(answerText)} `;
+      for (const contextSentence of contextualSentences) {
+        // La mención de publicación describe el documento, no una condición
+        // de la cifra. Otros textos deben quedar reflejados en la respuesta.
+        if (
+          /^(?:la )?norma fue publicada en el diario oficial[.]?$/u.test(
+            contextSentence,
+          )
+        )
+          continue;
+        if (!comparableAnswer.includes(` ${comparable(contextSentence)} `))
+          return false;
+      }
+    }
+    return row.split(';').every((cell) => {
+      const separator = cell.indexOf(':');
+      if (separator < 0) return false;
+      const label = cell.slice(0, separator).trim();
+      const value = cell.slice(separator + 1).trim();
+      if (!value) return true;
+      if (
+        matchingAmounts(value).has(amount) &&
+        /\b(?:remuneracion|sueldo|salario)\b/u.test(label)
+      ) {
+        const qualifier = label
+          .replace(/\b(?:remuneracion|sueldo|salario|mensuales?|s)\b/gu, ' ')
+          .replace(/[^a-z0-9]+/gu, ' ')
+          .trim()
+          .replace(/\s+/gu, ' ');
+        return !qualifier || answerText.includes(equivalent(qualifier));
+      }
+      if (
+        /^cargo$/u.test(label) &&
+        /^(?:docentes?|profesor(?:a|es|as)?|auxiliar(?: de educacion)?|director(?:a|es|as)?|directivos?)$/u.test(
+          value,
+        ) &&
+        question &&
+        rolesIn(value).includes(salaryQuestionProfile(question).role ?? '')
+      )
+        return true;
+      return answerText.includes(equivalent(value));
+    });
+  }
+  const entry = [...row.matchAll(new RegExp(AMOUNT_PATTERN.source, 'gu'))].find(
+    (match) => matchingAmounts(match[0]).has(amount),
+  );
+  if (!entry || entry.index === undefined) return false;
+  const tail = row
+    .slice(entry.index + entry[0].length)
+    .replace(/^[\s,;:.]+|[\s,;:.]+$/gu, '');
+  if (/[a-z]/u.test(tail) && !answerText.includes(equivalent(tail)))
+    return false;
+  const prefix = row.slice(0, entry.index);
+  const condition = prefix.match(
+    /\b(?:si|cuando|unicamente|solo|solamente|siempre que|en caso de|para quienes|a condicion de|salvo)\b[^,;]*/u,
+  )?.[0];
+  return !condition || answerText.includes(equivalent(condition.trim()));
+}
 
 function citedSourcesForSentence(
   sentence: string,
@@ -1194,10 +1378,120 @@ export function assessSalaryAnswerCoverage(
 ): SalaryAnswerFinding | null {
   const rowMismatch = salaryRowMismatch(answer, sources, question);
   if (rowMismatch) return rowMismatch;
+  const answerAmounts = amountSentences(answer);
+  const asksSalary =
+    question === null || salaryQuestionProfile(question).isSalaryQuestion;
+  // Una respuesta salarial no puede aportar un importe que ninguna fuente tenga:
+  // si ninguna trae un monto, cualquier cifra es inventada o externa. Se marca
+  // para que el turno no la presente como evidencia.
+  if (
+    asksSalary &&
+    answerAmounts.length &&
+    !sources.some((source) => hasAmount(source.chunkContent))
+  ) {
+    return { excerpt: answerAmounts[0].slice(0, 2_000) };
+  }
   const generalSources = sources.filter(isGeneralRemunerationSource);
-  for (const sentence of amountSentences(answer)) {
+  for (const sentence of answerAmounts) {
     const cited = citedSourcesForSentence(sentence, sources);
-    if (!cited.length) continue;
+    if (!cited.length) {
+      // Una tabla con fuente única puede llevar la cita antes de las filas.
+      // Con varias fuentes no se puede adivinar cuál respalda la cifra.
+      if (sources.length !== 1 || !sources[0])
+        return { excerpt: sentence.slice(0, 2_000) };
+      cited.push(sources[0]);
+    }
+
+    if (
+      [...matchingAmounts(sentence)].some(
+        (amount) =>
+          !cited.some((source) =>
+            matchingAmounts(source.chunkContent).has(amount),
+          ),
+      )
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+
+    const role =
+      question && isBroadSalaryQuestion(question)
+        ? salaryQuestionProfile(question).role
+        : null;
+    const statedSectors = salarySectors(sentence);
+    const questionSectors = question ? salarySectors(question) : [];
+    // Una misma oración con cifras y ambos sectores no permite asociar cada
+    // importe inequívocamente; se pide al modelo separarlos con su fuente.
+    if (statedSectors.length > 1) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+    if (
+      questionSectors.length === 1 &&
+      statedSectors.length === 1 &&
+      questionSectors[0] !== statedSectors[0]
+    ) {
+      return { excerpt: sentence.slice(0, 2_000) };
+    }
+    const sector =
+      statedSectors.length === 1
+        ? statedSectors[0]
+        : statedSectors.length === 0 && questionSectors.length === 1
+          ? questionSectors[0]
+          : null;
+    if (sector || role) {
+      const amounts = matchingAmounts(sentence);
+      const supported = [...amounts].every((amount) =>
+        cited.some((source) =>
+          sentencesIn(source.chunkContent)
+            .flatMap((row) =>
+              ((hasMarkdownTable(source.chunkContent) &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(row) &&
+                row.includes(';')) ||
+              /\bcargo\s*:/u.test(row)
+                ? [row]
+                : row.split(SALARY_CLAUSE_SPLIT)
+              ).map((clause) => ({ row, clause })),
+            )
+            .some(({ row, clause }) => {
+              const sectors = salarySectors(clause);
+              const table =
+                hasMarkdownTable(source.chunkContent) &&
+                row.includes(';') &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(row);
+              if (
+                !retainsSalaryConditions(
+                  row,
+                  amount,
+                  sentence,
+                  table,
+                  source.chunkContent,
+                  question,
+                )
+              )
+                return false;
+              const tableRole =
+                hasMarkdownTable(source.chunkContent) &&
+                !/\bcargo\s*:/u.test(clause) &&
+                /\b(?:remuneracion|sueldo|salario)[^:]*:/u.test(clause) &&
+                role &&
+                rolesIn(normalizeSpanishText(source.documentTitle)).includes(
+                  role,
+                ) &&
+                !/\b(?:administrativ[oa]s?|auxiliar(?:es)?|docentes?|profesor(?:a|es|as)?|director(?:a|es|as)?)\b/u.test(
+                  row,
+                );
+              return (
+                exactSalaryAmounts(clause).has(amount) &&
+                !/\b(?:no|ni|excepto|excluid[oa]s?)\b/u.test(clause) &&
+                (!role ||
+                  ((rolesIn(clause).includes(role) || tableRole) &&
+                    GENERAL_REMUNERATION_TERMS.test(clause))) &&
+                (!sector || (sectors.length === 1 && sectors[0] === sector))
+              );
+            }),
+        ),
+      );
+      if (!supported) return { excerpt: sentence.slice(0, 2_000) };
+    }
 
     // Un documento reemplazado nunca se presenta como regla vigente. No basta
     // con que el fragmento use la palabra «remuneración»: su situación

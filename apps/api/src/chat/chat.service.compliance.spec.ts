@@ -397,7 +397,7 @@ describe('ChatService — lineamientos del cliente', () => {
           ...source,
           articleReference: 'Artículo 3',
           chunkContent:
-            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+            'La remuneración mensual del profesor es de S/ 2 666,80.',
           numeralReference: 'Literal h)',
           semanticScore: 0.95,
         },
@@ -406,7 +406,7 @@ describe('ChatService — lineamientos del cliente', () => {
           articleReference: 'Artículo 3',
           chunkId: '6c8b56af-6d0c-4fef-881e-7c00907540dd',
           chunkContent:
-            'El literal h) señala una remuneración mensual de S/ 2 666,80.',
+            'La remuneración mensual del profesor es de S/ 2 666,80.',
           documentVersionId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
           moduleIds: ['b'],
           moduleNames: ['Remuneraciones'],
@@ -433,15 +433,11 @@ describe('ChatService — lineamientos del cliente', () => {
       'done',
     ]);
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        question: '¿Cuánto gana un profesor del Perú?',
-      }),
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const answer = events.find((event) => event.type === 'token');
+    expect(answer?.data.text).toContain(
+      'La remuneración mensual del profesor es de S/ 2 666,80.',
     );
-    const generateInput = (
-      answerGateway.generate.mock.calls as Array<[{ sources?: unknown[] }]>
-    )[0]?.[0];
-    expect(generateInput?.sources?.length).toBeGreaterThan(0);
     expect(completion()).toMatchObject({
       replyRole: 'assistant',
       unansweredReason: null,
