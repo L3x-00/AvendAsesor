@@ -132,12 +132,21 @@
 .avend-chat-welcome {
   animation: avend-rise-in 380ms var(--avend-ease-interaction) both;
   background:
-    radial-gradient(circle at 100% 0%, rgb(22 119 255 / 10%), transparent 45%),
-    var(--avend-surface);
-  border: 1px solid var(--avend-border);
+    linear-gradient(
+      135deg,
+      rgb(6 48 112 / 18%) 0%,
+      rgb(71 178 255 / 14%) 47%,
+      rgb(255 255 255 / 54%) 100%
+    ),
+    rgb(247 252 255 / 52%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 72%);
   border-radius: 1.125rem;
-  box-shadow: var(--avend-shadow-surface);
+  box-shadow:
+    0 18px 44px rgb(4 44 107 / 16%),
+    inset 0 1px 0 rgb(255 255 255 / 70%);
   padding: clamp(1.25rem, 3vw, 1.75rem);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 
 .avend-chat-welcome h2 {
@@ -177,8 +186,9 @@
 
 .avend-chat-suggestions button {
   align-items: center;
-  background: var(--avend-surface);
-  border: 1px solid var(--avend-border);
+  background: rgb(255 255 255 / 48%);
+  backdrop-filter: blur(10px) saturate(130%);
+  border: 1px solid rgb(255 255 255 / 68%);
   border-radius: 0.75rem;
   color: var(--avend-text);
   cursor: pointer;
@@ -196,6 +206,7 @@
     border-color 160ms var(--avend-ease-interaction),
     transform 160ms var(--avend-ease-interaction);
   width: 100%;
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
 }
 
 .avend-chat-suggestions button svg {
@@ -211,8 +222,8 @@
 }
 
 .avend-chat-suggestions button:not(:disabled):hover {
-  background: var(--avend-soft-blue);
-  border-color: rgb(22 119 255 / 35%);
+  background: rgb(222 244 255 / 72%);
+  border-color: rgb(74 180 255 / 58%);
 }
 
 .avend-chat-suggestions button:not(:disabled):hover svg {
@@ -1497,6 +1508,10 @@ ul.avend-chat-list {
    contraste del contenido. Está por debajo de la conversación y se omite
    por completo si el sistema prefiere menos movimiento. */
 .avend-chat-page {
+  background:
+    radial-gradient(ellipse at 84% 4%, rgb(98 201 255 / 24%), transparent 54%),
+    radial-gradient(ellipse at 8% 94%, rgb(11 61 145 / 17%), transparent 58%),
+    linear-gradient(138deg, #edf8ff 0%, #e6f5ff 48%, #f7fbff 100%);
   isolation: isolate;
   overflow: clip;
   position: relative;
@@ -1509,7 +1524,7 @@ ul.avend-chat-list {
 
 .avend-chat-aero-shards {
   inset: 0;
-  opacity: 0.24;
+  opacity: 0.44;
   pointer-events: none;
   position: absolute;
   z-index: 0;
@@ -1523,7 +1538,7 @@ ul.avend-chat-list {
 
 @media (max-width: 47.99rem) {
   .avend-chat-aero-shards {
-    opacity: 0.18;
+    opacity: 0.32;
   }
 }
 

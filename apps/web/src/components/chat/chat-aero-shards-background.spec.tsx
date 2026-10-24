@@ -39,7 +39,7 @@ describe("ChatAeroShardsBackground", () => {
     expect(screen.queryByTestId("aero-shards-engine")).not.toBeInTheDocument();
   });
 
-  it("usa una configuración decorativa ligera sin capturar las acciones del chat", async () => {
+  it("usa una configuración azul dinámica y ligera sin capturar las acciones del chat", async () => {
     vi.stubGlobal("navigator", { gpu: {} });
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("GPUCanvasContext", class GPUCanvasContext {});
@@ -57,14 +57,20 @@ describe("ChatAeroShardsBackground", () => {
     expect(await screen.findByTestId("aero-shards-engine")).toBeInTheDocument();
     expect(renderAeroShards).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        count: 360,
+        accentColor: "#77d4ff",
+        count: 480,
         dpr: 1,
+        glow: 0.18,
         holdToGather: false,
-        markers: "none",
-        mouseInteraction: false,
+        intro: true,
+        lightMode: false,
+        markers: "dots",
+        mouseInteraction: true,
         placement: "full",
         powerPreference: "low-power",
         pulseOnClick: false,
+        shardColor: "#0b3d91",
+        speed: 0.55,
       }),
     );
   });

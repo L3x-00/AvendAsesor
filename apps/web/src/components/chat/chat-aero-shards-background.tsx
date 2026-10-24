@@ -79,25 +79,25 @@ export function ChatAeroShardsBackground() {
   return (
     <div aria-hidden="true" className="avend-chat-aero-shards">
       <AeroShards
-        accentColor="#d8ebff"
+        accentColor="#77d4ff"
         backgroundColor="transparent"
-        count={360}
-        depthOfField={0.75}
+        count={480}
+        depthOfField={0.68}
         dpr={1}
-        glow={0}
+        glow={0.18}
         holdToGather={false}
-        intro={false}
-        lightMode
-        markers="none"
+        intro
+        lightMode={false}
+        markers="dots"
         material="glass"
-        mouseInteraction={false}
+        mouseInteraction
         onError={() => setAeroShards(null)}
         placement="full"
         powerPreference="low-power"
         pulseOnClick={false}
-        shardColor="#6ca3f5"
-        speed={0.3}
-        vignette={0.3}
+        shardColor="#0b3d91"
+        speed={0.55}
+        vignette={0.2}
       />
     </div>
   );
