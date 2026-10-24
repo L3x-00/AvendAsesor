@@ -1372,6 +1372,25 @@ textarea[aria-invalid="true"]:focus,
   outline-offset: 2px;
 }
 
+/* «Página 17 de 41» dentro de una respuesta: abre el documento citado en esa
+   página. Se ve como enlace, sin confundirse con la cita [n]. */
+.avend-chat-page-link {
+  color: var(--avend-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  white-space: nowrap;
+}
+
+.avend-chat-page-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.avend-chat-page-link:focus-visible {
+  border-radius: 0.2rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
 /* Fuente única de la respuesta: una sola cita bajo la tabla o al final, en vez
    de repetirla en cada párrafo, viñeta o fila. El margen negativo la acerca al
    bloque que respalda; el relleno del enlace amplía el área táctil a ≥ 44 px

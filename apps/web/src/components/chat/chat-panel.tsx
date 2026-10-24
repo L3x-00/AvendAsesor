@@ -53,6 +53,7 @@ import {
   type MarkdownTableBlock,
 } from "./chat-response-tables";
 import { ChatTable } from "./chat-table";
+import { linkPageReferences } from "./chat-page-links";
 import { friendlyDates } from "./friendly-dates";
 import { SubmoduleFolder } from "./submodule-folder";
 import {
@@ -382,14 +383,30 @@ function renderInline(
       : text;
   return displayText.split("**").map((segment, index) => {
     const cited = linkCitations(segment, citations, `c${index}`);
+    const ranks = [...new Set(citedSourceRanks(segment))];
+    const pageRank =
+      ranks.length === 1 ? ranks[0] : citations?.consolidated?.rank;
+    // «Página 17 de 41» abre el documento citado en esa página.
+    const withPages = citations?.sources.length
+      ? cited.flatMap((part, partIndex) =>
+          typeof part === "string"
+            ? linkPageReferences(
+                part,
+                citations.sources,
+                pageRank,
+                `p${index}-${partIndex}`,
+              )
+            : [part],
+        )
+      : cited;
     // Direcciones de dominios oficiales (gob.pe…) en cualquier respuesta.
     const linked = links.urls
-      ? cited.flatMap((part, partIndex) =>
+      ? withPages.flatMap((part, partIndex) =>
           typeof part === "string"
             ? linkifyOfficialUrls(part, `u${index}-${partIndex}`)
             : [part],
         )
-      : cited;
+      : withPages;
     // En las sugerencias, MINEDU, UGEL, SUNEDU… enlazan a su portal oficial.
     const parts = links.entities
       ? linked.flatMap((part, partIndex) =>

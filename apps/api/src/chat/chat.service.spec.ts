@@ -1827,7 +1827,7 @@ describe('ChatService', () => {
 
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     const token = events.find((event) => event.type === 'token');
-    expect(token?.data.text).toContain('No encontré un monto de remuneración');
+    expect(token?.data.text).toContain('Todavía no tengo el monto exacto');
     expect(token?.data.text).toContain('Decreto Supremo');
     const completion = (
       historyGateway.completeTurn.mock.calls as Array<
@@ -1867,7 +1867,7 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'token')).toBe(true);
     expect(answerGateway.generate).not.toHaveBeenCalled();
     const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain('No encontré un monto de remuneración');
+    expect(answer?.data.text).toContain('Todavía no tengo el monto exacto');
     expect(answer?.data.text).toContain(
       'La remuneración mensual del auxiliar de educación',
     );
@@ -1919,7 +1919,7 @@ describe('ChatService', () => {
     });
 
     const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain('No encontré un monto de remuneración');
+    expect(answer?.data.text).toContain('Todavía no tengo el monto exacto');
     expect(answer?.data.text).not.toContain('S/ 2 000,00');
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
@@ -1965,7 +1965,7 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     expect(answerGateway.generate).not.toHaveBeenCalled();
     const answer = events.find((event) => event.type === 'no_evidence');
-    expect(answer?.data.message).toContain('no puedo darte una cifra');
+    expect(answer?.data.message).toContain('prefiero no inventarla');
     expect(answer?.data.message).not.toContain('sector público');
     expect(events.some((event) => event.type === 'token')).toBe(false);
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(

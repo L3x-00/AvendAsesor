@@ -62,6 +62,14 @@ const REGULATION_VERB =
 /** Una condición de pago que acompaña a la tabla (proporcionalidad, jornada). */
 const PAY_CONDITION =
   /\b(?:proporcional|jornada|carga\s+horaria|horas?\s+(?:contratadas?|semanales?|lectivas?))\b/u;
+/**
+ * Una unidad que habla de la remuneración como regla («la remuneración es…»,
+ * «el decreto establece el monto de la remuneración»), no de un requisito que
+ * solo menciona «constancias de haberes». Evita citar trámites de experiencia
+ * como si explicaran cuánto se gana.
+ */
+const SALARY_RULE =
+  /\b(?:remuneracion(?:es)?|sueldos?|salarios?)\b[^.;]{0,80}\b(?:es|son|se|sera|seran|esta|estan|ha|han|sido|corresponde|asciende|equivale|fija|fijan|fijad[oa]s?|establece|establecen|establecid[oa]s?|regula|regulan|regulad[oa]s?|determina|determinan|determinad[oa]s?|percibe|perciben|otorga|otorgan|monto|importe|escala)\b|\bhaberes\b[^.;]{0,80}\b(?:fija|fijan|fijad[oa]s?|establece|establecen|establecid[oa]s?|regula|regulan|regulad[oa]s?|determina|determinan|determinad[oa]s?|corresponde|asciende|equivale|percibe|perciben|otorga|otorgan|monto|importe|escala|sera|seran)\b|\b(?:establece|establecen|fija|fijan|regula|regulan|determina|determinan)\b[^.;]{0,60}\b(?:remuneracion(?:es)?|sueldos?|salarios?|haberes)\b/u;
 const MAX_NOTE_CHARS = 500;
 
 /**
@@ -311,13 +319,34 @@ function escapeCell(value: string): string {
 /**
  * Artefacto de extracción del PDF: el símbolo de grado de «N.°» llega como
  * «%», «*», «?» o comilla. Solo se corrige esa marca junto al número de norma;
- * el resto del texto citado se conserva literal.
+ * el resto del texto citado se conserva, salvo la cabecera repetida del PDF que
+ * se explica abajo.
  */
 function readableExtract(text: string): string {
-  return text
+  const cleaned = text
     .replace(/\bN\s*[%*?¿"“”]\s*(?=\d{2,})/gu, 'N.° ')
     .replace(/\s+/gu, ' ')
     .trim();
+  // Un fragmento que empieza con la cabecera del documento («Norma Técnica
+  // Código … Página 17 de 41 6.2.6 …») gana legibilidad si arranca en la
+  // página: la cabecera ya está en la ficha de la fuente. Se conserva la
+  // referencia de página para que la interfaz la enlace.
+  if (
+    !/^(?:norma\s+t[eé]cnica|c[oó]digo|norma\s+que\s+regula)/iu.test(cleaned)
+  ) {
+    return cleaned;
+  }
+  const page = /\b(P[aá]gina\s+\d+\s+de\s+\d+)\b/iu.exec(cleaned);
+  if (!page || (page.index ?? 0) > 500) return cleaned;
+  const rest = cleaned
+    .slice((page.index ?? 0) + page[0].length)
+    .replace(/^[\s·:–—-]+/u, '')
+    .trim();
+  // Solo se recorta si después de la página queda una cláusula numerada
+  // («6.2.6 …»). Un pie de página al final o una referencia cruzada no deben
+  // borrar el contenido que se quiere citar.
+  if (rest.length < 20 || !/^\d+(?:\.\d+)*\b/u.test(rest)) return cleaned;
+  return `${page[1]} · ${rest}`;
 }
 
 /**
@@ -402,7 +431,7 @@ function scheduleIntro(
   const [onlyHours] = [...hours];
   return amounts.size === 1 && hours.size === 1
     ? `${subject} es ${amount} para una jornada de ${onlyHours} horas. [${rank}]`
-    : `${subject}, según la tabla recuperada, es la siguiente. [${rank}]`;
+    : `${subject}, según la tabla del documento, es la siguiente. [${rank}]`;
 }
 
 /**
@@ -492,8 +521,8 @@ function scheduleSummary(
   const subject = `${phrase ? ` del ${phrase}` : ''}${sectorPhrase(sectors)}`;
   const yearLabel = year !== null && year !== primaryYear ? ` de ${year}` : '';
   return conflict
-    ? `Otra fuente recuperada del mismo año registra un monto distinto: ${amount} para una jornada de ${onlyHours} horas${subject}. [${rank}]`
-    : `Otra fuente recuperada${yearLabel} también registra ${amount} para una jornada de ${onlyHours} horas${subject}. [${rank}]`;
+    ? `Otra fuente del mismo año registra un monto distinto: ${amount} para una jornada de ${onlyHours} horas${subject}. [${rank}]`
+    : `Otra fuente${yearLabel} también registra ${amount} para una jornada de ${onlyHours} horas${subject}. [${rank}]`;
 }
 
 /**
@@ -565,7 +594,7 @@ function renderExtraSource(
         primaryYear,
         conflict,
       ) ??
-      `Otra fuente recuperada contiene una escala de remuneración que no se puede resumir en un solo monto y jornada. [${rank}]`;
+      `Otra fuente contiene una escala de remuneración que no se puede resumir en un solo monto y jornada. [${rank}]`;
     return {
       sectors: scheduleEntry.unit.sectors,
       text: `- ${summary}`,
@@ -721,19 +750,23 @@ function renderCandidates(
     body =
       primaryUnits.length === 1
         ? `${readableExtract(primaryUnits[0]?.text ?? '')} [${primaryRank}]`
-        : unitSection(
-            primaryUnits,
-            primaryRank,
-            'La evidencia recuperada registra:',
-          );
+        : unitSection(primaryUnits, primaryRank, 'Esto es lo que encontré:');
   } else {
-    const panorama = noAmountUnits(primaryUnits);
-    const units = panorama.length ? panorama : primaryUnits.slice(0, 1);
-    body = unitSection(
-      units,
-      primaryRank,
-      'No encontré un monto de remuneración para el cargo consultado en la evidencia recuperada. La evidencia disponible indica:',
+    const intro = `Todavía no tengo el monto exacto${
+      expectedRole === null ? ' para ese cargo' : ` del ${expectedRole}`
+    } en los documentos disponibles.`;
+    const panorama = noAmountUnits(
+      primaryUnits.filter((unit) =>
+        SALARY_RULE.test(normalizeSpanishText(unit.text)),
+      ),
     );
+    body = panorama.length
+      ? unitSection(
+          panorama,
+          primaryRank,
+          `${intro} Esto es lo que sí encontré:`,
+        )
+      : `${intro} [${primaryRank}]`;
   }
 
   const displayedSectors = [
@@ -742,13 +775,16 @@ function renderCandidates(
       : primary.units.flatMap((unit) => unit.sectors)),
     ...extras.flatMap(({ sectors }) => sectors),
   ];
-  const missingSectors = displayedSectors.length
-    ? requestedSectors.filter((sector) => !displayedSectors.includes(sector))
-    : [];
+  // El aviso de sector ausente solo tiene sentido si la persona preguntó por
+  // ese sector. En una pregunta general no se menciona un sector que no pidió.
+  const missingSectors =
+    explicitSector && displayedSectors.length
+      ? requestedSectors.filter((sector) => !displayedSectors.includes(sector))
+      : [];
   const missingMessage = missingSectors.length
-    ? `\n\nNo se recuperó un fragmento salarial explícito para el sector ${missingSectors
+    ? `\n\nNo tengo un monto para el sector ${missingSectors
         .map(displaySector)
-        .join(' y ')}.`
+        .join(' y ')} en los documentos disponibles.`
     : '';
 
   const fullAnswer = `${[body, ...extras.map(({ text }) => text)].join('\n\n')}${missingMessage}`;
