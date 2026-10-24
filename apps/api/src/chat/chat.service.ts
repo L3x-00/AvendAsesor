@@ -1606,7 +1606,9 @@ export class ChatService {
         )
       : null;
     const responseSources = broadSalaryAnswerTurn
-      ? (extractiveSalary?.sources ?? [])
+      ? extractiveSalary?.hasVerifiedAmount
+        ? extractiveSalary.sources
+        : []
       : retrieval.sources;
     const citations = toCitationBundle(
       responseSources,
@@ -1621,9 +1623,11 @@ export class ChatService {
     // remuneración mensual en anual, ni extenderla a otro cargo o sector.
     if (broadSalaryAnswerTurn) {
       if (input.abortSignal?.aborted) return;
-      const finalAnswer =
-        extractiveSalary?.answer ??
-        'No recuperé un fragmento salarial que pueda atribuirse con seguridad al sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.';
+      const finalAnswer = extractiveSalary
+        ? extractiveSalary.hasVerifiedAmount
+          ? extractiveSalary.answer
+          : 'No encontré un monto verificable para el cargo consultado en las fuentes disponibles. Para no darte una cifra sin sustento, no indicaré un importe.'
+        : 'No recuperé un fragmento salarial que pueda atribuirse con seguridad al sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.';
       const completed = await this.historyGateway.completeTurn({
         answer: finalAnswer,
         conversationId: turn.conversationId,

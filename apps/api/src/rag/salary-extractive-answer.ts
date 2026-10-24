@@ -1,5 +1,6 @@
 import type { RetrievalScope, RetrievedChunk } from './retrieval.gateway';
 import {
+  hasAmount,
   hasSalaryPanoramaEvidence,
   salaryQuestionProfile,
   salaryRoles,
@@ -9,6 +10,7 @@ import { normalizeSpanishText } from './text-normalization';
 
 export interface ExtractiveSalaryAnswer {
   answer: string;
+  hasVerifiedAmount: boolean;
   sources: RetrievedChunk[];
 }
 
@@ -20,6 +22,8 @@ interface SalaryEvidenceUnit {
 const PANORAMA_SECTORS = ['publico', 'privado'] as const;
 const GENERAL_SALARY_TERM =
   /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haberes)\b/u;
+const SPECIAL_BENEFIT_TERM =
+  /\b(?:asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?|sepelio|bono(?:s)?|compensacion(?:es)?|beneficios?|incentivos?|cts)\b/u;
 const NEGATED_SALARY_UNIT =
   /\b(?:no|ni|excepto|excluid[oa]s?|inaplicable|no\s+se\s+aplica)\b/u;
 const EDUCATION_AUXILIARY = /\bauxiliar(?:es)?\s+de\s+educacion\b/u;
@@ -143,6 +147,20 @@ function visibleUnitsFor(
 }
 
 /**
+ * Una cifra solo habilita una respuesta de «cuánto gana» cuando pertenece a
+ * la cláusula de remuneración general. Los beneficios adicionales pueden
+ * figurar junto al sueldo en el mismo fragmento, pero no lo sustituyen.
+ */
+function hasVerifiedGeneralSalaryAmount(unit: string): boolean {
+  const normalizedUnit = normalizeSpanishText(unit);
+  if (SPECIAL_BENEFIT_TERM.test(normalizedUnit)) return false;
+  return unit.split(/[;\n]/u).some((clause) => {
+    const normalizedClause = normalizeSpanishText(clause);
+    return GENERAL_SALARY_TERM.test(normalizedClause) && hasAmount(clause);
+  });
+}
+
+/**
  * Evita que el modelo reformule un importe salarial. Cada bloque mostrado es
  * únicamente las oraciones o filas recuperadas que superan la comprobación de
  * cargo y sector, y la cita se añade en el servidor. Un fragmento que ya
@@ -216,21 +234,28 @@ export function buildExtractiveSalaryAnswer(
       !selected.some(({ evidence }) => evidence.sectors.includes(sector)),
   );
 
-  const answer = selected
-    .map(({ evidence }, index) => {
-      const units = visibleUnitsFor(
-        evidence,
-        requestedSectors,
-        explicitSectors.length > 0,
-      );
+  const renderedSources = selected.map(({ evidence, source }) => ({
+    source,
+    units: visibleUnitsFor(
+      evidence,
+      requestedSectors,
+      explicitSectors.length > 0,
+    ),
+  }));
+  const answer = renderedSources
+    .map(({ units }, index) => {
       return `Fragmento recuperado de la fuente ${index + 1}:\n${units.map((unit) => unit.text).join('\n\n')}\n[${index + 1}]`;
     })
     .join('\n\n');
+  const hasVerifiedAmount = renderedSources.some(({ units }) =>
+    units.some((unit) => hasVerifiedGeneralSalaryAmount(unit.text)),
+  );
   const missingMessage = missingSectors.length
     ? `\n\nNo se recuperó un fragmento salarial explícito para el sector ${missingSectors.join(' y ')}.`
     : '';
   return {
     answer: `${answer}${missingMessage}`,
-    sources: selected.map(({ source }) => source),
+    hasVerifiedAmount,
+    sources: renderedSources.map(({ source }) => source),
   };
 }

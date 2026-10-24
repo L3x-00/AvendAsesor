@@ -37,6 +37,7 @@ describe('buildExtractiveSalaryAnswer', () => {
 
     expect(result?.answer).toContain(content);
     expect(result?.answer).toContain('[1]');
+    expect(result?.hasVerifiedAmount).toBe(true);
     expect(result?.sources).toHaveLength(1);
   });
 
@@ -265,6 +266,81 @@ describe('buildExtractiveSalaryAnswer', () => {
     expect(result?.answer).toContain('S/ 2 000,00');
     expect(result?.answer).not.toContain('Docente');
     expect(result?.answer).not.toContain('S/ 4 000,00');
+  });
+
+  it('no considera el monto de otra unidad como monto verificable del cargo', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La remuneración del auxiliar de educación del sector público se regula por la normativa vigente. La remuneración mensual del docente del sector privado es S/ 4 000,00.',
+        ),
+      ],
+      '¿Cuánto gana un auxiliar de educación?',
+      'current',
+    );
+
+    expect(result?.hasVerifiedAmount).toBe(false);
+    expect(result?.answer).not.toContain('S/ 4 000,00');
+  });
+
+  it('no confunde una bonificación con el monto de la remuneración', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La remuneración del auxiliar de educación del sector público se regula por normativa; la bonificación temporal es S/ 500,00.',
+        ),
+      ],
+      '¿Cuánto gana un auxiliar de educación?',
+      'current',
+    );
+
+    expect(result?.hasVerifiedAmount).toBe(false);
+  });
+
+  it('no toma una bonificación incluida en la misma cláusula como sueldo', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La remuneración del auxiliar de educación del sector público incluye una bonificación temporal de S/ 500,00.',
+        ),
+      ],
+      '¿Cuánto gana un auxiliar de educación?',
+      'current',
+    );
+
+    expect(result?.hasVerifiedAmount).toBe(false);
+  });
+
+  it('no toma la CTS incluida en la cláusula como sueldo', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La remuneración del auxiliar de educación del sector público incluye CTS de S/ 500,00.',
+        ),
+      ],
+      '¿Cuánto gana un auxiliar de educación?',
+      'current',
+    );
+
+    expect(result?.hasVerifiedAmount).toBe(false);
+  });
+
+  it.each([
+    'Bonificación temporal',
+    'Beneficio temporal',
+    'Incentivo temporal',
+  ])('no toma una fila de tabla con %s como sueldo', (concept) => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          `| Cargo | Sector | Remuneración | Concepto |\n| --- | --- | --- | --- |\n| Auxiliar de educación | Público | S/ 500,00 | ${concept} |`,
+        ),
+      ],
+      '¿Cuánto gana un auxiliar de educación?',
+      'current',
+    );
+
+    expect(result?.hasVerifiedAmount).toBe(false);
   });
 
   it('descarta fragmentos que podrían crear una cita ajena en la interfaz', () => {

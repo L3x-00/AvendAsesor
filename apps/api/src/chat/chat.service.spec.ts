@@ -1710,6 +1710,14 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     expect(events.some((event) => event.type === 'token')).toBe(true);
     expect(answerGateway.generate).not.toHaveBeenCalled();
+    const answer = events.find((event) => event.type === 'token');
+    expect(answer?.data.text).toContain('No encontré un monto verificable');
+    expect(answer?.data.text).not.toContain('normativa vigente');
+    expect(answer?.data.text).not.toContain('?');
+    expect(events.find((event) => event.type === 'sources')).toEqual({
+      data: { sources: [] },
+      type: 'sources',
+    });
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -1747,9 +1755,7 @@ describe('ChatService', () => {
     });
 
     const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain(
-      'La remuneración mensual del auxiliar de educación es aquella que se encuentra establecida',
-    );
+    expect(answer?.data.text).toContain('No encontré un monto verificable');
     expect(answer?.data.text).not.toContain('S/ 2 000,00');
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
