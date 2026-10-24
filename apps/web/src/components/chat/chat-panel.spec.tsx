@@ -213,6 +213,70 @@ describe("ChatPanel", () => {
     expect(within(bullet as HTMLElement).queryByRole("link")).toBeNull();
   });
 
+  it("enlaza la página citada al documento de la fuente", () => {
+    const first = eligibleConversation.messages[1].sources[0];
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content:
+                "6.2.6 La experiencia laboral se reconoce. Página 17 de 41 [1]",
+              sources: [
+                { ...first, pageStart: 17, pageEnd: 17, pdfPageCount: 41 },
+              ],
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    const pageLink = screen.getByRole("link", {
+      name: /Abrir Página 17 de 41 de la fuente 1/,
+    });
+    expect(pageLink).toHaveAttribute(
+      "href",
+      `/api/chat/sources/${sourceId}/download?pagina=17`,
+    );
+    expect(pageLink).toHaveAttribute("target", "_blank");
+  });
+
+  it("no enlaza una página cuando la frase cita dos fuentes", () => {
+    const first = eligibleConversation.messages[1].sources[0];
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...eligibleConversation,
+          messages: [
+            eligibleConversation.messages[0],
+            {
+              ...eligibleConversation.messages[1],
+              content: "Según [1], la página 17 de 41 consta en [2].",
+              sources: [
+                { ...first, pageStart: 17, pageEnd: 17, pdfPageCount: 41 },
+                {
+                  ...first,
+                  documentVersionId: "44444444-4444-4444-8444-444444444444",
+                  id: "55555555-5555-4555-8555-555555555555",
+                  rank: 2,
+                },
+              ],
+            },
+          ],
+        }}
+        modules={[chatModule]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: /Abrir Página 17 de 41/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("offers the orientation sheet only for a completed sourced assistant message", () => {
     render(
       <ChatPanel

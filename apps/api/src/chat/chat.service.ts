@@ -659,7 +659,7 @@ function ambiguityMessage(question: string, modules: ResolvedModule[]): string {
  * mostrar una cifra que podría pertenecer a otra fila.
  */
 function salaryEvidenceClarificationMessage(): string {
-  return 'La evidencia contiene información salarial, pero la respuesta no permite asociar cada monto con la condición correcta. Para no darte una cifra equivocada, ¿me confirmas tu jornada, vínculo, cargo o escala?';
+  return 'Tengo información salarial, pero necesito un dato para no darte una cifra equivocada: ¿me confirmas tu jornada, vínculo, cargo o escala?';
 }
 
 /**
@@ -1630,7 +1630,7 @@ export class ChatService {
           conversationId: turn.conversationId,
           faqMemory,
           message:
-            'No recuperé un fragmento salarial que pueda atribuirse con seguridad al cargo o sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.',
+            'No tengo un monto que pueda atribuir con seguridad a ese cargo o sector. Para no darte una cifra equivocada, prefiero no inventarla.',
           modules: broadSalaryModules,
           retrievalScope,
           topRelevanceScore: retrieval.topRelevanceScore,
@@ -1905,7 +1905,7 @@ export class ChatService {
       );
       const message =
         broadSalaryAnswerTurn && noSalaryAmountEvidence
-          ? 'Los documentos disponibles tratan la remuneración del cargo consultado, pero no incluyen el monto. Para no apartarme de las fuentes, no puedo darte una cifra. ¿Quieres que te explique qué regla sí consta?'
+          ? 'Los documentos disponibles tratan la remuneración del cargo consultado, pero no incluyen el monto. Para no darte una cifra equivocada, prefiero no inventarla. ¿Quieres que te explique qué regla sí consta?'
           : (salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
               ?.message ?? salaryEvidenceClarificationMessage());
       const completed = await this.historyGateway.completeTurn({

@@ -206,6 +206,9 @@ describe('buildExtractiveSalaryAnswer', () => {
     );
 
     expect(result?.answer).toContain('sector público');
+    expect(result?.answer).toContain(
+      'No tengo un monto para el sector público',
+    );
   });
 
   it('prioriza un fragmento de cada sector en la pregunta general', () => {
@@ -248,7 +251,7 @@ describe('buildExtractiveSalaryAnswer', () => {
 
     expect(result?.answer).toContain('S/ 2 000,00');
     expect(result?.answer).not.toContain('S/ 4 000,00');
-    expect(result?.answer).toContain('sector privado');
+    expect(result?.answer).not.toContain('sector privado');
   });
 
   it('no exhibe una fila de otro cargo que comparte la misma tabla', () => {
@@ -420,7 +423,7 @@ describe('buildExtractiveSalaryAnswer', () => {
         'current',
       );
 
-      expect(result?.answer).toContain('según la tabla recuperada');
+      expect(result?.answer).toContain('según la tabla del documento');
       expect(result?.answer).not.toContain('es S/ 3 500,70 para una jornada');
       expect(result?.answer).toContain('S/ 3 500,70');
       expect(result?.answer).toContain('S/ 3 800,90');
@@ -583,7 +586,7 @@ describe('buildExtractiveSalaryAnswer', () => {
     );
 
     expect(result?.hasVerifiedAmount).toBe(true);
-    expect(result?.answer).not.toContain('No encontré un monto');
+    expect(result?.answer).not.toContain('Todavía no tengo el monto exacto');
     expect(result?.answer).toContain('S/ 3 500,70');
     expect(result?.sources).toHaveLength(1);
   });
@@ -629,7 +632,7 @@ describe('buildExtractiveSalaryAnswer', () => {
       'current',
     );
 
-    expect(result?.answer).toContain('No encontré un monto');
+    expect(result?.answer).toContain('Todavía no tengo el monto exacto');
     expect(result?.answer).toContain('N.° 296-2016-EF');
     expect(result?.sources).toHaveLength(1);
   });
@@ -815,7 +818,7 @@ describe('buildExtractiveSalaryAnswer', () => {
     );
 
     expect(result?.answer).toContain('S/ 3 500,70');
-    expect(result?.answer).toContain('Otra fuente recuperada de 2025');
+    expect(result?.answer).toContain('Otra fuente de 2025');
     expect(result?.answer).toContain('S/ 3 300,60');
   });
 
@@ -924,6 +927,105 @@ describe('buildExtractiveSalaryAnswer', () => {
     expect(result?.answer).not.toContain('3 300,60');
   });
 
+  it('presenta el requisito del auxiliar sin lenguaje técnico y conserva la página', () => {
+    const content =
+      'Norma Técnica Código NORMA QUE REGULA EL PROCESO PARA LA CONTRATACIÓN DE AUXILIARES DE EDUCACIÓN EN LAS INSTITUCIONES EDUCATIVAS PÚBLICAS DE EDUCACIÓN BÁSICA REGULAR Y EDUCACIÓN BÁSICA ESPECIAL Página 17 de 41 6.2.6 La experiencia laboral en el cargo de auxiliar de educación se reconoce siempre que haya realizado su labor en instituciones educativas públicas, en condición de contratado, y la remuneración mensual del auxiliar de educación se fija por decreto supremo.';
+    const result = buildExtractiveSalaryAnswer(
+      [source(content, { documentVersionId: 'version-requisito' })],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain(
+      'Todavía no tengo el monto exacto del auxiliar de educación',
+    );
+    expect(result?.answer).toContain('Página 17 de 41 · 6.2.6');
+    expect(result?.answer).not.toContain('Norma Técnica Código');
+    expect(result?.answer).not.toContain('No se recuperó');
+    expect(result?.answer).not.toContain('evidencia recuperada');
+  });
+
+  it('no cita un requisito de experiencia como explicación del sueldo', () => {
+    const content =
+      'Norma Técnica Código NORMA QUE REGULA EL PROCESO PARA LA CONTRATACIÓN DE AUXILIARES DE EDUCACIÓN EN LAS INSTITUCIONES EDUCATIVAS PÚBLICAS DE EDUCACIÓN BÁSICA REGULAR Y EDUCACIÓN BÁSICA ESPECIAL Página 17 de 41 6.2.6 La experiencia laboral en el cargo de auxiliar de educación se reconoce siempre que haya realizado su labor en instituciones educativas públicas, en condición de contratado, y para el puntaje es obligatorio presentar las constancias de haberes y descuentos o las boletas de pago mensuales.';
+    const result = buildExtractiveSalaryAnswer(
+      [source(content, { documentVersionId: 'version-experiencia' })],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain(
+      'Todavía no tengo el monto exacto del auxiliar de educación',
+    );
+    expect(result?.answer).not.toContain('constancias de haberes');
+    expect(result?.answer).not.toContain('experiencia laboral');
+    expect(result?.answer).toContain('[1]');
+  });
+
+  it('no cita «constancias de haberes son obligatorias» como sueldo', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Para acreditar la experiencia del auxiliar de educación, las constancias de haberes son obligatorias y deben presentarse al postular.',
+        ),
+      ],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain(
+      'Todavía no tengo el monto exacto del auxiliar de educación',
+    );
+    expect(result?.answer).not.toContain('constancias de haberes');
+    expect(result?.answer).toContain('[1]');
+  });
+
+  it('no recorta el contenido cuando la página aparece al final', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Norma Técnica Código NORMA QUE REGULA EL PROCESO PARA LA CONTRATACIÓN DE AUXILIARES DE EDUCACIÓN EN LAS INSTITUCIONES EDUCATIVAS PÚBLICAS 6.2.6 La experiencia laboral en el cargo de auxiliar de educación se reconoce, y la remuneración mensual del auxiliar de educación se fija por decreto supremo Página 17 de 41',
+        ),
+      ],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain(
+      'la remuneración mensual del auxiliar de educación se fija por decreto supremo',
+    );
+    expect(result?.answer).not.toBe('Página 17 de 41 [1]');
+  });
+
+  it('reconoce una regla salarial conjugada en futuro o pasado', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La remuneración mensual del auxiliar de educación será fijada cada año por decreto supremo.',
+        ),
+      ],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('será fijada cada año');
+  });
+
+  it('busca la regla salarial antes de recortar a dos unidades', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'La experiencia del auxiliar de educación se acredita con constancias de haberes y boletas de pago. La experiencia del auxiliar de educación en instituciones educativas públicas se reconoce con la resolución de contrato y las constancias de haberes. El sueldo del auxiliar de educación se define cada año en la escala institucional.',
+        ),
+      ],
+      'cuanto gana un auxiliar?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('El sueldo del auxiliar de educación');
+    expect(result?.answer).not.toContain('La experiencia del auxiliar');
+  });
+
   it('declara que falta el monto del auxiliar y cita la norma que lo regula', () => {
     const result = buildExtractiveSalaryAnswer(
       [
@@ -941,7 +1043,7 @@ describe('buildExtractiveSalaryAnswer', () => {
 
     expect(result?.hasVerifiedAmount).toBe(false);
     expect(result?.sources).toHaveLength(1);
-    expect(result?.answer).toContain('No encontré un monto');
+    expect(result?.answer).toContain('Todavía no tengo el monto exacto');
     expect(result?.answer).toContain('Decreto Supremo');
     expect(result?.answer).toContain('N.° 296-2016-EF');
     expect(result?.answer).toContain('Auxiliares de Educación');
