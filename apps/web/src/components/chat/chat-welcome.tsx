@@ -1,6 +1,15 @@
 "use client";
 
-/** Bienvenida compacta del chat vacío. */
+/**
+ * Bienvenida del chat vacío: saluda por el nombre, explica en una frase qué
+ * se puede preguntar y ofrece inicios de consulta para completar.
+ */
+export const CHAT_STARTERS = [
+  "¿Qué requisitos necesito para ",
+  "¿Qué plazo tengo para ",
+  "¿Qué funciones tiene ",
+  "¿Qué pasa si ",
+] as const;
 
 /** Primer nombre legible; si no hay nombre, el saludo queda genérico. */
 export function firstNameOf(fullName: string | null | undefined): string | null {
@@ -10,10 +19,26 @@ export function firstNameOf(fullName: string | null | undefined): string | null 
 }
 
 interface ChatWelcomeProps {
+  disabled?: boolean;
   fullName?: string | null;
+  onSuggestion: (text: string) => void;
 }
 
-export function ChatWelcome({ fullName }: ChatWelcomeProps) {
+/** Mantiene el foco en el cuadro después de insertar un inicio de consulta. */
+function placeCaretAtEnd() {
+  window.requestAnimationFrame(() => {
+    const box = document.getElementById("chat-question");
+    if (!(box instanceof HTMLTextAreaElement)) return;
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  });
+}
+
+export function ChatWelcome({
+  disabled,
+  fullName,
+  onSuggestion,
+}: ChatWelcomeProps) {
   const firstName = firstNameOf(fullName);
 
   return (
@@ -25,6 +50,31 @@ export function ChatWelcome({ fullName }: ChatWelcomeProps) {
         documento vigente sale la información; si necesitas una norma
         anterior, pídelo expresamente.
       </p>
+      <p className="avend-chat-welcome-label" id="chat-suggestions-label">
+        Empieza con una de estas frases y complétala con tu caso:
+      </p>
+      <ul
+        aria-labelledby="chat-suggestions-label"
+        className="avend-chat-suggestions"
+      >
+        {CHAT_STARTERS.map((starter, index) => (
+          <li key={starter} style={{ animationDelay: `${160 + index * 70}ms` }}>
+            <button
+              disabled={disabled}
+              onClick={() => {
+                onSuggestion(starter);
+                placeCaretAtEnd();
+              }}
+              type="button"
+            >
+              <span>{`${starter.trimEnd()}…?`}</span>
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path d="M5 12h14m0 0-5-5m5 5-5 5" />
+              </svg>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

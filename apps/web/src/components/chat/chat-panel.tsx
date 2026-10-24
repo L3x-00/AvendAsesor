@@ -1642,7 +1642,17 @@ export function ChatPanel({
             </div>
           ) : null}
           {messages.length === 0 ? (
-            <ChatWelcome fullName={fullName} />
+            <ChatWelcome
+              disabled={isStreaming}
+              fullName={fullName}
+              onSuggestion={(text) => {
+                setQuestion(text);
+                setStatus(
+                  "Ejemplo listo en el cuadro: ajústalo a tu caso y envíalo.",
+                );
+                questionInputRef.current?.focus();
+              }}
+            />
           ) : (
             messages.map((message, messageIndex) => (
               <article
