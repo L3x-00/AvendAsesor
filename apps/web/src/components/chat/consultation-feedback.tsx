@@ -423,8 +423,7 @@ export function ConsultationFeedback({
       {showInvitation ? <div className={styles.copy}>
         <h2>¿La respuesta necesita revisión?</h2>
         <p>
-          Reporta la última respuesta o comparte una sugerencia. Tu sugerencia
-          no se incorpora automáticamente a las respuestas.
+          Reporta la última respuesta o comparte una sugerencia.
         </p>
       </div> : null}
       <div className={styles.actions}>

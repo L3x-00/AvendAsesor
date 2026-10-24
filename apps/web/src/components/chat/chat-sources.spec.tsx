@@ -622,11 +622,9 @@ describe("ChatDownloads", () => {
     ).toBeVisible();
     expect(summary?.textContent).not.toContain("(");
     // Icono y flecha son decorativos: el lector de pantalla lee solo nombre y cantidad.
-    expect(summary?.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(
-      1,
-    );
+    expect(summary?.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
     expect(
-      summary?.querySelector('span[aria-hidden="true"] svg'),
+      summary?.querySelector('span[aria-hidden="true"] img[src="/microsoft-word.svg"]'),
     ).not.toBeNull();
     // El lector de pantalla anuncia nombre y cantidad con el mismo formato de siempre.
     expect(summary).toHaveAttribute("aria-label", "Documentos disponibles (2)");

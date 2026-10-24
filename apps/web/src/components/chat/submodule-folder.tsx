@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useId, useMemo, useState } from "react";
 import type { ChatModule } from "@/lib/chat-api/types";
 
@@ -111,10 +112,13 @@ export function SubmoduleFolder({
                 type="button"
               >
                 <span aria-hidden="true" className="avend-chat-module-icon">
-                  <svg fill="none" viewBox="0 0 24 24">
-                    <path d="M7 3.75h7L18 7.7v12.55H7z" />
-                    <path d="M14 3.75V8h4M10 12h5M10 15.5h5" />
-                  </svg>
+                  <Image
+                    alt=""
+                    height={24}
+                    src="/files.svg"
+                    unoptimized
+                    width={24}
+                  />
                 </span>
                 <span className="avend-chat-module-name">
                   {submodule.name}
