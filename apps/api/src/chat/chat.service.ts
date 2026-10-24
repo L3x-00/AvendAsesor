@@ -48,6 +48,7 @@ import {
   RAG_DEFAULT_MATCH_THRESHOLD,
   RAG_NO_EVIDENCE_MESSAGE,
   RAG_TOPIC_CLARIFICATION_MESSAGE,
+  RAG_TRUNCATION_NOTE,
 } from '../rag/rag.constants';
 import {
   detectRetrievalScope,
@@ -152,8 +153,7 @@ function acceptedFollowUpContext(content: string): string {
 }
 
 /** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
-export const RAG_TRUNCATION_NOTE =
-  '(La respuesta se acortó por su extensión. Si necesitas más detalle, pregúntame por un punto específico).';
+export { RAG_TRUNCATION_NOTE };
 
 export interface ChatSource {
   articleReference: string | null;
@@ -1607,9 +1607,7 @@ export class ChatService {
         )
       : null;
     const responseSources = broadSalaryAnswerTurn
-      ? extractiveSalary?.hasVerifiedAmount
-        ? extractiveSalary.sources
-        : []
+      ? (extractiveSalary?.sources ?? [])
       : retrieval.sources;
     const citations = toCitationBundle(
       responseSources,
@@ -1619,16 +1617,29 @@ export class ChatService {
     );
 
     // Las cifras, períodos y condiciones de un panorama general no se
-    // reformulan con texto generado. Esta respuesta muestra el fragmento que
-    // recuperó el RAG y la cita creada por el servidor, para no convertir una
-    // remuneración mensual en anual, ni extenderla a otro cargo o sector.
+    // reformulan con texto generado. Esta respuesta muestra la tabla o las
+    // unidades verificadas que recuperó el RAG y la cita creada por el
+    // servidor, para no convertir una remuneración mensual en anual ni
+    // extenderla a otro cargo o sector. Cuando la evidencia no permite
+    // siquiera atribuir un enunciado al cargo, se cierra sin evidencia: el
+    // contrato de persistencia no admite una respuesta «assistant» sin fuente.
     if (broadSalaryAnswerTurn) {
       if (input.abortSignal?.aborted) return;
-      const finalAnswer = extractiveSalary
-        ? extractiveSalary.hasVerifiedAmount
-          ? extractiveSalary.answer
-          : 'No encontré un monto verificable para el cargo consultado en las fuentes disponibles. Para no darte una cifra sin sustento, no indicaré un importe.'
-        : 'No recuperé un fragmento salarial que pueda atribuirse con seguridad al sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.';
+      if (!extractiveSalary) {
+        yield* this.completeWithoutEvidence({
+          conversationId: turn.conversationId,
+          faqMemory,
+          message:
+            'No recuperé un fragmento salarial que pueda atribuirse con seguridad al cargo o sector consultado. Para no apartarme de las fuentes, no puedo darte una cifra.',
+          modules: broadSalaryModules,
+          retrievalScope,
+          topRelevanceScore: retrieval.topRelevanceScore,
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        return;
+      }
+      const finalAnswer = extractiveSalary.answer;
       const completed = await this.historyGateway.completeTurn({
         answer: finalAnswer,
         conversationId: turn.conversationId,
@@ -2216,6 +2227,7 @@ export class ChatService {
     conversationId: string;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
     message?: string;
+    modules?: ResolvedModule[];
     retrievalScope: RetrievalScope;
     topRelevanceScore: number | null;
     userId: string;
@@ -2244,6 +2256,7 @@ export class ChatService {
         conversationId: input.conversationId,
         inReplyToMessageId: input.userMessageId,
         messageId: completed.answerMessageId,
+        ...(input.modules?.length ? { modules: input.modules } : {}),
         provider: 'rule',
       },
       type: 'done',
