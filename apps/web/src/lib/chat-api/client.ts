@@ -8,14 +8,12 @@ import {
   chatModuleSchema,
   chatSourceDownloadSchema,
   chatUpdateSchema,
-  moduleOverviewSchema,
   type ChatConversationPage,
   type ChatCatalogDocumentDownload,
   type ChatConversationDetail,
   type ChatModule,
   type ChatSourceDownload,
   type ChatUpdate,
-  type ModuleOverview,
 } from "./types";
 
 export class ChatApiError extends Error {
@@ -80,11 +78,8 @@ export class ChatApiClient {
     }
   }
 
-  getModuleOverview(moduleId: string): Promise<ModuleOverview> {
-    return this.send(
-      `/chat/modules/${moduleId}/overview`,
-      moduleOverviewSchema,
-    );
+  async prepareModuleContext(moduleId: string): Promise<void> {
+    await this.send(`/chat/modules/${moduleId}/overview`);
   }
 
   getSourceDownloadUrl(

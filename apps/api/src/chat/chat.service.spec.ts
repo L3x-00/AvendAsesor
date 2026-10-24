@@ -121,6 +121,73 @@ describe('ChatService', () => {
     );
   });
 
+  it('entrega al modelo el contexto interno del tema sin mezclarlo con las fuentes', async () => {
+    const selectedModuleId = source.moduleIds[0];
+    const preparedContext = {
+      documents: [
+        {
+          summary: 'Describe de manera orientativa las reglas de licencia.',
+          title: 'Norma de licencias',
+        },
+      ],
+      moduleId: selectedModuleId,
+      scopeName: 'Licencias',
+    };
+    historyGateway.listActiveModules.mockResolvedValue([
+      {
+        code: 'LIC',
+        description: null,
+        id: selectedModuleId,
+        name: 'Licencias',
+        parentModuleId: null,
+        sortOrder: 0,
+      },
+    ]);
+    const catalogService = {
+      internalTopicContext: jest.fn().mockResolvedValue(preparedContext),
+    };
+    service = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      catalogService as never,
+    );
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: selectedModuleId, name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La licencia se solicita mediante el procedimiento institucional. [1]';
+      })(),
+    );
+
+    await collect(service, { selectedModuleId });
+
+    expect(catalogService.internalTopicContext).toHaveBeenCalledWith({
+      module: {
+        code: 'LIC',
+        description: null,
+        id: selectedModuleId,
+        name: 'Licencias',
+        parentModuleId: null,
+        sortOrder: 0,
+      },
+      parent: null,
+    });
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources: [source],
+        topicContext: preparedContext,
+      }),
+    );
+  });
+
   it('sin señal educativa y sin proveedor responde con la plantilla del alcance', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',
@@ -880,6 +947,62 @@ describe('ChatService', () => {
         question: 'Explícame los requisitos.',
         selectedModuleId: newModuleId,
       }),
+    );
+  });
+
+  it('no entrega un contexto interno del tema anterior tras detectar un cambio', async () => {
+    const selectedModuleId = source.moduleIds[0];
+    const newModuleId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId,
+    });
+    historyGateway.listActiveModules.mockResolvedValue([
+      {
+        code: 'LIC',
+        description: null,
+        id: selectedModuleId,
+        name: 'Licencias',
+        parentModuleId: null,
+        sortOrder: 0,
+      },
+    ]);
+    const catalogService = {
+      internalTopicContext: jest.fn().mockResolvedValue({
+        documents: [{ summary: 'Contexto anterior.', title: 'Licencias' }],
+        moduleId: selectedModuleId,
+        scopeName: 'Licencias',
+      }),
+    };
+    service = new ChatService(
+      answerGateway,
+      historyGateway,
+      ragService as never,
+      configService as never,
+      faqMemoryService as never,
+      catalogService as never,
+    );
+    ragService.retrieve.mockResolvedValue({
+      kind: 'topic_change',
+      resolvedModule: { id: newModuleId, name: 'Otro tema' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La respuesta del tema nuevo tiene sustento. [1]';
+      })(),
+    );
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      selectedModuleId,
+    });
+
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ topicContext: null }),
     );
   });
 

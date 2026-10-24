@@ -1591,18 +1591,10 @@ export function ChatPanel({
             </div>
           ) : null}
 
-          {messages.length === 0 && (selectedModuleId ?? activeParentId) ? (
+          {(selectedModuleId ?? activeParentId) ? (
             <ModuleOverviewCard
-              disabled={isStreaming}
               key={selectedModuleId ?? activeParentId}
               moduleId={(selectedModuleId ?? activeParentId) as string}
-              onAsk={(text) => {
-                setQuestion(text);
-                setStatus(
-                  "Pregunta lista en el cuadro: ajústala a tu caso y envíala.",
-                );
-                questionInputRef.current?.focus();
-              }}
             />
           ) : null}
         </div>

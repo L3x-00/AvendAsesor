@@ -121,6 +121,30 @@ describe('ChatCatalogService — panorama de un tema', () => {
     ]);
   });
 
+  it('reutiliza internamente el resumen preparado sin convertirlo en evidencia', async () => {
+    const { catalog } = withSummaries([padrones]);
+    await catalog.prepareModuleContext({
+      module: asignaciones,
+      parent: remuneraciones,
+    });
+
+    await expect(
+      catalog.internalTopicContext({
+        module: asignaciones,
+        parent: remuneraciones,
+      }),
+    ).resolves.toEqual({
+      documents: [
+        {
+          summary: 'Aprueba los padrones para las asignaciones.',
+          title: 'Aprueban Padrones de Instituciones Educativas.',
+        },
+      ],
+      moduleId: 'asi',
+      scopeName: 'Asignaciones y bonificaciones',
+    });
+  });
+
   it('lista los documentos del tema con un resumen generado del texto', async () => {
     const { catalog, catalogGateway, summarize } = withSummaries([
       padrones,

@@ -45,14 +45,15 @@ export class ChatController {
     return this.chatService.listUpdates(authorization);
   }
 
-  /** Panorama del tema abierto: sus documentos con un resumen corto. */
+  /** Prepara en segundo plano el contexto del tema seleccionado. */
   @Get('modules/:moduleId/overview')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  moduleOverview(
+  prepareModuleContext(
     // Cualquier versión de UUID: el seed de demostración usa UUID v5.
     @Param('moduleId', new ParseUUIDPipe()) moduleId: string,
   ) {
-    return this.chatService.moduleOverview(moduleId);
+    return this.chatService.prepareModuleContext(moduleId);
   }
 
   @Get('conversations')

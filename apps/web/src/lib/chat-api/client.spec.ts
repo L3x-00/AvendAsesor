@@ -83,22 +83,14 @@ describe("ChatApiClient", () => {
     );
   });
 
-  it("lee el panorama de un tema sin cachearlo en el servidor", async () => {
+  it("prepara el contexto de un tema sin devolver su resumen", async () => {
     const moduleId = "9c8b56af-6d0c-4fef-881e-7c00907540dd";
-    const payload = {
-      documents: [],
-      moduleId,
-      moduleName: "Remuneraciones",
-      scope: "empty",
-      scopeName: "Remuneraciones",
-      total: 0,
-    };
-    const request = vi.fn(
-      async () => new Response(JSON.stringify(payload), { status: 200 }),
-    );
+    const request = vi.fn(async () => new Response(null, { status: 204 }));
     const client = new ChatApiClient("verified-token", undefined, request);
 
-    await expect(client.getModuleOverview(moduleId)).resolves.toEqual(payload);
+    await expect(
+      client.prepareModuleContext(moduleId),
+    ).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledWith(
       `http://localhost:3001/chat/modules/${moduleId}/overview`,
       expect.objectContaining({ cache: "no-store", method: "GET" }),

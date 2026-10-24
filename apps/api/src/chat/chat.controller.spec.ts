@@ -12,7 +12,7 @@ describe('ChatController', () => {
     listConversations: jest.fn(),
     listModules: jest.fn(),
     listUpdates: jest.fn(),
-    moduleOverview: jest.fn(),
+    prepareModuleContext: jest.fn(),
     recordTechnicalFailure: jest.fn(),
     stream: jest.fn(),
   };
@@ -52,11 +52,11 @@ describe('ChatController', () => {
     service.listUpdates.mockResolvedValue([]);
     await expect(controller.listUpdates(authorization)).resolves.toEqual([]);
     expect(service.listUpdates).toHaveBeenCalledWith(authorization);
-    service.moduleOverview.mockResolvedValue({ documents: [] });
+    service.prepareModuleContext.mockResolvedValue(undefined);
     await expect(
-      controller.moduleOverview('4c8b56af-6d0c-4fef-881e-7c00907540dd'),
-    ).resolves.toEqual({ documents: [] });
-    expect(service.moduleOverview).toHaveBeenCalledWith(
+      controller.prepareModuleContext('4c8b56af-6d0c-4fef-881e-7c00907540dd'),
+    ).resolves.toBeUndefined();
+    expect(service.prepareModuleContext).toHaveBeenCalledWith(
       '4c8b56af-6d0c-4fef-881e-7c00907540dd',
     );
     await expect(

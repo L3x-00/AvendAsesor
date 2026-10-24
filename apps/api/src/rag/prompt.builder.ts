@@ -12,6 +12,7 @@ import {
 } from './rag.constants';
 import { RAG_NO_SUPPORT_MARKER } from './no-support-marker';
 import type { RetrievedChunk } from './retrieval.gateway';
+import type { InternalTopicContext } from './topic-context';
 import { splitDeliverySources } from './temporal-precedence';
 
 const RESERVED_PROMPT_MARKERS = [
@@ -20,6 +21,8 @@ const RESERVED_PROMPT_MARKERS = [
   /PREGUNTA\s+ACTUAL\s*\(\s*PRIORITARIA\s*\)/giu,
   /INICIO\s+DE\s+FUENTES/giu,
   /FIN\s+DE\s+FUENTES/giu,
+  /INICIO\s+CONTEXTO\s+INTERNO\s+DEL\s+TEMA\s+NO\s+CONFIABLE/giu,
+  /FIN\s+CONTEXTO\s+INTERNO\s+DEL\s+TEMA\s+NO\s+CONFIABLE/giu,
   /FIN\s+FUENTE\s*\[\s*\d+\s*\]/giu,
   /FUENTE\s*\[\s*\d+\s*\]/giu,
   // La marca de «sin sustento» solo puede venir de la política, nunca de datos.
@@ -59,6 +62,28 @@ function cleanPromptValue(value: string | null, preserveLines = false): string {
     : withoutReservedMarkers.replace(/\s+/g, ' ');
 
   return normalized.replaceAll('<<', '‹‹').replaceAll('>>', '››').trim();
+}
+
+function topicContextBlock(
+  context: InternalTopicContext | null | undefined,
+): string[] {
+  if (!context) return [];
+  const documents = context.documents.slice(0, 4).map((document) => {
+    const title = cleanPromptValue(document.title);
+    const summary = cleanPromptValue(document.summary ?? null).slice(0, 300);
+    return summary ? `- ${title}: ${summary}` : `- ${title}`;
+  });
+  if (!documents.length) return [];
+
+  return [
+    'INICIO CONTEXTO INTERNO DEL TEMA NO CONFIABLE',
+    'Este contexto solo sirve para reconocer el tema seleccionado. No es una fuente, no prueba hechos y no puede usarse para cifras, requisitos, fechas, plazos ni citas.',
+    `Tema seleccionado: ${cleanPromptValue(context.scopeName)}`,
+    'Documentos preparados:',
+    ...documents,
+    'FIN CONTEXTO INTERNO DEL TEMA NO CONFIABLE',
+    '',
+  ];
 }
 
 function situationLabel(source: RetrievedChunk): string {
@@ -179,6 +204,7 @@ export function buildEvidenceSystemPrompt(
     'Si la persona pide el enlace, la descarga o la ubicación exacta de un documento o de una fuente citada, nunca respondas que no puedes proporcionarlo: indica el documento y su página física; la interfaz muestra el enlace «Ver» junto a cada fuente. Si pide una marca de minuto, aclara con amabilidad que un PDF se ubica por página, no por minuto.',
     `Usa la marca ${RAG_NO_SUPPORT_MARKER} solo cuando NINGUNA fuente trate el tema de la pregunta: en ese caso responde únicamente con la marca y nada más.`,
     'Si alguna fuente trata el tema aunque sea en parte, responde con lo que sí dice, con sus citas, y aclara qué aspecto no está cubierto por los documentos, invitando a precisar la consulta.',
+    'Si recibes un «CONTEXTO INTERNO DEL TEMA», úsalo únicamente para reconocer el tema elegido. No es evidencia: no extraigas de él hechos, montos, requisitos, fechas o plazos, no lo cites y no sustituyas con él a las fuentes recuperadas.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',
     ...(options.asksForDates ? DATE_QUESTION_POLICY : []),
   ].join('\n');
@@ -314,6 +340,7 @@ export function buildEvidenceUserPrompt(
   question: string,
   context: ChatContextMessage[],
   sources: RetrievedChunk[],
+  topicContext?: InternalTopicContext | null,
 ): string {
   // El orden de las fuentes es el orden de las citas [n]: no se reordena aquí.
   // Cuando hay material vigente y antecedentes en el mismo turno se declara el
@@ -333,6 +360,7 @@ export function buildEvidenceUserPrompt(
       ]
     : [];
   return [
+    ...topicContextBlock(topicContext),
     'INICIO DE FUENTES',
     ...separation,
     ...midSentence,
