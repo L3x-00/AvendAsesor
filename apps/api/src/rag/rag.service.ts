@@ -730,7 +730,13 @@ export function inheritedFactorQuestions(
   ) {
     return [];
   }
-  if (!forceContext && !continuesSalaryThread(question)) return [];
+  // Forzar contexto por una aclaración no debe convertir una nueva pregunta
+  // salarial con cargo propio en una continuación de la anterior.
+  if (
+    (!forceContext || salaryQuestionProfile(question).isSalaryQuestion) &&
+    !continuesSalaryThread(question)
+  )
+    return [];
   const turns = priorUserQuestions.filter(
     (prior) => !SYNTHETIC_CONTEXT_PREFIX.test(prior),
   );
@@ -740,7 +746,16 @@ export function inheritedFactorQuestions(
   const inherited: string[] = [];
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     inherited.unshift(turns[index]);
-    if (salaryQuestionProfile(turns[index]).isSalaryQuestion) return inherited;
+    const turnProfile = salaryQuestionProfile(turns[index]);
+    if (turnProfile.isSalaryQuestion) {
+      // Una pregunta salarial elíptica también puede necesitar el cargo y el
+      // sector del inicio del hilo: «¿y cuánto gana por 30 horas?» no es una
+      // consulta completa por sí sola.
+      const ellipticalSalary =
+        turnProfile.role === null && continuesSalaryThread(turns[index]);
+      if (!ellipticalSalary) return inherited;
+      continue;
+    }
     if (!continuesSalaryThread(turns[index])) return [];
   }
   return [];
@@ -772,6 +787,26 @@ function continuesSalaryThread(turn: string): boolean {
   const declaresFactor =
     profile.jornadaHours !== null || profile.scale !== null;
   const normalized = normalizeSpanishText(turn);
+  if (
+    profile.isSalaryQuestion &&
+    profile.role === null &&
+    !profile.asksSpecialAllocation
+  ) {
+    const remainingTopic = normalized.replace(
+      /\b(?:remuneracion(?:es)?|sueldos?|salarios?|cuanto\s+(?:gana|ganan|gano|ganaria)|sector\s+(?:public[oa]|privad[oa])|public[oa]|privad[oa]|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu,
+      ' ',
+    );
+    // Solo formularios sin sujeto/cargo identificable heredan la consulta.
+    // Cualquier palabra no reconocida se trata como tema propio, incluso sin
+    // artículo («cuánto gana ingeniero»).
+    const residue = remainingTopic
+      .replace(
+        /\b(?:y|e|o|pero|entonces|ademas|tambien|cuanto|cual|seria|gana|ganan|gano|ganaria|percibe|perciben|cobra|cobran|se|es|de|del|la|el|los|las|un|una|en|por|para|con|al|ano|anos|horas?|laboral|peru|mes|mensual(?:es)?|regimen)\b|\d+|[^a-z]+/gu,
+        ' ',
+      )
+      .trim();
+    return !hasTopicTerm(remainingTopic) && !residue;
+  }
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return false;
   }
