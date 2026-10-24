@@ -1573,65 +1573,70 @@ export function ChatPanel({
       selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">
-        <ChatAeroShardsBackground />
-        <div
-          className="avend-chat-workspace-transition"
-          key={selectedModuleId ?? activeParentId ?? "general"}
-        >
-          <header className="avend-chat-header">
-            <div>
-              <p className="avend-eyebrow">Consulta normativa</p>
-              <h1 id="chat-title">
-                {activeParent ? activeParent.name : "Chat general"}
-              </h1>
-              {activeParent?.description ? (
-                <p className="avend-chat-module-description">
-                  {activeParent.description}
-                </p>
-              ) : null}
-            </div>
-          </header>
+        {/* La escena animada acompaña solo la cabecera inicial. La
+            conversación y el cuadro de consulta quedan sobre el fondo neutro
+            para que el texto conserve todo su contraste. */}
+        <div className="avend-chat-hero">
+          <ChatAeroShardsBackground />
+          <div
+            className="avend-chat-workspace-transition"
+            key={selectedModuleId ?? activeParentId ?? "general"}
+          >
+            <header className="avend-chat-header">
+              <div>
+                <p className="avend-eyebrow">Consulta normativa</p>
+                <h1 id="chat-title">
+                  {activeParent ? activeParent.name : "Chat general"}
+                </h1>
+                {activeParent?.description ? (
+                  <p className="avend-chat-module-description">
+                    {activeParent.description}
+                  </p>
+                ) : null}
+              </div>
+            </header>
 
-          {modules.length === 0 ? (
-            <p className="avend-chat-empty-modules">
-              Aún no hay módulos activos para filtrar la consulta. Puedes
-              consultar de forma general cuando existan documentos procesados.
-            </p>
-          ) : activeParent && submodules.length > 0 ? (
-            <SubmoduleFolder
-              disabled={isStreaming}
-              moduleName={activeParent.name}
-              onSelect={changeModuleContext}
-              selectedModuleId={selectedSubmodule?.id}
-              submodules={submodules}
-            />
-          ) : null}
-
-          {selectedSubmodule ? (
-            <div className="avend-chat-context" role="status">
-              <span>
-                <strong>Tema:</strong> {selectedSubmodule.name}
-              </span>
-              <button
-                aria-label={`Quitar el tema ${selectedSubmodule.name}`}
+            {modules.length === 0 ? (
+              <p className="avend-chat-empty-modules">
+                Aún no hay módulos activos para filtrar la consulta. Puedes
+                consultar de forma general cuando existan documentos procesados.
+              </p>
+            ) : activeParent && submodules.length > 0 ? (
+              <SubmoduleFolder
                 disabled={isStreaming}
-                onClick={clearSubmodule}
-                type="button"
-              >
-                <span>Quitar</span>
-                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-                  <path d="m7 7 10 10M17 7 7 17" />
-                </svg>
-              </button>
-            </div>
-          ) : null}
+                moduleName={activeParent.name}
+                onSelect={changeModuleContext}
+                selectedModuleId={selectedSubmodule?.id}
+                submodules={submodules}
+              />
+            ) : null}
 
-          {(selectedModuleId ?? activeParentId) ? (
-            <ModuleOverviewCard
-              key={selectedModuleId ?? activeParentId}
-              moduleId={(selectedModuleId ?? activeParentId) as string}
-            />
-          ) : null}
+            {selectedSubmodule ? (
+              <div className="avend-chat-context" role="status">
+                <span>
+                  <strong>Tema:</strong> {selectedSubmodule.name}
+                </span>
+                <button
+                  aria-label={`Quitar el tema ${selectedSubmodule.name}`}
+                  disabled={isStreaming}
+                  onClick={clearSubmodule}
+                  type="button"
+                >
+                  <span>Quitar</span>
+                  <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                    <path d="m7 7 10 10M17 7 7 17" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
+
+            {(selectedModuleId ?? activeParentId) ? (
+              <ModuleOverviewCard
+                key={selectedModuleId ?? activeParentId}
+                moduleId={(selectedModuleId ?? activeParentId) as string}
+              />
+            ) : null}
+          </div>
         </div>
 
         <section aria-busy={isStreaming} className="avend-chat-conversation">

@@ -161,8 +161,28 @@ describe("ChatPanel", () => {
   it("integra el fondo decorativo sin alterar la bienvenida", () => {
     render(<ChatPanel modules={[chatModule]} />);
 
-    expect(screen.getByTestId("chat-aero-shards-background")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Chat general" })).toBeVisible();
+    const shards = screen.getByTestId("chat-aero-shards-background");
+    const hero = shards.closest(".avend-chat-hero") as HTMLElement | null;
+    const conversation = document.querySelector(".avend-chat-conversation");
+    const composer = document.querySelector(".avend-chat-composer");
+
+    expect(hero).not.toBeNull();
+    expect(conversation).not.toBeNull();
+    expect(composer).not.toBeNull();
+    // La escena se queda en la cabecera: no alcanza la conversación ni el
+    // cuadro de consulta.
+    expect(hero?.contains(conversation)).toBe(false);
+    expect(hero?.contains(composer)).toBe(false);
+    expect(
+      hero?.contains(screen.getByRole("heading", { name: "Chat general" })),
+    ).toBe(true);
+    // La bienvenida conserva su sitio dentro de la conversación.
+    expect(
+      screen.getByRole("heading", { name: "¿En qué te ayudo hoy?" }),
+    ).toBeVisible();
+    expect(conversation).toContainElement(
+      screen.getByRole("heading", { name: "¿En qué te ayudo hoy?" }),
+    );
   });
 
   it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {

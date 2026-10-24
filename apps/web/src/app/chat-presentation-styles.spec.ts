@@ -87,7 +87,10 @@ describe("contratos de presentación del chat en teléfono", () => {
     expect(ruleBody(globalStyles, ".avend-chat-table tbody th")).not.toMatch(
       /background/u,
     );
-    const numeric = ruleBody(globalStyles, '.avend-chat-table [data-align="right"]');
+    const numeric = ruleBody(
+      globalStyles,
+      '.avend-chat-table [data-align="right"]',
+    );
     expect(numeric).toMatch(/text-align:\s*right/u);
     expect(numeric).toMatch(/font-variant-numeric:\s*tabular-nums/u);
     // Franjas por fila: sirven a la tabla ancha y a la tarjeta del teléfono.
@@ -117,12 +120,15 @@ describe("contratos de presentación del chat en teléfono", () => {
     expect(ruleBody(globalStyles, `${stacked} td[data-blank]`)).toMatch(
       /display:\s*none/u,
     );
-    expect(
-      ruleBody(globalStyles, `${stacked} [data-align]`),
-    ).toMatch(/text-align:\s*left/u);
+    expect(ruleBody(globalStyles, `${stacked} [data-align]`)).toMatch(
+      /text-align:\s*left/u,
+    );
     // El grupo de una celda combinada se ve en la tarjeta.
     expect(
-      ruleBody(globalStyles, ".avend-chat-table--stacked .avend-chat-table-inherited"),
+      ruleBody(
+        globalStyles,
+        ".avend-chat-table--stacked .avend-chat-table-inherited",
+      ),
     ).toMatch(/position:\s*static/u);
   });
 
@@ -179,6 +185,45 @@ describe("contratos de presentación del chat en teléfono", () => {
     expect(teacherStyles).not.toMatch(
       /\.avend-chat-suggestions li:nth-child\(n \+ 3\)\s*\{\s*display:\s*none/u,
     );
+  });
+
+  it("limita la escena animada a la cabecera y deja el resto del chat legible", () => {
+    const hero = ruleBody(teacherStyles, ".avend-chat-hero");
+    const shards = ruleBody(teacherStyles, ".avend-chat-aero-shards");
+    const composer = ruleBody(teacherStyles, ".avend-chat-composer");
+    const input = ruleBody(
+      teacherStyles,
+      ".avend-chat-composer .avend-chat-input-shell",
+    );
+
+    // La escena vive dentro de la cabecera y no se fija sobre toda la página.
+    expect(hero).toMatch(/position:\s*relative/u);
+    expect(hero).toMatch(/isolation:\s*isolate/u);
+    expect(shards).toMatch(/position:\s*absolute/u);
+    expect(shards).not.toMatch(/position:\s*fixed/u);
+    // Se acota a la banda de la cabecera aunque debajo haya más contenido.
+    expect(shards).toMatch(/height:\s*min\(100%/u);
+    // Se disuelve en un óvalo: sin marco rectangular ni borde duro.
+    expect(shards).toMatch(
+      /mask-image:\s*radial-gradient\(\s*ellipse[^)]*transparent 100%/u,
+    );
+    // Estándar y prefijado: cada uno cubre navegadores distintos.
+    expect(shards).toMatch(/^\s*-webkit-mask-image:\s*radial-gradient\(/mu);
+    expect(shards).toMatch(/^\s*mask-image:\s*radial-gradient\(/mu);
+    // El texto de la cabecera mantiene su contraste sobre el óvalo.
+    expect(teacherStyles).toMatch(
+      /\.avend-chat-hero \.avend-chat-header p:not\(\.avend-eyebrow\),\s*\.avend-chat-hero \.avend-chat-empty-modules\s*\{\s*color:\s*var\(--avend-navy\)/u,
+    );
+    // El cuadro de consulta conserva franja opaca y cápsula sólida.
+    expect(composer).toMatch(/position:\s*sticky/u);
+    expect(composer).toMatch(
+      /linear-gradient\(\s*to bottom,\s*rgb\(243 245 249 \/ 0%\),\s*var\(--avend-surface-muted\)\s+1\.25rem/u,
+    );
+    // La franja solo es invisible si su color final es el fondo real del panel.
+    expect(ruleBody(globalStyles, ".avend-teacher-shell")).toMatch(
+      /background:\s*var\(--avend-surface-muted\)/u,
+    );
+    expect(input).toMatch(/background:\s*var\(--avend-surface\)/u);
   });
 
   it("en la tarjeta de referencias cada dato va en la columna de valores", () => {
