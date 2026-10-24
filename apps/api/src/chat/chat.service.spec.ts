@@ -1443,7 +1443,8 @@ describe('ChatService', () => {
 
     const token = events.find((event) => event.type === 'token');
     expect(token?.data.text).toContain('Cargo: Docente; Sector: Público');
-    expect(token?.data.text).not.toContain('- Modalidad / Forma:');
+    expect(token?.data.text).toContain('Cargo: Docente; Sector: Privado');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     const completion = (
       historyGateway.completeTurn.mock.calls as Array<
         [Parameters<ChatHistoryGateway['completeTurn']>[0]]
@@ -1806,6 +1807,38 @@ describe('ChatService', () => {
     expect(clarification.data.message).not.toContain('nombrado o contratado');
   });
 
+  it('responde «cuanto gana un auxiliar?» sin rechazo técnico y cita la norma aplicable', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'ambiguous',
+      modules: [{ id: source.moduleIds[0], name: 'Remuneraciones' }],
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            '4.13. Decreto Supremo N° 296-2016-EF, que establece monto, criterios y condiciones de la remuneración mensual, las asignaciones y bonificaciones por condiciones especiales del servicio, los beneficios, la remuneración vacacional y las vacaciones truncas a otorgarse a los Auxiliares de Educación nombrados y contratados.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      question: 'cuanto gana un auxiliar?',
+    });
+
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    const token = events.find((event) => event.type === 'token');
+    expect(token?.data.text).toContain('No encontré un monto de remuneración');
+    expect(token?.data.text).toContain('Decreto Supremo');
+    const completion = (
+      historyGateway.completeTurn.mock.calls as Array<
+        [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+      >
+    )[0]?.[0];
+    expect(completion?.replyRole).toBe('assistant');
+    expect(completion?.sources).toHaveLength(1);
+    expect(events.at(-1)?.type).toBe('done');
+  });
+
   it('responde el panorama de auxiliar aunque falte el monto y conserva los temas sugeridos', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'ambiguous',
@@ -1834,13 +1867,21 @@ describe('ChatService', () => {
     expect(events.some((event) => event.type === 'token')).toBe(true);
     expect(answerGateway.generate).not.toHaveBeenCalled();
     const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain('No encontré un monto verificable');
-    expect(answer?.data.text).not.toContain('normativa vigente');
+    expect(answer?.data.text).toContain('No encontré un monto de remuneración');
+    expect(answer?.data.text).toContain(
+      'La remuneración mensual del auxiliar de educación',
+    );
     expect(answer?.data.text).not.toContain('?');
-    expect(events.find((event) => event.type === 'sources')).toEqual({
-      data: { sources: [] },
-      type: 'sources',
-    });
+    const sources = events.find((event) => event.type === 'sources');
+    expect(sources?.data.sources).toHaveLength(1);
+    const completion = (
+      historyGateway.completeTurn.mock.calls as Array<
+        [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+      >
+    )[0]?.[0];
+    expect(completion?.replyRole).toBe('assistant');
+    expect(completion?.sources).toHaveLength(1);
+    expect(completion?.sources?.[0]?.chunkId).toBe(source.chunkId);
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
@@ -1878,7 +1919,7 @@ describe('ChatService', () => {
     });
 
     const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain('No encontré un monto verificable');
+    expect(answer?.data.text).toContain('No encontré un monto de remuneración');
     expect(answer?.data.text).not.toContain('S/ 2 000,00');
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
@@ -1923,11 +1964,17 @@ describe('ChatService', () => {
 
     expect(events.some((event) => event.type === 'clarification')).toBe(false);
     expect(answerGateway.generate).not.toHaveBeenCalled();
-    const answer = events.find((event) => event.type === 'token');
-    expect(answer?.data.text).toContain('no puedo darte una cifra');
-    expect(answer?.data.text).not.toContain('sector público');
-    const sources = events.find((event) => event.type === 'sources');
-    expect(sources).toEqual({ data: { sources: [] }, type: 'sources' });
+    const answer = events.find((event) => event.type === 'no_evidence');
+    expect(answer?.data.message).toContain('no puedo darte una cifra');
+    expect(answer?.data.message).not.toContain('sector público');
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'no_evidence',
+        sources: [],
+        unansweredReason: 'insufficient_evidence',
+      }),
+    );
     expect(events.at(-1)).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',

@@ -9,6 +9,9 @@ export const RAG_AMBIGUITY_MESSAGE =
   'Encontré información relacionada con más de un tema y quiero orientarte con precisión.';
 
 export const MAX_RAG_ANSWER_CHARS = 20_000;
+/** Nota fija cuando la respuesta se corta por su extensión (tope de tokens o de caracteres). */
+export const RAG_TRUNCATION_NOTE =
+  '(La respuesta se acortó por su extensión. Si necesitas más detalle, pregúntame por un punto específico).';
 /** Tope de tokens de salida del proveedor: acota coste/latencia y mantiene la
  * respuesta muy por debajo de MAX_RAG_ANSWER_CHARS (evita el corte por longitud). */
 export const MAX_RAG_ANSWER_TOKENS = 1_500;
