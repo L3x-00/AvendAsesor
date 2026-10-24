@@ -1,5 +1,6 @@
 import type { RetrievedChunk } from './retrieval.gateway';
 import type { ChatContextMessage } from '../chat/chat-history.gateway';
+import type { InternalTopicContext } from './topic-context';
 
 export interface AnswerGatewayInput {
   abortSignal?: AbortSignal;
@@ -17,6 +18,8 @@ export interface AnswerGatewayInput {
   onFinish?: (reason: string | null) => void;
   question: string;
   sources: RetrievedChunk[];
+  /** Contexto auxiliar del tema elegido; nunca respalda ni cita hechos. */
+  topicContext?: InternalTopicContext | null;
 }
 
 export interface AnswerGateway {

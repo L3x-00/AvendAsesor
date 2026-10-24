@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   accessTokens: [] as string[],
-  getModuleOverview: vi.fn(),
+  prepareModuleContext: vi.fn(),
   resolveAuthorizedChatSession: vi.fn(),
 }));
 
@@ -24,8 +24,8 @@ vi.mock("@/lib/chat-api/client", () => {
       mocks.accessTokens.push(accessToken);
     }
 
-    getModuleOverview(moduleId: string) {
-      return mocks.getModuleOverview(moduleId);
+    prepareModuleContext(moduleId: string) {
+      return mocks.prepareModuleContext(moduleId);
     }
   }
 
@@ -47,22 +47,21 @@ function call(id = moduleId) {
 describe("chat module overview BFF", () => {
   beforeEach(() => {
     mocks.accessTokens.length = 0;
-    mocks.getModuleOverview.mockReset();
+    mocks.prepareModuleContext.mockReset();
     mocks.resolveAuthorizedChatSession.mockResolvedValue({
       accessToken: "token-1",
     });
   });
 
-  it("devuelve el panorama del tema con la sesión del docente", async () => {
-    mocks.getModuleOverview.mockResolvedValue({ documents: [], moduleId });
+  it("prepara el contexto del tema con la sesión del docente sin devolver el resumen", async () => {
+    mocks.prepareModuleContext.mockResolvedValue(undefined);
 
     const response = await call();
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ documents: [], moduleId });
-    expect(response.headers.get("Cache-Control")).toBe("private, max-age=120");
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(mocks.accessTokens).toEqual(["token-1"]);
-    expect(mocks.getModuleOverview).toHaveBeenCalledWith(moduleId);
+    expect(mocks.prepareModuleContext).toHaveBeenCalledWith(moduleId);
   });
 
   it("exige una sesión autorizada", async () => {
@@ -75,12 +74,12 @@ describe("chat module overview BFF", () => {
       status: "forbidden",
     });
     expect((await call()).status).toBe(403);
-    expect(mocks.getModuleOverview).not.toHaveBeenCalled();
+    expect(mocks.prepareModuleContext).not.toHaveBeenCalled();
   });
 
   it("rechaza identificadores inválidos sin llamar a la API", async () => {
     expect((await call("no-es-uuid")).status).toBe(404);
-    expect(mocks.getModuleOverview).not.toHaveBeenCalled();
+    expect(mocks.prepareModuleContext).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -91,7 +90,7 @@ describe("chat module overview BFF", () => {
     [new ChatApiResponseError(), 502],
     [new Error("network"), 503],
   ])("traduce el fallo %s a %i sin exponer detalles", async (error, status) => {
-    mocks.getModuleOverview.mockRejectedValue(error);
+    mocks.prepareModuleContext.mockRejectedValue(error);
 
     const response = await call();
 

@@ -19,7 +19,7 @@ function failure(error: string, status: number): NextResponse {
   );
 }
 
-/** Panorama del tema abierto en el chat (documentos y resumen corto). */
+/** Prepara el contexto interno de un tema sin exponer sus resúmenes al navegador. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ moduleId: string }> },
@@ -35,11 +35,12 @@ export async function GET(
   if (!moduleId.success) return failure("MODULE_NOT_FOUND", 404);
 
   try {
-    const overview = await new ChatApiClient(
-      session.accessToken,
-    ).getModuleOverview(moduleId.data);
-    return NextResponse.json(overview, {
-      headers: { "Cache-Control": "private, max-age=120" },
+    await new ChatApiClient(session.accessToken).prepareModuleContext(
+      moduleId.data,
+    );
+    return new Response(null, {
+      headers: { "Cache-Control": "no-store" },
+      status: 204,
     });
   } catch (error) {
     if (error instanceof ChatApiError) {

@@ -10,6 +10,7 @@ import {
   type SuggestedQuestionsGateway,
 } from './chat-catalog.types';
 import type { TopicModule } from './topic-match';
+import type { InternalTopicContext } from '../../rag/topic-context';
 
 /** Las sugerencias se regeneran solo si cambia el catálogo o pasa este tiempo. */
 export const SUGGESTIONS_CACHE_MS = 30 * 60 * 1000;
@@ -250,7 +251,11 @@ export class ChatCatalogService {
   } | null = null;
   private readonly summaries = new Map<
     string,
-    { expiresAt: number; promise: Promise<string | null> }
+    {
+      expiresAt: number;
+      promise: Promise<string | null>;
+      summary: string | null | undefined;
+    }
   >();
 
   constructor(
@@ -338,6 +343,64 @@ export class ChatCatalogService {
     };
   }
 
+  /**
+   * Prepara los resúmenes del tema al seleccionarlo, sin exponerlos al cliente.
+   * El RAG podrá aprovechar únicamente los que ya hayan terminado, sin sumar
+   * espera al turno ni convertirlos en una fuente citable.
+   */
+  async prepareModuleContext(input: {
+    module: TopicModule;
+    parent: TopicModule | null;
+  }): Promise<void> {
+    await this.moduleOverview(input);
+  }
+
+  /**
+   * Contexto breve y no probatorio para la redacción. Conserva títulos y, si
+   * ya se generaron, resúmenes orientativos; la evidencia sigue viniendo solo
+   * de `RagService.retrieve`.
+   */
+  async internalTopicContext(input: {
+    module: TopicModule;
+    parent: TopicModule | null;
+  }): Promise<InternalTopicContext | null> {
+    const documents = await this.availableDocuments();
+    const inModule = documents.filter((document) =>
+      document.moduleIds.includes(input.module.id),
+    );
+    const inParent = input.parent
+      ? documents.filter((document) =>
+          document.moduleIds.includes(input.parent?.id ?? ''),
+        )
+      : [];
+    const scope = inModule.length
+      ? 'module'
+      : inParent.length
+        ? 'parent'
+        : 'empty';
+    const inScope = scope === 'module' ? inModule : inParent;
+    if (!inScope.length) return null;
+
+    const selected = inScope.slice(0, MAX_OVERVIEW_DOCUMENTS);
+    for (const document of selected) {
+      // Si el docente consulta antes de que termine el precalentado, se
+      // conserva el título y el resumen termina de prepararse en segundo plano.
+      void this.summaryFor(document);
+    }
+
+    return {
+      documents: selected.map((document) => ({
+        summary: this.summaries.get(document.versionId)?.summary ?? null,
+        title: document.title,
+      })),
+      moduleId: input.module.id,
+      scopeName:
+        scope === 'parent' && input.parent
+          ? input.parent.name
+          : input.module.name,
+    };
+  }
+
   private async generateSummary(
     document: AvailableDocument,
     gateway: DocumentSummaryGateway,
@@ -363,9 +426,11 @@ export class ChatCatalogService {
     const entry = {
       expiresAt: Date.now() + SUMMARY_CACHE_MS,
       promise: this.generateSummary(document, this.summaryGateway),
+      summary: undefined as string | null | undefined,
     };
     // Sin resumen (fallo o salida vacía) se reintenta en unos minutos.
     void entry.promise.then((summary) => {
+      entry.summary = summary;
       if (!summary) entry.expiresAt = Date.now() + FAILED_SUMMARY_CACHE_MS;
     });
     const now = Date.now();

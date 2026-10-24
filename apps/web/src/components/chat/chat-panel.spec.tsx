@@ -129,8 +129,8 @@ async function submitQuestion(user: ReturnType<typeof userEvent.setup>) {
 }
 
 /**
- * Solo las llamadas del chat: la tarjeta «Documentos de este tema» también
- * consulta la red al abrir un tema.
+ * Solo las llamadas del chat: el contexto interno del tema también consulta
+ * la red al abrir un tema.
  */
 function chatCalls(mock: { mock: { calls: unknown[][] } }) {
   return mock.mock.calls.filter(
@@ -1987,20 +1987,23 @@ describe("ChatPanel", () => {
   it("starts a new conversation after «Otra consulta» announces a new topic", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(async () =>
-        streamResponse([
-          'event: conversational\ndata: {"message":"¡Claro! Cuéntame tu consulta.","startsNewTopic":true}\n\n',
-        ]),
-      )
-      .mockImplementationOnce(async () =>
-        streamResponse([
-          `event: conversation\ndata: {"conversationId":"${newConversationId}","userMessageId":"${questionMessageId}","startedNewConversation":true}\n\n`,
-          'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
-          doneEvent("rule"),
-        ]),
-      );
+    const chatResponses = [
+      streamResponse([
+        'event: conversational\ndata: {"message":"¡Claro! Cuéntame tu consulta.","startsNewTopic":true}\n\n',
+      ]),
+      streamResponse([
+        `event: conversation\ndata: {"conversationId":"${newConversationId}","userMessageId":"${questionMessageId}","startedNewConversation":true}\n\n`,
+        'event: no_evidence\ndata: {"message":"No hay sustento suficiente."}\n\n',
+        doneEvent("rule"),
+      ]),
+    ];
+    let chatResponseIndex = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/chat/modules/")) {
+        return new Response(null, { status: 204 });
+      }
+      return chatResponses[chatResponseIndex++];
+    });
     vi.stubGlobal("fetch", fetchMock);
     window.history.replaceState(null, "", `/chat/${conversationId}`);
     render(
@@ -2197,49 +2200,24 @@ describe("ChatPanel", () => {
     );
   });
 
-  it("al abrir un tema muestra sus documentos y deja lista una pregunta sobre ellos", async () => {
-    const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              documents: [
-                {
-                  documentType: "LEY",
-                  id: "33333333-3333-4333-8333-333333333333",
-                  issuanceYear: 2012,
-                  resolutionNumber: null,
-                  summary: "Regula las licencias del profesorado.",
-                  title: "Ley de licencias",
-                },
-              ],
-              moduleId: chatModule.id,
-              moduleName: "Licencias",
-              scope: "module",
-              scopeName: "Licencias",
-              total: 1,
-            }),
-            { headers: { "Content-Type": "application/json" } },
-          ),
-      ),
-    );
+  it("al abrir un tema prepara el contexto sin exponer resumen ni documentos", async () => {
+    const request = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", request);
     render(
       <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
     );
 
-    await screen.findByRole("button", { name: "Ocultar resumen" });
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /Preguntar sobre este documento/,
-      }),
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        `/api/chat/modules/${chatModule.id}/overview`,
+        expect.objectContaining({
+          headers: { Accept: "application/json" },
+        }),
+      ),
     );
-
-    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
-    expect(box).toHaveValue("¿Qué establece «Ley de licencias»?");
-    expect(box).toHaveFocus();
+    expect(screen.queryByText("Documentos de este tema")).toBeNull();
+    expect(screen.queryByRole("button", { name: /resumen/i })).toBeNull();
+    expect(screen.queryByText("Ley de licencias")).toBeNull();
   });
 
   it("muestra el catálogo con preguntas recomendadas que rellenan el cuadro", async () => {

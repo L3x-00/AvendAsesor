@@ -12,13 +12,13 @@ import {
   ChatCatalogService,
   fallbackSuggestions,
   overviewMessage,
-  type ModuleOverview,
 } from './catalog/chat-catalog.service';
 import type { AvailableDocument } from './catalog/chat-catalog.types';
 import { detectOverviewRequest, matchTopicModule } from './catalog/topic-match';
 import type { AuthorizationContext } from '../authorization';
 import { FaqMemoryService } from '../learning/faq-memory.service';
 import type { AnswerGateway } from '../rag/answer.gateway';
+import type { InternalTopicContext } from '../rag/topic-context';
 import { unsupportedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
@@ -1276,7 +1276,7 @@ export class ChatService {
     const salaryRetrievalRequest =
       salaryQuestionProfile(effectiveQuestion).isSalaryQuestion ||
       inheritedSalaryQuestions.length > 0;
-    const topicContext = salaryRetrievalRequest
+    const retrievalTopicContext = salaryRetrievalRequest
       ? priorUserQuestions
       : priorUserQuestions.filter(
           (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
@@ -1290,18 +1290,19 @@ export class ChatService {
           ]
         : [];
     const retrievalContext = acceptedAnswer
-      ? [...acceptedAnswerContext, ...topicContext]
+      ? [...acceptedAnswerContext, ...retrievalTopicContext]
       : lastDocumentAnswer
         ? [
-            ...topicContext,
+            ...retrievalTopicContext,
             `Respuesta anterior: ${lastDocumentAnswer.content.slice(0, 2000)}`,
           ]
-        : topicContext;
+        : retrievalTopicContext;
     const forceContext =
       Boolean(acceptedQuestion) ||
       Boolean(lastDocumentAnswer) ||
       conversationContext.at(-1)?.role === 'clarification' ||
       inheritedSalaryQuestions.length > 0;
+    const selectedTopicContext = this.internalTopicContext(selectedModuleId);
     const retrieval = await this.ragService.retrieve(
       effectiveQuestion,
       selectedModuleId,
@@ -1658,6 +1659,12 @@ export class ChatService {
       return;
     }
 
+    const preparedTopicContext = await selectedTopicContext;
+    const topicContext =
+      preparedTopicContext?.moduleId === selectedModuleId
+        ? preparedTopicContext
+        : null;
+
     // Las fuentes se emiten junto con el primer fragmento real de la respuesta:
     // si el modelo declara que ninguna fuente responde (marca de «sin
     // sustento»), el turno se cierra como «sin evidencia» y el usuario nunca ve
@@ -1711,6 +1718,7 @@ export class ChatService {
       },
       question: acceptedQuestion ?? input.question,
       sources: retrieval.sources,
+      topicContext,
     })) {
       if (input.abortSignal?.aborted) return;
 
@@ -2449,8 +2457,8 @@ export class ChatService {
     }
   }
 
-  /** Panorama de un tema para mostrarlo al abrirlo en el chat. */
-  async moduleOverview(moduleId: string): Promise<ModuleOverview> {
+  /** Prepara el contexto interno del tema sin devolver resúmenes al cliente. */
+  async prepareModuleContext(moduleId: string): Promise<void> {
     if (!this.catalogService) {
       throw new ServiceUnavailableException({
         code: 'CHAT_CATALOG_UNAVAILABLE',
@@ -2465,10 +2473,38 @@ export class ChatService {
         message: 'El tema no existe o no está activo.',
       });
     }
-    return this.catalogService.moduleOverview({
+    await this.catalogService.prepareModuleContext({
       module,
       parent: modules.find((item) => item.id === module.parentModuleId) ?? null,
     });
+  }
+
+  private async internalTopicContext(
+    moduleId: string | null,
+  ): Promise<InternalTopicContext | null> {
+    if (!moduleId || !this.catalogService) return null;
+    // La preparación es complementaria: una implementación antigua del
+    // catálogo no debe impedir que el RAG responda con sus fuentes reales.
+    if (typeof this.catalogService.internalTopicContext !== 'function') {
+      return null;
+    }
+    try {
+      const modules = await this.cachedModules();
+      const module = modules.find((item) => item.id === moduleId);
+      if (!module) return null;
+      return await this.catalogService.internalTopicContext({
+        module,
+        parent:
+          modules.find((item) => item.id === module.parentModuleId) ?? null,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo preparar el contexto interno del tema: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return null;
+    }
   }
 
   /**

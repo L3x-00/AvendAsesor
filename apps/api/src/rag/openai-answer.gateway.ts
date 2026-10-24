@@ -88,6 +88,7 @@ export class OpenAiAnswerGateway implements AnswerGateway {
               input.question,
               input.conversationContext,
               input.sources,
+              input.topicContext,
             );
     return client.chat.completions.create(
       {

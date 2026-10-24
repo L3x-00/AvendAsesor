@@ -78,6 +78,7 @@ function setup(
         { title: 'Aprueban Padrones de Instituciones Educativas' },
       ]),
     moduleOverview: jest.fn().mockResolvedValue(overview()),
+    prepareModuleContext: jest.fn().mockResolvedValue(undefined),
     reply: jest.fn(),
     ...catalogOverrides,
   };
@@ -315,12 +316,14 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     });
   });
 
-  describe('moduleOverview (panorama al abrir un tema)', () => {
-    it('devuelve el panorama del tema con su tema principal', async () => {
+  describe('prepareModuleContext (preparación interna al abrir un tema)', () => {
+    it('prepara el tema con su tema principal sin devolver el panorama', async () => {
       const { catalogService, service } = setup();
 
-      await expect(service.moduleOverview('esc')).resolves.toEqual(overview());
-      expect(catalogService.moduleOverview).toHaveBeenCalledWith({
+      await expect(
+        service.prepareModuleContext('esc'),
+      ).resolves.toBeUndefined();
+      expect(catalogService.prepareModuleContext).toHaveBeenCalledWith({
         module: modules[1],
         parent: modules[0],
       });
@@ -329,7 +332,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     it('un tema inexistente o inactivo responde 404', async () => {
       const { service } = setup();
 
-      await expect(service.moduleOverview('otro')).rejects.toBeInstanceOf(
+      await expect(service.prepareModuleContext('otro')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -337,7 +340,7 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
     it('sin catálogo configurado responde 503', async () => {
       const { service } = setup({}, false);
 
-      await expect(service.moduleOverview('esc')).rejects.toBeInstanceOf(
+      await expect(service.prepareModuleContext('esc')).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
     });
@@ -348,9 +351,11 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
         new Error('db down'),
       );
 
-      await expect(service.moduleOverview('esc')).rejects.toThrow('db down');
-      await service.moduleOverview('esc');
-      await service.moduleOverview('rem');
+      await expect(service.prepareModuleContext('esc')).rejects.toThrow(
+        'db down',
+      );
+      await service.prepareModuleContext('esc');
+      await service.prepareModuleContext('rem');
 
       expect(historyGateway.listActiveModules).toHaveBeenCalledTimes(2);
     });
