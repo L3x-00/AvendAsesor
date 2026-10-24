@@ -153,6 +153,19 @@ describe("contratos de presentación del chat en teléfono", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
+  it("los documentos y temas evitan crear tarjetas adicionales", () => {
+    const downloadsToggle = ruleBody(sourceStyles, ".foldToggle");
+    expect(downloadsToggle).toMatch(/background:\s*transparent/u);
+    expect(downloadsToggle).toMatch(/border:\s*0/u);
+
+    const topic = ruleBody(
+      teacherStyles,
+      ".avend-chat-submodules .avend-chat-module",
+    );
+    expect(topic).toMatch(/border-radius:\s*0/u);
+    expect(topic).toMatch(/border-left:\s*0\.1875rem solid transparent/u);
+  });
+
   it("en la tarjeta de referencias cada dato va en la columna de valores", () => {
     // Sin esto el segundo dato de una celda caía en la columna estrecha de la
     // etiqueta y partía palabras («Remuneracio-nes»).

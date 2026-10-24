@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type ReactNode } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
 import type { ChatSource } from "@/lib/chat-api/types";
@@ -417,9 +418,13 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
       <FoldSummary
         count={documents.length}
         icon={
-          <svg fill="none" viewBox="0 0 24 24">
-            <path d="M12 3v12m0 0-4-4m4 4 4-4M5 20h14" />
-          </svg>
+          <Image
+            alt=""
+            height={37}
+            src="/microsoft-word.svg"
+            unoptimized
+            width={36}
+          />
         }
         label="Documentos disponibles"
       />

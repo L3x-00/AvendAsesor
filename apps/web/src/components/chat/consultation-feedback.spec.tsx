@@ -133,6 +133,14 @@ describe("ConsultationFeedback", () => {
     expect(
       screen.getByRole("region", { name: "Reportes y sugerencias" }),
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Reporta la última respuesta o comparte una sugerencia.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/no se incorpora automáticamente a las respuestas/u),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sugerencia" })).toBeEnabled();
   });
 

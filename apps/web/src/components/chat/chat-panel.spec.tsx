@@ -934,10 +934,7 @@ describe("ChatPanel", () => {
     );
   });
 
-  it("saluda por el nombre y un ejemplo solo rellena el cuadro, sin enviar", async () => {
-    const user = userEvent.setup();
-    const request = vi.fn();
-    vi.stubGlobal("fetch", request);
+  it("saluda por el nombre y deja el cuadro listo, sin atajos adicionales", () => {
     render(<ChatPanel fullName="MARÍA pérez" modules={[chatModule]} />);
 
     expect(
@@ -945,19 +942,12 @@ describe("ChatPanel", () => {
         name: "Hola, María. ¿En qué te ayudo hoy?",
       }),
     ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", {
-        name: "¿Qué requisitos necesito para…?",
-      }),
-    );
-
-    const box = screen.getByRole("textbox", { name: "Escribe tu consulta" });
-    expect(box).toHaveValue("¿Qué requisitos necesito para ");
-    expect(box).toHaveFocus();
-    expect(request).not.toHaveBeenCalledWith(
-      "/api/chat/stream",
-      expect.anything(),
-    );
+    expect(
+      screen.queryByRole("button", { name: "¿Qué requisitos necesito para…?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
+    ).toHaveValue("");
   });
 
   it("keeps the empty module state explicit instead of inventing a category", () => {

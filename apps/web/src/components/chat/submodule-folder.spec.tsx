@@ -35,7 +35,9 @@ describe("SubmoduleFolder", () => {
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await user.click(screen.getByRole("button", { name: "Tema 1" }));
+    const firstTopic = screen.getByRole("button", { name: "Tema 1" });
+    expect(firstTopic.querySelector('img[src="/files.svg"]')).not.toBeNull();
+    await user.click(firstTopic);
     expect(onSelect).toHaveBeenCalledWith(modules(3)[0].id);
   });
 

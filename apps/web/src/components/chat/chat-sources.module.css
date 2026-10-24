@@ -444,13 +444,12 @@
   margin-top: 0.875rem;
 }
 
-/* Cabecera plegable: tarjeta con icono, nombre, cantidad y una flecha que gira.
-   Sustituye al triángulo del navegador por un control que se ve pulsable. */
+/* Cabecera plegable: conserva el control nativo sin añadir otra tarjeta. */
 .foldToggle {
   align-items: center;
-  background: var(--avend-surface);
-  border: 1px solid var(--avend-border);
-  border-radius: 0.875rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   color: var(--avend-navy);
   cursor: pointer;
   display: flex;
@@ -459,11 +458,10 @@
   gap: 0.75rem;
   list-style: none;
   min-height: 3rem;
-  padding: 0.375rem 0.75rem;
+  padding: 0.375rem 0;
   transition:
-    background-color 150ms ease-out,
-    border-color 150ms ease-out,
-    box-shadow 220ms var(--avend-ease-interaction);
+    color 150ms ease-out,
+    transform 220ms var(--avend-ease-interaction);
   user-select: none;
 }
 
@@ -472,9 +470,8 @@
 }
 
 .foldToggle:hover {
-  background: var(--avend-soft-blue);
-  border-color: rgb(22 119 255 / 35%);
-  box-shadow: 0 6px 16px rgb(13 27 61 / 8%);
+  color: var(--avend-accent-strong);
+  transform: translateX(0.125rem);
 }
 
 .foldToggle:focus-visible {
@@ -484,23 +481,19 @@
 
 .foldIcon {
   align-items: center;
-  background: var(--avend-soft-blue);
-  border-radius: 0.625rem;
-  color: var(--avend-accent-strong);
   display: inline-flex;
   flex: 0 0 auto;
-  height: 2rem;
+  height: 2.25rem;
   justify-content: center;
-  width: 2rem;
+  width: 2.25rem;
 }
 
-.foldIcon svg {
-  height: 1.125rem;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-  width: 1.125rem;
+.foldIcon img {
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  transition: transform 220ms var(--avend-ease-interaction);
+  width: auto;
 }
 
 .foldLabel {
@@ -534,12 +527,15 @@
 }
 
 .others[open] > .foldToggle {
-  background: linear-gradient(135deg, #ffffff 0%, var(--avend-soft-blue) 100%);
-  border-color: rgb(22 119 255 / 30%);
+  color: var(--avend-accent-strong);
 }
 
 .others[open] > .foldToggle .foldChevron {
   transform: rotate(180deg);
+}
+
+.others[open] > .foldToggle .foldIcon img {
+  transform: translateY(-0.125rem) rotate(-4deg) scale(1.04);
 }
 
 /* El contenido aparece con el mismo movimiento que el panel de referencias. */
@@ -566,7 +562,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .foldToggle,
-  .foldChevron {
+  .foldChevron,
+  .foldIcon img {
     transition: none;
   }
 
