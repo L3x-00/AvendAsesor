@@ -38,6 +38,7 @@ import {
   withoutLegacyLeadIn,
 } from "./official-links";
 import { ChatWelcome } from "./chat-welcome";
+import { ChatAeroShardsBackground } from "./chat-aero-shards-background";
 import { ConsultationFeedback } from "./consultation-feedback";
 import { ModuleOverviewCard } from "./module-overview";
 import { ChatCatalogDownloads } from "./chat-catalog-downloads";
@@ -1555,6 +1556,7 @@ export function ChatPanel({
       selectedModuleId={activeParentId}
     >
       <section aria-labelledby="chat-title" className="avend-chat-page">
+        <ChatAeroShardsBackground />
         <div
           className="avend-chat-workspace-transition"
           key={selectedModuleId ?? activeParentId ?? "general"}

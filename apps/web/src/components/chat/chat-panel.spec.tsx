@@ -8,6 +8,13 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./chat-aero-shards-background", () => ({
+  ChatAeroShardsBackground: () => (
+    <div aria-hidden="true" data-testid="chat-aero-shards-background" />
+  ),
+}));
+
 import { ChatPanel, FRIENDLY_ERRORS } from "./chat-panel";
 
 const chatModule = {
@@ -151,6 +158,13 @@ function requestBody(
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatPanel", () => {
+  it("integra el fondo decorativo sin alterar la bienvenida", () => {
+    render(<ChatPanel modules={[chatModule]} />);
+
+    expect(screen.getByTestId("chat-aero-shards-background")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Chat general" })).toBeVisible();
+  });
+
   it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {
     const first = eligibleConversation.messages[1].sources[0];
     const answer = {

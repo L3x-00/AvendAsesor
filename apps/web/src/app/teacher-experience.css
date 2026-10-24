@@ -1493,6 +1493,46 @@ ul.avend-chat-list {
   width: 100%;
 }
 
+/* Fondo decorativo WebGPU del chat: no recibe interacción ni reduce el
+   contraste del contenido. Está por debajo de la conversación y se omite
+   por completo si el sistema prefiere menos movimiento. */
+.avend-chat-page {
+  isolation: isolate;
+  overflow: clip;
+  position: relative;
+}
+
+.avend-chat-page > :not(.avend-chat-aero-shards) {
+  position: relative;
+  z-index: 1;
+}
+
+.avend-chat-aero-shards {
+  inset: 0;
+  opacity: 0.24;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.avend-chat-aero-shards .aero-shards,
+.avend-chat-aero-shards .aero-shards-canvas {
+  height: 100%;
+  width: 100%;
+}
+
+@media (max-width: 47.99rem) {
+  .avend-chat-aero-shards {
+    opacity: 0.18;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-aero-shards {
+    display: none;
+  }
+}
+
 .avend-chat-header {
   padding: 0 0 1rem;
 }
