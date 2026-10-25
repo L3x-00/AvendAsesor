@@ -1320,6 +1320,30 @@ describe('ChatService', () => {
     ).toEqual([]);
   });
 
+  it('mantiene el hilo salarial iniciado con el error observado y lo corta tras un cambio de tema', () => {
+    const typoQuestion = 'cuanto ganau nprofesro';
+
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Y para 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: [typoQuestion, '¿Y para 30 horas?'],
+      }),
+    ).toEqual([typoQuestion, '¿Y para 30 horas?']);
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Y para 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: [
+          typoQuestion,
+          '¿Qué requisitos necesito para postular?',
+        ],
+      }),
+    ).toEqual([]);
+  });
+
   it('no muestra una tabla salarial si el importe no coincide con su fila', async () => {
     const tableSource = {
       ...source,
@@ -1453,7 +1477,7 @@ describe('ChatService', () => {
     expect(completion?.answer).toContain('Cargo: Docente; Sector: Público');
   });
 
-  it('muestra el fragmento salarial sin depender de una negativa del modelo', async () => {
+  it('muestra el fragmento salarial determinista pese al error tipográfico observado', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
@@ -1474,7 +1498,7 @@ describe('ChatService', () => {
     );
 
     const events = await collect(service, {
-      question: '¿Cuánto gana un docente?',
+      question: 'cuanto ganau nprofesro',
     });
 
     expect(events.map((event) => event.type)).toEqual([
@@ -1485,6 +1509,12 @@ describe('ChatService', () => {
     ]);
     expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
     expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'cuanto gana un profesor',
+      null,
+      [],
+      { forceContext: false },
+    );
     const completion = (
       historyGateway.completeTurn.mock.calls as Array<
         [Parameters<ChatHistoryGateway['completeTurn']>[0]]
@@ -2451,6 +2481,32 @@ describe('ChatService', () => {
       expect.objectContaining({
         question: '¿Cuánto es mi renumeración mensual?',
       }),
+    );
+  });
+
+  it('recupera la pregunta salarial con el error tipográfico observado sin reescribir el historial', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'La remuneración está sustentada. [1]';
+      },
+    });
+
+    await collect(service, { question: 'cuanto ganau nprofesro' });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'cuanto gana un profesor',
+      null,
+      [],
+      { forceContext: false },
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ question: 'cuanto ganau nprofesro' }),
     );
   });
 

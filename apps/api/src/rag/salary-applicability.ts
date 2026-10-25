@@ -1,4 +1,5 @@
 import { CITATION_GROUP, citedIndexes } from './citations';
+import { normalizeDomainQuery } from './query-normalization';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -496,7 +497,10 @@ export function withInheritedSalaryFactors(
 
 /** Factores que la propia consulta ya declara. */
 export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
-  const text = normalizeSpanishText(question);
+  // Los turnos previos se conservan literalmente en el historial. Al volver a
+  // clasificarlos para resolver un seguimiento, se normalizan solo en memoria
+  // para no perder una intención salarial que ya fue reconocida al inicio.
+  const text = normalizeSpanishText(normalizeDomainQuery(question));
   const salaryText = salaryRequestText(text);
   return {
     asksSpecialAllocation: SPECIAL_ALLOCATION_REQUEST.test(text),

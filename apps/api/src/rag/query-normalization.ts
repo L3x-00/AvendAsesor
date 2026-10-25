@@ -21,6 +21,21 @@ const ABBREVIATIONS: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
 ];
 
 /**
+ * Combinaciones observadas que unen palabras y además intercambian letras.
+ * Se corrigen como frase completa para no convertir por aproximación cualquier
+ * término parecido en una consulta jurídica distinta.
+ */
+const OBSERVED_PHRASE_TYPOS: ReadonlyArray<{
+  pattern: RegExp;
+  replacement: string;
+}> = [
+  {
+    pattern: /^\s*¿?\s*cu[aá]nto\s+ganau\s+nprofesro\s*[?!.]?\s*$/iu,
+    replacement: 'cuanto gana un profesor',
+  },
+];
+
+/**
  * Errores frecuentes demostrados por la campaña real o por pruebas
  * explícitas. Se comparan sin tildes —la gente escribe «renumeración» con
  * tilde y sin ella— y siempre por palabra completa: una corrección difusa
@@ -63,7 +78,11 @@ function matchWordCase(original: string, replacement: string): string {
 
 /** Solo corrige palabras completas del mapa: no toca cifras ni siglas. */
 function correctCommonTypos(text: string): string {
-  return text.replace(/[\p{L}]+/gu, (word) => {
+  let corrected = text;
+  for (const { pattern, replacement } of OBSERVED_PHRASE_TYPOS) {
+    corrected = corrected.replace(pattern, replacement);
+  }
+  return corrected.replace(/[\p{L}]+/gu, (word) => {
     const replacement = COMMON_WORD_TYPOS.get(normalizeSpanishText(word));
     return replacement ? matchWordCase(word, replacement) : word;
   });

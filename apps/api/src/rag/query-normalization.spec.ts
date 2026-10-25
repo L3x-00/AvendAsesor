@@ -34,6 +34,21 @@ describe('normalizeDomainQuery', () => {
     expect(normalizeDomainQuery(input)).toBe(expected);
   });
 
+  it('corrige solo la combinación tipográfica salarial observada', () => {
+    expect(normalizeDomainQuery('cuanto ganau nprofesro')).toBe(
+      'cuanto gana un profesor',
+    );
+    expect(normalizeDomainQuery('¿cuánto ganau nprofesro?')).toBe(
+      'cuanto gana un profesor',
+    );
+    expect(normalizeDomainQuery('¿quién ganau nprofesro?')).toBe(
+      '¿quién ganau nprofesro?',
+    );
+    expect(normalizeDomainQuery('dime cuanto ganau nprofesro')).toBe(
+      'dime cuanto ganau nprofesro',
+    );
+  });
+
   // OBS-004: la campaña real escribió «renumeración» con tilde. El corrector
   // anterior solo reconocía la variante sin tilde y el vocabulario dinámico
   // empataba entre «remuneración» y «remuneraciones», así que la consulta
