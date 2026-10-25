@@ -1788,6 +1788,48 @@ describe("ChatPanel", () => {
       expect(links[0]).toHaveAccessibleName(/Ver fuente 1:/u);
     });
 
+    it("lleva una cita consolidada a la fila visible aunque su ancla sea otro fragmento", () => {
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        value: scrollIntoView,
+      });
+      vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+
+      renderAnswer("Segundo fragmento. [2]\n\nPrimer fragmento. [1]", [
+        {
+          documentVersionId,
+          id: "1c8b56af-6d0c-4fef-881e-7c00907540dd",
+          pageEnd: 36,
+          pageStart: 36,
+          rank: 1,
+        },
+        {
+          documentVersionId,
+          id: "2c8b56af-6d0c-4fef-881e-7c00907540dd",
+          pageEnd: 11,
+          pageStart: 11,
+          rank: 2,
+        },
+      ]);
+
+      const citation = screen.getByRole("link", { name: /Ver fuente 2:/u });
+      expect(citation).toHaveAttribute("href", `#fuente-${messageId}-2`);
+      fireEvent.click(citation);
+
+      const row = document.getElementById(`fuente-${messageId}-1`);
+      expect(window.location.hash).toBe(`#fuente-${messageId}-2`);
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "auto",
+        block: "center",
+      });
+      expect(row).toHaveFocus();
+    });
+
     it("conserva cada cita en su lugar cuando provienen de documentos distintos", () => {
       renderAnswer("Primer dato. [1]\n\nSegundo dato. [2]", [
         { documentVersionId, rank: 1 },

@@ -274,15 +274,18 @@ function revealSource(targetId: string) {
   window.requestAnimationFrame(() => {
     const revealedTarget = document.getElementById(targetId);
     if (!revealedTarget) return;
+    // Una cita puede apuntar a una ancla secundaria dentro de la misma fila
+    // consolidada. El foco visible siempre queda en la fila de Referencias.
+    const focusTarget = revealedTarget.closest<HTMLElement>("tr") ?? revealedTarget;
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
     window.history.replaceState(null, "", `#${targetId}`);
-    revealedTarget.scrollIntoView?.({
+    focusTarget.scrollIntoView?.({
       behavior: reduceMotion ? "auto" : "smooth",
       block: "center",
     });
-    revealedTarget.focus({ preventScroll: true });
+    focusTarget.focus({ preventScroll: true });
   });
 }
 
