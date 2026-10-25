@@ -172,7 +172,7 @@ describe("contratos de presentación del chat en teléfono", () => {
 
     const topic = ruleBody(
       teacherStyles,
-      ".avend-chat-submodules .avend-chat-module",
+      ".avend-chat-submodule-tag",
     );
     expect(topic).toMatch(/border-radius:\s*0/u);
     expect(topic).toMatch(/border-left:\s*0\.1875rem solid transparent/u);
