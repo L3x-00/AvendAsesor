@@ -234,7 +234,11 @@ describe("ChatSources", () => {
     expect(row).toHaveAttribute("id", "fuente-m-referencias-1");
     expect(within(table).getAllByRole("row")).toHaveLength(2);
     expect(within(row as HTMLTableRowElement).getByText("11, 27, 36 de 64")).toBeVisible();
-    expect(row).toHaveTextContent("Sin sección o artículo identificado");
+    expect(
+      within(row as HTMLTableRowElement).getByText(
+        "Páginas 11, 27, 36 de 64 del PDF · Sin sección o artículo identificado",
+      ),
+    ).toBeVisible();
     expect(document.getElementById("fuente-m-referencias-2")).toHaveAttribute(
       "tabindex",
       "-1",

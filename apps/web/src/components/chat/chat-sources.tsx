@@ -195,6 +195,13 @@ function groupedPageLabel(pages: GroupedPages): string {
   return `${ranges}${pages.pageCount ? ` de ${pages.pageCount}` : ""}`;
 }
 
+function groupedLocationFallback(pages: GroupedPages): string {
+  const isSinglePage =
+    pages.ranges.length === 1 &&
+    pages.ranges[0]?.start === pages.ranges[0]?.end;
+  return `${isSinglePage ? "Página" : "Páginas"} ${groupedPageLabel(pages)} del PDF · Sin sección o artículo identificado`;
+}
+
 function situationLabel(source: ChatSource): string {
   switch (source.documentSituation) {
     case "current":
@@ -339,6 +346,10 @@ function SourceLocation({ group }: { group: ReferenceSourceGroup }) {
   const hasUnspecifiedLocation = group.sources.some(
     (groupedSource) => structuredLocation(groupedSource) == null,
   );
+  // Si ningún fragmento aporta una ubicación estructural, el único dato útil
+  // para localizarlo son las mismas páginas ya consolidadas en «Pág.».
+  const unspecifiedLocationPages =
+    locations.length === 0 ? groupedPages(group) : undefined;
 
   return (
     <>
@@ -349,7 +360,9 @@ function SourceLocation({ group }: { group: ReferenceSourceGroup }) {
       ))}
       {hasUnspecifiedLocation ? (
         <span className={styles.referenceLine}>
-          Sin sección o artículo identificado
+          {unspecifiedLocationPages
+            ? groupedLocationFallback(unspecifiedLocationPages)
+            : "Sin sección o artículo identificado"}
         </span>
       ) : null}
     </>
