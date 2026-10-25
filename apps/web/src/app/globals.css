@@ -1199,6 +1199,11 @@ textarea[aria-invalid="true"]:focus,
   vertical-align: top;
 }
 
+/* La modalidad fusionada acompaña visualmente todo su grupo de niveles. */
+.avend-chat-table tbody th[rowspan] {
+  vertical-align: middle;
+}
+
 .avend-chat-table th:not(:last-child),
 .avend-chat-table td:not(:last-child) {
   border-right: 1px solid var(--avend-border);
@@ -1283,6 +1288,17 @@ textarea[aria-invalid="true"]:focus,
     color: var(--avend-navy);
     display: block;
     font-size: 1.0625rem;
+    padding-bottom: 0.375rem;
+  }
+
+  /* Una celda agrupada con rowspan no se repite en escritorio. En la tarjeta
+     móvil se recupera el nombre de su modalidad para mantener el contexto. */
+  .avend-chat-table.avend-chat-table--stacked tbody tr[data-group-label]::before {
+    color: var(--avend-navy);
+    content: attr(data-group-label);
+    display: block;
+    font-size: 1.0625rem;
+    font-weight: 700;
     padding-bottom: 0.375rem;
   }
 

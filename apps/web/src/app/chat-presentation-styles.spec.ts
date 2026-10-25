@@ -97,6 +97,9 @@ describe("contratos de presentación del chat en teléfono", () => {
     expect(
       ruleBody(globalStyles, ".avend-chat-table tbody tr:nth-child(even)"),
     ).toMatch(/background:\s*var\(--avend-surface-muted\)/u);
+    expect(ruleBody(globalStyles, ".avend-chat-table tbody th[rowspan]")).toMatch(
+      /vertical-align:\s*middle/u,
+    );
   });
 
   it("en el teléfono las filas se apilan como tarjetas sin perder los encabezados de columna", () => {
@@ -130,6 +133,9 @@ describe("contratos de presentación del chat en teléfono", () => {
         ".avend-chat-table--stacked .avend-chat-table-inherited",
       ),
     ).toMatch(/position:\s*static/u);
+    expect(ruleBody(globalStyles, `${stacked} tbody tr[data-group-label]::before`)).toMatch(
+      /content:\s*attr\(data-group-label\)/u,
+    );
   });
 
   it("en el teléfono la tabla recupera la sangría del avatar", () => {

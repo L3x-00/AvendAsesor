@@ -28,6 +28,9 @@ function plainHeader(header: string): string {
  * (ver `avend-chat-table--stacked`). Con dos columnas cabe sin deslizar.
  */
 const STACKED_FROM_COLUMNS = 3;
+const MODALITY_FORM_HEADER = /^modalidad\s*\/\s*forma$/iu;
+const SALARY_HEADER =
+  /\b(?:remuneraci[oó]n(?:es)?|sueldos?|salarios?)\b/iu;
 
 function joinNames(names: readonly string[]): string {
   return names.length > 1
@@ -46,6 +49,80 @@ export function tableSummary(
 ): string {
   const names = headers.map(plainHeader);
   return `Tabla de la respuesta ${index}: ${names.length} columnas (${joinNames(names)}) y ${rowCount} ${rowCount === 1 ? "fila" : "filas"}.`;
+}
+
+interface SalaryModalityGroup {
+  /** Primera fila del grupo: la celda se extiende verticalmente. */
+  rowSpan?: number;
+  /** Filas posteriores: no se repite la celda, pero conservan el contexto móvil. */
+  inheritedLabel?: string;
+}
+
+function tableCellLabel(cell: string | undefined): string {
+  return (cell ?? "")
+    .replace(HEADER_MARKUP, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * Identifica celdas que se pueden unir sin esconder una cita distinta. La
+ * negrita no cambia la modalidad, pero la referencia de una fuente sí.
+ */
+function tableCellGroupKey(cell: string | undefined): string {
+  return (cell ?? "")
+    .replace(/\*\*|__/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * Solo la escala salarial con «Modalidad / Forma» puede condensar su primera
+ * columna. Las demás tablas conservan todas sus filas para no cambiar el
+ * significado de una lista, trámite o tabla ordinaria.
+ */
+export function salaryModalityGroups(
+  headers: readonly string[],
+  rows: readonly string[][],
+): SalaryModalityGroup[] {
+  const groups = rows.map(() => ({} as SalaryModalityGroup));
+  const isSalaryScale =
+    MODALITY_FORM_HEADER.test(plainHeader(headers[0] ?? "")) &&
+    headers.some((header) => SALARY_HEADER.test(plainHeader(header)));
+  if (!isSalaryScale) return groups;
+
+  let rowIndex = 0;
+  while (rowIndex < rows.length) {
+    const label = tableCellLabel(rows[rowIndex]?.[0]);
+    const groupKey = tableCellGroupKey(rows[rowIndex]?.[0]);
+    if (!label) {
+      rowIndex += 1;
+      continue;
+    }
+
+    let endIndex = rowIndex + 1;
+    while (
+      endIndex < rows.length &&
+      tableCellGroupKey(rows[endIndex]?.[0]) === groupKey
+    ) {
+      endIndex += 1;
+    }
+
+    const rowSpan = endIndex - rowIndex;
+    if (rowSpan > 1) {
+      groups[rowIndex] = { rowSpan };
+      for (
+        let inheritedIndex = rowIndex + 1;
+        inheritedIndex < endIndex;
+        inheritedIndex += 1
+      ) {
+        groups[inheritedIndex] = { inheritedLabel: label };
+      }
+    }
+    rowIndex = endIndex;
+  }
+
+  return groups;
 }
 
 interface ChatTableProps {
@@ -74,6 +151,7 @@ export function ChatTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
   const labels = firstColumnLabels(rows);
+  const salaryGroups = salaryModalityGroups(headers, rows);
   const stacked = headers.length >= STACKED_FROM_COLUMNS;
 
   useEffect(() => {
@@ -127,7 +205,18 @@ export function ChatTable({
           </thead>
           <tbody role="rowgroup">
             {rows.map((row, rowIndex) => (
-              <tr key={`${rowIndex}-${row.join("|")}`} role="row">
+              <tr
+                aria-label={
+                  salaryGroups[rowIndex]?.inheritedLabel
+                    ? `${plainHeader(headers[0] ?? "")}: ${
+                        salaryGroups[rowIndex].inheritedLabel
+                      }`
+                    : undefined
+                }
+                data-group-label={salaryGroups[rowIndex]?.inheritedLabel}
+                key={`${rowIndex}-${row.join("|")}`}
+                role="row"
+              >
                 {row.map((cell, column) => {
                   const common = {
                     "data-align": alignments[column],
@@ -136,10 +225,13 @@ export function ChatTable({
                   const { inherited, label } = labels[rowIndex];
                   // La primera columna nombra la fila: es su encabezado.
                   if (column === 0 && label) {
+                    const salaryGroup = salaryGroups[rowIndex];
+                    if (salaryGroup?.inheritedLabel) return null;
                     return (
                       <th
                         {...common}
                         key={`${column}-${cell}`}
+                        rowSpan={salaryGroup?.rowSpan}
                         role="rowheader"
                         scope="row"
                       >

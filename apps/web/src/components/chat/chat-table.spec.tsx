@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ChatTable, tableSummary } from "./chat-table";
+import { ChatTable, salaryModalityGroups, tableSummary } from "./chat-table";
 
 const HINT = "Desliza hacia los lados para ver todas las columnas.";
 
@@ -36,6 +36,56 @@ describe("tableSummary", () => {
   });
 });
 
+describe("salaryModalityGroups", () => {
+  const salaryHeaders = [
+    "Modalidad / Forma",
+    "Nivel / Ciclo",
+    "Jornada laboral",
+    "Remuneración mensual",
+  ];
+
+  it("solo agrupa modalidades iguales y contiguas de una tabla salarial", () => {
+    expect(
+      salaryModalityGroups(salaryHeaders, [
+        ["Educación Básica Regular – EBR", "Inicial", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Regular – EBR", "Primaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Regular – EBR", "Secundaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Especial – EBE", "Inicial", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Especial – EBE", "Primaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Regular – EBR", "Inicial", "30 horas", "S/ 3 500,70"],
+      ]),
+    ).toEqual([
+      { rowSpan: 3 },
+      { inheritedLabel: "Educación Básica Regular – EBR" },
+      { inheritedLabel: "Educación Básica Regular – EBR" },
+      { rowSpan: 2 },
+      { inheritedLabel: "Educación Básica Especial – EBE" },
+      {},
+    ]);
+  });
+
+  it("no aplica el formato salarial a tablas que no declaran modalidad y forma", () => {
+    expect(
+      salaryModalityGroups(
+        ["Modalidad", "Nivel", "Remuneración mensual"],
+        [
+          ["EBR", "Inicial", "S/ 3 500,70"],
+          ["EBR", "Primaria", "S/ 3 500,70"],
+        ],
+      ),
+    ).toEqual([{}, {}]);
+  });
+
+  it("no une rótulos iguales cuando sus fuentes son diferentes", () => {
+    expect(
+      salaryModalityGroups(salaryHeaders, [
+        ["EBR [1]", "Inicial", "30 horas", "S/ 3 500,70"],
+        ["EBR [2]", "Primaria", "30 horas", "S/ 3 500,70"],
+      ]),
+    ).toEqual([{}, {}]);
+  });
+});
+
 describe("ChatTable", () => {
   it("expone la tabla con un nombre que resume su contenido y encabezados de columna", () => {
     renderTable();
@@ -67,6 +117,57 @@ describe("ChatTable", () => {
     );
     // Los datos siguen siendo celdas, no encabezados.
     expect(screen.getAllByRole("cell")).toHaveLength(2);
+  });
+
+  it("agrupa la modalidad salarial repetida sin alterar los niveles ni los montos", () => {
+    renderTable({
+      headers: [
+        "Modalidad / Forma",
+        "Nivel / Ciclo",
+        "Jornada laboral",
+        "Remuneración mensual",
+      ],
+      rows: [
+        ["Educación Básica Regular – EBR", "Inicial", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Regular – EBR", "Primaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Regular – EBR", "Secundaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Especial – EBE", "Inicial", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Especial – EBE", "Primaria", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Alternativa – EBA", "Inicial / Intermedio", "30 horas", "S/ 3 500,70"],
+        ["Educación Básica Alternativa – EBA", "Avanzado", "30 horas", "S/ 3 500,70"],
+        ["Educación Técnica Productiva – ETP", "Básico y Medio", "30 horas", "S/ 3 500,70"],
+      ],
+    });
+
+    expect(
+      screen
+        .getByRole("rowheader", { name: "Educación Básica Regular – EBR" })
+        .getAttribute("rowspan"),
+    ).toBe("3");
+    expect(
+      screen
+        .getByRole("rowheader", { name: "Educación Básica Especial – EBE" })
+        .getAttribute("rowspan"),
+    ).toBe("2");
+    expect(
+      screen
+        .getByRole("rowheader", { name: "Educación Básica Alternativa – EBA" })
+        .getAttribute("rowspan"),
+    ).toBe("2");
+    expect(
+      screen
+        .getByRole("rowheader", { name: "Educación Técnica Productiva – ETP" })
+        .hasAttribute("rowspan"),
+    ).toBe(false);
+    expect(screen.getAllByText("S/ 3 500,70")).toHaveLength(8);
+    expect(screen.getAllByRole("row")).toHaveLength(9);
+
+    const primariaEbr = screen.getAllByRole("row")[2];
+    expect(within(primariaEbr).queryByRole("rowheader")).not.toBeInTheDocument();
+    expect(primariaEbr).toHaveAttribute(
+      "data-group-label",
+      "Educación Básica Regular – EBR",
+    );
   });
 
   it("una celda combinada hereda el grupo para el lector de pantalla y no se pierde la fila", () => {
