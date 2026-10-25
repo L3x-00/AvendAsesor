@@ -2631,9 +2631,15 @@ describe('ChatService', () => {
       question: 'Sí',
     });
 
-    expect(confirmation).toEqual([
-      expect.objectContaining({ type: 'conversational' }),
-    ]);
+    expect(confirmation).toHaveLength(1);
+    const confirmationEvent = confirmation[0];
+    if (!confirmationEvent || confirmationEvent.type !== 'conversational') {
+      throw new Error('Expected a conversational rewrite reminder.');
+    }
+    expect(confirmationEvent.data.message).toContain(
+      'escribe de otra forma la palabra',
+    );
+    expect(confirmationEvent.data.message).not.toContain('botones');
     expect(ragService.retrieve).not.toHaveBeenCalled();
   });
 

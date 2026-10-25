@@ -1046,6 +1046,22 @@ export class ChatService {
       isAffirmativeFollowUpAnswer(question) &&
       prefetchedContext?.messages.at(-1)?.role === 'clarification'
     ) {
+      const pendingClarification =
+        prefetchedContext.messages.at(-1)?.content ?? '';
+      if (
+        pendingClarification.includes('Para no adivinar entre esas opciones,')
+      ) {
+        // Una duda ortográfica con alternativas empatadas no tiene botones ni
+        // una propuesta aceptable con «sí»: se pide reescribir la palabra.
+        yield {
+          data: {
+            message:
+              'Para continuar, escribe de otra forma la palabra que te señalé. Así evito elegir una opción equivocada por ti.',
+          },
+          type: 'conversational',
+        };
+        return;
+      }
       // El turno anterior pidió un dato o eligió entre varios temas. Un «sí» a
       // secas no responde esa pregunta: se invita a usar las opciones que ya
       // están en pantalla en vez de buscar «sí» en el corpus y caer en
