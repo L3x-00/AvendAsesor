@@ -1,4 +1,7 @@
-import { normalizeDomainQuery } from './query-normalization';
+import {
+  normalizeDomainQuery,
+  recoverDomainQuery,
+} from './query-normalization';
 
 describe('normalizeDomainQuery', () => {
   it.each([
@@ -103,6 +106,66 @@ describe('normalizeDomainQuery', () => {
     );
   });
 
+  it('recupera automáticamente omisiones y transposiciones únicas del léxico docente', () => {
+    expect(recoverDomainQuery('docente nombrdo con 30 oras')).toEqual({
+      clarification: null,
+      normalizedQuestion: 'docente nombrado con 30 horas',
+    });
+    expect(normalizeDomainQuery('mi profesro es nombrdo')).toBe(
+      'mi profesor es nombrado',
+    );
+  });
+
+  it('no adivina un error de dos letras: propone la consulta y espera confirmación', () => {
+    expect(recoverDomainQuery('cuanto gana profeszz')).toEqual({
+      clarification: {
+        originalWord: 'profeszz',
+        suggestions: ['profesor'],
+        suggestedQuestion: 'cuanto gana profesor',
+      },
+      normalizedQuestion: 'cuanto gana profeszz',
+    });
+  });
+
+  it('mantiene la primera duda y conserva las correcciones mecánicas a ambos lados', () => {
+    expect(recoverDomainQuery('docente nombrdo profeszz con oras')).toEqual({
+      clarification: {
+        originalWord: 'profeszz',
+        suggestions: ['profesor'],
+        suggestedQuestion: 'docente nombrado profesor con horas',
+      },
+      normalizedQuestion: 'docente nombrado profeszz con horas',
+    });
+  });
+
+  it('conserva formas válidas y palabras españolas aunque sean cercanas al léxico docente', () => {
+    expect(normalizeDomainQuery('¿Cuánto ganan las profesoras?')).toBe(
+      '¿Cuánto ganan las profesoras?',
+    );
+    expect(normalizeDomainQuery('Los docentes tienen permisos')).toBe(
+      'Los docentes tienen permisos',
+    );
+    expect(recoverDomainQuery('El suelo de la escuela')).toEqual({
+      clarification: null,
+      normalizedQuestion: 'El suelo de la escuela',
+    });
+    expect(recoverDomainQuery('hola profeszz')).toEqual({
+      clarification: null,
+      normalizedQuestion: 'hola profeszz',
+    });
+  });
+
+  it('no prepara una consulta aceptable con sí cuando las alternativas empatan', () => {
+    expect(recoverDomainQuery('requisitos para nombrad')).toEqual({
+      clarification: {
+        originalWord: 'nombrad',
+        suggestions: ['nombrada', 'nombrado'],
+        suggestedQuestion: null,
+      },
+      normalizedQuestion: 'requisitos para nombrad',
+    });
+  });
+
   it('no altera números de norma, años, siglas ni nombres propios', () => {
     const question =
       '¿Qué dispone la RSG N.° 326-2017-MINEDU y el DS N.° 049-2025-EF para el 2026?';
@@ -112,6 +175,17 @@ describe('normalizeDomainQuery', () => {
     expect(
       normalizeDomainQuery('Rosa Quispe presentó su renumeración en la UGEL'),
     ).toBe('Rosa Quispe presentó su remuneración en la UGEL');
+    expect(normalizeDomainQuery('Quiero ver esa RM 123')).toBe(
+      'Quiero ver esa resolución ministerial 123',
+    );
+    expect(recoverDomainQuery('Quiero ver esa RM 123').clarification).toBe(
+      null,
+    );
+    expect(recoverDomainQuery('Hola, buenos días').clarification).toBe(null);
+    expect(normalizeDomainQuery('la resignación no es una reasignación')).toBe(
+      'la resignación no es una reasignación',
+    );
+    expect(recoverDomainQuery('contrato docente').clarification).toBe(null);
   });
 
   it('deja intacto el texto correcto', () => {

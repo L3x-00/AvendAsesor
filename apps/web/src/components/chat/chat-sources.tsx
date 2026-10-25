@@ -14,16 +14,51 @@ interface ChatSourcesProps {
   sources: ChatSource[];
 }
 
+/** La versión identifica un documento real; sin ella, el historial es ambiguo. */
+function sourceDocumentKey(source: ChatSource): string {
+  return source.documentVersionId
+    ? `version:${source.documentVersionId}`
+    : `source:${source.id}`;
+}
+
 function uniqueDocuments(sources: ChatSource[]): ChatSource[] {
   const seen = new Set<string>();
   return sources.filter((source) => {
     // La identidad de versión evita ocultar homónimos. En historiales antiguos
     // sin ese campo, cada cita queda visible en vez de deduplicar por metadatos.
-    const key = source.documentVersionId ?? source.id;
+    const key = sourceDocumentKey(source);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+interface ReferenceSourceGroup {
+  /** Primer fragmento: conserva el número y enlace que ya veía la persona. */
+  source: ChatSource;
+  /** Todos los fragmentos de la misma versión documental. */
+  sources: ChatSource[];
+}
+
+/**
+ * Una misma versión puede aparecer varias veces cuando el RAG cita distintas
+ * páginas. Se presenta una sola referencia, pero nunca se mezclan versiones
+ * distintas ni historiales antiguos que carecen de esa identidad.
+ */
+export function groupReferenceSources(
+  sources: readonly ChatSource[],
+): ReferenceSourceGroup[] {
+  const groups = new Map<string, ReferenceSourceGroup>();
+  for (const source of sources) {
+    const key = sourceDocumentKey(source);
+    const group = groups.get(key);
+    if (group) {
+      group.sources.push(source);
+    } else {
+      groups.set(key, { source, sources: [source] });
+    }
+  }
+  return [...groups.values()];
 }
 
 /** Ancla estable de la fila n de las referencias de un mensaje. */
@@ -94,9 +129,9 @@ export function singleCitedSource(
   if (!first) return undefined;
   // Misma identidad que `uniqueDocuments`: en historiales sin versión cada
   // fuente cuenta como un documento distinto y no se agrupa.
-  const documentKey = (source: ChatSource) =>
-    source.documentVersionId ?? source.id;
-  return cited.every((source) => documentKey(source) === documentKey(first))
+  return cited.every(
+    (source) => sourceDocumentKey(source) === sourceDocumentKey(first),
+  )
     ? first
     : undefined;
 }
@@ -110,6 +145,54 @@ function pageRange(source: ChatSource): string {
 function hasPdfPagination(source: ChatSource): boolean {
   // Las conversaciones antiguas no guardaban MIME y eran mayoritariamente PDF.
   return source.mimeType == null || source.mimeType === "application/pdf";
+}
+
+interface GroupedPageRange {
+  end: number;
+  start: number;
+}
+
+interface GroupedPages {
+  pageCount?: number;
+  ranges: GroupedPageRange[];
+}
+
+/** Páginas físicas únicas, en su orden natural dentro del PDF. */
+function groupedPages(group: ReferenceSourceGroup): GroupedPages | undefined {
+  if (!group.sources.every(hasPdfPagination)) return undefined;
+
+  const ranges = new Map<string, GroupedPageRange>();
+  for (const source of group.sources) {
+    const key = `${source.pageStart}:${source.pageEnd}`;
+    if (!ranges.has(key)) {
+      ranges.set(key, {
+        end: source.pageEnd,
+        start: source.pageStart,
+      });
+    }
+  }
+
+  const sortedRanges = [...ranges.values()].sort(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+  const pageCounts = new Set(
+    group.sources
+      .map((source) => source.pdfPageCount)
+      .filter((count): count is number => count != null),
+  );
+  return {
+    pageCount: pageCounts.size === 1 ? [...pageCounts][0] : undefined,
+    ranges: sortedRanges,
+  };
+}
+
+function groupedPageLabel(pages: GroupedPages): string {
+  const ranges = pages.ranges
+    .map((range) =>
+      range.start === range.end ? `${range.start}` : `${range.start}–${range.end}`,
+    )
+    .join(", ");
+  return `${ranges}${pages.pageCount ? ` de ${pages.pageCount}` : ""}`;
 }
 
 function situationLabel(source: ChatSource): string {
@@ -200,6 +283,79 @@ function locationSectionTitle(source: ChatSource): string | null {
   return title || null;
 }
 
+function structuredLocation(source: ChatSource): string | null {
+  const sectionTitle = locationSectionTitle(source);
+  const parts = [
+    sectionTitle ? `Sección o subtítulo: ${sectionTitle}` : null,
+    source.articleReference ? `Artículo: ${source.articleReference}` : null,
+    source.numeralReference
+      ? `Numeral o literal: ${source.numeralReference}`
+      : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function SourceLocation({ group }: { group: ReferenceSourceGroup }) {
+  const { source } = group;
+  const sectionTitle = locationSectionTitle(source);
+  if (group.sources.length === 1) {
+    return (
+      <>
+        {sectionTitle ? (
+          <span className={styles.referenceLine}>
+            <span>Sección o subtítulo:</span> {sectionTitle}
+          </span>
+        ) : null}
+        {source.articleReference ? (
+          <span className={styles.referenceLine}>
+            <span>Artículo:</span> {source.articleReference}
+          </span>
+        ) : null}
+        {source.numeralReference ? (
+          <span className={styles.referenceLine}>
+            <span>Numeral o literal:</span> {source.numeralReference}
+          </span>
+        ) : null}
+        {!sectionTitle &&
+        !source.articleReference &&
+        !source.numeralReference ? (
+          <span className={styles.referenceLine}>
+            {hasPdfPagination(source)
+              ? `${source.pageStart === source.pageEnd ? "Página" : "Páginas"} ${pageRange(source)} del PDF · Sin sección o artículo identificado`
+              : "Fragmento del documento · Sin sección o artículo identificado"}
+          </span>
+        ) : null}
+      </>
+    );
+  }
+
+  const locations = [
+    ...new Set(
+      group.sources
+        .map(structuredLocation)
+        .filter((location): location is string => location != null),
+    ),
+  ];
+  const hasUnspecifiedLocation = group.sources.some(
+    (groupedSource) => structuredLocation(groupedSource) == null,
+  );
+
+  return (
+    <>
+      {locations.map((location) => (
+        <span className={styles.referenceLine} key={location}>
+          {location}
+        </span>
+      ))}
+      {hasUnspecifiedLocation ? (
+        <span className={styles.referenceLine}>
+          Sin sección o artículo identificado
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function SourceTable({
   caption,
   messageId,
@@ -209,6 +365,8 @@ function SourceTable({
   messageId?: string;
   sources: ChatSource[];
 }) {
+  const groups = groupReferenceSources(sources);
+
   return (
     <div className={styles.tableViewport}>
       <table className={styles.table}>
@@ -234,10 +392,11 @@ function SourceTable({
           </tr>
         </thead>
         <tbody>
-          {sources.map((source) => {
+          {groups.map((group) => {
+            const { source } = group;
             // Se abre en la página citada (los PDF se ven en el navegador).
             const downloadPath = `/api/chat/sources/${encodeURIComponent(source.id)}/download?pagina=${source.pageStart}`;
-            const sectionTitle = locationSectionTitle(source);
+            const pages = groupedPages(group);
 
             return (
               <tr
@@ -252,6 +411,18 @@ function SourceTable({
                     Fuente número:{" "}
                   </span>
                   <span className={styles.rank}>{source.rank}</span>
+                  {messageId
+                    ? group.sources.slice(1).map((groupedSource) => (
+                        <span
+                          className={styles.srOnly}
+                          id={sourceAnchorId(messageId, groupedSource.rank)}
+                          key={groupedSource.id}
+                          tabIndex={-1}
+                        >
+                          Fuente {groupedSource.rank} incluida en esta referencia
+                        </span>
+                      ))
+                    : null}
                 </td>
                 <td data-label="Tipo">
                   <span className={styles.documentType}>
@@ -274,50 +445,26 @@ function SourceTable({
                   </span>
                 </td>
                 <td data-label="Ubicación">
-                  {sectionTitle ? (
-                    <span className={styles.referenceLine}>
-                      <span>Sección o subtítulo:</span> {sectionTitle}
-                    </span>
-                  ) : null}
-                  {source.articleReference ? (
-                    <span className={styles.referenceLine}>
-                      <span>Artículo:</span> {source.articleReference}
-                    </span>
-                  ) : null}
-                  {source.numeralReference ? (
-                    <span className={styles.referenceLine}>
-                      <span>Numeral o literal:</span> {source.numeralReference}
-                    </span>
-                  ) : null}
-                  {!sectionTitle &&
-                  !source.articleReference &&
-                  !source.numeralReference ? (
-                    <span className={styles.referenceLine}>
-                      {hasPdfPagination(source)
-                        ? `${source.pageStart === source.pageEnd ? "Página" : "Páginas"} ${pageRange(source)} del PDF · Sin sección o artículo identificado`
-                        : "Fragmento del documento · Sin sección o artículo identificado"}
-                    </span>
-                  ) : null}
+                  <SourceLocation group={group} />
                 </td>
                 <td data-label="Pág.">
-                  {hasPdfPagination(source) ? (
+                  {pages ? (
                     <>
                       <span className={styles.mobileCellLabel}>
-                        {source.pageStart === source.pageEnd
+                        {pages.ranges.length === 1 &&
+                        pages.ranges[0]?.start === pages.ranges[0]?.end
                           ? "Página PDF: "
                           : "Páginas PDF: "}
                       </span>
                       <span
                         aria-label={
-                          source.pageStart === source.pageEnd
+                          pages.ranges.length === 1 &&
+                          pages.ranges[0]?.start === pages.ranges[0]?.end
                             ? "Página PDF"
                             : "Páginas PDF"
                         }
                       >
-                        {pageRange(source)}
-                        {source.pdfPageCount
-                          ? ` de ${source.pdfPageCount}`
-                          : null}
+                        {groupedPageLabel(pages)}
                       </span>
                     </>
                   ) : (

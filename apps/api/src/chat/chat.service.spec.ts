@@ -2510,6 +2510,139 @@ describe('ChatService', () => {
     );
   });
 
+  it('corrige una omisión mecánica única antes de buscar y conserva lo escrito en el historial', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'La información está sustentada. [1]';
+      },
+    });
+
+    await collect(service, {
+      question: 'docente nombrdo con 30 oras',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'docente nombrado con 30 horas',
+      null,
+      [],
+      { forceContext: false },
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ question: 'docente nombrdo con 30 oras' }),
+    );
+  });
+
+  it('pide confirmación amigable ante una corrección compleja sin consultar el RAG', async () => {
+    const events = await collect(service, {
+      question: 'cuanto gana profeszz',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'clarification',
+      'done',
+    ]);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected an orthographic clarification.');
+    }
+    expect(clarification.data.message).toContain('«profeszz»');
+    expect(clarification.data.message).toContain('«profesor»');
+    expect(clarification.data.message).toContain('Sugerencia:');
+    expect(clarification.data.message).toContain('«cuanto gana profesor»');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ question: 'cuanto gana profeszz' }),
+    );
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'clarification',
+        sources: [],
+        unansweredReason: 'ambiguous_request',
+      }),
+    );
+  });
+
+  it('busca la sugerencia ortográfica cuando el docente la acepta con «sí»', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: 'cuanto gana profeszz', role: 'user' },
+        {
+          content:
+            'Quiero asegurarme de entender tu consulta antes de buscar la información.\n\nSugerencia:\n¿Te explico esta consulta: «cuanto gana profesor»?',
+          role: 'clarification',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, { conversationId, question: 'Sí' });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      'Explícame esta consulta: «cuanto gana profesor».',
+      null,
+      ['cuanto gana profeszz'],
+      { forceContext: true, salaryContextQuestions: [] },
+    );
+  });
+
+  it('pide reescribir una palabra ambigua y no permite confirmar una opción arbitraria con «sí»', async () => {
+    const events = await collect(service, {
+      question: 'requisitos para nombrad',
+    });
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected an ambiguous orthographic clarification.');
+    }
+    expect(clarification.data.message).toContain('«nombrad»');
+    expect(clarification.data.message).toContain('«nombrada»');
+    expect(clarification.data.message).toContain('«nombrado»');
+    expect(clarification.data.message).not.toContain('Sugerencia:');
+
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: 'requisitos para nombrad', role: 'user' },
+        { content: clarification.data.message, role: 'clarification' },
+      ],
+      selectedModuleId: null,
+    });
+
+    const confirmation = await collect(service, {
+      conversationId,
+      question: 'Sí',
+    });
+
+    expect(confirmation).toHaveLength(1);
+    const confirmationEvent = confirmation[0];
+    if (!confirmationEvent || confirmationEvent.type !== 'conversational') {
+      throw new Error('Expected a conversational rewrite reminder.');
+    }
+    expect(confirmationEvent.data.message).toContain(
+      'escribe de otra forma la palabra',
+    );
+    expect(confirmationEvent.data.message).not.toContain('botones');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
   it('no reescribe un término jurídico válido por similitud con el catálogo', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',

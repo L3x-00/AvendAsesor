@@ -23,7 +23,7 @@ import { unsupportedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { causalClarificationFor } from '../rag/process-clarification';
-import { normalizeDomainQuery } from '../rag/query-normalization';
+import { recoverDomainQuery } from '../rag/query-normalization';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
@@ -38,7 +38,7 @@ import {
   salaryRowMismatch,
   withInheritedSalaryFactors,
 } from '../rag/salary-applicability';
-import { hasTopicTerm } from '../rag/domain-lexicon';
+import { hasStrongDomainSignal, hasTopicTerm } from '../rag/domain-lexicon';
 import {
   MAX_CHAT_CONTEXT_CHARS,
   MAX_CHAT_CONTEXT_MESSAGES,
@@ -933,10 +933,31 @@ export class ChatService {
     // enruta `classifyTurnIntent` a `domain`, que sigue el flujo evidence-only
     // de abajo. No crear conversación por "hola"/"gracias" cumple el lineamiento
     // de historial.
-    // Correcciones explícitas y verificadas («renumeración» →
-    // «remuneración»). Se usan para entender y buscar; en el historial queda
-    // exactamente lo que la persona escribió.
-    const question = this.correctedQuestion(input.question);
+    // Las correcciones automáticas de una letra se usan solo para entender y
+    // buscar; en el historial queda exactamente lo que la persona escribió.
+    // Si la corrección necesita inferir más de una letra o empata entre
+    // conceptos, se pide confirmación antes de consultar el corpus.
+    const recovery = recoverDomainQuery(input.question);
+    const question = recovery.normalizedQuestion;
+
+    const intent = classifyTurnIntent(question, {
+      inConversation: Boolean(input.conversationId),
+    });
+
+    if (
+      recovery.clarification &&
+      intent.lane === 'domain' &&
+      (!input.conversationId ||
+        hasStrongDomainSignal(normalizeSpanishText(question)))
+    ) {
+      yield* this.askForOrthographicClarification({
+        clarification: recovery.clarification,
+        conversationId: input.conversationId,
+        question: input.question,
+        userId: input.authorization.userId,
+      });
+      return;
+    }
 
     // Metapetición sobre la propia conversación: se responde con la memoria de
     // la sesión y no con el corpus. Sin turno nuevo: es una vista efímera, igual
@@ -950,10 +971,6 @@ export class ChatService {
       });
       return;
     }
-
-    const intent = classifyTurnIntent(question, {
-      inConversation: Boolean(input.conversationId),
-    });
 
     // «Sí», «claro», «dale»… Antes de responder como charla, se comprueba si la
     // última respuesta propia dejó una propuesta pendiente. Si existe, la
@@ -1029,6 +1046,22 @@ export class ChatService {
       isAffirmativeFollowUpAnswer(question) &&
       prefetchedContext?.messages.at(-1)?.role === 'clarification'
     ) {
+      const pendingClarification =
+        prefetchedContext.messages.at(-1)?.content ?? '';
+      if (
+        pendingClarification.includes('Para no adivinar entre esas opciones,')
+      ) {
+        // Una duda ortográfica con alternativas empatadas no tiene botones ni
+        // una propuesta aceptable con «sí»: se pide reescribir la palabra.
+        yield {
+          data: {
+            message:
+              'Para continuar, escribe de otra forma la palabra que te señalé. Así evito elegir una opción equivocada por ti.',
+          },
+          type: 'conversational',
+        };
+        return;
+      }
       // El turno anterior pidió un dato o eligió entre varios temas. Un «sí» a
       // secas no responde esa pregunta: se invita a usar las opciones que ya
       // están en pantalla en vez de buscar «sí» en el corpus y caer en
@@ -2413,11 +2446,83 @@ export class ChatService {
     return promise;
   }
 
-  private correctedQuestion(question: string): string {
-    // Solo aplica sustituciones completas y explícitamente verificadas. No se
-    // infiere una corrección a partir de títulos o módulos dinámicos: una
-    // palabra jurídica válida no debe convertirse en otra por similitud.
-    return normalizeDomainQuery(question);
+  /**
+   * Detiene una corrección ortográfica de baja certeza antes del RAG. El texto
+   * literal sigue siendo el turno del docente; la propuesta solo se convierte
+   * en consulta si la acepta con «sí».
+   */
+  private async *askForOrthographicClarification(input: {
+    clarification: {
+      originalWord: string;
+      suggestions: readonly string[];
+      suggestedQuestion: string | null;
+    };
+    conversationId: string | null;
+    question: string;
+    userId: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    const turn = await this.historyGateway.beginTurn({
+      conversationId: input.conversationId,
+      question: input.question,
+      selectedModuleId: null,
+      userId: input.userId,
+    });
+    yield {
+      data: {
+        conversationId: turn.conversationId,
+        moduleId: null,
+        startedNewConversation: !input.conversationId,
+        userMessageId: turn.userMessageId,
+      },
+      type: 'conversation',
+    };
+
+    const suggestions = input.clarification.suggestions.map(
+      (suggestion) => `«${suggestion}»`,
+    );
+    const proposal = suggestions.join(' o ');
+    const message = input.clarification.suggestedQuestion
+      ? [
+          'Quiero asegurarme de entender tu consulta antes de buscar la información.',
+          `La palabra «${input.clarification.originalWord}» podría referirse a ${proposal}.`,
+          '',
+          'Sugerencia:',
+          `¿Te explico esta consulta: «${input.clarification.suggestedQuestion
+            .trim()
+            .replace(/^¿\s*/u, '')
+            .replace(/[?!.]+\s*$/u, '')}»?`,
+          'Si no es eso, escribe la palabra como prefieras y la revisamos juntos.',
+        ].join('\n')
+      : [
+          'Quiero asegurarme de entender tu consulta antes de buscar la información.',
+          `La palabra «${input.clarification.originalWord}» puede referirse a ${proposal}.`,
+          'Para no adivinar entre esas opciones, ¿podrías escribir esa palabra de otra forma?',
+        ].join('\n');
+    const completed = await this.historyGateway.completeTurn({
+      answer: message,
+      conversationId: turn.conversationId,
+      faqMemory: this.faqMemoryService.prepare(input.question),
+      detectedModuleId: null,
+      detectedSubmoduleId: null,
+      qualitySignals: [],
+      replyRole: 'clarification',
+      retrievalScope: detectRetrievalScope(input.question),
+      sources: [],
+      topRelevanceScore: null,
+      unansweredReason: 'ambiguous_request',
+      userId: input.userId,
+      userMessageId: turn.userMessageId,
+    });
+    yield { data: { message, modules: [] }, type: 'clarification' };
+    yield {
+      data: {
+        conversationId: turn.conversationId,
+        inReplyToMessageId: turn.userMessageId,
+        messageId: completed.answerMessageId,
+        provider: 'rule',
+      },
+      type: 'done',
+    };
   }
 
   /**

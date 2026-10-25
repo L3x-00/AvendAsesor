@@ -5,6 +5,7 @@ import {
   ChatSources,
   citationRanks,
   citedSourceRanks,
+  groupReferenceSources,
   singleCitedSource,
   sourceCitationLabel,
 } from "./chat-sources";
@@ -76,6 +77,31 @@ describe("singleCitedSource", () => {
     const sources = [source(1), source(2)];
     expect(singleCitedSource("Uno [1]. Dos [2].", sources)).toBeUndefined();
     expect(singleCitedSource("Uno [1]. Dos [1].", sources)?.rank).toBe(1);
+  });
+});
+
+describe("groupReferenceSources", () => {
+  const source = (rank: number, documentVersionId?: string) =>
+    ({
+      documentVersionId,
+      id: `00000000-0000-4000-8000-00000000000${rank}`,
+      rank,
+    }) as Parameters<typeof groupReferenceSources>[0][number];
+  const versionA = "33333333-3333-4333-8333-333333333331";
+  const versionB = "33333333-3333-4333-8333-333333333332";
+
+  it("reúne solo fragmentos de la misma versión y conserva los historiales ambiguos", () => {
+    const groups = groupReferenceSources([
+      source(1, versionA),
+      source(2, versionA),
+      source(3, versionB),
+      source(4),
+      source(5),
+    ]);
+
+    expect(groups.map((group) => group.sources.map((item) => item.rank))).toEqual(
+      [[1, 2], [3], [4], [5]],
+    );
   });
 });
 
@@ -171,6 +197,113 @@ describe("ChatSources", () => {
       }),
     ).toHaveTextContent("Ver documento");
   }, 15_000);
+
+  it("muestra una sola referencia por documento y reúne sus páginas citadas", () => {
+    const documentVersionId = "33333333-3333-4333-8333-333333333333";
+    const common = {
+      articleReference: null,
+      documentSituation: "current" as const,
+      documentTitle: "Norma técnica sobre el proceso de encargatura",
+      documentVersionId,
+      mimeType: "application/pdf",
+      moduleName: "Encargatura docente",
+      numeralReference: null,
+      pdfPageCount: 64,
+      relevanceScore: 0.9,
+      sectionTitle: null,
+      versionNumber: 1,
+    };
+    render(
+      <ChatSources
+        citedRanks={[1, 2, 5]}
+        messageId="m-referencias"
+        sources={[
+          { ...common, id: "11111111-1111-4111-8111-111111111111", pageEnd: 36, pageStart: 36, rank: 1 },
+          { ...common, id: "22222222-2222-4222-8222-222222222222", pageEnd: 11, pageStart: 11, rank: 2 },
+          { ...common, id: "55555555-5555-4555-8555-555555555555", pageEnd: 27, pageStart: 27, rank: 5 },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const row = within(table)
+      .getByText("Norma técnica sobre el proceso de encargatura")
+      .closest("tr");
+    expect(row).toHaveAttribute("id", "fuente-m-referencias-1");
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
+    expect(within(row as HTMLTableRowElement).getByText("11, 27, 36 de 64")).toBeVisible();
+    expect(row).toHaveTextContent("Sin sección o artículo identificado");
+    expect(document.getElementById("fuente-m-referencias-2")).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    expect(document.getElementById("fuente-m-referencias-5")).toHaveTextContent(
+      "Fuente 5 incluida en esta referencia",
+    );
+    expect(
+      screen.getByRole("link", {
+        name: "Abrir fuente [1]: Norma técnica sobre el proceso de encargatura (se abre en una pestaña nueva)",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/api/chat/sources/11111111-1111-4111-8111-111111111111/download?pagina=36",
+    );
+  });
+
+  it("conserva las ubicaciones jurídicas distintas dentro de una referencia agrupada", () => {
+    const documentVersionId = "33333333-3333-4333-8333-333333333334";
+    render(
+      <ChatSources
+        citedRanks={[1, 2]}
+        sources={[
+          {
+            articleReference: "Artículo 4",
+            documentSituation: "current",
+            documentTitle: "Reglamento de prueba",
+            documentVersionId,
+            id: "11111111-1111-4111-8111-111111111112",
+            mimeType: "application/pdf",
+            moduleName: "Pruebas",
+            numeralReference: "4.1",
+            pageEnd: 11,
+            pageStart: 11,
+            pdfPageCount: 64,
+            rank: 1,
+            relevanceScore: 0.9,
+            sectionTitle: null,
+            versionNumber: 1,
+          },
+          {
+            articleReference: "Artículo 6",
+            documentSituation: "current",
+            documentTitle: "Reglamento de prueba",
+            documentVersionId,
+            id: "22222222-2222-4222-8222-222222222223",
+            mimeType: "application/pdf",
+            moduleName: "Pruebas",
+            numeralReference: "6.2",
+            pageEnd: 27,
+            pageStart: 27,
+            pdfPageCount: 64,
+            rank: 2,
+            relevanceScore: 0.9,
+            sectionTitle: null,
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const row = within(table).getByText("Reglamento de prueba").closest("tr");
+    expect(within(row as HTMLTableRowElement).getByText("11, 27 de 64")).toBeVisible();
+    expect(row).toHaveTextContent("Artículo: Artículo 4 · Numeral o literal: 4.1");
+    expect(row).toHaveTextContent("Artículo: Artículo 6 · Numeral o literal: 6.2");
+  });
 
   it("preserves ranges and a clear fallback when source metadata is absent", () => {
     render(
