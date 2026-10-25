@@ -148,6 +148,24 @@
   margin: 0;
 }
 
+.avend-chat-welcome-message-control {
+  background: transparent;
+  border: 0;
+  color: var(--avend-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.875rem;
+  margin: 0.375rem 0 0;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+  text-underline-offset: 0.1875rem;
+}
+
+.avend-chat-welcome-message-control:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
 .avend-chat-welcome-text {
   color: var(--avend-text);
   font-size: 1rem;
@@ -253,6 +271,7 @@
   }
 
   .avend-chat-suggestions button,
+  .avend-chat-welcome-message-control,
   .avend-chat-suggestions button svg {
     transition: none;
   }
@@ -1757,7 +1776,7 @@ ul.avend-chat-list {
 
 .avend-chat-topic-folder-reveal[data-open="true"]
   .avend-chat-submodules
-  .avend-chat-module {
+  .avend-chat-submodule-tag {
   animation: avend-topic-float-in 420ms cubic-bezier(0.34, 1.35, 0.64, 1) both;
 }
 
@@ -1805,6 +1824,8 @@ ul.avend-chat-list {
   display: grid;
   gap: 0.25rem 1rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  list-style: none;
+  margin: 0;
   overflow: visible;
   padding: 0.125rem 0;
 }
@@ -1817,7 +1838,7 @@ ul.avend-chat-list {
   margin: 0 0 0.25rem;
 }
 
-.avend-chat-submodules .avend-chat-module {
+.avend-chat-submodule-tag {
   align-items: center;
   background: transparent;
   border: 0;
@@ -1825,7 +1846,7 @@ ul.avend-chat-list {
   border-radius: 0;
   box-shadow: none;
   color: var(--avend-text);
-  cursor: pointer;
+  cursor: default;
   display: flex;
   font: inherit;
   gap: 0.5rem;
@@ -1833,66 +1854,27 @@ ul.avend-chat-list {
   min-height: 2.75rem;
   padding: 0.375rem 0.25rem 0.375rem 0.5625rem;
   text-align: left;
-  transition:
-    background-color 160ms var(--avend-ease-interaction),
-    border-color 160ms var(--avend-ease-interaction),
-    color 160ms var(--avend-ease-interaction);
   transform: none;
   width: 100%;
 }
 
-.avend-chat-submodules
-  .avend-chat-module:not(:disabled):not([aria-pressed="true"]):hover {
-  background: rgb(22 119 255 / 7%);
-  border-left-color: rgb(22 119 255 / 45%);
-  box-shadow: none;
-  transform: none;
-}
-
-.avend-chat-submodules .avend-chat-module:focus-visible {
-  outline: 3px solid var(--avend-focus);
-  outline-offset: 2px;
-}
-
-.avend-chat-submodules .avend-chat-module:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
-.avend-chat-submodules .avend-chat-module[aria-pressed="true"] {
-  background: linear-gradient(90deg, rgb(22 119 255 / 13%), transparent);
-  border-left-color: var(--avend-accent-strong);
-  box-shadow: none;
-  color: var(--avend-navy);
-  transform: none;
-}
-
-.avend-chat-module .avend-chat-module-icon {
+.avend-chat-submodule-tag .avend-chat-module-icon {
   align-items: center;
-  display: inline-flex;
-  justify-content: center;
-}
-
-.avend-chat-submodules .avend-chat-module-icon {
   border: 0;
+  display: inline-flex;
   flex: 0 0 auto;
   height: 1.375rem;
+  justify-content: center;
   width: 1.375rem;
 }
 
-.avend-chat-submodules .avend-chat-module-icon img {
+.avend-chat-submodule-tag .avend-chat-module-icon img {
   height: 100%;
   object-fit: contain;
   width: 100%;
 }
 
-.avend-chat-submodules
-  .avend-chat-module[aria-pressed="true"]
-  .avend-chat-module-icon {
-  transform: translateY(-0.0625rem);
-}
-
-.avend-chat-submodules .avend-chat-module-name {
+.avend-chat-submodule-tag .avend-chat-module-name {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.3;
@@ -1922,14 +1904,13 @@ ul.avend-chat-list {
   .avend-chat-topic-folder-paper,
   .avend-chat-topic-folder-front,
   .avend-chat-topic-folder-reveal,
-  .avend-chat-submodules .avend-chat-module,
-  .avend-chat-submodules .avend-chat-module-icon {
+  .avend-chat-submodule-tag,
+  .avend-chat-submodule-tag .avend-chat-module-icon {
     transition: none;
   }
 
   .avend-chat-topic-folder-reveal[data-open="true"]
-    .avend-chat-submodules
-    .avend-chat-module {
+    .avend-chat-submodule-tag {
     animation: none;
   }
 

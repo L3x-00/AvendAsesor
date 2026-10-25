@@ -16,6 +16,7 @@ vi.mock("./chat-aero-shards-background", () => ({
 }));
 
 import { ChatPanel, FRIENDLY_ERRORS } from "./chat-panel";
+import { GENERAL_WELCOME_MESSAGES } from "./chat-welcome";
 
 const chatModule = {
   code: "LICENSES",
@@ -110,8 +111,33 @@ function conversationEvent(): string {
   return `event: conversation\ndata: {"conversationId":"${conversationId}","userMessageId":"${questionMessageId}"}\n\n`;
 }
 
+function conversationEventFor(
+  nextConversationId: string,
+  moduleId: string | null,
+  startedNewConversation: boolean,
+): string {
+  return `event: conversation\ndata: ${JSON.stringify({
+    conversationId: nextConversationId,
+    moduleId,
+    startedNewConversation,
+    userMessageId: questionMessageId,
+  })}\n\n`;
+}
+
 function doneEvent(provider: "openai" | "rule"): string {
   return `event: done\ndata: {"conversationId":"${conversationId}","inReplyToMessageId":"${questionMessageId}","messageId":"${messageId}","provider":"${provider}"}\n\n`;
+}
+
+function doneEventFor(
+  nextConversationId: string,
+  provider: "openai" | "rule",
+): string {
+  return `event: done\ndata: ${JSON.stringify({
+    conversationId: nextConversationId,
+    inReplyToMessageId: questionMessageId,
+    messageId,
+    provider,
+  })}\n\n`;
 }
 
 function doneEventWithModules(
@@ -155,7 +181,10 @@ function requestBody(
   return JSON.parse(body);
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("ChatPanel", () => {
   it("integra el fondo decorativo sin alterar la bienvenida", () => {
@@ -183,6 +212,32 @@ describe("ChatPanel", () => {
     expect(conversation).toContainElement(
       screen.getByRole("heading", { name: "¿En qué te ayudo hoy?" }),
     );
+  });
+
+  it("rota la bienvenida únicamente en el chat general", () => {
+    vi.useFakeTimers();
+    const generalChat = render(<ChatPanel modules={[chatModule]} />);
+
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: GENERAL_WELCOME_MESSAGES[1],
+      }),
+    ).toBeVisible();
+
+    generalChat.unmount();
+    render(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(
+      screen.getByRole("heading", {
+        level: 2,
+        name: GENERAL_WELCOME_MESSAGES[0],
+      }),
+    ).toBeVisible();
   });
 
   it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {
@@ -783,8 +838,7 @@ describe("ChatPanel", () => {
     ).toBeEnabled();
   });
 
-  it("muestra los submódulos del módulo activo en la zona principal y permite quitar el subtema", async () => {
-    const user = userEvent.setup();
+  it("muestra los submódulos como etiquetas informativas sin fijar uno para la consulta", () => {
     render(
       <ChatPanel
         initialModuleId={chatModule.id}
@@ -794,54 +848,83 @@ describe("ChatPanel", () => {
 
     expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
     expect(screen.queryByText("LICENSES")).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: "Mostrar temas. 1 tema" }),
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: /licencia por salud/i }),
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Tema: Licencia por salud",
-    );
-
-    await user.click(
-      screen.getByRole("button", {
-        name: "Quitar el tema Licencia por salud",
-      }),
-    );
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText("Licencia por salud").closest("button")).toBeNull();
+    expect(
+      screen.getByText(/Puedes preguntar sobre cualquiera de ellos/i),
+    ).toBeVisible();
+    expect(screen.queryByText(/^Tema:/)).not.toBeInTheDocument();
   });
 
-  it("restarts the workspace transition between sibling submodules", async () => {
+  it("normaliza un subtema inicial al tema padre antes de abrir una conversación", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      void args;
+      return streamResponse([conversationEvent(), doneEvent("rule")]);
+    });
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
       <ChatPanel
         initialModuleId={childModule.id}
         modules={[chatModule, childModule, secondChildModule]}
       />,
     );
-    const initialWorkspace = container.querySelector(
-      ".avend-chat-workspace-transition",
+
+    expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
+    await submitQuestion(user);
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(1));
+    expect(requestBody(chatCalls(fetchMock)[0])).toEqual({
+      moduleId: chatModule.id,
+      question: "¿Cómo solicito una licencia?",
+    });
+  });
+
+  it("abre un alcance raíz nuevo antes de continuar una conversación histórica de subtema", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEventFor(newConversationId, chatModule.id, true),
+          doneEventFor(newConversationId, "rule"),
+        ]),
+      )
+      .mockImplementationOnce(async () =>
+        streamResponse([
+          conversationEventFor(newConversationId, chatModule.id, false),
+          doneEventFor(newConversationId, "rule"),
+        ]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <ChatPanel
+        initialConversation={{
+          ...initialConversation,
+          conversation: {
+            ...initialConversation.conversation,
+            selectedModuleId: childModule.id,
+          },
+        }}
+        modules={[chatModule, childModule]}
+      />,
     );
 
-    expect(initialWorkspace).not.toBeNull();
-    await user.click(
-      screen.getByRole("button", { name: /licencia por estudios/i }),
-    );
+    await submitQuestion(user);
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(1));
+    expect(requestBody(chatCalls(fetchMock)[0])).toEqual({
+      conversationId,
+      moduleId: chatModule.id,
+      question: "¿Cómo solicito una licencia?",
+    });
+    expect(await screen.findByText("Respuesta lista.")).toBeVisible();
 
-    await waitFor(() =>
-      expect(
-        container.querySelector(".avend-chat-workspace-transition"),
-      ).not.toBe(initialWorkspace),
-    );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Tema: Licencia por estudios",
-    );
-    expect(
-      screen.getByRole("textbox", { name: "Escribe tu consulta" }),
-    ).toHaveFocus();
+    await submitQuestion(user);
+    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
+    expect(requestBody(chatCalls(fetchMock)[1])).toEqual({
+      conversationId: newConversationId,
+      question: "¿Cómo solicito una licencia?",
+    });
   });
 
   it("cambia de módulo raíz de forma local sin una nueva navegación de servidor", async () => {
@@ -867,55 +950,6 @@ describe("ChatPanel", () => {
       screen.getByText("Tema actualizado: Evaluación docente."),
     ).toBeVisible();
   });
-
-  it("reinicia la conversación al cambiar o quitar el subtema", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi.fn(async (...args: Parameters<typeof fetch>) => {
-      void args;
-      return streamResponse([conversationEvent(), doneEvent("rule")]);
-    });
-    vi.stubGlobal("crypto", { randomUUID: () => "local-id" });
-    vi.stubGlobal("fetch", fetchMock);
-    render(
-      <ChatPanel
-        initialConversation={initialConversation}
-        modules={[chatModule, childModule]}
-      />,
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: "Mostrar temas. 1 tema" }),
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: /licencia por salud/i }),
-    );
-    await submitQuestion(user);
-    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(1));
-    expect(requestBody(chatCalls(fetchMock)[0])).toEqual({
-      moduleId: childModule.id,
-      question: "¿Cómo solicito una licencia?",
-    });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", {
-          name: "Quitar el tema Licencia por salud",
-        }),
-      ).toBeEnabled(),
-    );
-
-    await user.click(
-      screen.getByRole("button", {
-        name: "Quitar el tema Licencia por salud",
-      }),
-    );
-    await submitQuestion(user);
-    await waitFor(() => expect(chatCalls(fetchMock)).toHaveLength(2));
-    expect(requestBody(chatCalls(fetchMock)[1])).toEqual({
-      moduleId: chatModule.id,
-      question: "¿Cómo solicito una licencia?",
-    });
-  }, 10_000);
 
   it("sustituye el texto transmitido por la respuesta definitiva y escribe las fechas en lenguaje natural", async () => {
     const user = userEvent.setup();
@@ -1072,13 +1106,13 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the approved guidance only before an available subtopic group", () => {
+  it("muestra la guía informativa solo si el tema tiene subtemas", () => {
     const { rerender } = render(
       <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
     );
 
     expect(
-      screen.queryByText(/Elige un tema si ayuda/i),
+      screen.queryByText(/Puedes preguntar sobre cualquiera de ellos/i),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -1087,7 +1121,9 @@ describe("ChatPanel", () => {
         modules={[chatModule, childModule]}
       />,
     );
-    expect(screen.getByText(/Elige un tema si ayuda/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Puedes preguntar sobre cualquiera de ellos/i),
+    ).toBeInTheDocument();
   });
 
   it("enables source links only after the sourced answer is persisted", async () => {
