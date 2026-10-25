@@ -1,6 +1,26 @@
-import { salaryQuestionProfile } from './salary-applicability';
+import {
+  isBroadSalaryQuestion,
+  salaryQuestionProfile,
+} from './salary-applicability';
+import { normalizeDomainQuery } from './query-normalization';
 
 describe('OBS-002/004 — consulta salarial en lenguaje natural', () => {
+  it('recupera la intención salarial del error tipográfico observado', () => {
+    const original = 'cuanto ganau nprofesro';
+    const normalized = normalizeDomainQuery(original);
+
+    expect(normalized).toBe('cuanto gana un profesor');
+    expect(salaryQuestionProfile(original)).toMatchObject({
+      isSalaryQuestion: true,
+      role: 'docente',
+    });
+    expect(salaryQuestionProfile(normalized)).toMatchObject({
+      isSalaryQuestion: true,
+      role: 'docente',
+    });
+    expect(isBroadSalaryQuestion(normalized)).toBe(true);
+  });
+
   it.each([
     'Soy docente contratado de secundaria con jornada de 30 horas. ¿Cuánto debería ganar en 2025?',
     'Soy docente contratado, 30 horas. ¿Cuánto gano en 2025?',
