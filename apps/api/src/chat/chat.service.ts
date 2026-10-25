@@ -2439,7 +2439,7 @@ export class ChatService {
     clarification: {
       originalWord: string;
       suggestions: readonly string[];
-      suggestedQuestion: string;
+      suggestedQuestion: string | null;
     };
     conversationId: string | null;
     question: string;
@@ -2465,18 +2465,23 @@ export class ChatService {
       (suggestion) => `«${suggestion}»`,
     );
     const proposal = suggestions.join(' o ');
-    const suggestedQuestion = input.clarification.suggestedQuestion
-      .trim()
-      .replace(/^¿\s*/u, '')
-      .replace(/[?!.]+\s*$/u, '');
-    const message = [
-      'Quiero asegurarme de entender tu consulta antes de buscar la información.',
-      `La palabra «${input.clarification.originalWord}» podría referirse a ${proposal}.`,
-      '',
-      'Sugerencia:',
-      `¿Te explico esta consulta: «${suggestedQuestion}»?`,
-      'Si no es eso, escribe la palabra como prefieras y la revisamos juntos.',
-    ].join('\n');
+    const message = input.clarification.suggestedQuestion
+      ? [
+          'Quiero asegurarme de entender tu consulta antes de buscar la información.',
+          `La palabra «${input.clarification.originalWord}» podría referirse a ${proposal}.`,
+          '',
+          'Sugerencia:',
+          `¿Te explico esta consulta: «${input.clarification.suggestedQuestion
+            .trim()
+            .replace(/^¿\s*/u, '')
+            .replace(/[?!.]+\s*$/u, '')}»?`,
+          'Si no es eso, escribe la palabra como prefieras y la revisamos juntos.',
+        ].join('\n')
+      : [
+          'Quiero asegurarme de entender tu consulta antes de buscar la información.',
+          `La palabra «${input.clarification.originalWord}» puede referirse a ${proposal}.`,
+          'Para no adivinar entre esas opciones, ¿podrías escribir esa palabra de otra forma?',
+        ].join('\n');
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: turn.conversationId,

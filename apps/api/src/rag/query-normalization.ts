@@ -1,4 +1,5 @@
 import { normalizeSpanishText } from './text-normalization';
+import { hasStrongDomainSignal } from './domain-lexicon';
 
 /**
  * Normalización de la consulta para búsqueda y clasificación: expande
@@ -71,39 +72,87 @@ const COMMON_WORD_TYPOS: ReadonlyMap<string, string> = new Map([
  */
 const RECOVERABLE_DOMAIN_TERMS = [
   'asignación',
+  'asignaciones',
   'auxiliar',
+  'auxiliares',
   'bonificación',
+  'bonificaciones',
   'contratación',
+  'contrataciones',
   'contratado',
   'contratada',
+  'contratados',
+  'contratadas',
   'docente',
+  'docentes',
   'documento',
   'documentos',
   'destaque',
+  'destaques',
   'encargatura',
-  'escala',
+  'encargaturas',
   'horas',
   'jornada',
+  'jornadas',
   'licencia',
+  'licencias',
   'maestra',
   'maestro',
-  'magisterial',
+  'maestras',
+  'maestros',
   'nombrada',
   'nombrado',
+  'nombradas',
+  'nombrados',
   'nombramiento',
+  'nombramientos',
   'pensión',
+  'pensiones',
   'permiso',
+  'permisos',
   'plazo',
   'plazos',
   'profesora',
   'profesor',
+  'profesoras',
+  'profesores',
   'reasignación',
+  'reasignaciones',
   'remuneración',
+  'remuneraciones',
   'requisitos',
-  'salario',
-  'sueldo',
   'vacaciones',
 ] as const;
+
+/**
+ * Términos de proceso que pueden confirmar, por sí solos, que una consulta
+ * breve pertenece al ámbito educativo. Los roles o conceptos cotidianos como
+ * «sueldo» y «escala» no activan recuperación: así no se corrige una palabra
+ * española válida fuera de una pregunta educativa explícita.
+ */
+const SPECIFIC_RECOVERY_TERMS = new Set(
+  [
+    'contratación',
+    'contratado',
+    'contratada',
+    'contratados',
+    'contratadas',
+    'destaque',
+    'destaques',
+    'encargatura',
+    'encargaturas',
+    'licencia',
+    'licencias',
+    'nombrada',
+    'nombrado',
+    'nombradas',
+    'nombrados',
+    'nombramiento',
+    'nombramientos',
+    'reasignación',
+    'reasignaciones',
+  ].map((term) => normalizeSpanishText(term)),
+);
 
 /**
  * Palabras normativas correctas que aparecen al expandir las siglas. Se
@@ -137,8 +186,11 @@ export interface OrthographicClarification {
   originalWord: string;
   /** Una o más alternativas empatadas; no se adivina entre ellas. */
   suggestions: readonly string[];
-  /** Consulta propuesta, usada solo si la persona acepta la sugerencia. */
-  suggestedQuestion: string;
+  /**
+   * Consulta propuesta solo cuando hay una única alternativa. Un empate exige
+   * que la persona elija/escriba el término: nunca se acepta con un «sí».
+   */
+  suggestedQuestion: string | null;
 }
 
 export interface DomainQueryRecovery {
@@ -297,6 +349,27 @@ function isSingleStructuralTypo(word: string, candidate: string): boolean {
   );
 }
 
+function hasSpecificRecoveryAnchor(text: string): boolean {
+  for (const match of text.matchAll(/[\p{L}]+/gu)) {
+    const word = match[0];
+    const candidates = candidatesFor(word);
+    const candidate = candidates[0] ?? null;
+    if (
+      candidate &&
+      candidates.length === 1 &&
+      SPECIFIC_RECOVERY_TERMS.has(normalizeSpanishText(candidate.term)) &&
+      candidate.distance === 1 &&
+      isSingleStructuralTypo(
+        normalizeSpanishText(word),
+        normalizeSpanishText(candidate.term),
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Recupera errores de una letra de forma automática solo cuando hay un único
  * término docente cercano. A dos ediciones, o ante un empate, conserva la
@@ -304,6 +377,13 @@ function isSingleStructuralTypo(word: string, candidate: string): boolean {
  * jurídica válida sea interpretada como otro trámite.
  */
 function recoverControlledTypos(text: string): DomainQueryRecovery {
+  const hasRecoveryAnchor =
+    hasStrongDomainSignal(normalizeSpanishText(text)) ||
+    hasSpecificRecoveryAnchor(text);
+  if (!hasRecoveryAnchor) {
+    return { clarification: null, normalizedQuestion: text };
+  }
+
   let normalizedQuestion = '';
   let suggestedQuestion = '';
   let lastIndex = 0;
@@ -345,7 +425,9 @@ function recoverControlledTypos(text: string): DomainQueryRecovery {
           originalWord: word,
           suggestions: candidates.map((item) => item.term),
         };
-        suggestedQuestion += matchWordCase(word, candidate.term);
+        suggestedQuestion += hasUniqueCandidate
+          ? matchWordCase(word, candidate.term)
+          : word;
       } else {
         suggestedQuestion += word;
       }
@@ -358,7 +440,11 @@ function recoverControlledTypos(text: string): DomainQueryRecovery {
   suggestedQuestion += text.slice(lastIndex);
   return {
     clarification: clarification
-      ? { ...clarification, suggestedQuestion }
+      ? {
+          ...clarification,
+          suggestedQuestion:
+            clarification.suggestions.length === 1 ? suggestedQuestion : null,
+        }
       : null,
     normalizedQuestion,
   };

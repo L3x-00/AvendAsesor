@@ -2601,6 +2601,42 @@ describe('ChatService', () => {
     );
   });
 
+  it('pide reescribir una palabra ambigua y no permite confirmar una opción arbitraria con «sí»', async () => {
+    const events = await collect(service, {
+      question: 'requisitos para nombrad',
+    });
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    if (!clarification || clarification.type !== 'clarification') {
+      throw new Error('Expected an ambiguous orthographic clarification.');
+    }
+    expect(clarification.data.message).toContain('«nombrad»');
+    expect(clarification.data.message).toContain('«nombrada»');
+    expect(clarification.data.message).toContain('«nombrado»');
+    expect(clarification.data.message).not.toContain('Sugerencia:');
+
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [
+        { content: 'requisitos para nombrad', role: 'user' },
+        { content: clarification.data.message, role: 'clarification' },
+      ],
+      selectedModuleId: null,
+    });
+
+    const confirmation = await collect(service, {
+      conversationId,
+      question: 'Sí',
+    });
+
+    expect(confirmation).toEqual([
+      expect.objectContaining({ type: 'conversational' }),
+    ]);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
   it('no reescribe un término jurídico válido por similitud con el catálogo', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'no_evidence',

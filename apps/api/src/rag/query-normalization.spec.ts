@@ -138,6 +138,34 @@ describe('normalizeDomainQuery', () => {
     });
   });
 
+  it('conserva formas válidas y palabras españolas aunque sean cercanas al léxico docente', () => {
+    expect(normalizeDomainQuery('¿Cuánto ganan las profesoras?')).toBe(
+      '¿Cuánto ganan las profesoras?',
+    );
+    expect(normalizeDomainQuery('Los docentes tienen permisos')).toBe(
+      'Los docentes tienen permisos',
+    );
+    expect(recoverDomainQuery('El suelo de la escuela')).toEqual({
+      clarification: null,
+      normalizedQuestion: 'El suelo de la escuela',
+    });
+    expect(recoverDomainQuery('hola profeszz')).toEqual({
+      clarification: null,
+      normalizedQuestion: 'hola profeszz',
+    });
+  });
+
+  it('no prepara una consulta aceptable con sí cuando las alternativas empatan', () => {
+    expect(recoverDomainQuery('requisitos para nombrad')).toEqual({
+      clarification: {
+        originalWord: 'nombrad',
+        suggestions: ['nombrada', 'nombrado'],
+        suggestedQuestion: null,
+      },
+      normalizedQuestion: 'requisitos para nombrad',
+    });
+  });
+
   it('no altera números de norma, años, siglas ni nombres propios', () => {
     const question =
       '¿Qué dispone la RSG N.° 326-2017-MINEDU y el DS N.° 049-2025-EF para el 2026?';
