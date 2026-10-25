@@ -1,46 +1,24 @@
 "use client";
 
 import Image from "next/image";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import type { ChatModule } from "@/lib/chat-api/types";
 
-const SEARCH_THRESHOLD = 12;
-
-function normalized(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/gu, "")
-    .toLocaleLowerCase("es");
-}
-
 /**
- * Carpeta de temas estable y accesible. Conserva la metáfora solicitada sin
- * física, arrastre ni interacción dependiente de hover, y escala mediante un
- * filtro local cuando el módulo tiene muchos subtemas.
+ * Carpeta de temas estable y accesible. Los subtemas describen el alcance del
+ * módulo elegido; no restringen la consulta ni se pueden seleccionar.
  */
 export function SubmoduleFolder({
   disabled,
   moduleName,
-  onSelect,
-  selectedModuleId,
   submodules,
 }: {
   disabled?: boolean;
   moduleName: string;
-  onSelect: (moduleId: string) => void;
-  selectedModuleId?: string;
   submodules: ChatModule[];
 }) {
   const contentId = useId();
-  const [isOpen, setIsOpen] = useState(Boolean(selectedModuleId));
-  const [query, setQuery] = useState("");
-  const visibleSubmodules = useMemo(() => {
-    const term = normalized(query.trim());
-    if (!term) return submodules;
-    return submodules.filter((submodule) =>
-      normalized(submodule.name).includes(term),
-    );
-  }, [query, submodules]);
+  const [isOpen, setIsOpen] = useState(true);
 
   return (
     <section
@@ -85,31 +63,15 @@ export function SubmoduleFolder({
       >
         <div className="avend-chat-topic-folder-content">
           <p className="avend-chat-submodules-label">
-            Elige un tema si ayuda a precisar tu consulta. También puedes
-            escribir directamente.
+            Este tema incluye los siguientes procesos. Puedes preguntar sobre
+            cualquiera de ellos sin seleccionarlo primero.
           </p>
-          {submodules.length >= SEARCH_THRESHOLD ? (
-            <label className="avend-chat-topic-search">
-              <span>Buscar un tema</span>
-              <input
-                disabled={disabled || !isOpen}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Escribe una palabra"
-                type="search"
-                value={query}
-              />
-            </label>
-          ) : null}
-          <div className="avend-chat-submodules">
-            {visibleSubmodules.map((submodule, index) => (
-              <button
-                aria-pressed={submodule.id === selectedModuleId}
-                className="avend-chat-module"
-                disabled={disabled || !isOpen}
+          <ul className="avend-chat-submodules">
+            {submodules.map((submodule, index) => (
+              <li
+                className="avend-chat-submodule-tag"
                 key={submodule.id}
-                onClick={() => onSelect(submodule.id)}
                 style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
-                type="button"
               >
                 <span aria-hidden="true" className="avend-chat-module-icon">
                   <Image
@@ -123,10 +85,10 @@ export function SubmoduleFolder({
                 <span className="avend-chat-module-name">
                   {submodule.name}
                 </span>
-              </button>
+              </li>
             ))}
-          </div>
-          {visibleSubmodules.length === 0 ? (
+          </ul>
+          {submodules.length === 0 ? (
             <p className="avend-chat-topic-empty" role="status">
               No encontramos temas con ese nombre.
             </p>

@@ -743,8 +743,18 @@ export function ChatPanel({
   );
   const [question, setQuestion] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState<string | undefined>(
-    initialConversation?.conversation.selectedModuleId ?? initialModuleId,
+    () => {
+      const initialSelection =
+        initialConversation?.conversation.selectedModuleId ?? initialModuleId;
+      return resolveActiveParentId(modules, initialSelection) ?? initialSelection;
+    },
   );
+  // Se conserva el alcance con el que nació una conversación histórica. Si
+  // era un subtema, el siguiente turno declara explícitamente su tema padre:
+  // la API abre entonces una conversación nueva con el alcance completo.
+  const [conversationScopeModuleId, setConversationScopeModuleId] = useState<
+    string | undefined
+  >(() => initialConversation?.conversation.selectedModuleId ?? undefined);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
@@ -798,11 +808,6 @@ export function ChatPanel({
         : [],
     [modules, activeParentId],
   );
-  // Etiqueta de contexto: solo cuando el usuario elige un submódulo concreto.
-  const selectedSubmodule = useMemo(() => {
-    const selected = modules.find((module) => module.id === selectedModuleId);
-    return selected && selected.parentModuleId ? selected : undefined;
-  }, [modules, selectedModuleId]);
   const latestReportableAnswerId = useMemo(
     () =>
       [...messages]
@@ -824,9 +829,11 @@ export function ChatPanel({
     moduleId: string | undefined,
     forceNewConversation = false,
   ) {
+    const parentModuleId =
+      resolveActiveParentId(modules, moduleId) ?? moduleId;
     if (
       isStreaming ||
-      (!forceNewConversation && moduleId === selectedModuleId)
+      (!forceNewConversation && parentModuleId === selectedModuleId)
     ) {
       return;
     }
@@ -837,11 +844,14 @@ export function ChatPanel({
     // Una conversación conserva el módulo con el que fue creada. Cambiar el
     // contexto inicia la siguiente consulta en una conversación nueva, sin
     // esperar una nueva navegación de servidor.
-    setSelectedModuleId(moduleId);
+    setSelectedModuleId(parentModuleId);
     setConversationId(undefined);
+    setConversationScopeModuleId(undefined);
     setMessages([]);
     setError(null);
-    const selectedModule = modules.find((module) => module.id === moduleId);
+    const selectedModule = modules.find(
+      (module) => module.id === parentModuleId,
+    );
     setStatus(
       selectedModule
         ? `Tema actualizado: ${selectedModule.name}.`
@@ -850,15 +860,13 @@ export function ChatPanel({
     window.history.replaceState(
       null,
       "",
-      moduleId ? `/chat?module=${encodeURIComponent(moduleId)}` : "/chat",
+      parentModuleId
+        ? `/chat?module=${encodeURIComponent(parentModuleId)}`
+        : "/chat",
     );
     if (shouldMoveFocusToComposer) {
       queueMicrotask(() => questionInputRef.current?.focus());
     }
-  }
-
-  function clearSubmodule() {
-    changeModuleContext(activeParentId);
   }
 
   /**
@@ -1235,12 +1243,24 @@ export function ChatPanel({
     setUpdateDismissed(true);
 
     // El módulo solo se envía al INICIAR una conversación: al continuarla, el
-    // servidor usa el módulo guardado. Reenviar el módulo de la pantalla tras
-    // un cambio de tema abría otra conversación sin contexto (punto 6).
+    // servidor usa el módulo guardado. La excepción es una conversación
+    // histórica creada con un subtema: declarar su padre fuerza una nueva
+    // conversación con el alcance completo, sin reescribir el historial.
+    const targetModuleId = options.moduleId ?? activeParentId ?? selectedModuleId;
+    const storedScopeParentId = resolveActiveParentId(
+      modules,
+      conversationScopeModuleId,
+    );
+    const expandsLegacySubmoduleScope = Boolean(
+      conversationId &&
+        conversationScopeModuleId &&
+        storedScopeParentId &&
+        storedScopeParentId !== conversationScopeModuleId &&
+        targetModuleId === storedScopeParentId,
+    );
     const targetConversationId = options.newConversation
       ? undefined
       : conversationId;
-    const targetModuleId = options.moduleId ?? selectedModuleId;
     const hadVisibleMessages = messages.length > 0;
     const announcedNewTopic = pendingNewTopicRef.current;
     pendingNewTopicRef.current = false;
@@ -1289,7 +1309,8 @@ export function ChatPanel({
           ...(targetConversationId
             ? { conversationId: targetConversationId }
             : {}),
-          ...(!targetConversationId && targetModuleId
+          ...((!targetConversationId || expandsLegacySubmoduleScope) &&
+          targetModuleId
             ? { moduleId: targetModuleId }
             : {}),
           question: normalizedQuestion,
@@ -1345,8 +1366,18 @@ export function ChatPanel({
                   conversationId !== result.data.conversationId)),
             );
             setConversationId(result.data.conversationId);
+            setConversationScopeModuleId(
+              result.data.moduleId ??
+                (expandsLegacySubmoduleScope
+                  ? targetModuleId
+                  : conversationScopeModuleId),
+            );
             if (startsNewTopic && result.data.moduleId !== undefined) {
-              setSelectedModuleId(result.data.moduleId ?? undefined);
+              const returnedModuleId = result.data.moduleId ?? undefined;
+              setSelectedModuleId(
+                resolveActiveParentId(modules, returnedModuleId) ??
+                  returnedModuleId,
+              );
             }
             setMessages((current) => {
               const localQuestionIndex = current.findLastIndex(
@@ -1466,6 +1497,7 @@ export function ChatPanel({
             }
             if (result.data.startsNewTopic) {
               setConversationId(undefined);
+              setConversationScopeModuleId(undefined);
               pendingNewTopicRef.current = true;
               window.history.replaceState(
                 null,
@@ -1608,35 +1640,14 @@ export function ChatPanel({
               <SubmoduleFolder
                 disabled={isStreaming}
                 moduleName={activeParent.name}
-                onSelect={changeModuleContext}
-                selectedModuleId={selectedSubmodule?.id}
                 submodules={submodules}
               />
             ) : null}
 
-            {selectedSubmodule ? (
-              <div className="avend-chat-context" role="status">
-                <span>
-                  <strong>Tema:</strong> {selectedSubmodule.name}
-                </span>
-                <button
-                  aria-label={`Quitar el tema ${selectedSubmodule.name}`}
-                  disabled={isStreaming}
-                  onClick={clearSubmodule}
-                  type="button"
-                >
-                  <span>Quitar</span>
-                  <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-                    <path d="m7 7 10 10M17 7 7 17" />
-                  </svg>
-                </button>
-              </div>
-            ) : null}
-
-            {(selectedModuleId ?? activeParentId) ? (
+            {activeParentId ? (
               <ModuleOverviewCard
-                key={selectedModuleId ?? activeParentId}
-                moduleId={(selectedModuleId ?? activeParentId) as string}
+                key={activeParentId}
+                moduleId={activeParentId}
               />
             ) : null}
           </div>
@@ -1672,6 +1683,8 @@ export function ChatPanel({
             <ChatWelcome
               disabled={isStreaming}
               fullName={fullName}
+              key={activeParentId ?? "general"}
+              rotateMessage={!activeParent}
               onSuggestion={(text) => {
                 setQuestion(text);
                 setStatus(
