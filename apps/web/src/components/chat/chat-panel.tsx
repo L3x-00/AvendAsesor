@@ -1684,7 +1684,6 @@ export function ChatPanel({
               disabled={isStreaming}
               fullName={fullName}
               key={activeParentId ?? "general"}
-              rotateMessage={!activeParent}
               onSuggestion={(text) => {
                 setQuestion(text);
                 setStatus(
@@ -1692,6 +1691,7 @@ export function ChatPanel({
                 );
                 questionInputRef.current?.focus();
               }}
+              topicName={activeParent?.name}
             />
           ) : (
             messages.map((message, messageIndex) => (

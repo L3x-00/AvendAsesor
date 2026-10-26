@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -23,6 +23,9 @@ describe("ChatWelcome", () => {
 
     expect(screen.getByRole("heading", { name: "Hola, Ana. ¿En qué te ayudo hoy?" })).toBeVisible();
     expect(container.querySelector(".avend-chat-welcome-mark")).toBeNull();
+    expect(
+      screen.getByText(GENERAL_WELCOME_MESSAGES[0]),
+    ).toHaveClass("avend-chat-welcome-message");
     expect(screen.getAllByRole("button")).toHaveLength(CHAT_STARTERS.length);
 
     await user.click(screen.getByRole("button", { name: "¿Qué pasa si…?" }));
@@ -36,9 +39,9 @@ describe("ChatWelcome", () => {
     expect(firstNameOf("  ")).toBeNull();
   });
 
-  it("rota los cuatro mensajes solo cuando se habilita la bienvenida general", () => {
+  it("rota los cuatro mensajes únicamente en la bienvenida general", () => {
     vi.useFakeTimers();
-    render(<ChatWelcome onSuggestion={vi.fn()} rotateMessage />);
+    render(<ChatWelcome onSuggestion={vi.fn()} />);
 
     expect(screen.getByRole("heading")).toHaveTextContent(
       GENERAL_WELCOME_MESSAGES[0],
@@ -53,22 +56,28 @@ describe("ChatWelcome", () => {
     );
   });
 
-  it("permite pausar la bienvenida automática sin afectar el mensaje visible", () => {
-    vi.useFakeTimers();
-    render(<ChatWelcome onSuggestion={vi.fn()} rotateMessage />);
-
-    act(() => vi.advanceTimersByTime(3_000));
-    expect(screen.getByRole("heading")).toHaveTextContent(
-      GENERAL_WELCOME_MESSAGES[1],
+  it("presenta una guía compacta del tema sin la bienvenida extensa", () => {
+    render(
+      <ChatWelcome
+        onSuggestion={vi.fn()}
+        topicName="Situaciones administrativas"
+      />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Pausar mensajes de bienvenida" }),
-    );
-    act(() => vi.advanceTimersByTime(9_000));
-    expect(screen.getByRole("heading")).toHaveTextContent(
-      GENERAL_WELCOME_MESSAGES[1],
-    );
+    expect(
+      screen.getByRole("heading", {
+        name: "Consulta sobre Situaciones administrativas.",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Escribe una consulta sobre procesos/u),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /Pausar mensajes de bienvenida|Reanudar mensajes de bienvenida/u,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(CHAT_STARTERS.length);
   });
 
   it("mantiene el primer mensaje si el usuario redujo el movimiento", () => {
@@ -77,7 +86,7 @@ describe("ChatWelcome", () => {
       "matchMedia",
       vi.fn(() => ({ matches: true })),
     );
-    render(<ChatWelcome onSuggestion={vi.fn()} rotateMessage />);
+    render(<ChatWelcome onSuggestion={vi.fn()} />);
 
     act(() => vi.advanceTimersByTime(12_000));
     expect(screen.getByRole("heading")).toHaveTextContent(

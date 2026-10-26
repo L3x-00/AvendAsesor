@@ -33,17 +33,16 @@ interface ChatWelcomeProps {
   disabled?: boolean;
   fullName?: string | null;
   onSuggestion: (text: string) => void;
-  rotateMessage?: boolean;
+  topicName?: string | null;
 }
 
-function useWelcomeMessage(rotateMessage: boolean) {
+function useWelcomeMessage(shouldRotate: boolean) {
   const [messageIndex, setMessageIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     const reducedMotion =
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    if (!rotateMessage || reducedMotion || isPaused) return;
+    if (!shouldRotate || reducedMotion) return;
 
     const intervalId = window.setInterval(() => {
       setMessageIndex((current) =>
@@ -51,14 +50,9 @@ function useWelcomeMessage(rotateMessage: boolean) {
       );
     }, WELCOME_MESSAGE_INTERVAL_MS);
     return () => window.clearInterval(intervalId);
-  }, [isPaused, rotateMessage]);
+  }, [shouldRotate]);
 
-  return {
-    isPaused,
-    setIsPaused,
-    welcomeMessage:
-      GENERAL_WELCOME_MESSAGES[messageIndex] ?? GENERAL_WELCOME_MESSAGES[0],
-  };
+  return GENERAL_WELCOME_MESSAGES[messageIndex] ?? GENERAL_WELCOME_MESSAGES[0];
 }
 
 /** Mantiene el foco en el cuadro después de insertar un inicio de consulta. */
@@ -75,35 +69,43 @@ export function ChatWelcome({
   disabled,
   fullName,
   onSuggestion,
-  rotateMessage = false,
+  topicName,
 }: ChatWelcomeProps) {
   const firstName = firstNameOf(fullName);
-  const { isPaused, setIsPaused, welcomeMessage } =
-    useWelcomeMessage(rotateMessage);
+  const normalizedTopicName = topicName?.trim() ?? "";
+  const isGeneralWelcome = normalizedTopicName.length === 0;
+  const welcomeMessage = useWelcomeMessage(isGeneralWelcome);
+  const heading = isGeneralWelcome
+    ? welcomeMessage
+    : `Consulta sobre ${normalizedTopicName}.`;
 
   return (
-    <div className="avend-chat-welcome">
+    <div
+      className={`avend-chat-welcome ${
+        isGeneralWelcome
+          ? "avend-chat-welcome--general"
+          : "avend-chat-welcome--topic"
+      }`}
+    >
       <h2 aria-live="off">
-        {firstName ? `Hola, ${firstName}. ${welcomeMessage}` : welcomeMessage}
-      </h2>
-      {rotateMessage ? (
-        <button
-          aria-pressed={isPaused}
-          className="avend-chat-welcome-message-control"
-          onClick={() => setIsPaused((current) => !current)}
-          type="button"
+        {isGeneralWelcome && firstName ? `Hola, ${firstName}. ` : null}
+        <span
+          className={
+            isGeneralWelcome ? "avend-chat-welcome-message" : undefined
+          }
+          key={heading}
         >
-          {isPaused
-            ? "Reanudar mensajes de bienvenida"
-            : "Pausar mensajes de bienvenida"}
-        </button>
+          {heading}
+        </span>
+      </h2>
+      {isGeneralWelcome ? (
+        <p className="avend-chat-welcome-text">
+          Escribe una consulta sobre procesos, requisitos, plazos, derechos o
+          trámites del ámbito educativo. Cada respuesta te muestra de qué
+          documento vigente sale la información; si necesitas una norma
+          anterior, pídelo expresamente.
+        </p>
       ) : null}
-      <p className="avend-chat-welcome-text">
-        Escribe una consulta sobre procesos, requisitos, plazos, derechos o
-        trámites del ámbito educativo. Cada respuesta te muestra de qué
-        documento vigente sale la información; si necesitas una norma
-        anterior, pídelo expresamente.
-      </p>
       <p className="avend-chat-welcome-label" id="chat-suggestions-label">
         Empieza con una de estas frases y complétala con tu caso:
       </p>

@@ -214,7 +214,7 @@ describe("ChatPanel", () => {
     );
   });
 
-  it("rota la bienvenida únicamente en el chat general", () => {
+  it("rota la bienvenida solo en el chat general y compacta la de cada tema", () => {
     vi.useFakeTimers();
     const generalChat = render(<ChatPanel modules={[chatModule]} />);
 
@@ -235,9 +235,15 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("heading", {
         level: 2,
-        name: GENERAL_WELCOME_MESSAGES[0],
+        name: "Consulta sobre Licencias.",
       }),
     ).toBeVisible();
+    expect(screen.queryByText(/Escribe una consulta sobre procesos/u)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /Pausar mensajes de bienvenida|Reanudar mensajes de bienvenida/u,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("mantiene las citas de fuentes distintas junto al bloque y al párrafo correspondientes", () => {
