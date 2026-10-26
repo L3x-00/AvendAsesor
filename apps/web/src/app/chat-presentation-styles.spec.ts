@@ -193,6 +193,17 @@ describe("contratos de presentación del chat en teléfono", () => {
     );
   });
 
+  it("cambia el mensaje general con suavidad, sin conservar el control retirado", () => {
+    expect(ruleBody(teacherStyles, ".avend-chat-welcome-message")).toMatch(
+      /animation:\s*avend-welcome-message-in\s+280ms/u,
+    );
+    expect(teacherStyles).toMatch(/@keyframes\s+avend-welcome-message-in/u);
+    expect(teacherStyles).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.avend-chat-welcome-message,[\s\S]*?animation:\s*none/u,
+    );
+    expect(teacherStyles).not.toMatch(/avend-chat-welcome-message-control/u);
+  });
+
   it("limita la escena animada a la cabecera y deja el resto del chat legible", () => {
     const hero = ruleBody(teacherStyles, ".avend-chat-hero");
     const shards = ruleBody(teacherStyles, ".avend-chat-aero-shards");
