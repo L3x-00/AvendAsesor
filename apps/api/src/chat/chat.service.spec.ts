@@ -179,11 +179,51 @@ describe('ChatService', () => {
         sortOrder: 0,
       },
       parent: null,
+      submodules: [],
     });
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: [source],
         topicContext: preparedContext,
+      }),
+    );
+  });
+
+  it('no deja que el modelo confirme vigencia cuando las fuentes no identifican un cambio', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('No debe invocar al proveedor');
+    });
+
+    const events = await collect(service, {
+      question: '¿La norma sigue vigente?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
+    expect(events.find((event) => event.type === 'token')).toMatchObject({
+      data: {
+        text: expect.stringContaining(
+          'Sin cambios identificados en las fuentes disponibles.',
+        ),
+      },
+    });
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replyRole: 'assistant',
+        sources: expect.arrayContaining([
+          expect.objectContaining({ chunkId: source.chunkId }),
+        ]),
       }),
     );
   });

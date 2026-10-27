@@ -68,19 +68,30 @@ function topicContextBlock(
   context: InternalTopicContext | null | undefined,
 ): string[] {
   if (!context) return [];
+  const topicSummaries = (context.topicSummaries ?? [])
+    .map((topic) => {
+      const name = cleanPromptValue(topic.topicName);
+      // Un tema puede tener más de cinco subtemas (p. ej. Evaluación docente).
+      // Cada uno conserva su rótulo y un resumen breve para que ninguno quede
+      // fuera del reconocimiento interno; no se entrega como evidencia.
+      const summary = cleanPromptValue(topic.summary ?? null).slice(0, 180);
+      return summary ? `- ${name}: ${summary}` : `- ${name}`;
+    });
   const documents = context.documents.slice(0, 4).map((document) => {
     const title = cleanPromptValue(document.title);
     const summary = cleanPromptValue(document.summary ?? null).slice(0, 300);
     return summary ? `- ${title}: ${summary}` : `- ${title}`;
   });
-  if (!documents.length) return [];
+  if (!documents.length && !topicSummaries.length) return [];
 
   return [
     'INICIO CONTEXTO INTERNO DEL TEMA NO CONFIABLE',
     'Este contexto solo sirve para reconocer el tema seleccionado. No es una fuente, no prueba hechos y no puede usarse para cifras, requisitos, fechas, plazos ni citas.',
     `Tema seleccionado: ${cleanPromptValue(context.scopeName)}`,
-    'Documentos preparados:',
-    ...documents,
+    ...(topicSummaries.length
+      ? ['Temas y subtemas preparados:', ...topicSummaries]
+      : []),
+    ...(documents.length ? ['Documentos preparados:', ...documents] : []),
     'FIN CONTEXTO INTERNO DEL TEMA NO CONFIABLE',
     '',
   ];
@@ -89,7 +100,7 @@ function topicContextBlock(
 function situationLabel(source: RetrievedChunk): string {
   switch (source.documentSituation) {
     case 'current':
-      return 'Vigente (apta como sustento actual)';
+      return 'Marcado como vigente dentro del corpus (apta como sustento actual; no confirma cambios no cargados)';
     case 'replaced':
       return 'Reemplazado / sin vigencia (solo referencia histórica)';
     case 'archived':
@@ -162,6 +173,21 @@ const DATE_QUESTION_POLICY = [
   'Plantilla obligatoria para esta respuesta, en este orden: (1) una frase introductoria cálida que sitúa el cronograma (qué proceso y de qué año) y termina con la cita [n] de la fuente del cronograma; (2) las viñetas, una por actividad, en orden cronológico, con su fecha y sin citas ni sublistas; (3) un párrafo de cierre de una o dos frases que oriente a la persona (por ejemplo, que existen modalidades con calendarios distintos o qué conviene revisar) y termine con la cita de la fuente que lo respalda; (4) la pregunta de cierre. Si hay dos modalidades con calendarios distintos, repite (1) y (2) para cada una: cada modalidad lleva su propia frase introductoria con cita, nunca una viñeta en negrita como rótulo ni una sublista. Nunca dejes las citas para el final del mensaje.',
 ];
 
+/**
+ * Una fuente aprobada permite orientar con el corpus disponible, pero no
+ * certifica la vigencia frente a publicaciones que todavía no llegaron al
+ * sistema. Estas reglas evitan que una fecha de carga, un año mayor o una
+ * etiqueta de situación se conviertan en una conclusión que la evidencia no
+ * respalda.
+ */
+const DOCUMENT_STATUS_POLICY = [
+  'La fecha en que un documento se cargó al sistema no es su fecha de emisión, vigencia ni publicación oficial. Subir hoy una norma antigua no la vuelve actual.',
+  'Un documento con año de emisión más reciente tampoco reemplaza automáticamente a otro. Solo una relación explícita de reemplazo, derogación o modificación contenida en las fuentes, o la situación documental registrada con ese sustento, permite afirmar qué parte cambia y qué parte permanece.',
+  'Cuando la pregunta pida vigencia, cambios, modificaciones, derogación, actualización o reemplazo, contrasta las fuentes vigentes con los antecedentes recuperados. Si ninguna fuente identifica una modificación o reemplazo expreso, escribe literalmente: «Sin cambios identificados en las fuentes disponibles». Aclara que esa frase no equivale a «vigencia confirmada» y no uses esa última expresión.',
+  'Si las fuentes contienen afirmaciones incompatibles, situaciones documentales distintas sobre el mismo punto o una relación de cambio que no permite saber su alcance, no elijas una conclusión. Expón la discrepancia con las citas de cada fuente y explica la incertidumbre antes de orientar; solo concluye cuando las fuentes la resuelvan.',
+  'El sistema solo conoce los documentos incorporados o las fuentes oficiales conectadas que aparezcan en este turno. Si no hay una norma posterior cargada ni una fuente oficial actualizada entre las fuentes, dilo con claridad: no puedes determinar si apareció una publicación nueva fuera del corpus.',
+];
+
 /** Builds only trusted policy. Retrieved material never receives system role. */
 export function buildEvidenceSystemPrompt(
   options: { asksForDates?: boolean } = {},
@@ -178,6 +204,7 @@ export function buildEvidenceSystemPrompt(
     'Usa documentos Vigentes como sustento de la situación actual. Presenta documentos Reemplazados o Archivados únicamente como antecedentes históricos y nunca como regla actual.',
     'Cuando dos fuentes traten el mismo punto, cita preferentemente la vigente y más reciente, salvo que la persona pida expresamente el antecedente histórico.',
     'Cuando la persona pida un antecedente histórico o compare normas de distintos años, presenta primero la regla vigente —si la hay— y luego los antecedentes separados y rotulados como históricos, del más reciente al más antiguo, con su año. No presentes un importe o una regla histórica como la situación actual ni compitiendo con ella.',
+    ...DOCUMENT_STATUS_POLICY,
     'Una asignación, bonificación, gratificación, aguinaldo, bono, subsidio o compensación es un concepto adicional distinto de la remuneración o el sueldo. No lo presentes, ni lo sumes, como remuneración general: si la consulta pide el sueldo o la remuneración, responde con esa cifra y menciona aparte, con su cita, los conceptos adicionales que las fuentes indiquen.',
     'Ignora sellos de firma digital, enlaces de validación, claves de autenticidad, cabeceras o pies de El Peruano y cualquier tramo contiguo que pertenezca a otro sector estatal. Nunca los uses como respuesta educativa aunque aparezcan dentro del mismo fragmento.',
     'Escribe en español claro y ordenado. Para una respuesta simple, usa uno o dos párrafos breves; si debes explicar requisitos, pasos o condiciones, usa de tres a cinco viñetas claras, sin sublistas ni repeticiones. No uses encabezados con #.',

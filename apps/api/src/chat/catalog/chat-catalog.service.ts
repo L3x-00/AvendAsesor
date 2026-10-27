@@ -22,6 +22,8 @@ export const DOCUMENTS_CACHE_MS = 2 * 60 * 1000;
 export const SUMMARY_CACHE_MS = 24 * 60 * 60 * 1000;
 export const FAILED_SUMMARY_CACHE_MS = 5 * 60 * 1000;
 const MAX_OVERVIEW_DOCUMENTS = 8;
+/** Evita saturar el proveedor cuando un tema principal reúne varios subtemas. */
+export const SUMMARY_PREWARM_CONCURRENCY = 2;
 /** Cuánto espera el chat por los resúmenes antes de mostrar la lista. */
 export const SUMMARY_WAIT_MS = 6_000;
 
@@ -257,6 +259,14 @@ export class ChatCatalogService {
       summary: string | null | undefined;
     }
   >();
+  /**
+   * El tema raíz puede agrupar varios subtemas. La cola prepara todos sus
+   * documentos en segundo plano, con concurrencia pequeña para no competir
+   * con una respuesta real del docente.
+   */
+  private activeSummaryPrewarms = 0;
+  private readonly queuedSummaryVersionIds = new Set<string>();
+  private readonly summaryPrewarmQueue: AvailableDocument[] = [];
 
   constructor(
     @Inject(SUPABASE_CHAT_CATALOG_GATEWAY)
@@ -351,8 +361,29 @@ export class ChatCatalogService {
   async prepareModuleContext(input: {
     module: TopicModule;
     parent: TopicModule | null;
+    submodules?: TopicModule[];
   }): Promise<void> {
+    // Conserva el contrato previo: los primeros documentos del panorama tienen
+    // oportunidad de dejar su resumen reutilizable antes de la consulta.
     await this.moduleOverview(input);
+    const documents = await this.availableDocuments();
+    const inModule = documents.filter((document) =>
+      document.moduleIds.includes(input.module.id),
+    );
+    const inParent = input.parent
+      ? documents.filter((document) =>
+          document.moduleIds.includes(input.parent?.id ?? ''),
+        )
+      : [];
+    const inScope = inModule.length ? inModule : inParent;
+
+    // Al elegir un tema raíz, el catálogo ya incluye sus documentos propios y
+    // los de cada subtema directo. A diferencia del panorama visible (máximo
+    // ocho), aquí se prepara todo el alcance para que el contexto interno no
+    // dependa de qué subtema habría seleccionado antes el docente.
+    for (const document of inScope) {
+      this.enqueueSummaryPrewarm(document);
+    }
   }
 
   /**
@@ -363,6 +394,7 @@ export class ChatCatalogService {
   async internalTopicContext(input: {
     module: TopicModule;
     parent: TopicModule | null;
+    submodules?: TopicModule[];
   }): Promise<InternalTopicContext | null> {
     const documents = await this.availableDocuments();
     const inModule = documents.filter((document) =>
@@ -388,6 +420,29 @@ export class ChatCatalogService {
       void this.summaryFor(document);
     }
 
+    const topicSummaries = [
+      {
+        summary: this.topicSummary(inScope),
+        topicName:
+          scope === 'parent' && input.parent
+            ? input.parent.name
+            : input.module.name,
+      },
+      ...(input.submodules ?? []).flatMap((submodule) => {
+        const submoduleDocuments = inScope.filter((document) =>
+          document.moduleIds.includes(submodule.id),
+        );
+        return submoduleDocuments.length
+          ? [
+              {
+                summary: this.topicSummary(submoduleDocuments),
+                topicName: submodule.name,
+              },
+            ]
+          : [];
+      }),
+    ];
+
     return {
       documents: selected.map((document) => ({
         summary: this.summaries.get(document.versionId)?.summary ?? null,
@@ -398,7 +453,16 @@ export class ChatCatalogService {
         scope === 'parent' && input.parent
           ? input.parent.name
           : input.module.name,
+      ...(input.submodules?.length ? { topicSummaries } : {}),
     };
+  }
+
+  private topicSummary(documents: AvailableDocument[]): string | null {
+    const summaries = documents
+      .map((document) => this.summaries.get(document.versionId)?.summary)
+      .filter((summary): summary is string => Boolean(summary))
+      .slice(0, 3);
+    return summaries.length ? summaries.join(' ') : null;
   }
 
   private async generateSummary(
@@ -416,6 +480,43 @@ export class ChatCatalogService {
       );
       return null;
     }
+  }
+
+  private enqueueSummaryPrewarm(document: AvailableDocument): void {
+    if (!this.summaryGateway) return;
+    const cached = this.summaries.get(document.versionId);
+    if (
+      (cached && cached.expiresAt > Date.now()) ||
+      this.queuedSummaryVersionIds.has(document.versionId)
+    ) {
+      return;
+    }
+
+    this.queuedSummaryVersionIds.add(document.versionId);
+    this.summaryPrewarmQueue.push(document);
+    this.drainSummaryPrewarmQueue();
+  }
+
+  private drainSummaryPrewarmQueue(): void {
+    while (
+      this.activeSummaryPrewarms < SUMMARY_PREWARM_CONCURRENCY &&
+      this.summaryPrewarmQueue.length
+    ) {
+      const document = this.summaryPrewarmQueue.shift();
+      if (!document) return;
+
+      this.activeSummaryPrewarms += 1;
+      void this.summaryFor(document).then(
+        () => this.finishSummaryPrewarm(document.versionId),
+        () => this.finishSummaryPrewarm(document.versionId),
+      );
+    }
+  }
+
+  private finishSummaryPrewarm(versionId: string): void {
+    this.activeSummaryPrewarms -= 1;
+    this.queuedSummaryVersionIds.delete(versionId);
+    this.drainSummaryPrewarmQueue();
   }
 
   /** Resumen de un documento, compartido y en caché por versión. */

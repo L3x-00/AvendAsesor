@@ -22,6 +22,7 @@ import type { InternalTopicContext } from '../rag/topic-context';
 import { unsupportedTableRows } from '../rag/answer-tables';
 import { CitationGroupNormalizer } from '../rag/citation-format';
 import { NoSupportMarkerFilter } from '../rag/no-support-marker';
+import { noIdentifiedChangesMessage } from '../rag/document-status';
 import { causalClarificationFor } from '../rag/process-clarification';
 import { recoverDomainQuery } from '../rag/query-normalization';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
@@ -1703,6 +1704,45 @@ export class ChatService {
       return;
     }
 
+    // La ausencia de una modificación expresa no puede salir del modelo como
+    // una «vigencia confirmada». Esta ruta conserva las fuentes revisadas,
+    // pero entrega una conclusión limitada y reproducible antes de transmitir
+    // cualquier token generado.
+    const noChangesMessage = noIdentifiedChangesMessage(
+      effectiveQuestion,
+      retrieval.sources,
+    );
+    if (noChangesMessage) {
+      if (input.abortSignal?.aborted) return;
+      const completed = await this.historyGateway.completeTurn({
+        answer: noChangesMessage,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId: relatedModule?.id ?? null,
+        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        qualitySignals: [],
+        replyRole: 'assistant',
+        retrievalScope,
+        sources: citations.inputs,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield { data: { sources: citations.sources }, type: 'sources' };
+      yield { data: { text: noChangesMessage }, type: 'token' };
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          provider: 'rule',
+        },
+        type: 'done',
+      };
+      return;
+    }
+
     const preparedTopicContext = await selectedTopicContext;
     const topicContext =
       preparedTopicContext?.moduleId === selectedModuleId
@@ -2594,6 +2634,7 @@ export class ChatService {
     await this.catalogService.prepareModuleContext({
       module,
       parent: modules.find((item) => item.id === module.parentModuleId) ?? null,
+      submodules: modules.filter((item) => item.parentModuleId === module.id),
     });
   }
 
@@ -2614,6 +2655,9 @@ export class ChatService {
         module,
         parent:
           modules.find((item) => item.id === module.parentModuleId) ?? null,
+        submodules: modules.filter(
+          (item) => item.parentModuleId === module.id,
+        ),
       });
     } catch (error) {
       this.logger.warn(

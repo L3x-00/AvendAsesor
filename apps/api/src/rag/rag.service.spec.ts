@@ -2037,6 +2037,11 @@ describe('detectRetrievalScope', () => {
     ['¿Qué norma se aplica actualmente?', 'current'],
     ['Compara la norma vigente con la versión anterior.', 'historical'],
     ['¿Qué establecía la normativa de 2024?', 'historical'],
+    ['¿La norma sigue vigente?', 'historical'],
+    ['¿Cuál es la vigencia de la norma?', 'historical'],
+    ['¿Qué modificaciones tiene la norma?', 'historical'],
+    ['¿Hay cambios en la reasignación docente?', 'historical'],
+    ['¿Cuál es la vigencia del cronograma?', 'current'],
     ['Necesito los antecedentes históricos específicos.', 'archived_explicit'],
     ['Muéstrame el documento archivado.', 'archived_explicit'],
   ] as const)('classifies %s as %s', (question, expected) => {
@@ -2044,7 +2049,7 @@ describe('detectRetrievalScope', () => {
   });
 
   it('does not unlock history for the current year alone', () => {
-    expect(detectRetrievalScope('Normativa vigente de 2026', 2026)).toBe(
+    expect(detectRetrievalScope('Normativa de 2026', 2026)).toBe(
       'current',
     );
   });

@@ -9,4 +9,12 @@ export interface InternalTopicContext {
   }>;
   moduleId: string;
   scopeName: string;
+  /**
+   * Resúmenes internos agregados del tema raíz y de sus subtemas directos.
+   * Orientan el reconocimiento del asunto; nunca son evidencia ni se citan.
+   */
+  topicSummaries?: Array<{
+    summary: string | null;
+    topicName: string;
+  }>;
 }

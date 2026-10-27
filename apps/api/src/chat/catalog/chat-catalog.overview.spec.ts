@@ -145,6 +145,104 @@ describe('ChatCatalogService — panorama de un tema', () => {
     });
   });
 
+  it('prepara todos los documentos del tema raíz y sus subtemas sin ampliar el contexto no probatorio', async () => {
+    const scopedDocuments = Array.from({ length: 10 }, (_, index) =>
+      document({
+        id: `subtema-${index}`,
+        issuanceYear: 2026 - index,
+        moduleIds: [
+          'rem',
+          index % 2 === 0 ? asignaciones.id : escala.id,
+        ],
+        title: `Documento del subtema ${index}`,
+        versionId: `version-subtema-${index}`,
+      }),
+    );
+    const { catalog, catalogGateway, summarize } = withSummaries(
+      scopedDocuments,
+    );
+
+    await catalog.prepareModuleContext({
+      module: remuneraciones,
+      parent: null,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(summarize).toHaveBeenCalledTimes(10);
+    expect(catalogGateway.getOpeningText).toHaveBeenCalledTimes(10);
+    expect(summarize.mock.calls.map(([input]) => input.title)).toEqual(
+      scopedDocuments.map((item) => item.title),
+    );
+
+    const context = await catalog.internalTopicContext({
+      module: remuneraciones,
+      parent: null,
+      submodules: [asignaciones, escala],
+    });
+    // El prompt conserva un contexto breve; los diez resúmenes quedan listos
+    // en segundo plano y no se transforman en fuentes citables.
+    expect(context?.documents).toHaveLength(8);
+    expect(context?.documents.every((item) => item.summary !== null)).toBe(
+      true,
+    );
+    expect(context?.topicSummaries?.map((item) => item.topicName)).toEqual([
+      'Remuneraciones',
+      'Asignaciones y bonificaciones',
+      'Escala remunerativa',
+    ]);
+    expect(
+      context?.topicSummaries?.every((item) => item.summary !== null),
+    ).toBe(true);
+  });
+
+  it('limita el precalentamiento adicional para no competir con una respuesta del docente', async () => {
+    const scopedDocuments = Array.from({ length: 12 }, (_, index) =>
+      document({
+        id: `cola-${index}`,
+        issuanceYear: 2026 - index,
+        moduleIds: ['rem', asignaciones.id],
+        title: `Documento en cola ${index}`,
+        versionId: `version-cola-${index}`,
+      }),
+    );
+    const delayedTitles = new Set(
+      scopedDocuments.slice(8).map((item) => item.title),
+    );
+    let active = 0;
+    let maxActive = 0;
+    const release: Array<() => void> = [];
+    const summarize = jest.fn(({ title }: { title: string }) => {
+      if (!delayedTitles.has(title)) return Promise.resolve(`Resumen ${title}`);
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      return new Promise<string>((resolve) => {
+        release.push(() => {
+          active -= 1;
+          resolve(`Resumen ${title}`);
+        });
+      });
+    });
+    const { catalog } = withSummaries(scopedDocuments, summarize);
+
+    await catalog.prepareModuleContext({
+      module: remuneraciones,
+      parent: null,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(summarize).toHaveBeenCalledTimes(10);
+    expect(maxActive).toBe(2);
+
+    while (release.length) {
+      const batch = release.splice(0, 2);
+      for (const done of batch) done();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    expect(summarize).toHaveBeenCalledTimes(12);
+    expect(maxActive).toBe(2);
+  });
+
   it('lista los documentos del tema con un resumen generado del texto', async () => {
     const { catalog, catalogGateway, summarize } = withSummaries([
       padrones,
