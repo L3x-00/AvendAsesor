@@ -18,6 +18,7 @@ import {
   withScheduleEvidence,
 } from './dated-evidence';
 import { hasTopicTerm } from './domain-lexicon';
+import { asksForDocumentStatus } from './document-status';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
 import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
 import {
@@ -851,7 +852,10 @@ export function detectRetrievalScope(
     return 'archived_explicit';
   }
 
-  if (HISTORICAL_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+  if (
+    HISTORICAL_INTENT_PATTERNS.some((pattern) => pattern.test(normalized)) ||
+    asksForDocumentStatus(question)
+  ) {
     return 'historical';
   }
 

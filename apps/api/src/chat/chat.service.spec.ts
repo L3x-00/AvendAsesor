@@ -179,12 +179,57 @@ describe('ChatService', () => {
         sortOrder: 0,
       },
       parent: null,
+      submodules: [],
     });
     expect(answerGateway.generate).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: [source],
         topicContext: preparedContext,
       }),
+    );
+  });
+
+  it('no deja que el modelo confirme vigencia cuando las fuentes no identifican un cambio', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('No debe invocar al proveedor');
+    });
+
+    const events = await collect(service, {
+      question: '¿La norma sigue vigente?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
+    const token = events.find(
+      (event): event is Extract<ChatStreamEvent, { type: 'token' }> =>
+        event.type === 'token',
+    );
+    expect(token?.data.text).toContain(
+      'Sin cambios identificados en las fuentes disponibles.',
+    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const calls = historyGateway.completeTurn.mock.calls as Array<
+      [
+        {
+          replyRole: string;
+          sources: Array<{ chunkId: string }>;
+        },
+      ]
+    >;
+    const persistedTurn = calls[0][0];
+    expect(persistedTurn.replyRole).toBe('assistant');
+    expect(persistedTurn.sources.map((item) => item.chunkId)).toContain(
+      source.chunkId,
     );
   });
 

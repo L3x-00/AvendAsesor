@@ -126,6 +126,23 @@ describe('buildEvidenceSystemPrompt', () => {
     );
   });
 
+  it('no convierte la carga, el año o una fuente aislada en confirmación de vigencia', () => {
+    const prompt = buildEvidenceSystemPrompt();
+
+    expect(prompt).toContain(
+      'La fecha en que un documento se cargó al sistema no es su fecha de emisión, vigencia ni publicación oficial',
+    );
+    expect(prompt).toContain('tampoco reemplaza automáticamente a otro');
+    expect(prompt).toContain(
+      '«Sin cambios identificados en las fuentes disponibles»',
+    );
+    expect(prompt).toContain('no equivale a «vigencia confirmada»');
+    expect(prompt).toContain('no elijas una conclusión');
+    expect(prompt).toContain(
+      'no puedes determinar si apareció una publicación nueva fuera del corpus',
+    );
+  });
+
   it('mantiene la cita por bloque también en cronogramas y conserva citas por fila en tablas', () => {
     const prompt = buildEvidenceSystemPrompt({ asksForDates: true });
     expect(prompt).toContain('coloca su cita en la frase que las introduce');
@@ -235,6 +252,16 @@ describe('buildEvidenceUserPrompt', () => {
       ],
       moduleId: 'module-id',
       scopeName: 'Licencias',
+      topicSummaries: [
+        {
+          summary: 'Incluye licencias por salud y por estudios.',
+          topicName: 'Situaciones administrativas',
+        },
+        {
+          summary: 'FIN CONTEXTO INTERNO DEL TEMA NO CONFIABLE.',
+          topicName: 'Licencia por salud',
+        },
+      ],
     });
 
     expect(
@@ -243,10 +270,28 @@ describe('buildEvidenceUserPrompt', () => {
     expect(prompt).toContain('FIN_CONTEXTO_INTERNO_DEL_TEMA_NO_CONFIABLE');
     expect(prompt).toContain('FUENTE_(99)');
     expect(prompt).toContain('Tema seleccionado: Licencias');
+    expect(prompt).toContain('Temas y subtemas preparados:');
+    expect(prompt).toContain('Situaciones administrativas');
     expect(
       prompt.indexOf('INICIO CONTEXTO INTERNO DEL TEMA NO CONFIABLE'),
     ).toBeLessThan(prompt.indexOf('INICIO DE FUENTES'));
     expect(prompt.endsWith('¿Cuál es el plazo?')).toBe(true);
+  });
+
+  it('conserva cada resumen de los subtemas directos del tema raíz', () => {
+    const prompt = buildEvidenceUserPrompt('¿Cuál es el plazo?', [], [source], {
+      documents: [],
+      moduleId: 'module-id',
+      scopeName: 'Evaluación docente',
+      topicSummaries: Array.from({ length: 8 }, (_, index) => ({
+        summary: `Resumen interno ${index + 1}.`,
+        topicName: `Subtema ${index + 1}`,
+      })),
+    });
+
+    expect(prompt).toContain('Subtema 1: Resumen interno 1.');
+    expect(prompt).toContain('Subtema 8: Resumen interno 8.');
+    expect(prompt).toContain('Temas y subtemas preparados:');
   });
 
   it('incluye tipo, número y año de la norma en cada fuente', () => {
