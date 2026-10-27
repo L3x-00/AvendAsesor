@@ -68,15 +68,14 @@ function topicContextBlock(
   context: InternalTopicContext | null | undefined,
 ): string[] {
   if (!context) return [];
-  const topicSummaries = (context.topicSummaries ?? [])
-    .map((topic) => {
-      const name = cleanPromptValue(topic.topicName);
-      // Un tema puede tener más de cinco subtemas (p. ej. Evaluación docente).
-      // Cada uno conserva su rótulo y un resumen breve para que ninguno quede
-      // fuera del reconocimiento interno; no se entrega como evidencia.
-      const summary = cleanPromptValue(topic.summary ?? null).slice(0, 180);
-      return summary ? `- ${name}: ${summary}` : `- ${name}`;
-    });
+  const topicSummaries = (context.topicSummaries ?? []).map((topic) => {
+    const name = cleanPromptValue(topic.topicName);
+    // Un tema puede tener más de cinco subtemas (p. ej. Evaluación docente).
+    // Cada uno conserva su rótulo y un resumen breve para que ninguno quede
+    // fuera del reconocimiento interno; no se entrega como evidencia.
+    const summary = cleanPromptValue(topic.summary ?? null).slice(0, 180);
+    return summary ? `- ${name}: ${summary}` : `- ${name}`;
+  });
   const documents = context.documents.slice(0, 4).map((document) => {
     const title = cleanPromptValue(document.title);
     const summary = cleanPromptValue(document.summary ?? null).slice(0, 300);

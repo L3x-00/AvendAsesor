@@ -150,17 +150,13 @@ describe('ChatCatalogService — panorama de un tema', () => {
       document({
         id: `subtema-${index}`,
         issuanceYear: 2026 - index,
-        moduleIds: [
-          'rem',
-          index % 2 === 0 ? asignaciones.id : escala.id,
-        ],
+        moduleIds: ['rem', index % 2 === 0 ? asignaciones.id : escala.id],
         title: `Documento del subtema ${index}`,
         versionId: `version-subtema-${index}`,
       }),
     );
-    const { catalog, catalogGateway, summarize } = withSummaries(
-      scopedDocuments,
-    );
+    const { catalog, catalogGateway, summarize } =
+      withSummaries(scopedDocuments);
 
     await catalog.prepareModuleContext({
       module: remuneraciones,
@@ -170,9 +166,10 @@ describe('ChatCatalogService — panorama de un tema', () => {
 
     expect(summarize).toHaveBeenCalledTimes(10);
     expect(catalogGateway.getOpeningText).toHaveBeenCalledTimes(10);
-    expect(summarize.mock.calls.map(([input]) => input.title)).toEqual(
-      scopedDocuments.map((item) => item.title),
-    );
+    const summarizedTitles = (
+      summarize.mock.calls as Array<[{ title: string }]>
+    ).map(([input]) => input.title);
+    expect(summarizedTitles).toEqual(scopedDocuments.map((item) => item.title));
 
     const context = await catalog.internalTopicContext({
       module: remuneraciones,

@@ -132,9 +132,7 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain(
       'La fecha en que un documento se cargó al sistema no es su fecha de emisión, vigencia ni publicación oficial',
     );
-    expect(prompt).toContain(
-      'tampoco reemplaza automáticamente a otro',
-    );
+    expect(prompt).toContain('tampoco reemplaza automáticamente a otro');
     expect(prompt).toContain(
       '«Sin cambios identificados en las fuentes disponibles»',
     );

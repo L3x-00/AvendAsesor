@@ -2655,9 +2655,7 @@ export class ChatService {
         module,
         parent:
           modules.find((item) => item.id === module.parentModuleId) ?? null,
-        submodules: modules.filter(
-          (item) => item.parentModuleId === module.id,
-        ),
+        submodules: modules.filter((item) => item.parentModuleId === module.id),
       });
     } catch (error) {
       this.logger.warn(

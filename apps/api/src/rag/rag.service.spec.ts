@@ -2049,9 +2049,7 @@ describe('detectRetrievalScope', () => {
   });
 
   it('does not unlock history for the current year alone', () => {
-    expect(detectRetrievalScope('Normativa de 2026', 2026)).toBe(
-      'current',
-    );
+    expect(detectRetrievalScope('Normativa de 2026', 2026)).toBe('current');
   });
 });
 

@@ -210,21 +210,26 @@ describe('ChatService', () => {
       'token',
       'done',
     ]);
-    expect(events.find((event) => event.type === 'token')).toMatchObject({
-      data: {
-        text: expect.stringContaining(
-          'Sin cambios identificados en las fuentes disponibles.',
-        ),
-      },
-    });
+    const token = events.find(
+      (event): event is Extract<ChatStreamEvent, { type: 'token' }> =>
+        event.type === 'token',
+    );
+    expect(token?.data.text).toContain(
+      'Sin cambios identificados en las fuentes disponibles.',
+    );
     expect(answerGateway.generate).not.toHaveBeenCalled();
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        replyRole: 'assistant',
-        sources: expect.arrayContaining([
-          expect.objectContaining({ chunkId: source.chunkId }),
-        ]),
-      }),
+    const calls = historyGateway.completeTurn.mock.calls as Array<
+      [
+        {
+          replyRole: string;
+          sources: Array<{ chunkId: string }>;
+        },
+      ]
+    >;
+    const persistedTurn = calls[0][0];
+    expect(persistedTurn.replyRole).toBe('assistant');
+    expect(persistedTurn.sources.map((item) => item.chunkId)).toContain(
+      source.chunkId,
     );
   });
 
