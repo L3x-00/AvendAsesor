@@ -326,6 +326,19 @@ describe('ChatService — panorama del tema y errores de escritura', () => {
       expect(catalogService.prepareModuleContext).toHaveBeenCalledWith({
         module: modules[1],
         parent: modules[0],
+        submodules: [],
+      });
+    });
+
+    it('prepara el tema principal con sus subtemas directos', async () => {
+      const { catalogService, service } = setup();
+
+      await service.prepareModuleContext('rem');
+
+      expect(catalogService.prepareModuleContext).toHaveBeenCalledWith({
+        module: modules[0],
+        parent: null,
+        submodules: [modules[1]],
       });
     });
 
