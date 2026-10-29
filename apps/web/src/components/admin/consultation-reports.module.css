@@ -277,20 +277,46 @@
 
 .priorityList {
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 19rem), 1fr)
+  );
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
+}
+
+.priorityList > li {
+  min-width: 0;
+  display: flex;
 }
 
 .priorityList a {
   border: 1px solid var(--avend-border);
   border-radius: 0.75rem;
   color: var(--avend-text);
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
   padding: 1rem;
   text-decoration: none;
+  width: 100%;
+  min-width: 0;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.priorityList a:focus-visible {
+  outline: 2px solid var(--avend-accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priorityList a {
+    transition: none;
+  }
 }
 
 .priorityList a:hover {
@@ -573,4 +599,31 @@
   .collapsibleHeading h2 {
     font-size: 1rem;
   }
+}
+/* Prioridades: presentación compacta */
+
+.priorityList .badge[data-priority] {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 0.875rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.priorityList strong {
+  color: var(--avend-text);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.priorityList .meta {
+  margin-top: auto;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.priorityList a:hover {
+  background-color: var(--avend-surface-muted);
 }
