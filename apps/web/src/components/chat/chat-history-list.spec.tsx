@@ -334,7 +334,50 @@ describe("ChatHistoryList", () => {
     expect(refresh).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
+  it("cancela el temporizador de estabilización al desmontar el historial", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<DeleteConversationResult>();
+    deleteConversationAction.mockReturnValueOnce(pending.promise);
 
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+
+    try {
+      const { unmount } = render(
+        <ChatHistoryList
+          conversations={[conversation, second]}
+          nextCursor={null}
+        />,
+      );
+
+      await confirmRemoval(user, "Licencias por salud");
+
+      const timeoutIndex = setTimeoutSpy.mock.calls.findIndex(
+        ([, delay]) => delay === 450,
+      );
+
+      expect(timeoutIndex).toBeGreaterThanOrEqual(0);
+
+      const timeoutId = setTimeoutSpy.mock.results[timeoutIndex]?.value;
+
+      expect(timeoutId).toBeDefined();
+
+      unmount();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId);
+
+      await act(async () => {
+        pending.resolve({ status: "removed" });
+        await pending.promise;
+      });
+
+      expect(refresh).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
+    }
+  });
   it("cancelar la confirmación no quita nada y devuelve el foco", async () => {
     const user = userEvent.setup();
     render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
