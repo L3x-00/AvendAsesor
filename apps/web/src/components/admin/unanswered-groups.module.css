@@ -1,19 +1,24 @@
 .list {
   display: grid;
-  gap: 0.875rem;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 18rem), 1fr)
+  );
+  align-items: stretch;
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
 }
 
 .group {
-  align-content: start;
   border: 1px solid var(--avend-border);
   border-left: 4px solid var(--avend-accent);
   border-radius: 0.75rem;
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
   min-width: 0;
   padding: 1rem;
 }
@@ -66,7 +71,12 @@
 }
 
 .examples li {
+  display: -webkit-box;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .hint {
@@ -83,7 +93,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.25rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.actions a {
+  max-width: 100%;
 }
 
 .resolve summary {
@@ -131,4 +146,29 @@
   border-color: var(--avend-accent);
   box-shadow: 0 0 0 3px var(--avend-soft-blue);
   outline: none;
+}
+/* Jerarquía visual de módulos */
+
+.heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.parentLabel {
+  color: var(--avend-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.generalHelp {
+  color: var(--avend-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0.5rem 0 0;
 }

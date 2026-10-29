@@ -21,6 +21,13 @@ function groupTitle(group: UnansweredGroup): string {
     ? `${group.parentModuleName} › ${group.moduleName}`
     : group.moduleName;
 }
+function groupDisplayTitle(group: UnansweredGroup): string {
+  if (group.kind === "topic" && group.moduleName) {
+    return group.moduleName;
+  }
+
+  return groupTitle(group);
+}
 
 const hints: Record<UnansweredGroup["kind"], string> = {
   catalog:
@@ -95,6 +102,12 @@ export function UnansweredGroups({
               ? "No hay consultas sin sustento pendientes en este periodo."
               : `${total} ${total === 1 ? "consulta quedó" : "consultas quedaron"} sin sustento. Se agrupan por tema para que sepas qué documento cargar primero.`}
           </p>
+          {total > 0 ? (
+            <p className={styles.generalHelp}>
+              Revisa las consultas de cada tema, carga la documentación
+              correspondiente y marca el grupo como resuelto cuando proceda.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -111,13 +124,22 @@ export function UnansweredGroups({
             if (group.moduleId) closeParams.set("moduleId", group.moduleId);
             return (
               <li
-                aria-labelledby={titleId}
+                aria-label={groupTitle(group)}
                 className={styles.group}
                 data-kind={group.kind}
                 key={titleId}
               >
                 <div className={styles.header}>
-                  <h3 id={titleId}>{groupTitle(group)}</h3>
+                  <div className={styles.heading}>
+                    {group.parentModuleName ? (
+                      <span className={styles.parentLabel}>
+                        {group.parentModuleName}
+                      </span>
+                    ) : null}
+
+                    <h3 id={titleId}>{groupDisplayTitle(group)}</h3>
+                  </div>
+
                   <span className={styles.count}>
                     {group.count} {group.count === 1 ? "consulta" : "consultas"}
                   </span>
@@ -132,7 +154,9 @@ export function UnansweredGroups({
                     ))}
                   </ul>
                 ) : null}
-                <p className={styles.hint}>{hints[group.kind]}</p>
+                {group.kind !== "topic" ? (
+                  <p className={styles.hint}>{hints[group.kind]}</p>
+                ) : null}
                 {group.count > closable ? (
                   <p className={reports.meta}>
                     Puedes revisar {closable} de {group.count} consultas en la pantalla de cierre; el resto sigue pendiente.
