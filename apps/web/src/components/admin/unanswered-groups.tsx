@@ -173,9 +173,13 @@ export function UnansweredGroups({
                   ) : null}
                   <Link
                     className="avend-button avend-button--secondary"
-                    href={casesHref(group, period)}
+                    href={
+                      group.count === 1 && group.caseIds.length === 1
+                        ? `/admin/operations/${group.caseIds[0]}`
+                        : casesHref(group, period)
+                    }
                   >
-                    Ver casos
+                    {group.count === 1 ? "Ver caso" : "Ver casos"}
                   </Link>
                   <Link
                     className="avend-button avend-button--secondary"
