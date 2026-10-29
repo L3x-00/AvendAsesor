@@ -292,17 +292,31 @@ export default async function ConsultationCasePage({
             Cambia el estado, agrega una nota o corrige la ruta. Las notas nunca
             reemplazan el historial previo.
           </p>
+
           <AdminActionForm
             action={updateConsultationCaseAction}
-            className={styles.compactForm}
-            rules={{ note: [{ kind: "maxLength", label: "La nota de revisión", max: 2000 }] }}
+            className={`${styles.compactForm} ${styles.caseManagementForm}`}
+            rules={{
+              note: [
+                {
+                  kind: "maxLength",
+                  label: "La nota de revisión",
+                  max: 2000,
+                },
+              ],
+            }}
             submitLabel="Guardar cambios"
           >
             <input name="caseId" type="hidden" value={caseId} />
-            <div className={`${styles.formGrid} ${styles.caseManagementGrid}`}>
+
+            <div className={styles.caseManagementGrid}>
               <label htmlFor="case-status-change">
                 Estado
-                <select defaultValue="" id="case-status-change" name="status">
+                <select
+                  defaultValue=""
+                  id="case-status-change"
+                  name="status"
+                >
                   <option value="">Conservar estado actual</option>
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -311,30 +325,74 @@ export default async function ConsultationCasePage({
                   ))}
                 </select>
               </label>
+
               <label htmlFor="case-note">
                 Nota de revisión
                 <textarea
                   id="case-note"
                   maxLength={2000}
                   name="note"
+                  placeholder="Describe brevemente la revisión o decisión tomada..."
                   rows={3}
                 />
                 <FieldError name="note" />
               </label>
             </div>
+
             {access.modulesAccess ? (
-              <details>
-                <summary>Corregir ruta de módulo o submódulo</summary>
-                <label className={styles.meta}>
-                  <input name="changeRouting" type="checkbox" value="true" />
-                  Guardar la corrección de ruta mostrada abajo
-                </label>
-                <ConsultationRouteFields
-                  initialModuleId={caseData.detectedModuleId}
-                  initialSubmoduleId={caseData.detectedSubmoduleId}
-                  roots={roots}
-                  submodules={submodules}
-                />
+              <details className={styles.caseRoutingDetails}>
+                <summary className={styles.caseRoutingSummary}>
+                  <span>Corregir módulo o submódulo</span>
+                  <span
+                    aria-hidden="true"
+                    className={styles.caseRoutingIndicator}
+                  >
+                    <svg
+                      fill="none"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      width="18"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  </span>
+                </summary>
+
+                <div className={styles.caseRoutingContent}>
+                  <p className={styles.caseRoutingHelp}>
+                    Utiliza esta opción únicamente cuando la consulta
+                    haya sido clasificada en un módulo incorrecto.
+                  </p>
+
+                  <label className={styles.caseRoutingCheckbox}>
+                    <input
+                      name="changeRouting"
+                      type="checkbox"
+                      value="true"
+                    />
+                    <span>
+                      <strong>Aplicar corrección de ruta</strong>
+                      <small>
+                        Marca esta casilla para guardar el módulo
+                        o submódulo seleccionado al pulsar
+                        «Guardar cambios».
+                      </small>
+                    </span>
+                  </label>
+
+                  <div className={styles.caseRoutingFields}>
+                    <ConsultationRouteFields
+                      initialModuleId={caseData.detectedModuleId}
+                      initialSubmoduleId={caseData.detectedSubmoduleId}
+                      roots={roots}
+                      submodules={submodules}
+                    />
+                  </div>
+                </div>
               </details>
             ) : null}
           </AdminActionForm>
