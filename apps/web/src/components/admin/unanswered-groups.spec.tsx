@@ -104,8 +104,11 @@ describe("UnansweredGroups", () => {
       name: "Sin tema identificado",
     });
     expect(
-      within(unknown).getByRole("link", { name: "Ver casos" }),
-    ).toHaveAttribute("href", expect.not.stringContaining("moduleId"));
+      within(unknown).getByRole("link", { name: "Ver caso" }),
+    ).toHaveAttribute(
+      "href",
+      "/admin/operations/55555555-5555-4555-8555-555555555555",
+    );
   });
 
   it("un tema principal filtra por módulo y no por submódulo", () => {
