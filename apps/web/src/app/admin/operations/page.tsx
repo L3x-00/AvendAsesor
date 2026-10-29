@@ -212,13 +212,12 @@ function ReviewPriorities({
     medium: "Media",
   } as const;
 
-  return (
-    <section
-      aria-labelledby="consultation-priorities-title"
-      className={styles.section}
+    return (
+    <details
+      className={`${styles.section} ${styles.collapsibleSection}`}
     >
-      <div className={styles.sectionHeader}>
-        <div>
+      <summary className={styles.collapsibleHeader}>
+        <div className={styles.collapsibleHeading}>
           <h2 id="consultation-priorities-title">
             Respuestas con mayor necesidad de revisión
           </h2>
@@ -227,7 +226,24 @@ function ReviewPriorities({
             cuenta la severidad y los tipos distintos de incidencia.
           </p>
         </div>
-      </div>
+
+        <span className={styles.collapsibleIndicator} aria-hidden="true">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </summary>
+
+      <div className={styles.collapsibleContent}>
       {items.length === 0 ? (
         <p className={styles.empty}>
           No hay respuestas abiertas que requieran revisión en este periodo.
@@ -258,9 +274,10 @@ function ReviewPriorities({
               </Link>
             </li>
           ))}
-        </ol>
+                </ol>
       )}
-    </section>
+      </div>
+    </details>
   );
 }
 
@@ -600,20 +617,45 @@ export default async function OperationsPage({
         ) : null}
 
         {view === "consultar" ? (
-        <section
-          aria-labelledby="consultation-cases-title"
-          className={styles.section}
-        >
-          <div className={styles.sectionHeader}>
-            <div>
-              <h2 id="consultation-cases-title">Casos para revisión</h2>
-              <p>
-                {totalCases}{" "}
-                {totalCases === 1 ? "caso encontrado" : "casos encontrados"} en
-                el periodo seleccionado.
-              </p>
-            </div>
-          </div>
+          <details
+            className={`${styles.section} ${styles.collapsibleSection}`}
+            open={
+              Boolean(query || status || kind || issueType || moduleId || submoduleId) ||
+              currentPage > 1
+                ? true
+                : undefined
+            }
+          >
+            <summary className={styles.collapsibleHeader}>
+              <div className={styles.collapsibleHeading}>
+                <h2 id="consultation-cases-title">
+                  Casos para revisión
+                </h2>
+
+                <p>
+                  {totalCases}{" "}
+                  {totalCases === 1 ? "caso encontrado" : "casos encontrados"} en
+                  el periodo seleccionado.
+                </p>
+              </div>
+
+              <span className={styles.collapsibleIndicator} aria-hidden="true">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </summary>
+
+            <div className={styles.collapsibleContent}>
           <form className={styles.filters} method="get">
             <input name="period" type="hidden" value={period} />
             <label htmlFor="case-search">
@@ -792,8 +834,9 @@ export default async function OperationsPage({
               ) : null}
             </nav>
           ) : null}
-        </section>
-        ) : null}
+        </div>
+      </details>
+    ) : null}
       </main>
     </AdminPage>
   );

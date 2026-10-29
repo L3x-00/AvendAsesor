@@ -453,3 +453,124 @@
   border-bottom-color: var(--avend-accent);
   color: var(--avend-accent-strong);
 }
+/* ==========================================
+   CASOS PARA REVISION - SECCION COLAPSABLE
+   ========================================== */
+
+.collapsibleSection {
+  overflow: hidden;
+}
+
+.collapsibleHeader {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  list-style: none;
+  margin: -1.25rem;
+  padding: 1.25rem;
+  transition: background-color 200ms ease;
+}
+
+.collapsibleHeader::-webkit-details-marker {
+  display: none;
+}
+
+.collapsibleHeader::marker {
+  content: "";
+}
+
+.collapsibleHeader:hover {
+  background-color: var(--avend-surface-muted);
+}
+
+.collapsibleHeader:focus-visible {
+  border-radius: 0.625rem;
+  outline: 2px solid var(--avend-accent);
+  outline-offset: -3px;
+}
+
+.collapsibleHeading {
+  min-width: 0;
+}
+
+.collapsibleHeading h2 {
+  color: var(--avend-navy);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.collapsibleHeading p {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.375rem 0 0;
+}
+
+.collapsibleIndicator {
+  align-items: center;
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  color: var(--avend-navy);
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.collapsibleIndicator svg {
+  transition: transform 260ms ease;
+}
+
+.collapsibleSection[open] .collapsibleIndicator svg {
+  transform: rotate(180deg);
+}
+
+.collapsibleContent {
+  padding-top: 1.5rem;
+}
+
+/* Animacion progresiva del contenido */
+@keyframes avendCasesReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.collapsibleSection[open] .collapsibleContent {
+  animation: avendCasesReveal 260ms ease-out both;
+}
+
+/* Accesibilidad: movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  .collapsibleIndicator svg {
+    transition: none;
+  }
+
+  .collapsibleSection[open] .collapsibleContent {
+    animation: none;
+  }
+}
+
+/* Ajuste para dispositivos moviles */
+@media (max-width: 42rem) {
+  .collapsibleHeader {
+    margin: -1rem;
+    padding: 1rem;
+  }
+
+  .collapsibleHeading h2 {
+    font-size: 1rem;
+  }
+}

@@ -1,7 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import "@testing-library/jest-dom/vitest";
+
 import type { UnansweredGroup } from "@/lib/consultation-reports-api/types";
 import { UnansweredGroups } from "./unanswered-groups";
+
+afterEach(() => {
+  cleanup();
+});
 
 const topic: UnansweredGroup = {
   caseIds: [
