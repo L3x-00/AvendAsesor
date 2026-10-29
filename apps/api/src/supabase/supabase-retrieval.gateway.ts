@@ -210,4 +210,51 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       })),
     );
   }
+
+  /**
+   * Lee el inicio de versiones que la búsqueda del mismo turno ya admitió.
+   * La cabecera suele contener el tipo y número de la norma, necesarios para
+   * no presentar en una cita el título equivocado de una carga histórica.
+   */
+  async initialChunksOfVersions(input: {
+    limitPerVersion: number;
+    versionIds: string[];
+  }): Promise<VersionChunk[]> {
+    const client = this.client;
+    if (!client) {
+      throw new ServiceUnavailableException(
+        'Document retrieval is not configured.',
+      );
+    }
+    const results = await Promise.all(
+      [...new Set(input.versionIds)].map((versionId) =>
+        client
+          .from('document_chunks')
+          .select(
+            'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+          )
+          .eq('document_version_id', versionId)
+          .order('chunk_index', { ascending: true })
+          .limit(input.limitPerVersion),
+      ),
+    );
+    if (results.some((result) => result.error)) {
+      throw new ServiceUnavailableException(
+        'Document identity evidence is temporarily unavailable.',
+      );
+    }
+    return results.flatMap((result) =>
+      (result.data ?? []).map((row) => ({
+        articleReference: row.article_reference,
+        chunkContent: row.chunk_content,
+        chunkId: row.id,
+        chunkIndex: row.chunk_index,
+        documentVersionId: row.document_version_id,
+        numeralReference: row.numeral_reference,
+        pageEnd: row.page_end,
+        pageStart: row.page_start,
+        sectionTitle: row.section_title,
+      })),
+    );
+  }
 }

@@ -8,6 +8,13 @@ import {
 } from './salary-applicability';
 import { parseSalarySchedule, type SalarySchedule } from './salary-schedule';
 import { MAX_RAG_ANSWER_CHARS, RAG_TRUNCATION_NOTE } from './rag.constants';
+import {
+  isPayrollReviewQuestion,
+  isRuralAllocationQuestion,
+  isRuralAllocationEvidence,
+  isRuralPadronQuestion,
+  isRuralPadronEvidence,
+} from './remuneration-retrieval';
 import { normalizeSpanishText } from './text-normalization';
 
 export interface ExtractiveSalaryAnswer {
@@ -565,6 +572,380 @@ function hasAnswerableAmount(units: readonly SalaryEvidenceUnit[]): boolean {
   );
 }
 
+const FIRST_SCALE_RIM_REFERENCE =
+  /\bremuneracion\s+integra\s+mensual(?:\s*\(?rim\)?)?.{0,120}\bprimera\s+escala\s+magisterial\b/u;
+
+function asksNamedContractComparison(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  return (
+    /\bnombrad[oa]s?\b/u.test(text) &&
+    /\bcontratad[oa]s?\b/u.test(text) &&
+    /\b(?:diferencia|compar|versus|vs\.?|entre)\b/u.test(text)
+  );
+}
+
+function isAscensoQuestion(question: string): boolean {
+  return /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u.test(
+    normalizeSpanishText(question),
+  );
+}
+
+function ascensoPlanillaAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  if (!isAscensoQuestion(question)) return null;
+  const source = sources.find((candidate) => {
+    const text = normalizeSpanishText(candidate.chunkContent);
+    return (
+      /\bascenso\s+de\s+escala(?:\s+magisterial)?\b/u.test(text) &&
+      /\bacto(?:s)?\s+resolutiv(?:os|o|as|a)\b/u.test(text) &&
+      /\b(?:pago|descuento)\b/u.test(text)
+    );
+  });
+  if (!source) return null;
+  return {
+    answer:
+      'La fuente de planillas incluye el ascenso de escala magisterial entre las situaciones administrativas de los actos resolutivos que derivan en pago o descuento. [1] Los documentos entregados no precisan un pago automático, un nuevo monto ni una fecha de implementación para cada caso.',
+    hasVerifiedAmount: false,
+    sources: [source],
+  };
+}
+
+function asksPadronRural(question: string): boolean {
+  return isRuralPadronQuestion(question);
+}
+
+function asksRuralAllocation(question: string): boolean {
+  return isRuralAllocationQuestion(question);
+}
+
+function ruralAllocationAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  if (!asksRuralAllocation(question)) return null;
+  const source = sources.find(isRuralAllocationEvidence);
+  if (!source) return null;
+  const year = source.issuanceYear;
+  const datedScope =
+    typeof year === 'number'
+      ? ` La fuente es del año ${year}.`
+      : '';
+  return {
+    answer:
+      'La fuente recuperada regula una asignación por trabajo en ámbito rural. [1]' +
+      datedScope +
+      ' Los documentos entregados no incluyen una regla actual que permita confirmar el monto aplicable hoy.',
+    hasVerifiedAmount: false,
+    sources: [source],
+  };
+}
+
+function padronRuralAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  if (!asksPadronRural(question)) return null;
+  const source = sources.find(isRuralPadronEvidence);
+  if (!source) return null;
+  const year = source.issuanceYear;
+  return {
+    answer:
+      typeof year === 'number'
+        ? `La evidencia recuperada contiene un padrón de instituciones educativas del año ${year}. [1] No incluye un padrón posterior ni un mecanismo para confirmar la inclusión actual de una institución, por lo que no permite determinar tu caso hoy.`
+        : 'La evidencia recuperada contiene un padrón de instituciones educativas. [1] No incluye un padrón posterior ni un mecanismo para confirmar la inclusión actual de una institución, por lo que no permite determinar tu caso hoy.',
+    hasVerifiedAmount: false,
+    sources: [source],
+  };
+}
+
+function asksPayrollReview(question: string): boolean {
+  return isPayrollReviewQuestion(question);
+}
+
+function payrollReviewAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  if (!asksPayrollReview(question)) return null;
+  const deductions = sources.find((candidate) => {
+    const text = normalizeSpanishText(candidate.chunkContent);
+    return /\b(?:deduccion|descuento)\b/u.test(text) && /\bplanilla\b/u.test(text);
+  });
+  const responsibility = sources.find((candidate) => {
+    const text = normalizeSpanishText(candidate.chunkContent);
+    return (
+      /\boficina\s+de\s+personal\b/u.test(text) &&
+      /\bacto(?:s)?\s+administrativ/u.test(text) &&
+      /\b(?:pago|descuento)\b/u.test(text)
+    );
+  });
+  const used = [deductions, responsibility].filter(
+    (source): source is RetrievedChunk => Boolean(source),
+  );
+  if (!used.length) return null;
+  const deductionCitation = deductions ? used.indexOf(deductions) + 1 : null;
+  const responsibilityCitation = responsibility
+    ? used.indexOf(responsibility) + 1
+    : null;
+  const facts = [
+    deductionCitation
+      ? `La fuente regula que las deducciones en planilla se aplican con prelación y límites según el tipo de descuento. [${deductionCitation}]`
+      : null,
+    responsibilityCitation
+      ? `También atribuye a la Oficina de Personal la emisión oportuna de actos administrativos que derivan en pago o descuento. [${responsibilityCitation}]`
+      : null,
+    'Los documentos entregados no establecen un canal, plazo ni recurso personal para presentar un reclamo por una diferencia remunerativa; no puedo inventar ese procedimiento.',
+  ].filter((fact): fact is string => Boolean(fact));
+  return {
+    answer: facts.join(' '),
+    hasVerifiedAmount: false,
+    sources: used,
+  };
+}
+
+function newestFirstScaleReference(
+  sources: readonly RetrievedChunk[],
+): RetrievedChunk | null {
+  const articles = sources.filter((source) =>
+    FIRST_SCALE_RIM_REFERENCE.test(normalizeSpanishText(source.chunkContent)),
+  );
+  if (!articles.length) return null;
+  const newestYear = Math.max(
+    ...articles.map((source) => source.issuanceYear ?? 0),
+  );
+  return (
+    articles
+      .filter((source) => (source.issuanceYear ?? 0) === newestYear)
+      .sort((left, right) => {
+        const leftHasArticle = /\barticulo\s+1\b/iu.test(
+          normalizeSpanishText(left.chunkContent),
+        );
+        const rightHasArticle = /\barticulo\s+1\b/iu.test(
+          normalizeSpanishText(right.chunkContent),
+        );
+        return Number(rightHasArticle) - Number(leftHasArticle);
+      })[0] ?? null
+  );
+}
+
+function centsIn(canonical: string): number | null {
+  const [integer, decimals = ''] = canonical.split('.');
+  if (!/^\d+$/u.test(integer) || !/^\d{0,2}$/u.test(decimals)) return null;
+  const cents = Number(integer) * 100 + Number(decimals.padEnd(2, '0'));
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+function formatSoles(cents: number): string {
+  const integer = String(Math.trunc(cents / 100)).replace(
+    /\B(?=(\d{3})+(?!\d))/gu,
+    ' ',
+  );
+  return `S/ ${integer},${String(cents % 100).padStart(2, '0')}`;
+}
+
+const SECOND_ARTICLE = /\barticulo\s+2\b/u;
+const HOURLY_RIM_TERM =
+  /\brim\b[\s\S]{0,80}\bpor\s+hora(?:\s+de\s+trabajo)?\b|\bpor\s+hora(?:\s+de\s+trabajo)?[\s\S]{0,80}\brim\b/u;
+
+function amountMatchesIn(text: string): RegExpMatchArray[] {
+  return [
+    ...withoutPhones(text).matchAll(new RegExp(UNIT_AMOUNT.source, 'giu')),
+  ];
+}
+
+/**
+ * Un importe solo puede usarse como RIM horaria si está en el mismo tramo que
+ * declara la RIM por hora. Se corta antes del artículo 2 para que la tabla de
+ * contratados nunca se multiplique como si fuera la primera escala.
+ */
+function firstScaleHourlyAmountIn(text: string): string | null {
+  const secondArticleIndex = normalizeSpanishText(text).search(SECOND_ARTICLE);
+  const firstArticleScope =
+    secondArticleIndex >= 0 ? text.slice(0, secondArticleIndex) : text;
+  for (const match of amountMatchesIn(firstArticleScope)) {
+    const index = match.index ?? 0;
+    const context = normalizeSpanishText(
+      firstArticleScope.slice(Math.max(0, index - 220), index + 220),
+    );
+    if (HOURLY_RIM_TERM.test(context)) return canonicalAmount(match[0]);
+  }
+  return null;
+}
+
+/**
+ * La extracción de un PDF puede partir la última oración del artículo 1 entre
+ * dos fragmentos. Solo se une cuando el segundo continúa en la misma o la
+ * página siguiente, el importe queda antes del artículo 2 y su propia oración
+ * de cierre dice que se fija "en la suma de". Así no se toma una fila de la
+ * tabla de contratados como RIM horaria.
+ */
+function splitFirstScaleHourlyAmountIn(
+  article: RetrievedChunk,
+  candidate: RetrievedChunk,
+): string | null {
+  if (
+    article.documentVersionId !== candidate.documentVersionId ||
+    candidate.pageStart < article.pageStart ||
+    candidate.pageStart > article.pageEnd + 1
+  ) {
+    return null;
+  }
+  const normalized = normalizeSpanishText(candidate.chunkContent);
+  const secondArticleIndex = normalized.search(SECOND_ARTICLE);
+  if (secondArticleIndex < 0) return null;
+  const scope = candidate.chunkContent.slice(0, secondArticleIndex);
+  for (const match of amountMatchesIn(scope)) {
+    const index = match.index ?? 0;
+    const before = normalizeSpanishText(scope.slice(Math.max(0, index - 100), index));
+    if (/\b(?:en\s+la\s+suma\s+de|asciende\s+a|equivale\s+a)\s*$/u.test(before)) {
+      return canonicalAmount(match[0]);
+    }
+  }
+  return null;
+}
+
+/** La fila de contratado es útil para comparar únicamente si declara 30 horas. */
+function contractAmountForThirtyHoursIn(text: string): string | null {
+  const normalized = normalizeSpanishText(text);
+  const secondArticleIndex = normalized.search(SECOND_ARTICLE);
+  if (secondArticleIndex < 0) return null;
+  const contractScope = text.slice(secondArticleIndex);
+  const normalizedScope = normalizeSpanishText(contractScope);
+  if (!/\bprofesor\s+contratado\b/u.test(normalizedScope)) return null;
+  const hasJornadaHeader = /\bjornada\s+laboral\b/u.test(normalizedScope);
+  if (!hasJornadaHeader) return null;
+  for (const match of amountMatchesIn(contractScope)) {
+    const index = match.index ?? 0;
+    const context = normalizeSpanishText(
+      contractScope.slice(Math.max(0, index - 120), index + 120),
+    );
+    if (/\b30(?:\s+horas?)?\b/u.test(context)) {
+      return canonicalAmount(match[0]);
+    }
+  }
+  return null;
+}
+
+/**
+ * La RIM de primera escala puede llegar partida entre el artículo que declara
+ * su alcance y el fragmento siguiente que contiene el valor por hora. Si la
+ * persona indica una jornada, se muestra el cálculo aritmético comprobable
+ * entre ambos fragmentos; no se extrapola a otras escalas ni a contratados.
+ */
+function firstScaleRimAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  const profile = salaryQuestionProfile(question);
+  if (
+    profile.condition !== 'nombrado' ||
+    profile.role !== 'docente' ||
+    profile.scale !== '1' ||
+    profile.jornadaHours === null
+  ) {
+    return null;
+  }
+  const article = newestFirstScaleReference(sources);
+  if (!article) return null;
+  const directAmountEvidence = sources
+    .filter((source) => source.documentVersionId === article.documentVersionId)
+    .map((source) => ({
+      amount: firstScaleHourlyAmountIn(source.chunkContent),
+      source,
+    }))
+    .find((candidate) => centsIn(candidate.amount ?? '') !== null);
+  const splitAmountEvidence = directAmountEvidence
+    ? null
+    : sources
+        .filter(
+          (source) => source.documentVersionId === article.documentVersionId,
+        )
+        .map((source) => ({
+          amount: splitFirstScaleHourlyAmountIn(article, source),
+          source,
+        }))
+        .find((candidate) => centsIn(candidate.amount ?? '') !== null);
+  const amountEvidence = directAmountEvidence ?? splitAmountEvidence;
+  const amountSource = amountEvidence?.source;
+  const hourlyCents = centsIn(amountEvidence?.amount ?? '');
+  if (!amountSource || hourlyCents === null) return null;
+  const total = hourlyCents * profile.jornadaHours;
+  if (!Number.isSafeInteger(total)) return null;
+  const sourcesForAnswer =
+    article.chunkId === amountSource.chunkId ? [article] : [article, amountSource];
+  const citations = sourcesForAnswer.map((_, index) => `[${index + 1}]`).join('');
+  return {
+    answer: `La RIM por hora de la primera escala magisterial es ${formatSoles(hourlyCents)}. Para la jornada indicada de ${profile.jornadaHours} horas, el cálculo es ${formatSoles(total)} (${formatSoles(hourlyCents)} × ${profile.jornadaHours}). ${citations}`,
+    hasVerifiedAmount: true,
+    sources: sourcesForAnswer,
+  };
+}
+
+/**
+ * Contrasta los dos regímenes solo cuando una misma evidencia recuperada
+ * identifica la RIM de la primera escala y la regla del contratado. No
+ * extiende la primera escala a todas las personas nombradas ni la tabla de
+ * contratados a otro vínculo.
+ */
+function namedContractComparisonAnswer(
+  sources: readonly RetrievedChunk[],
+  question: string,
+): ExtractiveSalaryAnswer | null {
+  if (!asksNamedContractComparison(question)) return null;
+  if (salaryQuestionProfile(question).role !== 'docente') return null;
+  const namedReference = newestFirstScaleReference(sources);
+  if (!namedReference) return null;
+  const sameVersion = sources.filter(
+    (source) => source.documentVersionId === namedReference.documentVersionId,
+  );
+  const directAmountEvidence = sameVersion
+    .map((source) => ({
+      amount: firstScaleHourlyAmountIn(source.chunkContent),
+      source,
+    }))
+    .find((candidate) => candidate.amount !== null);
+  const splitAmountEvidence = directAmountEvidence
+    ? null
+    : sameVersion
+        .map((source) => ({
+          amount: splitFirstScaleHourlyAmountIn(namedReference, source),
+          source,
+        }))
+        .find((candidate) => candidate.amount !== null);
+  const amountEvidence = directAmountEvidence ?? splitAmountEvidence;
+  const contractEvidence = sameVersion
+    .map((source) => ({
+      amount: contractAmountForThirtyHoursIn(source.chunkContent),
+      source,
+    }))
+    .find((candidate) => candidate.amount !== null);
+  const amountSource = amountEvidence?.source;
+  const contractSource = contractEvidence?.source;
+  const hourlyAmount = amountEvidence?.amount;
+  const monthlyAmount = contractEvidence?.amount;
+  if (!amountSource || !contractSource || !hourlyAmount || !monthlyAmount) {
+    return null;
+  }
+  const printableAmount = (amount: string) => {
+    const cents = centsIn(amount);
+    return cents === null ? amount : formatSoles(cents);
+  };
+  const answerSources = [namedReference];
+  if (amountSource.chunkId !== namedReference.chunkId) answerSources.push(amountSource);
+  if (!answerSources.some((source) => source.chunkId === contractSource.chunkId)) {
+    answerSources.push(contractSource);
+  }
+  const namedCitation = answerSources.indexOf(namedReference) + 1;
+  const amountCitation = answerSources.indexOf(amountSource) + 1;
+  return {
+    answer: `La diferencia documentada es el régimen de cálculo: para un docente nombrado, la fuente fija la RIM por hora de la primera escala magisterial en ${printableAmount(hourlyAmount)}. [${namedCitation}][${amountCitation}] Para un profesor contratado, fija una remuneración mensual según la jornada, modalidad, forma, nivel o ciclo. En la fila recuperada de 30 horas, la tabla muestra ${printableAmount(monthlyAmount)}. [${answerSources.indexOf(contractSource) + 1}] Esa fila no determina por sí sola el monto de una persona con otra jornada.`,
+    hasVerifiedAmount: true,
+    sources: answerSources,
+  };
+}
+
 /**
  * Una fuente adicional solo aporta una frase verificable: si trae una escala,
  * se resume su único monto y jornada; si trae una escala con varios montos, se
@@ -818,10 +1199,37 @@ export function buildExtractiveSalaryAnswer(
   question: string,
   scope: RetrievalScope,
 ): ExtractiveSalaryAnswer | null {
+  const profile = salaryQuestionProfile(question);
+  const ruralAllocation = ruralAllocationAnswer(sources, question);
+  if (ruralAllocation) return ruralAllocation;
+  const padron = padronRuralAnswer(sources, question);
+  if (padron) return padron;
+  const payroll = payrollReviewAnswer(sources, question);
+  if (payroll) return payroll;
+  const ascenso = ascensoPlanillaAnswer(sources, question);
+  if (ascenso) return ascenso;
+  // Una asignación específica, el efecto administrativo de un ascenso o la
+  // revisión de una boleta no piden el sueldo general. Si una tabla salarial
+  // aparece por vecindad semántica, debe responder el modelo solo con la
+  // evidencia del concepto solicitado y no sustituirlo por esa tabla.
+  if (
+    profile.asksSpecialAllocation ||
+    isAscensoQuestion(question)
+  ) {
+    return null;
+  }
+  const comparison = namedContractComparisonAnswer(sources, question);
+  if (comparison) return comparison;
+  if (
+    profile.condition === 'nombrado' &&
+    profile.scale === '1' &&
+    profile.jornadaHours !== null
+  ) {
+    return firstScaleRimAnswer(sources, question);
+  }
   const explicitSectors = salarySectors(question);
   const requestedSectors =
     explicitSectors.length > 0 ? explicitSectors : [...PANORAMA_SECTORS];
-  const profile = salaryQuestionProfile(question);
   const expectedRole = profile.role;
   const candidates: SalaryCandidate[] = sources
     .filter((source) => hasSalaryPanoramaEvidence([source], scope, question))

@@ -214,12 +214,26 @@ export function integrityIssues(
       issues.push(
         `Fuente [${source.rank}] ajena al inventario elegible previo.`,
       );
+    // El recuperador puede corregir en memoria una ficha de decreto cuyo
+    // título/año de catálogo contradice la cabecera verificable del PDF. La
+    // identidad estable sigue siendo documento+versión; MIME y paginación no
+    // pueden cambiar. Solo se acepta la corrección cuando la ficha original
+    // era un decreto y la cita resultante declara un Decreto Supremo.
+    const reconciledReference = /^decreto\s+supremo\s+n(?:[.°º]\s*)*(\d{1,8}\s*-\s*((?:19|20)\d{2})\s*-\s*[a-z]{2,20})\b/iu.exec(
+      source.title,
+    );
+    const reconciledDecreeIdentity =
+      document?.documentType === 'DECRETO_SUPREMO' &&
+      !/decreto\s+supremo/iu.test(document.title) &&
+      reconciledReference !== null &&
+      Number(reconciledReference[2]) === source.issuanceYear;
     if (
       document &&
-      (source.title !== document.title ||
-        source.issuanceYear !== document.issuanceYear ||
-        source.mimeType !== document.mimeType ||
-        source.pageCount !== document.pageCount)
+      (source.mimeType !== document.mimeType ||
+        source.pageCount !== document.pageCount ||
+        (!reconciledDecreeIdentity &&
+          (source.title !== document.title ||
+            source.issuanceYear !== document.issuanceYear)))
     )
       issues.push(
         `Metadatos de [${source.rank}] difieren del inventario canónico.`,
@@ -320,7 +334,7 @@ function moneyValues(text: string): string[] {
 }
 
 /**
- * Coincidencia técnica con el control DS049/p3/3300.60, no verdad jurídica.
+ * Coincidencia técnica con el control DS277/p2/3500.70, no verdad jurídica.
  * Texto abierto puede cambiar el alcance fuera de la tabla: O03 requiere
  * contraste humano aunque coincidan número, formato, página y citas.
  */
@@ -340,7 +354,7 @@ export function salary2025TableMatchesControl(turn: QualityTurn): boolean {
     /\b(?:auxiliar|nombrad[oa]|director|directivo)\b/u.test(allText) ||
     /\b(?:20|24|25|40)\s*horas\b/u.test(allText) ||
     !amounts.length ||
-    amounts.some((amount) => amount !== '3300.60')
+    amounts.some((amount) => amount !== '3500.70')
   )
     return false;
   return (
@@ -350,7 +364,7 @@ export function salary2025TableMatchesControl(turn: QualityTurn): boolean {
       const normalizedAmounts = moneyValues(text);
       return (
         normalizedAmounts.length > 0 &&
-        normalizedAmounts.every((amount) => amount === '3300.60') &&
+        normalizedAmounts.every((amount) => amount === '3500.70') &&
         row.some((cell) =>
           /^(?:\*\*)?30(?:\s*horas)?(?:\*\*)?$/iu.test(cell),
         ) &&
@@ -359,9 +373,9 @@ export function salary2025TableMatchesControl(turn: QualityTurn): boolean {
           const source = sourceByRank.get(rank);
           return (
             source?.issuanceYear === 2025 &&
-            /049\s*-\s*2025\s*-\s*EF/iu.test(source.title) &&
-            source.page <= 3 &&
-            source.pageEnd >= 3
+            /277\s*-\s*2025\s*-\s*EF/iu.test(source.title) &&
+            source.page <= 2 &&
+            source.pageEnd >= 2
           );
         })
       );
@@ -387,7 +401,7 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
     C16: { title: /reasignaci[oó]n|permuta/iu },
     C17: { module: 'Remuneraciones' },
     C18: { module: 'Remuneraciones' },
-    C19: { title: /049-2025-EF/iu },
+    C19: { module: 'Remuneraciones' },
     C20: { module: 'Remuneraciones' },
     'PI-01': { module: 'Ley y reglamento' },
     'PI-02': { title: /contrataci[oó]n docente|renovaci[oó]n/iu },
@@ -396,8 +410,15 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
     'PI-05': { title: /auxiliar/iu },
     O01: { module: 'Remuneraciones' },
     O02: { module: 'Remuneraciones' },
-    O03: { title: /049-2025-EF/iu },
-    O04: { title: /049-2025-EF/iu },
+    O03: { module: 'Remuneraciones' },
+    O04: { module: 'Remuneraciones' },
+    'REM-01': { module: 'Remuneraciones' },
+    'REM-02': { module: 'Remuneraciones' },
+    'REM-03': { module: 'Remuneraciones' },
+    'REM-04': { module: 'Remuneraciones' },
+    'REM-05': { module: 'Remuneraciones' },
+    'REM-06': { module: 'Remuneraciones' },
+    'REM-07': { module: 'Remuneraciones' },
     E03: { title: /074-2019-EF/iu },
   };
 /** Mismo evaluador en la primera corrida y todas sus repeticiones. */
@@ -418,9 +439,9 @@ export function salaryDocumentLocationIsCorrect(turn: QualityTurn): boolean {
     citationsPointToKnownSources(turn) &&
     turn.sources.some(
       (source) =>
-        /049-2025-EF/iu.test(source.title) &&
-        source.page <= 3 &&
-        source.pageEnd >= 3,
+        /277-2025-EF/iu.test(source.title) &&
+        source.page <= 2 &&
+        source.pageEnd >= 2,
     ) &&
     !/no puedo[^.]*enlac/iu.test(turn.answer)
   );

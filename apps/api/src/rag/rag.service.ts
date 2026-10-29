@@ -20,7 +20,10 @@ import {
 import { hasTopicTerm } from './domain-lexicon';
 import { asksForDocumentStatus } from './document-status';
 import { consolidateDocumentEvidence } from './evidence-consolidation';
-import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
+import {
+  reconcileRetrievedDocumentIdentities,
+  sanitizeRetrievedEvidence,
+} from './evidence-sanitizer';
 import {
   hasGeneralSalaryEvidence,
   isBroadSalaryQuestion,
@@ -54,6 +57,12 @@ import type {
   VersionChunk,
 } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
+import {
+  isDirectRemunerationEvidence,
+  isRuralAllocationQuestion,
+  isRuralPadronQuestion,
+  remunerationEvidenceQueries,
+} from './remuneration-retrieval';
 
 export interface ResolvedModule {
   id: string;
@@ -312,9 +321,19 @@ function sourcesWithoutVersionDuplicates(
   }> = [];
   for (const source of sources) {
     const text = evidenceTokens(source.chunkContent).join(' ');
+    const sourceHasArticle = /\barticulo\s+\d+\b/iu.test(
+      normalizeSpanishText(source.chunkContent),
+    );
     const repeated = kept.some((item) => {
+      const keptHasArticle = /\barticulo\s+\d+\b/iu.test(
+        normalizeSpanishText(item.source.chunkContent),
+      );
       return (
         item.source.documentVersionId === source.documentVersionId &&
+        // Un artículo puede definir el alcance de una cifra situada en el
+        // siguiente fragmento. No se colapsa frente a una portada, aunque
+        // compartan gran parte del vocabulario del documento.
+        !(sourceHasArticle && !keptHasArticle) &&
         (item.text === text || item.text.includes(text))
       );
     });
@@ -365,6 +384,35 @@ function sourcesEligibleForQuestion(
   });
 }
 
+const REPEAL_REFERENCE_WINDOW =
+  /\bderog(?:a|an|ar|aci[oó]n|atoria)[\s\S]{0,360}/giu;
+
+/**
+ * Una norma recuperada puede declarar que otra deja de regir para el mismo
+ * concepto salarial. Se descarta únicamente la fuente que la propia evidencia
+ * identifica dentro de una cláusula de derogación; no se infiere vigencia por
+ * fecha ni se modifica el catálogo documental.
+ */
+function withoutExplicitlyRepealedSalarySources(
+  sources: RetrievedChunk[],
+  question: string,
+): RetrievedChunk[] {
+  if (!salaryQuestionProfile(question).isSalaryQuestion) return sources;
+  const repealed = new Set<string>();
+  for (const source of sources) {
+    for (const clause of source.chunkContent.matchAll(REPEAL_REFERENCE_WINDOW)) {
+      for (const reference of exactDocumentReferencesIn(clause[0])) {
+        if (reference.complete) repealed.add(reference.lookupKey);
+      }
+    }
+  }
+  if (!repealed.size) return sources;
+  return sources.filter((source) => {
+    const ownReferences = exactDocumentReferencesIn(source.documentTitle);
+    return !ownReferences.some((reference) => repealed.has(reference.lookupKey));
+  });
+}
+
 /** Fuentes a no más de `margin` del mejor puntaje, en su orden original. */
 function withinScoreMargin(
   sources: RetrievedChunk[],
@@ -395,6 +443,49 @@ function prepareDelivery(
   );
 }
 
+function withSalaryRuleContext(
+  delivered: RetrievedChunk[],
+  candidates: RetrievedChunk[],
+  question: string | undefined,
+): RetrievedChunk[] {
+  if (!question) return delivered;
+  const profile = salaryQuestionProfile(question);
+  if (
+    profile.condition !== 'nombrado' ||
+    profile.scale !== '1' ||
+    profile.jornadaHours === null
+  ) {
+    return delivered;
+  }
+  const articles = candidates.filter((source) =>
+    /\bremuneracion\s+integra\s+mensual(?:\s*\(?rim\)?)?.{0,120}\bprimera\s+escala\s+magisterial\b/u.test(
+      normalizeSpanishText(source.chunkContent),
+    ),
+  );
+  if (!articles.length) return delivered;
+  const newestYear = Math.max(
+    ...articles.map((source) => source.issuanceYear ?? 0),
+  );
+  const article = articles
+    .filter((source) => (source.issuanceYear ?? 0) === newestYear)
+    .sort((left, right) => {
+      const leftHasArticle = /\barticulo\s+1\b/iu.test(
+        normalizeSpanishText(left.chunkContent),
+      );
+      const rightHasArticle = /\barticulo\s+1\b/iu.test(
+        normalizeSpanishText(right.chunkContent),
+      );
+      return Number(rightHasArticle) - Number(leftHasArticle);
+    })[0];
+  if (!article || delivered.some((source) => source.chunkId === article.chunkId)) {
+    return delivered;
+  }
+  // El artículo define a qué cifra corresponde el fragmento contiguo. Va
+  // delante para que las citas de una operación aritmética mantengan primero
+  // la regla y luego el importe, sin reemplazar otras fuentes entregables.
+  return [article, ...delivered];
+}
+
 /**
  * Evidencia que se entrega al modelo y al usuario: dentro de la banda de
  * relevancia, consolidada por documento (una referencia visible por versión,
@@ -409,8 +500,18 @@ function relevantSources(
   question?: string,
   scoreMargin = RAG_SOURCE_SCORE_MARGIN,
 ): RetrievedChunk[] {
+  const ranked = uniqueSources(byScoreDescending(sources));
+  const direct = question
+    ? ranked.filter((source) => isDirectRemunerationEvidence(question, source))
+    : [];
   const eligible = prepareDelivery(
-    withinScoreMargin(uniqueSources(byScoreDescending(sources)), scoreMargin),
+    uniqueSources([
+      ...withinScoreMargin(ranked, scoreMargin),
+      // La fuente sigue siendo resultado de la misma consulta y del mismo
+      // umbral; solo se evita que una coincidencia salarial genérica la saque
+      // de la respuesta cuando el propio texto sí trata el concepto pedido.
+      ...direct,
+    ]),
     question,
   );
   const distinctDocuments = new Set(
@@ -427,6 +528,21 @@ function relevantSources(
   const selectedChunks = new Set<string>();
   const selectedDocuments = new Set<string>();
 
+  // La evidencia directa se reserva antes de completar el cupo con documentos
+  // de incremento general. No aumenta el conjunto recuperado: solo protege la
+  // fuente que efectivamente trata el padron, ascenso o revisión de planilla
+  // consultado frente al orden cronológico del resto.
+  for (const source of eligible) {
+    if (!question || !isDirectRemunerationEvidence(question, source)) continue;
+    if (selectedChunks.has(source.chunkId)) continue;
+    selected.push(source);
+    selectedChunks.add(source.chunkId);
+    selectedDocuments.add(source.documentVersionId);
+    if (selected.length === limit) {
+      return withSalaryRuleContext(selected, sources, question);
+    }
+  }
+
   for (const source of eligible) {
     if (selectedDocuments.has(source.documentVersionId)) continue;
     selected.push(source);
@@ -439,7 +555,7 @@ function relevantSources(
     if (selectedChunks.has(source.chunkId)) continue;
     selected.push(source);
   }
-  return selected;
+  return withSalaryRuleContext(selected, sources, question);
 }
 
 function byScoreDescending(sources: RetrievedChunk[]): RetrievedChunk[] {
@@ -891,6 +1007,13 @@ function chunkFromDeliveredVersion(
   };
 }
 
+function needsDocumentIdentityAnchor(source: RetrievedChunk): boolean {
+  return (
+    source.documentType === 'DECRETO_SUPREMO' &&
+    !/\bdecreto\s+supremo\b/iu.test(source.documentTitle)
+  );
+}
+
 interface RetrieveOptions {
   forceContext?: boolean;
   /**
@@ -977,6 +1100,93 @@ export class RagService {
         }`,
       );
       return delivered;
+    }
+  }
+
+  /**
+   * Cuando la recuperación ya encontró un decreto cuya ficha no se identifica
+   * como decreto, se lee únicamente el inicio de esa misma versión para
+   * verificar su cabecera. Esto permite reparar la cita en memoria sin
+   * confiar en títulos contradictorios ni abrir una búsqueda adicional.
+   */
+  private async identityAnchorsFor(
+    sources: RetrievedChunk[],
+  ): Promise<RetrievedChunk[]> {
+    if (!this.gateway.initialChunksOfVersions) return [];
+    const anchors = new Map<string, RetrievedChunk>();
+    for (const source of sources) {
+      if (
+        needsDocumentIdentityAnchor(source) &&
+        !anchors.has(source.documentVersionId)
+      ) {
+        anchors.set(source.documentVersionId, source);
+      }
+    }
+    if (!anchors.size) return [];
+    try {
+      const rows = await this.gateway.initialChunksOfVersions({
+        limitPerVersion: 4,
+        versionIds: [...anchors.keys()],
+      });
+      return rows.flatMap((row) => {
+        const anchor = anchors.get(row.documentVersionId);
+        return anchor ? [chunkFromDeliveredVersion(anchor, row)] : [];
+      });
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No se pudo verificar la identidad documental recuperada: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * En consultas rurales el PDF puede recuperar el considerando de una norma
+   * y dejar el artículo o padrón en el siguiente fragmento. Se leen únicamente
+   * los primeros tramos de una versión ya aceptada por la misma búsqueda y se
+   * someten después a los filtros normales; no se abre una búsqueda nueva ni
+   * se confía en el título como si fuera evidencia.
+   */
+  private async ruralRemunerationContextFor(
+    sources: RetrievedChunk[],
+    question: string,
+  ): Promise<RetrievedChunk[]> {
+    if (
+      !this.gateway.initialChunksOfVersions ||
+      (!isRuralAllocationQuestion(question) && !isRuralPadronQuestion(question))
+    ) {
+      return [];
+    }
+    const anchors = new Map<string, RetrievedChunk>();
+    for (const source of sources) {
+      if (
+        /\b(?:asignacion|rural|padron|unidocent|multigrado)\b/iu.test(
+          source.documentTitle,
+        ) &&
+        !anchors.has(source.documentVersionId)
+      ) {
+        anchors.set(source.documentVersionId, source);
+      }
+    }
+    if (!anchors.size) return [];
+    try {
+      const rows = await this.gateway.initialChunksOfVersions({
+        limitPerVersion: 4,
+        versionIds: [...anchors.keys()],
+      });
+      return rows.flatMap((row) => {
+        const anchor = anchors.get(row.documentVersionId);
+        return anchor ? [chunkFromDeliveredVersion(anchor, row)] : [];
+      });
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No se pudo completar el contexto rural recuperado: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return [];
     }
   }
 
@@ -1296,6 +1506,54 @@ export class RagService {
         globalSearch,
         selectedSearch,
       ]);
+
+      // Las consultas cotidianas sobre RIM, padrones rurales o una boleta no
+      // suelen repetir la terminología jurídica de los documentos. Cuando la
+      // pregunta aporta señales inequívocas se ejecutan búsquedas canónicas
+      // acotadas en el mismo alcance y módulo; no añaden hechos ni relajan el
+      // umbral de admisión de evidencia.
+      const remunerationQueries = remunerationEvidenceQueries(salaryQuestion);
+      if (remunerationQueries.length) {
+        const canonicalEmbeddings = await this.embeddings.embed(
+          remunerationQueries,
+          INTERACTIVE_AI_LIMITS,
+        );
+        const canonicalResults = await Promise.all(
+          remunerationQueries.map((canonicalQuery, index) => {
+            const embedding = canonicalEmbeddings[index];
+            if (!embedding || embedding.length !== 1536) {
+              return Promise.resolve<RetrievedChunk[]>([]);
+            }
+            return this.gateway.search({
+              ...searchBase,
+              embedding,
+              query: canonicalQuery,
+              selectedModuleId,
+            });
+          }),
+        );
+        const canonicalSources = canonicalResults.flat();
+        const identityAnchors = await this.identityAnchorsFor(canonicalSources);
+        const ruralContext = await this.ruralRemunerationContextFor(
+          canonicalSources,
+          salaryQuestion,
+        );
+        if (selectedModuleId) {
+          rawSelectedSources = [
+            ...rawSelectedSources,
+            ...canonicalSources,
+            ...identityAnchors,
+            ...ruralContext,
+          ];
+        } else {
+          rawGlobalSources = [
+            ...rawGlobalSources,
+            ...canonicalSources,
+            ...identityAnchors,
+            ...ruralContext,
+          ];
+        }
+      }
     }
     // La ruta conserva las asociaciones de todos los documentos pertinentes.
     // La deduplicación interdocumental ocurre solo al armar las fuentes que se
@@ -1304,9 +1562,16 @@ export class RagService {
       sourcesWithoutVersionDuplicates(
         byScoreDescending(
           sourcesEligibleForQuestion(
-            sources
-              .map(sanitizeRetrievedEvidence)
-              .filter((source): source is RetrievedChunk => Boolean(source)),
+            withoutExplicitlyRepealedSalarySources(
+              reconcileRetrievedDocumentIdentities(
+                sources
+                  .map(sanitizeRetrievedEvidence)
+                  .filter(
+                    (source): source is RetrievedChunk => Boolean(source),
+                  ),
+              ),
+              salaryQuestion,
+            ),
             salaryQuestion,
             retrievalScope,
           ),

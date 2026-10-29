@@ -28,6 +28,12 @@ import { recoverDomainQuery } from '../rag/query-normalization';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
+  isAscensoRemunerationQuestion,
+  isPayrollReviewQuestion,
+  isRuralAllocationQuestion,
+  isRuralPadronQuestion,
+} from '../rag/remuneration-retrieval';
+import {
   assessSalaryAnswerCoverage,
   hasAmount,
   hasGeneralSalaryEvidence,
@@ -1374,6 +1380,21 @@ export class ChatService {
         retrievalScope,
         salaryQuestion,
       );
+    const salaryProfileForTurn = salaryQuestionProfile(salaryQuestion);
+    // La RIM de primera escala con jornada y vínculo expresos tiene una regla
+    // aritmética comprobable. También en un caso personal se responde con esa
+    // extracción, sin dejar que el modelo mezcle una tabla de contratados.
+    const deterministicFirstScaleSalary =
+      personalSalary &&
+      salaryProfileForTurn.condition === 'nombrado' &&
+      salaryProfileForTurn.role === 'docente' &&
+      salaryProfileForTurn.scale === '1' &&
+      salaryProfileForTurn.jornadaHours !== null;
+    const deterministicRemunerationTopic =
+      isAscensoRemunerationQuestion(salaryQuestion) ||
+      isRuralPadronQuestion(salaryQuestion) ||
+      isRuralAllocationQuestion(salaryQuestion) ||
+      isPayrollReviewQuestion(salaryQuestion);
 
     // Los botones de temas que antes acompañaban a la aclaración se conservan en
     // la respuesta: el panorama salarial no debe dejar la conversación sin una
@@ -1456,7 +1477,10 @@ export class ChatService {
     // (OBS-007) y una pregunta por «minuto» de un PDF no se corregía (OBS-012).
     // Corre antes de las aclaraciones: quien pide dónde está el documento no
     // está preguntando un monto ni una causal.
-    if (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') {
+    if (
+      (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') &&
+      !deterministicFirstScaleSalary
+    ) {
       const locationRequest = sourceLocationRequestIn(effectiveQuestion, {
         inConversation: continuesConversation,
       });
@@ -1633,14 +1657,18 @@ export class ChatService {
       }
     }
 
-    const extractiveSalary = broadSalaryAnswerTurn
+    const useExtractiveSalary =
+      broadSalaryAnswerTurn ||
+      deterministicFirstScaleSalary ||
+      deterministicRemunerationTopic;
+    const extractiveSalary = useExtractiveSalary
       ? buildExtractiveSalaryAnswer(
           retrieval.sources,
           salaryQuestion,
           retrievalScope,
         )
       : null;
-    const responseSources = broadSalaryAnswerTurn
+    const responseSources = useExtractiveSalary
       ? (extractiveSalary?.sources ?? [])
       : retrieval.sources;
     const citations = toCitationBundle(
@@ -1657,7 +1685,7 @@ export class ChatService {
     // extenderla a otro cargo o sector. Cuando la evidencia no permite
     // siquiera atribuir un enunciado al cargo, se cierra sin evidencia: el
     // contrato de persistencia no admite una respuesta «assistant» sin fuente.
-    if (broadSalaryAnswerTurn) {
+    if (useExtractiveSalary) {
       if (input.abortSignal?.aborted) return;
       if (!extractiveSalary) {
         yield* this.completeWithoutEvidence({

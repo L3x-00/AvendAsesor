@@ -83,4 +83,13 @@ export interface RetrievalGateway {
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]>;
+  /**
+   * Primeros fragmentos de versiones que ya fueron recuperadas en este turno.
+   * Sirven para comprobar la identidad de una fuente cuando su ficha tiene un
+   * título genérico o contradictorio; no amplían el corpus ni la búsqueda.
+   */
+  initialChunksOfVersions?(input: {
+    limitPerVersion: number;
+    versionIds: string[];
+  }): Promise<VersionChunk[]>;
 }

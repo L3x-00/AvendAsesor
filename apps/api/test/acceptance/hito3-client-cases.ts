@@ -1,7 +1,8 @@
 /**
  * Validación integral del Hito 3 (lineamiento 12 del cliente): ejecuta los 15
  * casos mínimos, las seis pruebas integrales PI-01…PI-06 del documento,
- * cuatro observaciones de remuneraciones O01…O04
+ * cuatro observaciones de remuneraciones O01…O04 y siete regresiones
+ * semánticas R01…R07 del módulo de remuneraciones
  * «Casos de Uso y Criterios de Aceptación (actualizado)» y un red-team con los
  * servicios REALES —clasificador, retrieval contra la base configurada,
  * embeddings y generación del proveedor—. Las escrituras del historial se
@@ -214,7 +215,7 @@ async function main(): Promise<void> {
    * declara que una respuesta sin tabla sea un fallo del modelo.
    */
   const tableSourceTitleFragments = (
-    env.ACCEPTANCE_TABLE_SOURCE_TITLES ?? '049-2025-EF'
+    env.ACCEPTANCE_TABLE_SOURCE_TITLES ?? '277-2025-EF'
   )
     .split('|')
     .map((value) => normalizeSpanishText(value).trim())
@@ -241,16 +242,18 @@ async function main(): Promise<void> {
       .filter((module) => !module.parentModuleId)
       .map((module) => module.name),
   };
+  // La ficha del documento 277 puede conservar un título de catálogo anterior;
+  // el contenido y la cita visible se verifican más abajo contra el decreto.
   const salaryDocument = corpus.documents.find((doc) =>
-    /049-2025-EF/iu.test(doc.title),
+    /ley\s+32498\s+remuneraciones/iu.test(doc.title),
   );
   const salaryChunks = salaryDocument
     ? await client
         .from('document_chunks')
         .select('chunk_content,page_start,page_end')
         .eq('document_version_id', salaryDocument.versionId)
-        .lte('page_start', 3)
-        .gte('page_end', 3)
+        .lte('page_start', 2)
+        .gte('page_end', 2)
     : null;
   if (salaryChunks?.error)
     throw new Error(
@@ -261,14 +264,14 @@ async function main(): Promise<void> {
   const salaryControl = {
     documentId: salaryDocument?.id ?? null,
     versionId: salaryDocument?.versionId ?? null,
-    page: 3,
-    expectedAmount: '3300.60',
+    page: 2,
+    expectedAmount: '3500.70',
     year: 2025,
     hours: 30,
     condition: 'contratado',
     textHash: createHash('sha256').update(salaryText).digest('hex'),
     verified:
-      /3\s*300,60/u.test(salaryText) &&
+      /3\s*500,70/u.test(salaryText) &&
       /\b30\b/u.test(salaryText) &&
       /30328/u.test(salaryText),
   };
@@ -1157,7 +1160,7 @@ async function main(): Promise<void> {
   );
   const o03Recovers2025Scale = o03.sources.some(
     (source) =>
-      /049-2025-EF/iu.test(source.title) &&
+      /277-2025-EF/iu.test(source.title) &&
       source.relatedModuleName === 'Remuneraciones',
   );
   const o03MentionsExpectedAmount =
@@ -1172,7 +1175,7 @@ async function main(): Promise<void> {
     'Monto 2025 de 30 horas solicitado como tabla',
     [o03],
     o03TablePass,
-    `Recupera DS 049-2025-EF: ${o03Recovers2025Scale}; tabla: ${markdownTables(o03.answer).length > 0}; monto S/ 3 300,60: ${o03MentionsExpectedAmount}; citas conocidas: ${citationsPointToKnownSources(o03)}.`,
+    `Recupera DS 277-2025-EF: ${o03Recovers2025Scale}; tabla: ${markdownTables(o03.answer).length > 0}; monto S/ 3 500,70: ${o03MentionsExpectedAmount}; citas conocidas: ${citationsPointToKnownSources(o03)}.`,
     has(o03, 'no_evidence') ? 'REQUIERE_CORPUS' : 'FALLA',
   );
 
@@ -1191,6 +1194,155 @@ async function main(): Promise<void> {
       : o04TechnicalPass
         ? 'REQUIERE_REVISION'
         : 'FALLA',
+  );
+
+  // REM-01…REM-07 — regresión semántica de remuneraciones. Los oráculos
+  // evalúan conceptos y fuentes, no una redacción literal del modelo.
+  const answerHas = (turn: TurnResult, ...concepts: RegExp[]) => {
+    const text = normalizeSpanishText(turn.answer);
+    return concepts.every((concept) => concept.test(text));
+  };
+  const hasSource = (turn: TurnResult, pattern: RegExp) =>
+    turn.sources.some((source) => pattern.test(source.title));
+  const hasOnlySources = (turn: TurnResult, pattern: RegExp) =>
+    turn.sources.length > 0 && turn.sources.every((source) => pattern.test(source.title));
+  const grounded = (turn: TurnResult) =>
+    turn.sources.length > 0 && citationsPointToKnownSources(turn);
+
+  const rem01 = await ask(
+    '¿Cuánto gana un profesor nombrado de primera escala con 30 horas?',
+    { moduleId: remuneraciones },
+  );
+  const rem01Pass =
+    grounded(rem01) &&
+    hasSource(rem01, /277-2025-EF/iu) &&
+    answerHas(rem01, /rim/u, /3\s*500[,.]70/u) &&
+    !/326-2017|asistencia/iu.test(rem01.answer);
+  record(
+    'REM-01',
+    'Primera escala: RIM y cita normativa directa',
+    [rem01],
+    rem01Pass,
+    `DS 277 recuperado: ${hasSource(rem01, /277-2025-EF/iu)}; RIM y cálculo: ${answerHas(rem01, /rim/u, /3\s*500[,.]70/u)}; sin asistencia: ${!/326-2017|asistencia/iu.test(rem01.answer)}.`,
+  );
+
+  const rem02a = await ask(
+    'Soy docente nombrado de primera escala con jornada de 30 horas. ¿Cuánto me corresponde?',
+    { moduleId: remuneraciones },
+  );
+  const rem02b = await ask('Ahora estoy en quinta escala, ¿cuánto me corresponde?', {
+    conversationId: rem02a.conversationId,
+    moduleId: remuneraciones,
+  });
+  const asksRepeatedFactors =
+    /(?:indica|precisa|dime).{0,100}(?:jornada|horas|nombrad)/iu.test(
+      rem02b.answer,
+    );
+  const rem02Pass =
+    grounded(rem02a) &&
+    hasSource(rem02a, /277-2025-EF/iu) &&
+    !asksRepeatedFactors &&
+    rem02b.answer.length > 0;
+  record(
+    'REM-02',
+    'Quinta escala: conserva vínculo y jornada del historial',
+    [rem02a, rem02b],
+    rem02Pass,
+    `Primer turno sustentado: ${grounded(rem02a)}; seguimiento no repite vínculo o jornada: ${!asksRepeatedFactors}; respuesta de quinta escala: ${rem02b.answer.length > 0}.`,
+  );
+
+  const rem03 = await ask(
+    '¿Cuál es la diferencia entre el sueldo de un docente nombrado y contratado?',
+    { moduleId: remuneraciones },
+  );
+  const rem03Pass =
+    grounded(rem03) &&
+    hasSource(rem03, /277-2025-EF/iu) &&
+    answerHas(rem03, /nombrad/u, /contratad/u, /rim|jornada/u);
+  record(
+    'REM-03',
+    'Nombrados y contratados: comparación de ambos regímenes',
+    [rem03],
+    rem03Pass,
+    `Fuente común verificable: ${hasSource(rem03, /277-2025-EF/iu)}; ambos vínculos y su regla: ${answerHas(rem03, /nombrad/u, /contratad/u, /rim|jornada/u)}.`,
+  );
+
+  const rem04 = await ask(
+    'Si trabajo en una zona rural, ¿me corresponde una asignación?',
+    { moduleId: remuneraciones },
+  );
+  const rem04Pass =
+    grounded(rem04) &&
+    hasOnlySources(rem04, /227-2015-EF/iu) &&
+    answerHas(rem04, /rural/u, /asignaci[oó]n/u, /documentos entregados|actual/u) &&
+    !/358-2019-EF|600[,.]00/iu.test(rem04.answer);
+  record(
+    'REM-04',
+    'Ruralidad: separa asignación rural de jornada adicional',
+    [rem04],
+    rem04Pass,
+    `Fuente rural directa y exclusiva: ${hasOnlySources(rem04, /227-2015-EF/iu)}; conceptos y límite presentes: ${answerHas(rem04, /rural/u, /asignaci[oó]n/u, /documentos entregados|actual/u)}; sin monto de jornada adicional: ${!/358-2019-EF|600[,.]00/iu.test(rem04.answer)}.`,
+  );
+
+  const rem05 = await ask(
+    'Si asciendo de escala, ¿cambia mi remuneración?',
+    { moduleId: remuneraciones },
+  );
+  const rem05NoAutomaticAssertion =
+    /no\s+(?:precisan|establecen|se[nñ]alan).{0,50}pago\s+automatico/iu.test(
+      normalizeSpanishText(rem05.answer),
+    );
+  const rem05Pass =
+    grounded(rem05) &&
+    hasSource(rem05, /121-2018-MINEDU/iu) &&
+    answerHas(rem05, /ascenso/u, /acto resolutivo|planilla|pago/u) &&
+    rem05NoAutomaticAssertion;
+  record(
+    'REM-05',
+    'Ascenso: relación sustentada con pago en planilla',
+    [rem05],
+    rem05Pass,
+    `Instructivo de planilla recuperado: ${hasSource(rem05, /121-2018-MINEDU/iu)}; relación ascenso-pago: ${answerHas(rem05, /ascenso/u, /acto resolutivo|planilla|pago/u)}; limita el automatismo: ${rem05NoAutomaticAssertion}.`,
+  );
+
+  const rem06 = await ask(
+    '¿Cómo sé si mi institución figura en los padrones de ruralidad?',
+    { moduleId: remuneraciones },
+  );
+  const rem06Limit = /no.{0,100}(?:confirmar|determinar|actual|vigente|inclusion)/iu.test(
+    normalizeSpanishText(rem06.answer),
+  );
+  const rem06Pass =
+    grounded(rem06) &&
+    hasOnlySources(rem06, /428-2015-MINEDU/iu) &&
+    answerHas(rem06, /padron/u, /2015|documentos disponibles|vigente/u) &&
+    rem06Limit;
+  record(
+    'REM-06',
+    'Padrones: reconoce evidencia fechada y límite actual',
+    [rem06],
+    rem06Pass,
+    `Padrón de 2015 recuperado de fuente exclusiva: ${hasOnlySources(rem06, /428-2015-MINEDU/iu)}; alcance temporal: ${answerHas(rem06, /padron/u, /2015|documentos disponibles|vigente/u)}; no afirma inclusión actual: ${rem06Limit}.`,
+  );
+
+  const rem07 = await ask(
+    'Mi boleta tiene descuentos y diferencias remunerativas. ¿Cómo reclamo?',
+    { moduleId: remuneraciones },
+  );
+  const rem07Limit = /no.{0,120}(?:canal|plazo|recurso|procedimiento).{0,120}reclamo|reclamo.{0,120}no.{0,120}(?:canal|plazo|recurso|procedimiento)/iu.test(
+    normalizeSpanishText(rem07.answer),
+  );
+  const rem07Pass =
+    grounded(rem07) &&
+    hasSource(rem07, /121-2018-MINEDU/iu) &&
+    answerHas(rem07, /descuento|deducci[oó]n|reintegro|planilla/u) &&
+    rem07Limit;
+  record(
+    'REM-07',
+    'Boletas y reclamos: explica planilla sin inventar procedimiento',
+    [rem07],
+    rem07Pass,
+    `Fuente de planilla recuperada: ${hasSource(rem07, /121-2018-MINEDU/iu)}; descuentos o reintegros: ${answerHas(rem07, /descuento|deducci[oó]n|reintegro|planilla/u)}; límite de reclamo declarado: ${rem07Limit}.`,
   );
 
   // Red-team evidence-only y charla.
