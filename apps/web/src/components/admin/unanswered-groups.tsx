@@ -38,20 +38,17 @@ const hints: Record<UnansweredGroup["kind"], string> = {
     "No se identificó un tema. Revisa los casos uno por uno o ciérralos si son pruebas o mensajes sin consulta.",
 };
 
-function casesHref(group: UnansweredGroup, period: string): string {
+function groupReviewHref(group: UnansweredGroup, period: string): string {
   const params = new URLSearchParams({
-    issueType: "support_insufficient",
-    kind: "automatic_alert",
+    kind: group.kind,
     period,
-    vista: "consultar",
   });
+
   if (group.moduleId) {
-    params.set(
-      group.parentModuleName ? "submoduleId" : "moduleId",
-      group.moduleId,
-    );
+    params.set("moduleId", group.moduleId);
   }
-  return `/admin/operations?${params.toString()}#consultation-cases-title`;
+
+  return `/admin/operations/grupos/revisar?${params.toString()}`;
 }
 
 /**
@@ -176,7 +173,7 @@ export function UnansweredGroups({
                     href={
                       group.count === 1 && group.caseIds.length === 1
                         ? `/admin/operations/${group.caseIds[0]}`
-                        : casesHref(group, period)
+                        : groupReviewHref(group, period)
                     }
                   >
                     {group.count === 1 ? "Ver caso" : "Ver casos"}

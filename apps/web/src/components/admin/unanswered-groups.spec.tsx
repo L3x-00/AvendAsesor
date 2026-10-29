@@ -74,14 +74,12 @@ describe("UnansweredGroups", () => {
       "href",
       "/admin/modules/33333333-3333-4333-8333-333333333333?cargar=1",
     );
-    expect(
-      within(group).getByRole("link", { name: "Ver casos" }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringContaining(
-        "submoduleId=33333333-3333-4333-8333-333333333333",
-      ),
-    );
+   expect(
+    within(group).getByRole("link", { name: "Ver casos" }),
+  ).toHaveAttribute(
+    "href",
+    "/admin/operations/grupos/revisar?kind=topic&period=month&moduleId=33333333-3333-4333-8333-333333333333",
+  );
     expect(
       within(group).getByRole("link", { name: "Cerrar 2 consultas" }),
     ).toHaveAttribute("href", expect.stringContaining("/grupos/cerrar?"));
@@ -105,27 +103,57 @@ describe("UnansweredGroups", () => {
     });
     expect(
       within(unknown).getByRole("link", { name: "Ver caso" }),
-    ).toHaveAttribute(
-      "href",
-      "/admin/operations/55555555-5555-4555-8555-555555555555",
-    );
-  });
-
-  it("un tema principal filtra por módulo y no por submódulo", () => {
+      ).toHaveAttribute(
+        "href",
+        "/admin/operations/55555555-5555-4555-8555-555555555555",
+      );
+      });
+      it("un grupo de catálogo con varias consultas abre su revisión", () => {
     render(
       <UnansweredGroups
         groups={[
-          { ...topic, moduleName: "Remuneraciones", parentModuleName: null },
+          {
+            ...topic,
+            kind: "catalog",
+            moduleId: null,
+            moduleName: null,
+            parentModuleName: null,
+          },
         ]}
-        period="week"
+        period="month"
       />,
     );
 
-    expect(screen.getByRole("link", { name: "Ver casos" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("moduleId=33333333"),
+    expect(
+        screen.getByRole("link", { name: "Ver casos" }),
+      ).toHaveAttribute(
+        "href",
+        "/admin/operations/grupos/revisar?kind=catalog&period=month",
     );
+    });
   });
+
+  it("un tema principal abre la revisión exacta de su grupo", () => {
+  render(
+    <UnansweredGroups
+      groups={[
+        {
+          ...topic,
+          moduleName: "Remuneraciones",
+          parentModuleName: null,
+        },
+      ]}
+      period="week"
+    />,
+  );
+
+  expect(
+    screen.getByRole("link", { name: "Ver casos" }),
+  ).toHaveAttribute(
+    "href",
+    "/admin/operations/grupos/revisar?kind=topic&period=week&moduleId=33333333-3333-4333-8333-333333333333",
+  );
+});
 
   it("sin acceso a Módulos no ofrece cargar el documento", () => {
     render(
@@ -179,4 +207,3 @@ describe("UnansweredGroups", () => {
     expect(screen.getByText(/1 consulta quedó sin sustento/)).toBeVisible();
     expect(screen.getByText("1 consulta")).toBeVisible();
   });
-});
