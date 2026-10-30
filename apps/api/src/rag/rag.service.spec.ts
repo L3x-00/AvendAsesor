@@ -778,7 +778,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -817,7 +817,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -851,7 +851,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -877,7 +877,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -891,10 +891,18 @@ describe('RagService', () => {
     ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
     await expect(
       service.retrieve(
-        '¿El cronograma de contratación de auxiliares es el mismo?',
+        '¿El cronograma de contratación de auxiliares de educación es el mismo?',
         null,
       ),
-    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'evidence',
+        resolvedModule: {
+          id: 'module-auxiliares',
+          name: 'Auxiliar de educación',
+        },
+      }),
+    );
   });
 
   it('no desempata con palabras administrativas comunes', async () => {
@@ -941,7 +949,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -1656,6 +1664,50 @@ describe('RagService', () => {
       sources: [source],
       topRelevanceScore: 0.9,
     });
+  });
+
+  it('preserva el módulo real de una figura administrativa asociada a un módulo vecino', async () => {
+    const tardinessSource = {
+      ...source,
+      chunkContent:
+        'La tercera tardanza se considera inasistencia injustificada solo para el descuento. El factor se calcula por minuto de tardanza.',
+      chunkId: 'tardiness-neighbor',
+      documentId: 'attendance-document',
+      documentTitle: 'RSG N.° 326-2017-MINEDU',
+      documentVersionId: 'attendance-version',
+      moduleIds: ['module-remuneraciones'],
+      moduleNames: ['Remuneraciones'],
+    };
+    gateway.search.mockImplementation(
+      (input: { query: string; selectedModuleId: string | null }) =>
+        Promise.resolve(
+          !input.selectedModuleId &&
+            /tardanza descuento asistencia/iu.test(input.query)
+            ? [tardinessSource]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve(
+        'Mi director me quiere descontar por llegar tarde 10 minutos, ¿eso procede?',
+        'module-a',
+      ),
+    ).resolves.toMatchObject({
+      kind: 'topic_change',
+      resolvedModule: { id: 'module-remuneraciones', name: 'Remuneraciones' },
+      sources: [expect.objectContaining({ chunkId: 'tardiness-neighbor' })],
+    });
+
+    const canonicalCalls = gateway.search.mock.calls
+      .map(
+        ([input]) =>
+          input as { query: string; selectedModuleId: string | null },
+      )
+      .filter((input) => /tardanza descuento asistencia/iu.test(input.query));
+    expect(canonicalCalls.map((input) => input.selectedModuleId)).toEqual(
+      expect.arrayContaining([null, 'module-a']),
+    );
   });
 
   it('keeps a selected submodule under its actual root instead of declaring a false topic change', async () => {

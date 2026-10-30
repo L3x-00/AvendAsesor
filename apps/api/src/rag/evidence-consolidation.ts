@@ -30,6 +30,9 @@ const MATERIAL_MARKERS: readonly string[] = [
   'excepto',
   'excepcion',
   'en caso de',
+  'establece',
+  'establecer',
+  'fijar',
   'incompatible',
   'maximo',
   'minimo',
@@ -137,6 +140,15 @@ function contributesMaterialBeyond(
     .map((source) => normalizedContent(source.chunkContent))
     .join('\n');
   const candidateText = normalizedContent(candidate.chunkContent);
+
+  // Un artículo con objeto propio puede aportar el alcance de una cifra que
+  // quedó en el fragmento contiguo (por ejemplo, el artículo fija la RIM y el
+  // siguiente contiene el importe). Se conserva solo si ese artículo aún no
+  // está en la evidencia visible del mismo documento.
+  const article = /\barticulo\s+(\d+)\b/u.exec(candidateText)?.[1];
+  if (article && !new RegExp(`\\barticulo\\s+${article}\\b`, 'u').test(primaryText)) {
+    return true;
+  }
 
   for (const marker of markersIn(candidateText)) {
     if (!primaryText.includes(marker)) return true;

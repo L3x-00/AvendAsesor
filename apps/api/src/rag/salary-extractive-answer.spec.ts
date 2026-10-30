@@ -1049,4 +1049,237 @@ describe('buildExtractiveSalaryAnswer', () => {
     expect(result?.answer).toContain('Auxiliares de Educación');
     expect(result?.answer).toContain('[1]');
   });
+
+  it('compara la RIM de nombrados con la tabla de contratados sin mezclar los regímenes', () => {
+    const named = source(
+      'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. Se fija la RIM por hora de trabajo semanal-mensual correspondiente a la Primera Escala Magisterial.',
+      {
+        chunkId: 'named-rule',
+        documentTitle: 'Decreto Supremo N.° 277-2025-EF',
+        documentVersionId: 'ds-277',
+        issuanceYear: 2025,
+      },
+    );
+    const hourly = source(
+      'La RIM por hora de trabajo semanal-mensual correspondiente a la Primera Escala Magisterial es S/ 116,69.',
+      {
+        chunkId: 'named-hourly-amount',
+        documentTitle: 'Decreto Supremo N.° 277-2025-EF',
+        documentVersionId: 'ds-277',
+        issuanceYear: 2025,
+      },
+    );
+    const contract = source(
+      'Artículo 2.- Monto de la remuneración mensual a otorgarse al profesor contratado. El profesor contratado percibe una remuneración mensual según jornada, modalidad, forma, nivel o ciclo. Jornada laboral 30 horas: S/ 3 500,70.',
+      {
+        chunkId: 'contract-rule',
+        documentTitle: 'Decreto Supremo N.° 277-2025-EF',
+        documentVersionId: 'ds-277',
+        issuanceYear: 2025,
+      },
+    );
+
+    const result = buildExtractiveSalaryAnswer(
+      [named, hourly, contract],
+      '¿Cuál es la diferencia entre el sueldo de un docente nombrado y contratado?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('RIM por hora');
+    expect(result?.answer).toContain('profesor contratado');
+    expect(result?.answer).toContain('S/ 116,69');
+    expect(result?.answer).toContain('S/ 3 500,70');
+    expect(result?.answer).toContain('no determina por sí sola');
+    expect(result?.sources).toEqual([named, hourly, contract]);
+  });
+
+  it('reconoce una fila contractual de 30 bajo el encabezado Jornada laboral', () => {
+    const named = source(
+      'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. La RIM por hora de trabajo semanal-mensual es S/ 116,69.',
+      { chunkId: 'named-table-header', documentVersionId: 'same-version' },
+    );
+    const contract = source(
+      'Artículo 2.- El profesor contratado percibe una remuneración mensual según la jornada laboral. Modalidad Jornada laboral Remuneración mensual S/ EBR 30 3 500,70.',
+      { chunkId: 'contract-table-header', documentVersionId: 'same-version' },
+    );
+
+    const result = buildExtractiveSalaryAnswer(
+      [named, contract],
+      '¿Cuál es la diferencia entre el sueldo de un docente nombrado y contratado?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('S/ 3 500,70');
+  });
+
+  it('no multiplica una fila de contratado como si fuera RIM por hora', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. Artículo 2.- El profesor contratado percibe remuneración mensual. Jornada laboral 30 horas: S/ 3 500,70.',
+          {
+            chunkId: 'articulos-mezclados',
+            documentVersionId: 'misma-version',
+          },
+        ),
+      ],
+      '¿Cuánto gana un profesor nombrado de primera escala con 30 horas?',
+      'current',
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('calcula la primera escala solo cuando el importe declara RIM por hora', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. La RIM por hora de trabajo semanal-mensual es S/ 116,69.',
+          {
+            chunkId: 'rim-horaria',
+            documentVersionId: 'rim-horaria-version',
+          },
+        ),
+      ],
+      '¿Cuánto gana un profesor nombrado de primera escala con 30 horas?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('S/ 3 500,70');
+  });
+
+  it('une solo la continuación inmediata del artículo 1 al importe anterior al artículo 2', () => {
+    const article = source(
+      'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. Fijar el monto de la RIM por hora de trabajo semanal-mensual correspondiente a la Primera Escala Magisterial de la Carrera Pública Magisterial a la que se refiere la Ley N.°',
+      {
+        chunkId: 'rim-articulo-1',
+        documentVersionId: 'rim-partido',
+        pageStart: 1,
+        pageEnd: 1,
+      },
+    );
+    const continuation = source(
+      '29944, en la suma de S/ 116,69. Artículo 2.- El profesor contratado percibe una remuneración mensual. Jornada laboral 30 horas: S/ 3 500,70.',
+      {
+        chunkId: 'rim-continuacion',
+        documentVersionId: 'rim-partido',
+        pageStart: 2,
+        pageEnd: 2,
+      },
+    );
+
+    const result = buildExtractiveSalaryAnswer(
+      [article, continuation],
+      '¿Cuánto gana un profesor nombrado de primera escala con 30 horas?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('S/ 116,69');
+    expect(result?.answer).toContain('S/ 3 500,70');
+    expect(result?.sources).toEqual([article, continuation]);
+  });
+
+  it('no aplica la RIM docente a un auxiliar que comparte escala y jornada', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. La RIM por hora de trabajo semanal-mensual es S/ 116,69.',
+          { chunkId: 'rim-docente', documentVersionId: 'rim-docente-version' },
+        ),
+      ],
+      '¿Cuánto gana un auxiliar nombrado de primera escala con 30 horas?',
+      'current',
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('no sustituye una consulta de asignación rural por la tabla salarial', () => {
+    expect(
+      buildExtractiveSalaryAnswer(
+        [
+          source(
+            'La remuneración mensual del profesor contratado con jornada de 30 horas es S/ 3 500,70.',
+          ),
+        ],
+        'Si trabajo en una zona rural, ¿me corresponde una asignación?',
+        'current',
+      ),
+    ).toBeNull();
+  });
+
+  it('limita la asignación rural a su padrón habilitante y a la fecha de la fuente', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'DECRETA: Artículo 1.- La asignación temporal por trabajo en ámbito rural se aplica según la clasificación de ruralidad.',
+          { chunkId: 'asignacion-rural', issuanceYear: 2015 },
+        ),
+      ],
+      'Si trabajo en una zona rural, ¿me corresponde una asignación?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('asignación por trabajo en ámbito rural');
+    expect(result?.answer).toContain('año 2015');
+    expect(result?.answer).toContain('no incluyen una regla actual');
+    expect(result?.sources).toHaveLength(1);
+  });
+
+  it('explica el efecto en planilla del ascenso sin inventar un importe o automatismo', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Actos resolutivos sobre situaciones administrativas que deriven en pago o descuento: ascenso de escala magisterial.',
+          { chunkId: 'ascenso-planilla' },
+        ),
+      ],
+      'Si asciendo de escala, ¿cambia mi remuneración?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('actos resolutivos');
+    expect(result?.answer).toContain('no precisan un pago automático');
+    expect(result?.answer).toContain('[1]');
+    expect(result?.hasVerifiedAmount).toBe(false);
+  });
+
+  it('declara el límite temporal del padrón sin inferir una inclusión actual', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source('Anexo 1: Padrón de Instituciones Educativas Públicas rurales.', {
+          chunkId: 'padron-2015',
+          issuanceYear: 2015,
+        }),
+      ],
+      '¿Cómo sé si mi institución figura en los padrones de ruralidad?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('año 2015');
+    expect(result?.answer).toContain('no permite determinar tu caso hoy');
+    expect(result?.sources).toHaveLength(1);
+  });
+
+  it('explica descuentos y responsabilidades sin inventar el reclamo personal', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Las deducciones en la planilla única de pagos consideran la prelación y límites según el tipo de descuento.',
+          { chunkId: 'deducciones' },
+        ),
+        source(
+          'La Oficina de Personal emite los actos administrativos que derivan en pago o descuento de manera oportuna.',
+          { chunkId: 'responsabilidad' },
+        ),
+      ],
+      'Mi boleta tiene descuentos y diferencias remunerativas. ¿Cómo reclamo?',
+      'current',
+    );
+
+    expect(result?.answer).toContain('deducciones en planilla');
+    expect(result?.answer).toContain('Oficina de Personal');
+    expect(result?.answer).toContain('no establecen un canal, plazo ni recurso');
+    expect(result?.sources).toHaveLength(2);
+  });
 });

@@ -3,6 +3,77 @@ import { normalizeSpanishText } from './text-normalization';
 
 const MIN_EVIDENCE_CHARS = 1;
 
+interface RecoveredDocumentIdentity {
+  issuanceYear: number;
+  resolutionNumber: string;
+  title: string;
+}
+
+/**
+ * Algunas cargas históricas conservaron el archivo correcto pero grabaron en
+ * su ficha el título de la ley habilitante. Cuando el propio extracto abre con
+ * la identidad de un Decreto Supremo y la ficha no declara ningún decreto, la
+ * cita se corrige en memoria para no atribuir la afirmación a la norma
+ * equivocada. No se inventa una identidad: se limita a la cabecera textual de
+ * la misma fuente recuperada.
+ */
+const DECREE_HEADING =
+  /\bdecreto\s+supremo\s+n\s*[.°º]*\s*(\d{1,8}\s*-\s*(?:19|20)\d{2}\s*-\s*[a-z]{2,20})\b(?=[\s\S]{0,280}\b(?:el|la)\s+(?:presidente|presidenta)\s+de\s+la\s+rep[uú]blica\b)/iu;
+const DECREE_IN_TITLE = /\b(?:decreto\s+supremo|\bds\b)\b/iu;
+
+function recoveredDocumentIdentity(
+  source: RetrievedChunk,
+): RecoveredDocumentIdentity | null {
+  if (
+    source.documentType !== 'DECRETO_SUPREMO' ||
+    DECREE_IN_TITLE.test(source.documentTitle) ||
+    source.pageStart !== 1
+  ) {
+    return null;
+  }
+  // Solo la cabecera de la primera página identifica al documento completo.
+  // Un decreto mencionado en una página posterior puede ser una cita, anexo o
+  // norma derogada y no debe sustituir los metadatos de la versión recuperada.
+  const match = DECREE_HEADING.exec(source.chunkContent.slice(0, 600));
+  const rawNumber = match?.[1];
+  if (!rawNumber) return null;
+  const resolutionNumber = rawNumber.replace(/\s*/gu, '').toUpperCase();
+  const year = Number(/-(\d{4})-/u.exec(resolutionNumber)?.[1]);
+  if (!Number.isInteger(year)) return null;
+  return {
+    issuanceYear: year,
+    resolutionNumber,
+    title: `Decreto Supremo N.° ${resolutionNumber}`,
+  };
+}
+
+/**
+ * Propaga la identidad recuperada a los demás fragmentos de la misma versión.
+ * Así el artículo que contiene el monto y la portada que contiene el número
+ * siguen siendo una única fuente verificable en la respuesta y en la cita.
+ */
+export function reconcileRetrievedDocumentIdentities(
+  sources: RetrievedChunk[],
+): RetrievedChunk[] {
+  const identities = new Map<string, RecoveredDocumentIdentity>();
+  for (const source of sources) {
+    const identity = recoveredDocumentIdentity(source);
+    if (identity) identities.set(source.documentVersionId, identity);
+  }
+  if (!identities.size) return sources;
+  return sources.map((source) => {
+    const identity = identities.get(source.documentVersionId);
+    return identity
+      ? {
+          ...source,
+          documentTitle: identity.title,
+          issuanceYear: identity.issuanceYear,
+          resolutionNumber: identity.resolutionNumber,
+        }
+      : source;
+  });
+}
+
 /**
  * Páginas de El Peruano anexadas a una resolución del MINEDU pueden contener
  * el inicio de la norma del sector siguiente. Ese texto no pertenece al
