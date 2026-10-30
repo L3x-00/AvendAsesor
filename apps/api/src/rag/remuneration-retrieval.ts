@@ -180,7 +180,6 @@ export function isDirectRemunerationEvidence(
   question: string,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): boolean {
-  const requested = normalizeSpanishText(question);
   const evidence = evidenceText(source);
   if (isRuralPadronQuestion(question)) {
     return isRuralPadronEvidence(source);

@@ -1914,7 +1914,7 @@ export class RagService {
       }
     }
     if (directAuxiliaryRoots.size === 1) {
-      const [id, name] = [...directAuxiliaryRoots.entries()][0]!;
+      const [id, name] = [...directAuxiliaryRoots.entries()][0];
       return {
         kind: id === selectedModuleId ? 'evidence' : 'topic_change',
         resolvedModule: {
