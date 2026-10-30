@@ -67,6 +67,11 @@ import {
   administrativeEvidenceQueries,
   isDirectAdministrativeEvidence,
 } from './administrative-retrieval';
+import {
+  evaluationEvidenceQueries,
+  isDirectEvaluationEvidence,
+  isEvaluationSourceCompatible,
+} from './evaluation-retrieval';
 
 export interface ResolvedModule {
   id: string;
@@ -384,7 +389,10 @@ function sourcesEligibleForQuestion(
     ) {
       return false;
     }
-    return isSalarySourceCompatible(question, source);
+    return (
+      isSalarySourceCompatible(question, source) &&
+      isEvaluationSourceCompatible(question, source)
+    );
   });
 }
 
@@ -516,7 +524,8 @@ function relevantSources(
     ? ranked.filter(
         (source) =>
           isDirectRemunerationEvidence(question, source) ||
-          isDirectAdministrativeEvidence(question, source),
+          isDirectAdministrativeEvidence(question, source) ||
+          isDirectEvaluationEvidence(question, source),
       )
     : [];
   const eligible = prepareDelivery(
@@ -551,7 +560,8 @@ function relevantSources(
     if (
       !question ||
       (!isDirectRemunerationEvidence(question, source) &&
-        !isDirectAdministrativeEvidence(question, source))
+        !isDirectAdministrativeEvidence(question, source) &&
+        !isDirectEvaluationEvidence(question, source))
     )
       continue;
     if (selectedChunks.has(source.chunkId)) continue;
@@ -1534,6 +1544,7 @@ export class RagService {
       const canonicalQueries = [
         ...remunerationEvidenceQueries(salaryQuestion),
         ...administrativeEvidenceQueries(question),
+        ...evaluationEvidenceQueries(question),
       ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embeddings.embed(
@@ -1701,7 +1712,8 @@ export class RagService {
             .filter(
               (candidate) =>
                 candidate.lexicalScore > 0 &&
-                isDirectAdministrativeEvidence(question, candidate),
+                (isDirectAdministrativeEvidence(question, candidate) ||
+                  isDirectEvaluationEvidence(question, candidate)),
             ),
         );
       }

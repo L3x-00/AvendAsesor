@@ -431,6 +431,34 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
     'SA-05': { title: /326-2017-MINEDU/iu },
     'SA-06': { title: /proceso administrativo disciplinario/iu },
     'SA-07': { title: /326-2017-MINEDU/iu },
+    'ED-01': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
+    'ED-02': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
+    'ED-03': {
+      module: 'Evaluación docente',
+      title: /evaluaci[oó]n.*desempe[nñ]o.*nombrad/iu,
+    },
+    'ED-04': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
+    'ED-05': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
+    'ED-06': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
+    'ED-07': {
+      module: 'Evaluación docente',
+      title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
+    },
     E03: { title: /074-2019-EF/iu },
   };
 /** Mismo evaluador en la primera corrida y todas sus repeticiones. */

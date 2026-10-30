@@ -345,6 +345,7 @@ async function main(): Promise<void> {
   const situacionesAdministrativas = requireModule(
     'Situaciones Administrativas',
   );
+  const evaluacionDocente = requireModule('Evaluación docente');
 
   const teacher: AuthorizationContext = {
     email: 'qa-docente@example.com',
@@ -1503,6 +1504,62 @@ async function main(): Promise<void> {
     sa07Pass,
     `RSG 326 recuperada: ${hasSource(sa07, /326-2017-MINEDU/i)}; identifica horas pedagógicas: ${answerHas(sa07, /horas pedagogicas/u)}; declara el límite de la fuente: ${sa07StatesLimit}; no enumera actividades no documentadas: ${sa07DoesNotInventActivities}.`,
   );
+
+  // ED-01…ED-07 — regresiones de evaluación docente. El inventario vigente
+  // distingue de forma explícita la falta de concurso de ascenso y desempeño
+  // de nombrados; no admite anexos de contratación como sustitutos.
+  const evaluationCases: Array<[string, string, string]> = [
+    [
+      'ED-01',
+      'Ascenso: requisitos, etapas y criterios del concurso',
+      'Quiero ascender de escala, ¿cuáles son los requisitos, etapas y criterios?',
+    ],
+    [
+      'ED-02',
+      'Segunda escala: prueba nacional y trayectoria profesional',
+      'Estoy en segunda escala, ¿qué se evalúa para ascender?',
+    ],
+    [
+      'ED-03',
+      'Desaprobación: desempeño de nombrados sin mezclar contratación',
+      'Si desapruebo la evaluación de desempeño como docente nombrado, ¿qué ocurre?',
+    ],
+    [
+      'ED-04',
+      'Permanencia mínima para postular al ascenso',
+      '¿Puedo postular al ascenso si no cumplo los años mínimos en mi escala?',
+    ],
+    [
+      'ED-05',
+      'Maestría: puntaje específico del concurso de ascenso',
+      '¿Una maestría da puntos en el concurso de ascenso?',
+    ],
+    [
+      'ED-06',
+      'Resultados y reclamos del concurso de ascenso',
+      '¿Dónde consulto resultados del ascenso y cómo reclamo?',
+    ],
+    [
+      'ED-07',
+      'Comparación entre desempeño y ascenso',
+      '¿Cuál es la diferencia entre evaluación de desempeño y evaluación de ascenso?',
+    ],
+  ];
+  for (const [id, title, question] of evaluationCases) {
+    const turn = await ask(question, { moduleId: evaluacionDocente });
+    const safeAbsence =
+      has(turn, 'no_evidence') &&
+      noEvidenceIsSafe(turn) &&
+      !turn.sources.length;
+    record(
+      id,
+      title,
+      [turn],
+      false,
+      `Sin sustitución por contratación ni desempeño de otro régimen: ${safeAbsence}.`,
+      'REQUIERE_CORPUS',
+    );
+  }
 
   // Red-team evidence-only y charla.
   const redTeam: Array<[string, string, (turn: TurnResult) => boolean]> = [
