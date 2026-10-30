@@ -111,10 +111,10 @@ describe('causalClarificationFor', () => {
 
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {
     expect(
-      causalClarificationFor(
-        '¿Qué debo solicitar para la reasignación?',
-        [SALUD, EMERGENCIA],
-      )?.message,
+      causalClarificationFor('¿Qué debo solicitar para la reasignación?', [
+        SALUD,
+        EMERGENCIA,
+      ])?.message,
     ).toContain('causal');
   });
 

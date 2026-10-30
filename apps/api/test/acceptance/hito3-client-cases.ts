@@ -1585,7 +1585,9 @@ async function main(): Promise<void> {
     { moduleId: auxiliares },
   );
   const aux02SafeAbsence =
-    has(aux02, 'no_evidence') && noEvidenceIsSafe(aux02) && !aux02.sources.length;
+    has(aux02, 'no_evidence') &&
+    noEvidenceIsSafe(aux02) &&
+    !aux02.sources.length;
   const aux02LimitedEvidence =
     grounded(aux02) &&
     hasSource(aux02, /158.*2025.*auxiliares/iu) &&

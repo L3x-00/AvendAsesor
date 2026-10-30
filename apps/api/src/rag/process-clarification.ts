@@ -15,8 +15,7 @@ const CAUSAL_PROCESS = /\b(?:reasignacion(?:es)?|reasignar(?:me|se)?)\b/u;
 // Preguntas de posibilidad o destino («¿puedo ir a otra UGEL?») tienen una
 // respuesta general verificable antes de que la causal refine requisitos y
 // documentos. No se deben cortar con una aclaración vacía.
-const REASSIGNMENT_ELIGIBILITY =
-  /\b(?:puedo|puede|es\s+posible)\b/u;
+const REASSIGNMENT_ELIGIBILITY = /\b(?:puedo|puede|es\s+posible)\b/u;
 const REASSIGNMENT_DESTINATION =
   /\b(?:otra|distinta)\s+(?:ugel|dre|provincia|region)\b|\b(?:ir(?:se)?|trasladar(?:me|se)?)\s+a\s+(?:otra|distinta)\b/u;
 

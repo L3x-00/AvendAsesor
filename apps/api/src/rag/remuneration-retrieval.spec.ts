@@ -34,7 +34,9 @@ describe('remunerationEvidenceQueries', () => {
 
   it('reconoce la flexión coloquial de ascender y busca el acto de planilla', () => {
     expect(
-      remunerationEvidenceQueries('Si asciendo de escala, cambia mi remuneración?'),
+      remunerationEvidenceQueries(
+        'Si asciendo de escala, cambia mi remuneración?',
+      ),
     ).toContain(
       'ascenso de escala magisterial acto resolutivo pago planilla única de pagos',
     );
@@ -57,7 +59,9 @@ describe('isDirectRemunerationEvidence', () => {
     expect(
       isDirectRemunerationEvidence(
         question,
-        source('El acto resolutivo de ascenso de escala magisterial deriva en pago por planilla.'),
+        source(
+          'El acto resolutivo de ascenso de escala magisterial deriva en pago por planilla.',
+        ),
       ),
     ).toBe(true);
     expect(
@@ -124,7 +128,8 @@ describe('isDirectRemunerationEvidence', () => {
   });
 
   it('exige padrón habilitante para una asignación rural y excluye jornada adicional', () => {
-    const question = 'Si trabajo en una zona rural, ¿me corresponde una asignación?';
+    const question =
+      'Si trabajo en una zona rural, ¿me corresponde una asignación?';
     expect(
       isDirectRemunerationEvidence(
         question,

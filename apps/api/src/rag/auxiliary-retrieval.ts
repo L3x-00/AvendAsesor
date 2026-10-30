@@ -6,10 +6,8 @@ import { normalizeSpanishText } from './text-normalization';
  * solo traducen una pregunta cotidiana a la denominación del corpus; no
  * agregan requisitos, montos ni plazos que la fuente no contenga.
  */
-const AUXILIARY_SIGNAL =
-  /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
-const AUXILIARY_EDUCATION_SIGNAL =
-  /\bauxiliar(?:es)?\s+de\s+educaci[oó]n\b/u;
+const AUXILIARY_SIGNAL = /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
+const AUXILIARY_EDUCATION_SIGNAL = /\bauxiliar(?:es)?\s+de\s+educaci[oó]n\b/u;
 const CONTRACT_SIGNAL =
   /\b(?:trabajar|postular|contrataci[oó]n|contrato|requisitos?)\b/u;
 const SALARY_SIGNAL =
@@ -113,7 +111,8 @@ export function isAuxiliarySourceCompatible(
       evidence,
     );
   }
-  if (REASSIGNMENT_SIGNAL.test(requested)) return /\breasignacion\b/u.test(evidence);
+  if (REASSIGNMENT_SIGNAL.test(requested))
+    return /\breasignacion\b/u.test(evidence);
   if (EXCHANGE_SIGNAL.test(requested)) return /\bpermuta\b/u.test(evidence);
   if (VACATION_SIGNAL.test(requested)) return /\bvacacion/u.test(evidence);
   if (MEDICAL_LEAVE_SIGNAL.test(requested)) {
@@ -138,20 +137,26 @@ export function isDirectAuxiliaryEvidence(
   question: string,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): boolean {
-  if (!isAuxiliaryQuestion(question) || !isAuxiliarySourceCompatible(question, source))
+  if (
+    !isAuxiliaryQuestion(question) ||
+    !isAuxiliarySourceCompatible(question, source)
+  )
     return false;
   const requested = normalizeSpanishText(question);
   const evidence = textOf(source);
   if (!AUXILIARY_EDUCATION_SIGNAL.test(evidence)) return false;
   if (CONTRACT_SIGNAL.test(requested) && !APPOINTMENT_SIGNAL.test(requested))
-    return /\bcontratacion\b/u.test(evidence) && /\brequisito|documento|expediente\b/u.test(evidence);
-  if (APPOINTMENT_SIGNAL.test(requested)) return /\bnombramiento\b/u.test(evidence);
-  if (REASSIGNMENT_SIGNAL.test(requested)) return /\breasignacion\b/u.test(evidence);
+    return (
+      /\bcontratacion\b/u.test(evidence) &&
+      /\brequisito|documento|expediente\b/u.test(evidence)
+    );
+  if (APPOINTMENT_SIGNAL.test(requested))
+    return /\bnombramiento\b/u.test(evidence);
+  if (REASSIGNMENT_SIGNAL.test(requested))
+    return /\breasignacion\b/u.test(evidence);
   if (EXCHANGE_SIGNAL.test(requested)) return /\bpermuta\b/u.test(evidence);
   if (VACATION_SIGNAL.test(requested)) return /\bvacacion/u.test(evidence);
-  if (MEDICAL_LEAVE_SIGNAL.test(requested)) return /\blicencia\b/u.test(evidence);
-  return (
-    SALARY_SIGNAL.test(requested) &&
-    hasAuxiliarySalaryRule(evidence)
-  );
+  if (MEDICAL_LEAVE_SIGNAL.test(requested))
+    return /\blicencia\b/u.test(evidence);
+  return SALARY_SIGNAL.test(requested) && hasAuxiliarySalaryRule(evidence);
 }

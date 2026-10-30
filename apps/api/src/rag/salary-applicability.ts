@@ -279,16 +279,14 @@ const ORDINAL_SCALES: ReadonlyMap<string, string> = new Map([
 
 /** Todas las escalas nombradas; «escala III» y «escala 3» son la misma. */
 function scalesIn(text: string): string[] {
-  return sortedUnique(
-    [
-      ...[...text.matchAll(SCALE_PATTERN_ALL)].map(
-        (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
-      ),
-      ...[...text.matchAll(ORDINAL_SCALE_PATTERN_ALL)].map(
-        (match) => ORDINAL_SCALES.get(match[1]) ?? match[1],
-      ),
-    ],
-  );
+  return sortedUnique([
+    ...[...text.matchAll(SCALE_PATTERN_ALL)].map(
+      (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
+    ),
+    ...[...text.matchAll(ORDINAL_SCALE_PATTERN_ALL)].map(
+      (match) => ORDINAL_SCALES.get(match[1]) ?? match[1],
+    ),
+  ]);
 }
 
 /**
@@ -526,7 +524,7 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
     // Una comparación («nombrados y contratados») no pertenece a un solo
     // vínculo. Dejarlo en null evita descartar la evidencia del segundo régimen
     // antes de que la respuesta pueda contrastarlos.
-    condition: conditions.length === 1 ? conditions[0] ?? null : null,
+    condition: conditions.length === 1 ? (conditions[0] ?? null) : null,
     isSalaryQuestion:
       SALARY_TERMS.test(salaryText) || SALARY_AMOUNT_QUESTION.test(salaryText),
     jornadaHours: hoursIn(text)[0] ?? null,
@@ -639,9 +637,7 @@ function salarySourceConflictsWithProfile(
     // no declara este factor, no se puede usar la otra para excluir todo el
     // fragmento; la ausencia del dato no prueba incompatibilidad.
     if (valuesByAmount.some((values) => values.length === 0)) return false;
-    return valuesByAmount.every(
-      (values) => !values.includes(String(expected)),
-    );
+    return valuesByAmount.every((values) => !values.includes(String(expected)));
   });
 }
 

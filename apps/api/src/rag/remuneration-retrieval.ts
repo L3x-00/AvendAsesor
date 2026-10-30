@@ -25,8 +25,7 @@ const SALARY_REVIEW_CONTEXT =
   /\b(?:remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|haberes)\b/u;
 const ASCENSO_SIGNAL =
   /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u;
-const ALLOCATION_SIGNAL =
-  /\b(?:asignaci[oó]n|bono|beneficio|pago)\b/u;
+const ALLOCATION_SIGNAL = /\b(?:asignaci[oó]n|bono|beneficio|pago)\b/u;
 const AMOUNT_REQUEST_SIGNAL =
   /\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)|\bme\s+corresponde\b/u;
 
@@ -45,9 +44,10 @@ function ownDocumentReferencePrecedes(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
   contentIndex: number,
 ): boolean {
-  const reference = /(\d{1,8})\s*-\s*((?:19|20)\d{2})\s*-\s*([a-z]{2,20})/iu.exec(
-    source.documentTitle,
-  );
+  const reference =
+    /(\d{1,8})\s*-\s*((?:19|20)\d{2})\s*-\s*([a-z]{2,20})/iu.exec(
+      source.documentTitle,
+    );
   // Los dobles de prueba y algunos documentos no normativos no declaran número
   // en el título; no se les atribuye una cabecera inexistente.
   if (!reference) return true;
@@ -197,7 +197,9 @@ export function isDirectRemunerationEvidence(
   if (isPayrollReviewQuestion(question)) {
     return (
       /\b(?:planilla|boleta)\b/u.test(evidence) &&
-      /\b(?:descuento|deducci[oó]n|reintegro|validaci[oó]n|pago)\b/u.test(evidence)
+      /\b(?:descuento|deducci[oó]n|reintegro|validaci[oó]n|pago)\b/u.test(
+        evidence,
+      )
     );
   }
   return false;
