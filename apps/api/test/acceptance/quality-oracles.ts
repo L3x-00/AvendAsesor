@@ -459,6 +459,13 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
       module: 'Evaluación docente',
       title: /(?:concurso|proceso).*ascenso|ascenso.*escala/iu,
     },
+    'AUX-01': { title: /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu },
+    'AUX-02': { title: /158.*2025.*auxiliares/iu },
+    'AUX-03': { title: /126.*2023.*auxiliares/iu },
+    'AUX-04': { title: /nombramiento.*auxiliares|013.*2021/iu },
+    'AUX-05': { title: /126.*2023.*auxiliares/iu },
+    'AUX-06': { title: /126.*2023.*auxiliares|121.*2018/iu },
+    'AUX-07': { title: /126.*2023.*auxiliares/iu },
     E03: { title: /074-2019-EF/iu },
   };
 /** Mismo evaluador en la primera corrida y todas sus repeticiones. */

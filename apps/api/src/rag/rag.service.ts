@@ -72,6 +72,11 @@ import {
   isDirectEvaluationEvidence,
   isEvaluationSourceCompatible,
 } from './evaluation-retrieval';
+import {
+  auxiliaryEvidenceQueries,
+  isAuxiliarySourceCompatible,
+  isDirectAuxiliaryEvidence,
+} from './auxiliary-retrieval';
 
 export interface ResolvedModule {
   id: string;
@@ -391,7 +396,8 @@ function sourcesEligibleForQuestion(
     }
     return (
       isSalarySourceCompatible(question, source) &&
-      isEvaluationSourceCompatible(question, source)
+      isEvaluationSourceCompatible(question, source) &&
+      isAuxiliarySourceCompatible(question, source)
     );
   });
 }
@@ -525,7 +531,8 @@ function relevantSources(
         (source) =>
           isDirectRemunerationEvidence(question, source) ||
           isDirectAdministrativeEvidence(question, source) ||
-          isDirectEvaluationEvidence(question, source),
+          isDirectEvaluationEvidence(question, source) ||
+          isDirectAuxiliaryEvidence(question, source),
       )
     : [];
   const eligible = prepareDelivery(
@@ -561,7 +568,8 @@ function relevantSources(
       !question ||
       (!isDirectRemunerationEvidence(question, source) &&
         !isDirectAdministrativeEvidence(question, source) &&
-        !isDirectEvaluationEvidence(question, source))
+        !isDirectEvaluationEvidence(question, source) &&
+        !isDirectAuxiliaryEvidence(question, source))
     )
       continue;
     if (selectedChunks.has(source.chunkId)) continue;
@@ -1545,6 +1553,7 @@ export class RagService {
         ...remunerationEvidenceQueries(salaryQuestion),
         ...administrativeEvidenceQueries(question),
         ...evaluationEvidenceQueries(question),
+        ...auxiliaryEvidenceQueries(question),
       ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embeddings.embed(
@@ -1877,6 +1886,45 @@ export class RagService {
           question,
         )
       : [];
+    // Algunos documentos transversales (por ejemplo, remuneración vacacional)
+    // están catalogados bajo Remuneraciones pero nombran expresamente al
+    // auxiliar. Si la pregunta y el texto coinciden de forma directa, se
+    // conserva la conversación en Auxiliar de educación en vez de convertirla
+    // erróneamente en cambio de módulo.
+    const directAuxiliarySources = auxiliaryEvidenceQueries(question).length
+      ? relevantSources(
+          byScoreDescending(
+            [...selectedRoutingSources, ...globalRoutingSources].filter(
+              (source) => isDirectAuxiliaryEvidence(question, source),
+            ),
+          ),
+          matchCount,
+          question,
+        ).filter((source) => isDirectAuxiliaryEvidence(question, source))
+      : [];
+    const directAuxiliaryRoots = new Map<string, string>();
+    for (const source of directAuxiliarySources) {
+      for (const association of sourceAssociations(source)) {
+        if (/^auxiliar de educaci[oó]n$/iu.test(association.rootModuleName)) {
+          directAuxiliaryRoots.set(
+            association.rootModuleId,
+            association.rootModuleName,
+          );
+        }
+      }
+    }
+    if (directAuxiliaryRoots.size === 1) {
+      const [id, name] = [...directAuxiliaryRoots.entries()][0]!;
+      return {
+        kind: id === selectedModuleId ? 'evidence' : 'topic_change',
+        resolvedModule: {
+          id,
+          name,
+        },
+        sources: directAuxiliarySources,
+        topRelevanceScore: topScore(directAuxiliarySources),
+      };
+    }
     const directAdministrativeRoute = directAdministrativeSources.length
       ? routeSources(directAdministrativeSources)
       : null;

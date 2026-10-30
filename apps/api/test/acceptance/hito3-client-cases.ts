@@ -1561,6 +1561,136 @@ async function main(): Promise<void> {
     );
   }
 
+  // AUX-01…AUX-07 — regresiones semánticas de Auxiliar de educación. Cada
+  // oráculo comprueba concepto y fuente, no una redacción rígida del modelo.
+  const aux01 = await ask(
+    'Quiero trabajar como auxiliar de educación, ¿qué requisitos necesito?',
+    { moduleId: auxiliares },
+  );
+  const aux01Pass =
+    grounded(aux01) &&
+    hasSource(aux01, /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu) &&
+    answerHas(aux01, /requisit|estudios|ciclo/u) &&
+    !has(aux01, 'no_evidence');
+  record(
+    'AUX-01',
+    'Contratación: requisitos por nivel y expediente',
+    [aux01],
+    aux01Pass,
+    `Fuente de contratación: ${hasSource(aux01, /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu)}; requisitos o estudios: ${answerHas(aux01, /requisit|estudios|ciclo/u)}; no cae en insuficiencia: ${!has(aux01, 'no_evidence')}.`,
+  );
+
+  const aux02 = await ask(
+    '¿Cuánto gana actualmente un auxiliar de educación nombrado?',
+    { moduleId: auxiliares },
+  );
+  const aux02SafeAbsence =
+    has(aux02, 'no_evidence') && noEvidenceIsSafe(aux02) && !aux02.sources.length;
+  const aux02LimitedEvidence =
+    grounded(aux02) &&
+    hasSource(aux02, /158.*2025.*auxiliares/iu) &&
+    /(?:no (?:tengo|encontre)|no.{0,80}monto|documentos disponibles)/iu.test(
+      normalizeSpanishText(aux02.answer),
+    ) &&
+    !/s\/\.?\s*\d{3,}/iu.test(aux02.answer);
+  record(
+    'AUX-02',
+    'Remuneración: conserva el límite sin inventar un monto',
+    [aux02],
+    aux02SafeAbsence || aux02LimitedEvidence,
+    `Negativa segura: ${aux02SafeAbsence}; si hay fuente, declara el límite sin cifra inventada: ${aux02LimitedEvidence}.`,
+  );
+
+  const aux03 = await ask(
+    'Soy auxiliar contratado, ¿tengo derecho a licencia por enfermedad?',
+    { moduleId: auxiliares },
+  );
+  const aux03Pass =
+    grounded(aux03) &&
+    hasSource(aux03, /126.*2023.*auxiliares/iu) &&
+    answerHas(aux03, /incapacidad temporal|descanso medico|citt/u) &&
+    answerHas(aux03, /contratad/u) &&
+    !has(aux03, 'no_evidence');
+  record(
+    'AUX-03',
+    'Licencia: incapacidad temporal, CITT y vínculo contratado',
+    [aux03],
+    aux03Pass,
+    `Fuente de auxiliares: ${hasSource(aux03, /126.*2023.*auxiliares/iu)}; CITT o incapacidad: ${answerHas(aux03, /incapacidad temporal|descanso medico|citt/u)}; vínculo contratado: ${answerHas(aux03, /contratad/u)}.`,
+  );
+
+  const aux04 = await ask(
+    '¿Puedo nombrarme como auxiliar si ya llevo varios años contratado?',
+    { moduleId: auxiliares },
+  );
+  const aux04Pass =
+    grounded(aux04) &&
+    hasSource(aux04, /nombramiento.*auxiliares|013.*2021/iu) &&
+    answerHas(aux04, /concurso/u, /nombramiento/u) &&
+    /(?:no|nunca).{0,80}(?:automatic|por si sola|de forma directa)/iu.test(
+      normalizeSpanishText(aux04.answer),
+    ) &&
+    !has(aux04, 'no_evidence');
+  record(
+    'AUX-04',
+    'Nombramiento: concurso sin confundir experiencia de contratación',
+    [aux04],
+    aux04Pass,
+    `Fuente de nombramiento: ${hasSource(aux04, /nombramiento.*auxiliares|013.*2021/iu)}; explica concurso: ${answerHas(aux04, /concurso/u, /nombramiento/u)}; no atribuye nombramiento automático: ${/(?:no|nunca).{0,80}(?:automatic|por si sola|de forma directa)/iu.test(normalizeSpanishText(aux04.answer))}.`,
+  );
+
+  const aux05 = await ask(
+    '¿Un auxiliar puede pedir reasignación para irse a otra UGEL?',
+    { moduleId: auxiliares },
+  );
+  const aux05Pass =
+    grounded(aux05) &&
+    hasSource(aux05, /126.*2023.*auxiliares/iu) &&
+    answerHas(aux05, /reasignaci[oó]n/u, /ugel|dre/u) &&
+    !has(aux05, 'clarification') &&
+    !has(aux05, 'no_evidence');
+  record(
+    'AUX-05',
+    'Reasignación: explica la posibilidad antes de pedir causal',
+    [aux05],
+    aux05Pass,
+    `Fuente de reasignación: ${hasSource(aux05, /126.*2023.*auxiliares/iu)}; explica UGEL/DRE: ${answerHas(aux05, /reasignaci[oó]n/u, /ugel|dre/u)}; no corta con aclaración: ${!has(aux05, 'clarification')}.`,
+  );
+
+  const aux06 = await ask(
+    '¿El auxiliar tiene vacaciones pagadas igual que un profesor?',
+    { moduleId: auxiliares },
+  );
+  const aux06Pass =
+    grounded(aux06) &&
+    hasSource(aux06, /126.*2023.*auxiliares|121.*2018/iu) &&
+    answerHas(aux06, /vacacion/u, /nombrad|contratad/u) &&
+    !has(aux06, 'no_evidence');
+  record(
+    'AUX-06',
+    'Vacaciones: diferencia nombrados y contratados',
+    [aux06],
+    aux06Pass,
+    `Fuente aplicable: ${hasSource(aux06, /126.*2023.*auxiliares|121.*2018/iu)}; diferencia vínculos: ${answerHas(aux06, /vacacion/u, /nombrad|contratad/u)}.`,
+  );
+
+  const aux07 = await ask(
+    'Soy auxiliar, ¿puedo hacer permuta con otra auxiliar de otra provincia?',
+    { moduleId: auxiliares },
+  );
+  const aux07Pass =
+    grounded(aux07) &&
+    hasSource(aux07, /126.*2023.*auxiliares/iu) &&
+    answerHas(aux07, /permuta/u) &&
+    !has(aux07, 'no_evidence');
+  record(
+    'AUX-07',
+    'Permuta: condiciones citadas desde la norma de auxiliares',
+    [aux07],
+    aux07Pass,
+    `Fuente de permuta: ${hasSource(aux07, /126.*2023.*auxiliares/iu)}; identifica el procedimiento: ${answerHas(aux07, /permuta/u)}.`,
+  );
+
   // Red-team evidence-only y charla.
   const redTeam: Array<[string, string, (turn: TurnResult) => boolean]> = [
     [

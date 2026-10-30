@@ -778,7 +778,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -817,7 +817,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -851,7 +851,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -877,7 +877,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -891,10 +891,18 @@ describe('RagService', () => {
     ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
     await expect(
       service.retrieve(
-        '¿El cronograma de contratación de auxiliares es el mismo?',
+        '¿El cronograma de contratación de auxiliares de educación es el mismo?',
         null,
       ),
-    ).resolves.toEqual(expect.objectContaining({ kind: 'ambiguous' }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'evidence',
+        resolvedModule: {
+          id: 'module-auxiliares',
+          name: 'Auxiliar de educación',
+        },
+      }),
+    );
   });
 
   it('no desempata con palabras administrativas comunes', async () => {
@@ -941,7 +949,7 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares.',
+        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],

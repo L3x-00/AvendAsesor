@@ -100,6 +100,24 @@ describe('causalClarificationFor', () => {
     ).toBeNull();
   });
 
+  it('no corta una consulta de elegibilidad para otra UGEL', () => {
+    expect(
+      causalClarificationFor(
+        '¿Un auxiliar puede pedir reasignación para irse a otra UGEL?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
+  });
+
+  it('conserva la aclaración para un pedido de requisitos sin causal', () => {
+    expect(
+      causalClarificationFor(
+        '¿Qué debo solicitar para la reasignación?',
+        [SALUD, EMERGENCIA],
+      )?.message,
+    ).toContain('causal');
+  });
+
   it('pide la causal aunque solo llegue una regla especial', () => {
     const clarification = causalClarificationFor(
       '¿Cuáles son los requisitos de la reasignación?',
