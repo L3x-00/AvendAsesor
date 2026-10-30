@@ -219,9 +219,10 @@ export function integrityIssues(
     // identidad estable sigue siendo documento+versión; MIME y paginación no
     // pueden cambiar. Solo se acepta la corrección cuando la ficha original
     // era un decreto y la cita resultante declara un Decreto Supremo.
-    const reconciledReference = /^decreto\s+supremo\s+n(?:[.°º]\s*)*(\d{1,8}\s*-\s*((?:19|20)\d{2})\s*-\s*[a-z]{2,20})\b/iu.exec(
-      source.title,
-    );
+    const reconciledReference =
+      /^decreto\s+supremo\s+n(?:[.°º]\s*)*(\d{1,8}\s*-\s*((?:19|20)\d{2})\s*-\s*[a-z]{2,20})\b/iu.exec(
+        source.title,
+      );
     const reconciledDecreeIdentity =
       document?.documentType === 'DECRETO_SUPREMO' &&
       !/decreto\s+supremo/iu.test(document.title) &&
@@ -419,6 +420,17 @@ export const CORPUS_RULES: Record<string, { module?: string; title?: RegExp }> =
     'REM-05': { module: 'Remuneraciones' },
     'REM-06': { module: 'Remuneraciones' },
     'REM-07': { module: 'Remuneraciones' },
+    'SA-01': { title: /licencias, permisos y vacaciones/iu },
+    'SA-02': { title: /licencias, permisos y vacaciones/iu },
+    'SA-03': { title: /licencias, permisos y vacaciones/iu },
+    // El único FAQ con ese término es de reasignación y no contiene una
+    // definición, finalidad ni canal de obtención del escalafón.
+    'SA-04': {
+      title: /escalaf[oó]n.*(?:registro|procedimiento|obtenci[oó]n)/iu,
+    },
+    'SA-05': { title: /326-2017-MINEDU/iu },
+    'SA-06': { title: /proceso administrativo disciplinario/iu },
+    'SA-07': { title: /326-2017-MINEDU/iu },
     E03: { title: /074-2019-EF/iu },
   };
 /** Mismo evaluador en la primera corrida y todas sus repeticiones. */

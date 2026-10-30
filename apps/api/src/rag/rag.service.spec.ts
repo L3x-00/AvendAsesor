@@ -1658,6 +1658,50 @@ describe('RagService', () => {
     });
   });
 
+  it('preserva el módulo real de una figura administrativa asociada a un módulo vecino', async () => {
+    const tardinessSource = {
+      ...source,
+      chunkContent:
+        'La tercera tardanza se considera inasistencia injustificada solo para el descuento. El factor se calcula por minuto de tardanza.',
+      chunkId: 'tardiness-neighbor',
+      documentId: 'attendance-document',
+      documentTitle: 'RSG N.° 326-2017-MINEDU',
+      documentVersionId: 'attendance-version',
+      moduleIds: ['module-remuneraciones'],
+      moduleNames: ['Remuneraciones'],
+    };
+    gateway.search.mockImplementation(
+      (input: { query: string; selectedModuleId: string | null }) =>
+        Promise.resolve(
+          !input.selectedModuleId &&
+            /tardanza descuento asistencia/iu.test(input.query)
+            ? [tardinessSource]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve(
+        'Mi director me quiere descontar por llegar tarde 10 minutos, ¿eso procede?',
+        'module-a',
+      ),
+    ).resolves.toMatchObject({
+      kind: 'topic_change',
+      resolvedModule: { id: 'module-remuneraciones', name: 'Remuneraciones' },
+      sources: [expect.objectContaining({ chunkId: 'tardiness-neighbor' })],
+    });
+
+    const canonicalCalls = gateway.search.mock.calls
+      .map(
+        ([input]) =>
+          input as { query: string; selectedModuleId: string | null },
+      )
+      .filter((input) => /tardanza descuento asistencia/iu.test(input.query));
+    expect(canonicalCalls.map((input) => input.selectedModuleId)).toEqual(
+      expect.arrayContaining([null, 'module-a']),
+    );
+  });
+
   it('keeps a selected submodule under its actual root instead of declaring a false topic change', async () => {
     const associatedSource = {
       ...source,

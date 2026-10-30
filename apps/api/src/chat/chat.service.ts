@@ -25,6 +25,10 @@ import { NoSupportMarkerFilter } from '../rag/no-support-marker';
 import { noIdentifiedChangesMessage } from '../rag/document-status';
 import { causalClarificationFor } from '../rag/process-clarification';
 import { recoverDomainQuery } from '../rag/query-normalization';
+import {
+  hasUnsupportedAdministrativeInference,
+  needsAdministrativeAnswerSafety,
+} from '../rag/administrative-answer-safety';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
@@ -1816,7 +1820,9 @@ export class ChatService {
     // única forma de impedir que una cifra inventada llegue a la pantalla
     // cuando ninguna fuente trae un importe que la respalde.
     const salaryProfile = salaryQuestionProfile(salaryQuestion);
-    const deferStreaming = salaryProfile.isSalaryQuestion;
+    const deferStreaming =
+      salaryProfile.isSalaryQuestion ||
+      needsAdministrativeAnswerSafety(effectiveQuestion);
 
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
@@ -1977,6 +1983,20 @@ export class ChatService {
       : placedAnswer;
     const truncated = cutByLength || finishReason === 'length';
     if (truncated) finalAnswer = `${finalAnswer}${truncationNote}`;
+
+    if (hasUnsupportedAdministrativeInference(effectiveQuestion, finalAnswer)) {
+      yield* this.completeWithoutEvidence({
+        conversationId: turn.conversationId,
+        faqMemory,
+        message:
+          'La fuente recuperada trata esta consulta, pero no permite confirmar ese detalle sin extender una regla más allá de lo que dice el documento. Para no darte una orientación incorrecta, necesito evidencia que lo establezca expresamente.',
+        retrievalScope,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      return;
+    }
 
     // La validación salarial de una tabla se hace antes de emitir el texto
     // retenido. Si el importe no coincide con su fila, se pide la condición

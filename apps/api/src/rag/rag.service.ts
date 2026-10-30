@@ -63,6 +63,10 @@ import {
   isRuralPadronQuestion,
   remunerationEvidenceQueries,
 } from './remuneration-retrieval';
+import {
+  administrativeEvidenceQueries,
+  isDirectAdministrativeEvidence,
+} from './administrative-retrieval';
 
 export interface ResolvedModule {
   id: string;
@@ -400,7 +404,9 @@ function withoutExplicitlyRepealedSalarySources(
   if (!salaryQuestionProfile(question).isSalaryQuestion) return sources;
   const repealed = new Set<string>();
   for (const source of sources) {
-    for (const clause of source.chunkContent.matchAll(REPEAL_REFERENCE_WINDOW)) {
+    for (const clause of source.chunkContent.matchAll(
+      REPEAL_REFERENCE_WINDOW,
+    )) {
       for (const reference of exactDocumentReferencesIn(clause[0])) {
         if (reference.complete) repealed.add(reference.lookupKey);
       }
@@ -409,7 +415,9 @@ function withoutExplicitlyRepealedSalarySources(
   if (!repealed.size) return sources;
   return sources.filter((source) => {
     const ownReferences = exactDocumentReferencesIn(source.documentTitle);
-    return !ownReferences.some((reference) => repealed.has(reference.lookupKey));
+    return !ownReferences.some((reference) =>
+      repealed.has(reference.lookupKey),
+    );
   });
 }
 
@@ -477,7 +485,10 @@ function withSalaryRuleContext(
       );
       return Number(rightHasArticle) - Number(leftHasArticle);
     })[0];
-  if (!article || delivered.some((source) => source.chunkId === article.chunkId)) {
+  if (
+    !article ||
+    delivered.some((source) => source.chunkId === article.chunkId)
+  ) {
     return delivered;
   }
   // El artículo define a qué cifra corresponde el fragmento contiguo. Va
@@ -502,7 +513,11 @@ function relevantSources(
 ): RetrievedChunk[] {
   const ranked = uniqueSources(byScoreDescending(sources));
   const direct = question
-    ? ranked.filter((source) => isDirectRemunerationEvidence(question, source))
+    ? ranked.filter(
+        (source) =>
+          isDirectRemunerationEvidence(question, source) ||
+          isDirectAdministrativeEvidence(question, source),
+      )
     : [];
   const eligible = prepareDelivery(
     uniqueSources([
@@ -533,7 +548,12 @@ function relevantSources(
   // fuente que efectivamente trata el padron, ascenso o revisión de planilla
   // consultado frente al orden cronológico del resto.
   for (const source of eligible) {
-    if (!question || !isDirectRemunerationEvidence(question, source)) continue;
+    if (
+      !question ||
+      (!isDirectRemunerationEvidence(question, source) &&
+        !isDirectAdministrativeEvidence(question, source))
+    )
+      continue;
     if (selectedChunks.has(source.chunkId)) continue;
     selected.push(source);
     selectedChunks.add(source.chunkId);
@@ -1507,32 +1527,60 @@ export class RagService {
         selectedSearch,
       ]);
 
-      // Las consultas cotidianas sobre RIM, padrones rurales o una boleta no
-      // suelen repetir la terminología jurídica de los documentos. Cuando la
-      // pregunta aporta señales inequívocas se ejecutan búsquedas canónicas
-      // acotadas en el mismo alcance y módulo; no añaden hechos ni relajan el
-      // umbral de admisión de evidencia.
-      const remunerationQueries = remunerationEvidenceQueries(salaryQuestion);
-      if (remunerationQueries.length) {
+      // Las consultas cotidianas pueden omitir la terminología jurídica que
+      // usan los documentos. Las expansiones solo se habilitan por señales
+      // inequívocas de la pregunta, se ejecutan en el mismo alcance y módulo,
+      // no añaden hechos y no relajan el umbral de admisión de evidencia.
+      const canonicalQueries = [
+        ...remunerationEvidenceQueries(salaryQuestion),
+        ...administrativeEvidenceQueries(question),
+      ].filter((value, index, values) => values.indexOf(value) === index);
+      if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embeddings.embed(
-          remunerationQueries,
+          canonicalQueries,
           INTERACTIVE_AI_LIMITS,
         );
         const canonicalResults = await Promise.all(
-          remunerationQueries.map((canonicalQuery, index) => {
+          canonicalQueries.map((canonicalQuery, index) => {
             const embedding = canonicalEmbeddings[index];
             if (!embedding || embedding.length !== 1536) {
-              return Promise.resolve<RetrievedChunk[]>([]);
+              return Promise.resolve({
+                global: [] as RetrievedChunk[],
+                selected: [] as RetrievedChunk[],
+              });
             }
-            return this.gateway.search({
-              ...searchBase,
-              embedding,
-              query: canonicalQuery,
-              selectedModuleId,
-            });
+            // La consulta técnica mantiene la búsqueda acotada, pero también
+            // revisa el corpus completo. El catálogo puede asociar una norma
+            // transversal a otro módulo (por ejemplo, asistencia y jornada),
+            // y esa asociación no debe ocultar una fuente que trata de forma
+            // directa la pregunta seleccionada.
+            return Promise.all([
+              this.gateway.search({
+                ...searchBase,
+                embedding,
+                query: canonicalQuery,
+                selectedModuleId: null,
+              }),
+              selectedModuleId
+                ? this.gateway.search({
+                    ...searchBase,
+                    embedding,
+                    query: canonicalQuery,
+                    selectedModuleId,
+                  })
+                : Promise.resolve<RetrievedChunk[]>([]),
+            ]).then(([global, selected]) => ({ global, selected }));
           }),
         );
-        const canonicalSources = canonicalResults.flat();
+        const canonicalGlobalSources = canonicalResults.flatMap(
+          (result) => result.global,
+        );
+        const canonicalSelectedSources = canonicalResults.flatMap(
+          (result) => result.selected,
+        );
+        const canonicalSources = selectedModuleId
+          ? canonicalSelectedSources
+          : canonicalGlobalSources;
         const identityAnchors = await this.identityAnchorsFor(canonicalSources);
         const ruralContext = await this.ruralRemunerationContextFor(
           canonicalSources,
@@ -1545,6 +1593,7 @@ export class RagService {
             ...identityAnchors,
             ...ruralContext,
           ];
+          rawGlobalSources = [...rawGlobalSources, ...canonicalGlobalSources];
         } else {
           rawGlobalSources = [
             ...rawGlobalSources,
@@ -1566,8 +1615,8 @@ export class RagService {
               reconcileRetrievedDocumentIdentities(
                 sources
                   .map(sanitizeRetrievedEvidence)
-                  .filter(
-                    (source): source is RetrievedChunk => Boolean(source),
+                  .filter((source): source is RetrievedChunk =>
+                    Boolean(source),
                   ),
               ),
               salaryQuestion,
@@ -1621,6 +1670,41 @@ export class RagService {
       // se exige una coincidencia léxica real y una similitud mínima; si no
       // hay ninguna, el turno sigue siendo «sin evidencia».
       const semanticFloor = Math.max(0.45, searchBase.matchThreshold - 0.05);
+      const administrativeRescueQueries =
+        administrativeEvidenceQueries(question);
+      if (administrativeRescueQueries.length) {
+        const rescueEmbeddings = await this.embeddings.embed(
+          administrativeRescueQueries,
+          INTERACTIVE_AI_LIMITS,
+        );
+        const rescueSources = await Promise.all(
+          administrativeRescueQueries.map((query, index) => {
+            const embedding = rescueEmbeddings[index];
+            if (!embedding || embedding.length !== 1536) {
+              return Promise.resolve<RetrievedChunk[]>([]);
+            }
+            return this.gateway.search({
+              ...searchBase,
+              embedding,
+              matchThreshold: 0,
+              query,
+              selectedModuleId: null,
+            });
+          }),
+        );
+        // Una coincidencia léxica directa con la figura técnica buscada es más
+        // segura que devolver insuficiencia por una similitud vectorial baja.
+        // No se relaja para resultados que solo comparten vocabulario laboral.
+        globalRoutingSources = routingSources(
+          rescueSources
+            .flat()
+            .filter(
+              (candidate) =>
+                candidate.lexicalScore > 0 &&
+                isDirectAdministrativeEvidence(question, candidate),
+            ),
+        );
+      }
       const lexicalSearch = (
         embedding: number[],
         query: string,
@@ -1644,12 +1728,14 @@ export class RagService {
               ),
             ),
           );
-      [globalRoutingSources, selectedRoutingSources] = await Promise.all([
-        lexicalSearch(globalEmbedding, globalQuery, null),
-        selectedModuleId
-          ? lexicalSearch(selectedEmbedding, selectedQuery, selectedModuleId)
-          : Promise.resolve([] as RetrievedChunk[]),
-      ]);
+      if (!globalRoutingSources.length && !selectedRoutingSources.length) {
+        [globalRoutingSources, selectedRoutingSources] = await Promise.all([
+          lexicalSearch(globalEmbedding, globalQuery, null),
+          selectedModuleId
+            ? lexicalSearch(selectedEmbedding, selectedQuery, selectedModuleId)
+            : Promise.resolve([] as RetrievedChunk[]),
+        ]);
+      }
     }
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };
@@ -1767,6 +1853,38 @@ export class RagService {
     const currentRoute = globalRoutingSources.length
       ? routeSources(globalRoutingSources)
       : null;
+    const directAdministrativeSources = administrativeEvidenceQueries(question)
+      .length
+      ? relevantSources(
+          byScoreDescending(
+            [...selectedRoutingSources, ...globalRoutingSources].filter(
+              (source) => isDirectAdministrativeEvidence(question, source),
+            ),
+          ),
+          matchCount,
+          question,
+        )
+      : [];
+    const directAdministrativeRoute = directAdministrativeSources.length
+      ? routeSources(directAdministrativeSources)
+      : null;
+    // Una fuente directa evita pedir una precisión innecesaria, pero conserva
+    // el módulo que el catálogo le atribuye. Si pertenece a otro módulo, el
+    // cambio de tema sigue el flujo normal y nunca se registra bajo el módulo
+    // previamente seleccionado.
+    if (
+      directAdministrativeRoute?.kind === 'resolved' &&
+      directAdministrativeRoute.resolvedModule
+    ) {
+      const resolvedModule = directAdministrativeRoute.resolvedModule;
+      return {
+        kind:
+          resolvedModule.id === selectedModuleId ? 'evidence' : 'topic_change',
+        resolvedModule,
+        sources: directAdministrativeSources,
+        topRelevanceScore: topScore(directAdministrativeSources),
+      };
+    }
     if (currentRoute) {
       if (
         currentRoute.kind === 'resolved' &&
