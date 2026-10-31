@@ -69,6 +69,7 @@ import {
 } from './administrative-retrieval';
 import {
   evaluationEvidenceQueries,
+  isCareerProgressionQuestion,
   isDirectEvaluationEvidence,
   isEvaluationSourceCompatible,
 } from './evaluation-retrieval';
@@ -86,6 +87,16 @@ import {
   legalTopicNeedsPrimaryText,
   namesOtherLaw,
 } from './legal-retrieval';
+import {
+  isDirectReassignmentEvidence,
+  isReassignmentCausalEvidence,
+  reassignmentEvidenceQueries,
+} from './reassignment-retrieval';
+import {
+  isDirectRationalizationEvidence,
+  rationalizationEvidenceQueries,
+} from './rationalization-retrieval';
+import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
 
 export interface ResolvedModule {
   id: string;
@@ -888,6 +899,16 @@ export function inheritedFactorQuestions(
   forceContext: boolean,
 ): string[] {
   if (!priorUserQuestions.length) return [];
+  // Una pregunta de ascenso o progresión de carrera tiene su propio tema y no
+  // hereda jornada, vínculo ni escala de una consulta salarial anterior: el
+  // dato de la escala aquí identifica el proceso, no una cifra. Si la pregunta
+  // pide una cifra, sí conserva los factores que la persona ya declaró.
+  if (
+    isCareerProgressionQuestion(question) &&
+    !salaryQuestionProfile(question).isSalaryQuestion
+  ) {
+    return [];
+  }
   if (
     !salaryQuestionProfile(question).isSalaryQuestion &&
     SELF_CONTAINED_NON_SALARY.test(normalizeSpanishText(question))
@@ -1081,6 +1102,12 @@ interface RetrieveOptions {
   legalCrossModule?: boolean;
   /** Nombre visible del módulo elegido, para conservarlo en la respuesta. */
   selectedModuleName?: string | null;
+  /**
+   * Intención temática principal detectada en el chat general. La recuperación
+   * conserva solo la documentación que trata ese proceso y no reparte la
+   * respuesta entre módulos que solo comparten vocabulario.
+   */
+  topicIntent?: TopicIntent | null;
 }
 
 @Injectable()
@@ -1575,6 +1602,8 @@ export class RagService {
         ...administrativeEvidenceQueries(question),
         ...evaluationEvidenceQueries(question),
         ...auxiliaryEvidenceQueries(question),
+        ...reassignmentEvidenceQueries(question),
+        ...rationalizationEvidenceQueries(question),
         ...legalEvidenceQueries(
           question,
           Boolean(options.legalModule || options.legalCrossModule),
@@ -1757,15 +1786,28 @@ export class RagService {
       // se exige una coincidencia léxica real y una similitud mínima; si no
       // hay ninguna, el turno sigue siendo «sin evidencia».
       const semanticFloor = Math.max(0.45, searchBase.matchThreshold - 0.05);
-      const administrativeRescueQueries =
-        administrativeEvidenceQueries(question);
-      if (administrativeRescueQueries.length) {
+      // Las expansiones canónicas traducen una intención ya reconocida a la
+      // denominación del corpus. Si la similitud vectorial no deja candidatos,
+      // se comprueban esas mismas consultas sin el umbral general, pero solo se
+      // admite un fragmento con coincidencia léxica real que trate directamente
+      // el concepto pedido. No se relaja el umbral para el resto de resultados.
+      const canonicalRescueQueries = [
+        ...remunerationEvidenceQueries(question),
+        ...administrativeEvidenceQueries(question),
+        ...evaluationEvidenceQueries(question),
+        ...auxiliaryEvidenceQueries(question),
+        ...reassignmentEvidenceQueries(question),
+        ...rationalizationEvidenceQueries(question),
+      ]
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .slice(0, 8);
+      if (canonicalRescueQueries.length) {
         const rescueEmbeddings = await this.embeddings.embed(
-          administrativeRescueQueries,
+          canonicalRescueQueries,
           INTERACTIVE_AI_LIMITS,
         );
         const rescueSources = await Promise.all(
-          administrativeRescueQueries.map((query, index) => {
+          canonicalRescueQueries.map((query, index) => {
             const embedding = rescueEmbeddings[index];
             if (!embedding || embedding.length !== 1536) {
               return Promise.resolve<RetrievedChunk[]>([]);
@@ -1779,9 +1821,6 @@ export class RagService {
             });
           }),
         );
-        // Una coincidencia léxica directa con la figura técnica buscada es más
-        // segura que devolver insuficiencia por una similitud vectorial baja.
-        // No se relaja para resultados que solo comparten vocabulario laboral.
         globalRoutingSources = routingSources(
           rescueSources
             .flat()
@@ -1789,7 +1828,11 @@ export class RagService {
               (candidate) =>
                 candidate.lexicalScore > 0 &&
                 (isDirectAdministrativeEvidence(question, candidate) ||
-                  isDirectEvaluationEvidence(question, candidate)),
+                  isDirectEvaluationEvidence(question, candidate) ||
+                  isDirectAuxiliaryEvidence(question, candidate) ||
+                  isDirectRemunerationEvidence(question, candidate) ||
+                  isDirectReassignmentEvidence(question, candidate) ||
+                  isDirectRationalizationEvidence(question, candidate)),
             ),
         );
       }
@@ -1827,6 +1870,58 @@ export class RagService {
     }
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {
       return { kind: 'no_evidence', topRelevanceScore: null };
+    }
+
+    // Chat general con una intención temática clara: la respuesta se arma solo
+    // con la documentación que trata ese proceso (y los fragmentos de su mismo
+    // documento), aunque el resto del corpus comparta vocabulario laboral. Si
+    // ninguna fuente lo trata, la ausencia se informa por tema; no se ofrece
+    // una lista de módulos alternativos.
+    if (
+      !selectedModuleId &&
+      options.topicIntent &&
+      !(
+        salaryQuestionProfile(salaryQuestion).isSalaryQuestion &&
+        options.topicIntent.id !== 'rural-allocation'
+      )
+    ) {
+      const topicIntent = options.topicIntent;
+      const intentSources = globalRoutingSources.filter((source) =>
+        isTopicIntentEvidence(topicIntent, question, source),
+      );
+      if (!intentSources.length) {
+        return { kind: 'no_evidence', topRelevanceScore: null };
+      }
+      const versions = new Set(
+        intentSources.map((source) => source.documentVersionId),
+      );
+      const evidence = globalRoutingSources.filter((source) =>
+        versions.has(source.documentVersionId),
+      );
+      let sources = relevantSources(evidence, matchCount, salaryQuestion);
+      if (topicIntent.id === 'reassignment') {
+        // La causal que la persona declaró («mi familia vive allá») debe estar
+        // entre los fragmentos entregados: la norma dedica secciones distintas
+        // a salud, emergencia, unidad familiar e interés personal.
+        const causalSources = byScoreDescending(evidence).filter((source) =>
+          isReassignmentCausalEvidence(question, source),
+        );
+        if (causalSources.length) {
+          sources = uniqueSources([
+            ...causalSources.slice(0, 2),
+            ...sources,
+          ]).slice(0, matchCount);
+        }
+      }
+      if (!sources.length) {
+        return { kind: 'no_evidence', topRelevanceScore: null };
+      }
+      return {
+        kind: 'evidence',
+        resolvedModule: routeSources(evidence).resolvedModule,
+        sources,
+        topRelevanceScore: topScore(sources),
+      };
     }
 
     if (!selectedModuleId) {
