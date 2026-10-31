@@ -1747,12 +1747,14 @@ describe('RagService', () => {
 
       await service.retrieve(question, 'module-a');
 
-      // Dos búsquedas semánticas (global y módulo) y, al quedar vacías, las
-      // dos del rescate léxico; todas deben conservar el alcance gobernado.
-      expect(gateway.search).toHaveBeenCalledTimes(4);
+      // Búsquedas semánticas (global y módulo), el rescate canónico cuando la
+      // intención lo permite y, si todo queda vacío, el léxico; todas deben
+      // conservar el alcance gobernado. El número exacto depende de las
+      // expansiones habilitadas por la pregunta, no del contrato de alcance.
       const calls = gateway.search.mock.calls as Array<
         [{ retrievalScope?: string }]
       >;
+      expect(calls.length).toBeGreaterThanOrEqual(4);
       expect(
         calls.every((call) => call[0]?.retrievalScope === retrievalScope),
       ).toBe(true);

@@ -21,7 +21,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "acceptance:hito3": "ts-node -T -P test/acceptance/tsconfig.json test/acceptance/hito3-client-cases.ts",
-    "acceptance:auxiliares": "ts-node -T -P test/acceptance/tsconfig.json test/acceptance/auxiliary-regression.ts"
+    "acceptance:auxiliares": "ts-node -T -P test/acceptance/tsconfig.json test/acceptance/auxiliary-regression.ts",
+    "acceptance:chat-general": "ts-node -T -P test/acceptance/tsconfig.json test/acceptance/general-regression.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

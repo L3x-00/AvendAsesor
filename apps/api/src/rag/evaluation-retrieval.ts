@@ -2,7 +2,14 @@ import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
 const ASCENSO_SIGNAL =
-  /\b(?:ascens(?:o|os)|ascend(?:er|ido|iendo)|asciend[oa])\b/u;
+  /\b(?:ascens(?:o|os)|ascend(?:er|ido|iendo|e|en|io)|asciend(?:[oa]|e|en))\b/u;
+/**
+ * Progresión en la carrera expresada sin el término técnico: «subir a segunda
+ * escala», «tengo años en primera escala, ¿cómo paso a la segunda?». Es una
+ * consulta de ascenso, no una pregunta por una cifra.
+ */
+const CAREER_PROGRESSION_SIGNAL =
+  /\b(?:subir|pasar|ascender|promocionar|avanzar)\s+(?:a\s+|hacia\s+|de\s+)?(?:la\s+)?(?:segunda|tercera|cuarta|quinta|sexta|septima|octava|\d)\s+escala\b|\b(?:primera|1)\s+escala\b[\s\S]{0,80}\b(?:subir|pasar|ascender|promocionar|avanzar)\b|\b(?:de|desde)\s+(?:la\s+)?(?:primera|1)\s+escala\b[\s\S]{0,60}\b(?:a|hacia)\s+(?:la\s+)?(?:segunda|2)\b/u;
 const DESEMPENO_SIGNAL =
   /\b(?:evaluaci[oó]n\s+de[ls]?\s+desempe[nñ]o|desempe[nñ]o\s+docente)\b/u;
 const NAMED_SIGNAL = /\b(?:nombrad[oa]s?|carrera\s+publica\s+magisterial)\b/u;
@@ -10,6 +17,11 @@ const CONTRACT_SIGNAL =
   /\b(?:contratad[oa]s?|contrataci[oó]n|renovaci[oó]n\s+de\s+contrato)\b/u;
 const COMPARISON_SIGNAL =
   /\b(?:diferencia(?:s)?|compar(?:a|ar|acion)|versus|\bvs\b)\b/u;
+
+export function isCareerProgressionQuestion(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  return ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text);
+}
 
 function textOf(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
@@ -20,7 +32,7 @@ function textOf(
 export function evaluationEvidenceQueries(question: string): string[] {
   const text = normalizeSpanishText(question);
   const queries: string[] = [];
-  if (ASCENSO_SIGNAL.test(text)) {
+  if (ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text)) {
     queries.push(
       'concurso de ascenso escala magisterial requisitos etapas prueba nacional trayectoria profesional',
     );
@@ -31,7 +43,7 @@ export function evaluationEvidenceQueries(question: string): string[] {
     );
   }
   if (
-    ASCENSO_SIGNAL.test(text) &&
+    (ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text)) &&
     /\b(?:permanencia|a[nñ]os?\s+minimos?|tiempo\s+minimo)\b/u.test(text)
   ) {
     queries.push(
@@ -39,13 +51,13 @@ export function evaluationEvidenceQueries(question: string): string[] {
     );
   }
   if (
-    ASCENSO_SIGNAL.test(text) &&
+    (ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text)) &&
     /\b(?:maestr[ií]a|maestro|grado\s+academico)\b/u.test(text)
   ) {
     queries.push('concurso ascenso maestría puntaje trayectoria profesional');
   }
   if (
-    ASCENSO_SIGNAL.test(text) &&
+    (ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text)) &&
     /\b(?:resultado|reclamo|impugnaci[oó]n)\b/u.test(text)
   ) {
     queries.push(
@@ -71,7 +83,9 @@ export function isEvaluationSourceCompatible(
 ): boolean {
   const questionText = normalizeSpanishText(question);
   const evidence = textOf(source);
-  const asksAscenso = ASCENSO_SIGNAL.test(questionText);
+  const asksAscenso =
+    ASCENSO_SIGNAL.test(questionText) ||
+    CAREER_PROGRESSION_SIGNAL.test(questionText);
   const asksDesempeno = DESEMPENO_SIGNAL.test(questionText);
   const compares = COMPARISON_SIGNAL.test(questionText);
 
@@ -103,7 +117,7 @@ export function isDirectEvaluationEvidence(
 ): boolean {
   const text = normalizeSpanishText(question);
   const evidence = textOf(source);
-  if (ASCENSO_SIGNAL.test(text)) {
+  if (ASCENSO_SIGNAL.test(text) || CAREER_PROGRESSION_SIGNAL.test(text)) {
     return /\b(?:concurso|proceso)\s+de\s+ascenso\b|\bascenso\s+de\s+escala\b/u.test(
       evidence,
     );

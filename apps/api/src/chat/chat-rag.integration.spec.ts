@@ -850,8 +850,11 @@ describe('ChatService + RagService integration', () => {
       data: { moduleId: CONTRACTS_MODULE_ID },
       type: 'conversation',
     });
+    // El chat general identifica el tema de cada consulta, pero no queda atado
+    // al módulo: la conversación sigue siendo general para la siguiente
+    // pregunta. Las fuentes sí provienen del módulo correcto.
     expect(auxiliaryEvents[0]).toMatchObject({
-      data: { moduleId: AUXILIARIES_MODULE_ID },
+      data: { moduleId: null },
       type: 'conversation',
     });
     expect(history.completions[0]?.sources).toEqual([

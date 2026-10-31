@@ -135,6 +135,7 @@ import {
   sourceLocationRequestIn,
 } from './intent/source-location';
 import { normalizeSpanishText } from '../rag/text-normalization';
+import { detectTopicIntent, type TopicIntent } from '../rag/topic-intent';
 
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
@@ -828,6 +829,22 @@ export function moduleEvidenceGapMessage(
 }
 
 /**
+ * Insuficiencia del chat general cuando la intención temática sí se identificó
+ * pero no hay fuente que la trate. Nombra el tema (y el módulo que lo cubre si
+ * está vacío) y no propone módulos alternativos: la persona no tiene que elegir
+ * un tema ni cambiar de conversación.
+ */
+export function topicIntentWithoutEvidenceMessage(
+  intent: TopicIntent,
+  documented: boolean | null,
+): string {
+  if (documented === false) {
+    return `Por ahora no cuento con documentación disponible sobre ${intent.label} en el módulo «${intent.moduleName}», por lo que no puedo darte una explicación normativa verificada.`;
+  }
+  return `Identifiqué que tu consulta trata sobre ${intent.label}, pero no encontré evidencia documental disponible para responderla, así que no puedo darte una explicación normativa verificada.`;
+}
+
+/**
  * Negativa verificable cuando la persona pide una norma concreta que no forma
  * parte de la evidencia aprobada. Solo repite identidades extraídas de la
  * pregunta: no completa títulos, vigencia ni contenido con conocimiento del
@@ -1268,6 +1285,28 @@ export class ChatService {
       ? (storedContext?.selectedModuleId ?? null)
       : input.selectedModuleId;
     let conversationId = continuesConversation ? input.conversationId : null;
+    // El chat general se reconoce por la selección del cliente (sin módulo).
+    // Cada turno identifica su tema; el módulo que un turno anterior hubiera
+    // adoptado no convierte la conversación en un chat de módulo.
+    // El chat general se reconoce por el módulo efectivo de la conversación. El
+    // cliente omite `selectedModuleId` al continuar, así que no se puede usar
+    // la entrada para decidir: un chat de módulo lo conserva desde el
+    // historial y no debe degradarse a general.
+    const generalChat = selectedModuleId === null;
+    const detectedIntent = generalChat
+      ? detectTopicIntent(effectiveQuestion)
+      : null;
+    // La intención de proceso no manda sobre una pregunta de cifra: la
+    // respuesta salarial ya combina la norma con la tabla y sus condiciones.
+    // La asignación por ruralidad es la excepción porque el pago es el tema.
+    const topicIntent =
+      detectedIntent &&
+      !(
+        salaryQuestionProfile(effectiveQuestion).isSalaryQuestion &&
+        detectedIntent.id !== 'rural-allocation'
+      )
+        ? detectedIntent
+        : null;
     const explanation = jornadaClarificationExplanation(
       question,
       conversationContext.at(-1),
@@ -1420,27 +1459,42 @@ export class ChatService {
     const forceSalaryContext =
       Boolean(lastDocumentAnswer) ||
       conversationContext.at(-1)?.role === 'clarification';
-    const inheritedSalaryQuestions = salaryQuestionsForTurn({
-      acceptedQuestion,
-      effectiveQuestion,
-      forceSalaryContext,
-      priorUserQuestions,
-    });
-    const personalSalary = hasPersonalSalaryContext(
-      effectiveQuestion,
-      priorUserQuestions,
-    );
+    // Responder una aclaración no es un tema nuevo: conserva el contexto que
+    // permitió precisarlo. Una intención propia y autocontenida sí inicia tema.
+    const answersPendingClarification =
+      conversationContext.at(-1)?.role === 'clarification';
+    const standaloneIntent =
+      Boolean(topicIntent) &&
+      !acceptedQuestion &&
+      !lastDocumentAnswer &&
+      !answersPendingClarification;
+    // Una intención temática propia (reasignación, incapacidad, ruralidad,
+    // ascenso, auxiliares, PAD o racionalización) inicia un tema nuevo: no
+    // hereda jornada, vínculo, escala ni cargo de la consulta salarial anterior.
+    const inheritedSalaryQuestions = standaloneIntent
+      ? []
+      : salaryQuestionsForTurn({
+          acceptedQuestion,
+          effectiveQuestion,
+          forceSalaryContext,
+          priorUserQuestions,
+        });
+    const personalSalary = standaloneIntent
+      ? false
+      : hasPersonalSalaryContext(effectiveQuestion, priorUserQuestions);
     // El contexto de recuperación conserva el tema, no la consulta salarial,
     // cuando el turno actual no es salarial. Así un pedido de documentos no
     // arrastra «cuánto gana un docente» a la búsqueda vectorial.
     const salaryRetrievalRequest =
       salaryQuestionProfile(effectiveQuestion).isSalaryQuestion ||
       inheritedSalaryQuestions.length > 0;
-    const retrievalTopicContext = salaryRetrievalRequest
-      ? priorUserQuestions
-      : priorUserQuestions.filter(
-          (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
-        );
+    const retrievalTopicContext = standaloneIntent
+      ? []
+      : salaryRetrievalRequest
+        ? priorUserQuestions
+        : priorUserQuestions.filter(
+            (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
+          );
     // La respuesta anterior solo entra en la búsqueda cuando la propuesta tiene
     // un deíctico que resolver («estos cargos»).
     const acceptedAnswerContext =
@@ -1469,6 +1523,7 @@ export class ChatService {
       retrievalContext,
       {
         forceContext,
+        ...(topicIntent ? { topicIntent } : {}),
         ...(personalSalary ? { personalSalary: true } : {}),
         ...(acceptedQuestion
           ? { salaryContextQuestions: inheritedSalaryQuestions }
@@ -1518,14 +1573,15 @@ export class ChatService {
 
     // Los botones de temas que antes acompañaban a la aclaración se conservan en
     // la respuesta: el panorama salarial no debe dejar la conversación sin una
-    // ruta sugerida. Se prefieren las rutas en conflicto y, si no las hay, los
-    // módulos de las fuentes recuperadas.
-    const broadSalaryModules = broadSalaryAnswerTurn
-      ? recommendedModules(
-          retrieval.kind === 'ambiguous' ? retrieval.modules : null,
-          retrieval.sources,
-        )
-      : [];
+    // ruta sugerida. Con una intención temática clara no se ofrecen módulos
+    // alternativos: la persona ya expresó qué proceso consulta.
+    const broadSalaryModules =
+      broadSalaryAnswerTurn && !topicIntent
+        ? recommendedModules(
+            retrieval.kind === 'ambiguous' ? retrieval.modules : null,
+            retrieval.sources,
+          )
+        : [];
 
     if (retrieval.kind === 'topic_change') {
       conversationId = null;
@@ -1545,12 +1601,15 @@ export class ChatService {
       retrieval.kind === 'evidence' &&
       !selectedModuleId &&
       retrieval.resolvedModule &&
-      !conversationId
+      !conversationId &&
+      !topicIntent
     ) {
       // Solo una conversación NUEVA adopta el módulo detectado. Una
       // conversación general (sin módulo) sigue siéndolo: antes se partía en
       // otra y la precisión del usuario ("de reasignación") llegaba al modelo
-      // sin la pregunta original.
+      // sin la pregunta original. Con intención temática por turno, el chat
+      // general no queda atado a un módulo: la siguiente consulta puede tratar
+      // otro proceso.
       selectedModuleId = retrieval.resolvedModule.id;
     }
 
@@ -1657,23 +1716,42 @@ export class ChatService {
         !input.conversationId &&
         !selectedModuleId &&
         !hasEducationalSignal(effectiveQuestion);
-      const message = retrieval.incompleteExactReferences?.length
-        ? incompleteExactReferencesMessage(retrieval.incompleteExactReferences)
-        : retrieval.missingExactReferences?.length
-          ? missingExactReferencesMessage(retrieval.missingExactReferences)
-          : selectedModuleId && moduleCorpus?.name
-            ? // Dentro de un módulo la falta de evidencia se explica con su
-              // nombre: el tema ya está elegido y no corresponde pedir el
-              // trámite ni sugerir otros módulos. El módulo sí tiene corpus; lo
-              // que falta es un documento que trate esta consulta.
-              moduleEvidenceGapMessage(
-                moduleCorpus.name,
-                effectiveQuestion,
-                retrievalScope,
-              )
-            : unrelated
-              ? buildConversationalReply('unrelated_no_evidence')
-              : undefined;
+      const intentState = topicIntent
+        ? await this.topicIntentModuleState(topicIntent)
+        : null;
+      const intentMessage =
+        topicIntent && intentState
+          ? topicIntentWithoutEvidenceMessage(
+              topicIntent,
+              intentState.documented,
+            )
+          : undefined;
+      let message: string | undefined;
+      if (retrieval.incompleteExactReferences?.length) {
+        message = incompleteExactReferencesMessage(
+          retrieval.incompleteExactReferences,
+        );
+      } else if (retrieval.missingExactReferences?.length) {
+        message = missingExactReferencesMessage(
+          retrieval.missingExactReferences,
+        );
+      } else if (intentMessage) {
+        // La intención ya está identificada: la falta es documental y se
+        // explica por tema, sin pedir una aclaración ni ofrecer módulos.
+        message = intentMessage;
+      } else if (selectedModuleId && moduleCorpus?.name) {
+        // Dentro de un módulo la falta de evidencia se explica con su nombre:
+        // el tema ya está elegido y no corresponde pedir el trámite ni sugerir
+        // otros módulos. El módulo sí tiene corpus; lo que falta es un
+        // documento que trate esta consulta.
+        message = moduleEvidenceGapMessage(
+          moduleCorpus.name,
+          effectiveQuestion,
+          retrievalScope,
+        );
+      } else if (unrelated) {
+        message = buildConversationalReply('unrelated_no_evidence');
+      }
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -2838,6 +2916,37 @@ export class ChatService {
         }`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Cobertura del módulo que trata la intención detectada en el chat general.
+   * `documented: false` solo cuando el catálogo confirma que no hay documentos;
+   * `null` cuando no se puede comprobar, para no afirmar una ausencia falsa.
+   */
+  private async topicIntentModuleState(
+    intent: TopicIntent,
+  ): Promise<{ documented: boolean | null; name: string }> {
+    try {
+      const modules = await this.cachedModules();
+      const wanted = normalizeSpanishText(intent.moduleName);
+      const module = modules.find(
+        (item) =>
+          !item.parentModuleId && normalizeSpanishText(item.name) === wanted,
+      );
+      if (!module) return { documented: null, name: intent.moduleName };
+      const state = await this.moduleCorpusState(module.id);
+      return {
+        documented: state ? state.documented : null,
+        name: state?.name ?? module.name,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo comprobar el módulo de la intención: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return { documented: null, name: intent.moduleName };
     }
   }
 
