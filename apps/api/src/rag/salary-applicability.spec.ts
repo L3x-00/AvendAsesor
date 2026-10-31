@@ -1886,7 +1886,9 @@ describe('assessSalaryAnswerCoverage', () => {
 describe('factores coloquiales de remuneración', () => {
   it('reconoce las escalas ordinales y conserva los factores ya declarados', () => {
     expect(
-      salaryQuestionProfile('Soy docente de quinta escala, cuánto me corresponde?'),
+      salaryQuestionProfile(
+        'Soy docente de quinta escala, cuánto me corresponde?',
+      ),
     ).toMatchObject({
       isSalaryQuestion: true,
       role: 'docente',

@@ -6,10 +6,8 @@ import { normalizeSpanishText } from './text-normalization';
  * solo traducen una pregunta cotidiana a la denominación del corpus; no
  * agregan requisitos, montos ni plazos que la fuente no contenga.
  */
-const AUXILIARY_SIGNAL =
-  /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
-const AUXILIARY_EDUCATION_SIGNAL =
-  /\bauxiliar(?:es)?\s+de\s+educaci[oó]n\b/u;
+const AUXILIARY_SIGNAL = /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
+const AUXILIARY_EDUCATION_SIGNAL = /\bauxiliar(?:es)?\s+de\s+educaci[oó]n\b/u;
 const CONTRACT_SIGNAL =
   /\b(?:trabajar|postular|contrataci[oó]n|contrato|requisitos?)\b/u;
 const SALARY_SIGNAL =
@@ -47,6 +45,7 @@ export function auxiliaryEvidenceQueries(question: string): string[] {
   if (CONTRACT_SIGNAL.test(text) && !APPOINTMENT_SIGNAL.test(text)) {
     queries.push(
       'contratación auxiliares educación requisitos por nivel modalidad capacitación edad documentos expediente 2026',
+      'requisitos específicos postulación auxiliar de educación nivel inicial primaria secundaria capacitación cincuenta horas pedagógicas especialidad distinta edad máxima expediente anexos',
     );
   }
   if (SALARY_SIGNAL.test(text)) {
@@ -65,6 +64,8 @@ export function auxiliaryEvidenceQueries(question: string): string[] {
   if (REASSIGNMENT_SIGNAL.test(text)) {
     queries.push(
       'reasignación auxiliar de educación otra UGEL requisitos causales titular nombrado',
+      'reasignación auxiliar de educación desplazamiento plaza de origen nivel modalidad interés personal unidad familiar salud emergencia',
+      'causales reasignación auxiliar de educación interés personal unidad familiar salud emergencia racionalización de plazas',
     );
   }
   if (VACATION_SIGNAL.test(text)) {
@@ -75,6 +76,7 @@ export function auxiliaryEvidenceQueries(question: string): string[] {
   if (EXCHANGE_SIGNAL.test(text)) {
     queries.push(
       'permuta auxiliar de educación requisitos años servicio edad cronograma',
+      'permuta auxiliar de educación informe escalafonario antigüedad treinta días nombrado cinco años tres años último lugar impedimento sesenta y uno edad vigencia primer día hábil marzo',
     );
   }
   return [...new Set(queries)].slice(0, 4);
@@ -113,7 +115,8 @@ export function isAuxiliarySourceCompatible(
       evidence,
     );
   }
-  if (REASSIGNMENT_SIGNAL.test(requested)) return /\breasignacion\b/u.test(evidence);
+  if (REASSIGNMENT_SIGNAL.test(requested))
+    return /\breasignacion\b/u.test(evidence);
   if (EXCHANGE_SIGNAL.test(requested)) return /\bpermuta\b/u.test(evidence);
   if (VACATION_SIGNAL.test(requested)) return /\bvacacion/u.test(evidence);
   if (MEDICAL_LEAVE_SIGNAL.test(requested)) {
@@ -138,20 +141,70 @@ export function isDirectAuxiliaryEvidence(
   question: string,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): boolean {
-  if (!isAuxiliaryQuestion(question) || !isAuxiliarySourceCompatible(question, source))
+  if (
+    !isAuxiliaryQuestion(question) ||
+    !isAuxiliarySourceCompatible(question, source)
+  )
     return false;
   const requested = normalizeSpanishText(question);
   const evidence = textOf(source);
   if (!AUXILIARY_EDUCATION_SIGNAL.test(evidence)) return false;
   if (CONTRACT_SIGNAL.test(requested) && !APPOINTMENT_SIGNAL.test(requested))
-    return /\bcontratacion\b/u.test(evidence) && /\brequisito|documento|expediente\b/u.test(evidence);
-  if (APPOINTMENT_SIGNAL.test(requested)) return /\bnombramiento\b/u.test(evidence);
-  if (REASSIGNMENT_SIGNAL.test(requested)) return /\breasignacion\b/u.test(evidence);
+    return (
+      /\bcontratacion\b/u.test(evidence) &&
+      /\brequisito|documento|expediente\b/u.test(evidence)
+    );
+  if (APPOINTMENT_SIGNAL.test(requested))
+    return /\bnombramiento\b/u.test(evidence);
+  if (REASSIGNMENT_SIGNAL.test(requested))
+    return /\breasignacion\b/u.test(evidence);
   if (EXCHANGE_SIGNAL.test(requested)) return /\bpermuta\b/u.test(evidence);
   if (VACATION_SIGNAL.test(requested)) return /\bvacacion/u.test(evidence);
-  if (MEDICAL_LEAVE_SIGNAL.test(requested)) return /\blicencia\b/u.test(evidence);
-  return (
-    SALARY_SIGNAL.test(requested) &&
-    hasAuxiliarySalaryRule(evidence)
-  );
+  if (MEDICAL_LEAVE_SIGNAL.test(requested))
+    return /\blicencia\b/u.test(evidence);
+  return SALARY_SIGNAL.test(requested) && hasAuxiliarySalaryRule(evidence);
+}
+
+/**
+ * Fragmento que abre la sección normativa de la figura consultada: su
+ * definición, requisitos o causales completas. Una mención incidental de la
+ * misma palabra en un procedimiento posterior (una notificación, una
+ * prohibición, un anexo) también coincide, pero no puede desplazar la sección
+ * que responde la pregunta. Se usa solo para ordenar evidencia ya admitida por
+ * la búsqueda; no amplía el corpus ni relaja los filtros.
+ */
+export function isCoreAuxiliaryEvidence(
+  question: string,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
+): boolean {
+  if (!isDirectAuxiliaryEvidence(question, source)) return false;
+  const requested = normalizeSpanishText(question);
+  const evidence = textOf(source);
+  if (APPOINTMENT_SIGNAL.test(requested)) {
+    return /\bconcurso publico de nombramiento\b/u.test(evidence);
+  }
+  if (REASSIGNMENT_SIGNAL.test(requested)) {
+    return /\b7\.1\s+(?:de la\s+)?reasignacion\b|\bla reasignacion es el desplazamiento\b|\b7\.1\.3\s+causales\b/u.test(
+      evidence,
+    );
+  }
+  if (EXCHANGE_SIGNAL.test(requested)) {
+    return /\b7\.2\s+(?:de la\s+)?permuta\b|\bla permuta es un desplazamiento\b/u.test(
+      evidence,
+    );
+  }
+  if (VACATION_SIGNAL.test(requested)) {
+    return /\b6\.4\s+remuneracion vacacional\b/u.test(evidence);
+  }
+  if (MEDICAL_LEAVE_SIGNAL.test(requested)) {
+    return /\b7\.4\.2\s+licencia por incapacidad temporal\b|\blicencia por incapacidad temporal\b/u.test(
+      evidence,
+    );
+  }
+  if (CONTRACT_SIGNAL.test(requested)) {
+    return /\b5\.7(?:\.1|\.2)?\s+requisitos\b|\brequisitos especificos\b/u.test(
+      evidence,
+    );
+  }
+  return SALARY_SIGNAL.test(requested) && hasAuxiliarySalaryRule(evidence);
 }

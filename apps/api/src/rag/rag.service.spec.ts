@@ -778,7 +778,8 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
+        chunkContent:
+          'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -817,7 +818,8 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
+        chunkContent:
+          'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -851,7 +853,8 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
+        chunkContent:
+          'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -877,7 +880,8 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
+        chunkContent:
+          'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],
@@ -949,7 +953,8 @@ describe('RagService', () => {
       },
       {
         ...source,
-        chunkContent: 'Cronograma de la contratación de auxiliares de educación.',
+        chunkContent:
+          'Cronograma de la contratación de auxiliares de educación.',
         chunkId: 'chunk-auxiliares',
         moduleIds: ['module-auxiliares'],
         moduleNames: ['Auxiliar de educación'],

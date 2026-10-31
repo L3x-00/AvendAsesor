@@ -146,7 +146,11 @@ function contributesMaterialBeyond(
   // siguiente contiene el importe). Se conserva solo si ese artículo aún no
   // está en la evidencia visible del mismo documento.
   const article = /\barticulo\s+(\d+)\b/u.exec(candidateText)?.[1];
-  if (article && !new RegExp(`\\barticulo\\s+${article}\\b`, 'u').test(primaryText)) {
+  if (
+    article &&
+    (markersIn(candidateText).length > 0 || hasSubstantiveFigure(candidateText)) &&
+    !new RegExp(`\\barticulo\\s+${article}\\b`, 'u').test(primaryText)
+  ) {
     return true;
   }
 

@@ -8,6 +8,8 @@ import {
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
 import { asksForDates } from './dated-evidence';
 import {
+  asksForMedicalLeave,
+  asksForProcedure,
   buildAdvisorySystemPrompt,
   buildAdvisoryUserPrompt,
   buildEvidenceSystemPrompt,
@@ -78,6 +80,8 @@ export class OpenAiAnswerGateway implements AnswerGateway {
           ? buildAdvisorySystemPrompt()
           : buildEvidenceSystemPrompt({
               asksForDates: asksForDates(input.question),
+              asksForMedicalLeave: asksForMedicalLeave(input.question),
+              asksForProcedure: asksForProcedure(input.question),
             });
     const userPrompt =
       mode === 'summary'

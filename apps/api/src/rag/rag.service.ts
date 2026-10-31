@@ -74,7 +74,9 @@ import {
 } from './evaluation-retrieval';
 import {
   auxiliaryEvidenceQueries,
+  isAuxiliaryQuestion,
   isAuxiliarySourceCompatible,
+  isCoreAuxiliaryEvidence,
   isDirectAuxiliaryEvidence,
 } from './auxiliary-retrieval';
 
@@ -562,8 +564,18 @@ function relevantSources(
   // La evidencia directa se reserva antes de completar el cupo con documentos
   // de incremento general. No aumenta el conjunto recuperado: solo protege la
   // fuente que efectivamente trata el padron, ascenso o revisión de planilla
-  // consultado frente al orden cronológico del resto.
-  for (const source of eligible) {
+  // consultado frente al orden cronológico del resto. En auxiliares, la sección
+  // que define la figura y fija sus requisitos o causales precede a las
+  // menciones incidentales de la misma palabra en trámites posteriores.
+  const directOrder =
+    question && isAuxiliaryQuestion(question)
+      ? [...eligible].sort(
+          (left, right) =>
+            Number(isCoreAuxiliaryEvidence(question, right)) -
+            Number(isCoreAuxiliaryEvidence(question, left)),
+        )
+      : eligible;
+  for (const source of directOrder) {
     if (
       !question ||
       (!isDirectRemunerationEvidence(question, source) &&
@@ -1914,7 +1926,7 @@ export class RagService {
       }
     }
     if (directAuxiliaryRoots.size === 1) {
-      const [id, name] = [...directAuxiliaryRoots.entries()][0]!;
+      const [id, name] = [...directAuxiliaryRoots.entries()][0];
       return {
         kind: id === selectedModuleId ? 'evidence' : 'topic_change',
         resolvedModule: {

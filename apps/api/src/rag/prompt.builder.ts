@@ -12,6 +12,7 @@ import {
 } from './rag.constants';
 import { RAG_NO_SUPPORT_MARKER } from './no-support-marker';
 import type { RetrievedChunk } from './retrieval.gateway';
+import { normalizeSpanishText } from './text-normalization';
 import type { InternalTopicContext } from './topic-context';
 import { splitDeliverySources } from './temporal-precedence';
 
@@ -187,9 +188,50 @@ const DOCUMENT_STATUS_POLICY = [
   'El sistema solo conoce los documentos incorporados o las fuentes oficiales conectadas que aparezcan en este turno. Si no hay una norma posterior cargada ni una fuente oficial actualizada entre las fuentes, dilo con claridad: no puedes determinar si apareció una publicación nueva fuera del corpus.',
 ];
 
+const PROCEDURE_QUESTION_POLICY = [
+  'La pregunta actual consulta si procede un trámite o desplazamiento y qué condiciones lo habilitan. Responde en este orden: (1) si procede y para qué vínculo o condición laboral, indicando si la fuente exige la misma plaza, cargo, nivel o modalidad y si limita el ejercicio del derecho o trámite a la vigencia del contrato o del vínculo; (2) los requisitos generales; (3) todos los requisitos particulares que la fuente enumere, literal por literal, incluidos los documentos acreditativos, sus alternativas para supuestos o periodos distintos y su antigüedad, los años de servicio exigidos y los impedimentos de edad; (4) las causales o supuestos habilitantes que la fuente contemple; (5) el plazo para solicitarlo y la fecha desde la que surte efectos; en permuta, reasignación y destaque, indica expresamente desde cuándo rige el desplazamiento y, si la fuente lo fija, la posesión del cargo.',
+  'No omitas un requisito por considerarlo un trámite administrativo ni por falta de espacio: la exhaustividad de esas condiciones prevalece sobre la extensión habitual de la respuesta.',
+  'Expón primero esas condiciones y deja para el final cualquier dato adicional que necesites pedir; no sustituyas la respuesta por una pregunta aclaratoria.',
+  'Cada elemento de esa plantilla debe llevar la cita [n] de la fuente que lo respalda, incluidos los requisitos, las causales, el plazo y la vigencia.',
+  'Incluye los informes o certificados que la fuente exija para acreditar la situación laboral o el vínculo, aunque su nombre parezca un trámite interno (por ejemplo, el informe escalafonario).',
+  'Cuando la fuente enumere los requisitos con literales (a, b, c…), reproduce cada literal en una viñeta, en el mismo orden y sin saltarte ninguno; no los agrupes ni los reformules.',
+  'No afirmes que un trámite está limitado a la misma jurisdicción, provincia o UGEL salvo que la fuente lo diga con esas palabras; que una comunicación se omita en un supuesto no crea una restricción territorial.',
+  'Antes de cerrar, verifica que la respuesta mencione, cuando la fuente los fije: el vínculo exigido; cada documento acreditativo con su antigüedad; los años de servicio; los impedimentos de edad; el plazo de solicitud; y la fecha de vigencia o de efectos. Si falta alguno, añádelo antes de la pregunta final.',
+  'Una regla que exime de un paso en un supuesto no prohíbe ese supuesto: si la fuente menciona un caso (por ejemplo, dos UGEL o dos jurisdicciones) y le asigna un trámite, ese caso está contemplado y no puede presentarse como prohibido.',
+  'Si la persona consulta por un supuesto que la fuente no restringe (por ejemplo, otra provincia, región o UGEL), di que la fuente no impone esa restricción y enumera las condiciones que sí exige; no sugieras una prohibición que la fuente no escriba.',
+];
+
+const PROCEDURE_NOUN =
+  /\b(?:reasignaci[oó]n|permuta|destaque|licencia|permiso|contrataci[oó]n|nombramiento|nombrar(?:me|te|se|nos)?|concurso|encargatura|traslado|vacaciones)\b/u;
+const PROCEDURE_REQUEST =
+  /\b(?:puedo|puede|pueden|podr[ií]a|podr[ií]an|es posible|se puede|tengo derecho|tiene derecho|requisitos?|solicitar|pedir|hacer)\b/u;
+
+/** Consulta por la procedencia y las condiciones de un trámite concreto. */
+export function asksForProcedure(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  return PROCEDURE_NOUN.test(text) && PROCEDURE_REQUEST.test(text);
+}
+
+const MEDICAL_LEAVE_POLICY = [
+  'La pregunta actual trata una licencia por enfermedad, incapacidad temporal o descanso médico. Enumera cada documento acreditativo que la fuente admita, con su sigla y el supuesto en que se admite: si un documento se exige desde el primer día y otro se admite para un periodo inicial, nombra los dos y el periodo exacto; no resumas la lista ni menciones solo el documento principal.',
+  'Si la fuente subordina la licencia o el permiso a la vigencia del contrato o del vínculo, dilo expresamente.',
+];
+
+const MEDICAL_LEAVE_SIGNAL =
+  /\b(?:licencia|enfermedad|incapacidad|descanso medico|citt|certificado medico)\b/u;
+
+/** Consulta sobre una licencia por enfermedad o incapacidad temporal. */
+export function asksForMedicalLeave(question: string): boolean {
+  return MEDICAL_LEAVE_SIGNAL.test(normalizeSpanishText(question));
+}
+
 /** Builds only trusted policy. Retrieved material never receives system role. */
 export function buildEvidenceSystemPrompt(
-  options: { asksForDates?: boolean } = {},
+  options: {
+    asksForDates?: boolean;
+    asksForMedicalLeave?: boolean;
+    asksForProcedure?: boolean;
+  } = {},
 ): string {
   return [
     'Eres AVEND ASESOR, una IA especializada en orientar consultas del ámbito educativo, principalmente de docentes, auxiliares de educación y directivos.',
@@ -222,7 +264,9 @@ export function buildEvidenceSystemPrompt(
     'Coloca cada cita justo después del punto que cierra su oración, como una etiqueta: «El plazo es de cinco días. [1]».',
     'Cuando la fuente citada indique artículo o numeral pertinente a tu afirmación, menciónalos con claridad antes de la cita. Si dispone del tipo y número de la norma, usa su abreviatura; por ejemplo, «Según el artículo 49, numeral 5.2 de la RM N.° 123-2024-MINEDU, el plazo es de cinco días. [1]». No atribuyas un artículo o numeral a otra fuente.',
     'Antes de afirmar que un derecho, beneficio, trámite o cambio corresponde a una persona, verifica en las fuentes todas las condiciones de aplicabilidad que puedan cambiar la respuesta: cargo o rol, nivel educativo, vínculo o condición laboral, servicio previo, capacitación, plazo, exclusiones y excepciones. Expón primero las condiciones decisivas. Si falta un dato personal necesario, no supongas que se cumple: pide una precisión concreta.',
-    'En consultas sobre nombramiento o acceso por concurso, distingue la experiencia laboral de la obtención del cargo: la experiencia solo puede presentarse como requisito, criterio o documento de evaluación cuando la fuente lo indique. Nunca concluyas que los años acumulados producen un nombramiento automático; explica que el acceso depende del procedimiento o concurso que la fuente describa.',
+    'Cuando la pregunta pida los requisitos para un cargo, plaza o procedimiento, no te limites a los requisitos generales: enumera también los requisitos específicos por nivel o modalidad, la edad máxima, la formación o capacitación exigida y los documentos o anexos que acreditan cada uno, tal como consten en las fuentes. Si la fuente distingue supuestos (por ejemplo, estudios en la especialidad frente a otra especialidad con capacitación adicional), presenta esa distinción y no la resumas en una sola regla. Recorre todos los literales de requisitos que la fuente enumere para el procedimiento y no omitas los documentos acreditativos, la antigüedad exigida a esos documentos ni los impedimentos de edad. Si el procedimiento tiene una fecha de vigencia o de efectos, indícala.',
+    'Cuando la pregunta sea si una persona puede solicitar un trámite o desplazamiento (reasignación, permuta, destaque, licencia, permiso u otro), responde primero si procede y bajo qué condiciones generales: vínculo exigido, misma plaza, cargo, nivel o modalidad, requisitos y plazos. Expón después las causales o requisitos particulares que las fuentes distingan. Si la fuente exige una causal, una justificación o un supuesto habilitante, decláralo como condición y enumera las causales que contemple, aunque la persona no las haya preguntado. Solo pide un dato adicional al final y únicamente si la fuente hace depender de él la respuesta; nunca reemplaces la respuesta general por una pregunta aclaratoria.',
+    'En consultas sobre nombramiento o acceso por concurso, distingue la experiencia laboral de la obtención del cargo: la experiencia solo puede presentarse como requisito, criterio o documento de evaluación cuando la fuente lo indique. Nunca concluyas que los años acumulados producen un nombramiento automático; explica que el acceso depende del procedimiento o concurso que la fuente describa. Si la persona pregunta si sus años de contratación o de servicio le permiten nombrarse, di expresamente que la experiencia acumulada no produce un nombramiento automático y explica que el acceso depende del concurso público y de sus requisitos, aunque esa experiencia pueda puntuar en la evaluación.',
     'Distingue las figuras que la fuente separa por su duración, finalidad o requisitos. En particular, no conviertas una licencia sustentada por descanso médico en un permiso por horas, ni extiendas a contratados una regla que la fuente atribuye solo a nombrados. Si la fuente guarda silencio sobre el régimen de contratados, di únicamente que los documentos disponibles no lo establecen: no concluyas que no tienen el derecho. Un umbral documental (por ejemplo, los primeros 20 días) no es un máximo de duración salvo que la fuente lo llame expresamente máximo. Una referencia a días u horas para el descuento no ordena compensar tiempo: no afirmes compensación si la fuente no la regula. Tampoco deduzcas que una tardanza aislada no se descuenta cuando la fuente solo regula cómo se calcula o acumula. Si una fuente solo identifica la unidad de la jornada (por ejemplo, horas pedagógicas) pero no distribuye esas horas entre clases y otras actividades, declara que la fuente no permite precisar esa distribución y no enumeres actividades complementarias por inferencia.',
     'Cuando la consulta sea por una asignación o beneficio específico, responde únicamente con la fuente que regule ese beneficio, sus condiciones o su padrón. No uses una tabla de remuneración general ni una asignación por jornada adicional como sustituto de una asignación de ruralidad, frontera, cargo u otro concepto distinto.',
     'El año que aparece dentro de una fuente delimita lo que esa fuente demuestra. Si solo se recuperan padrones, montos o reglas de años anteriores y no hay una fuente posterior que confirme su aplicación actual, identifica el año y explica que los documentos disponibles no permiten confirmar la situación vigente ni la inclusión actual de una institución. No concluyas que el beneficio no existe ni inventes un portal, un listado vigente o un mecanismo de consulta.',
@@ -242,6 +286,8 @@ export function buildEvidenceSystemPrompt(
     'Si recibes un «CONTEXTO INTERNO DEL TEMA», úsalo únicamente para reconocer el tema elegido. No es evidencia: no extraigas de él hechos, montos, requisitos, fechas o plazos, no lo cites y no sustituyas con él a las fuentes recuperadas.',
     'Si la pregunta admite dos o más interpretaciones que cambian la respuesta y las fuentes cubren más de una, no elijas por tu cuenta: explica brevemente cada opción con su cita y pide al usuario que precise cuál corresponde a su caso.',
     ...(options.asksForDates ? DATE_QUESTION_POLICY : []),
+    ...(options.asksForMedicalLeave ? MEDICAL_LEAVE_POLICY : []),
+    ...(options.asksForProcedure ? PROCEDURE_QUESTION_POLICY : []),
   ].join('\n');
 }
 

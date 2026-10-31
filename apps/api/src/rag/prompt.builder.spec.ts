@@ -1,4 +1,6 @@
 import {
+  asksForMedicalLeave,
+  asksForProcedure,
   buildAdvisoryUserPrompt,
   buildContextualUserPrompt,
   buildEvidenceSystemPrompt,
@@ -563,5 +565,30 @@ describe('fragmentos que empiezan a mitad de una oración', () => {
 
     expect(prompt).toContain(`Contenido:\n${chunkContent}`);
     expect(prompt).not.toContain('[…]');
+  });
+});
+
+describe('preguntas por procedimiento', () => {
+  it('solo añade la política de condiciones cuando se consulta un trámite', () => {
+    const general = buildEvidenceSystemPrompt();
+    const procedure = buildEvidenceSystemPrompt({ asksForProcedure: true });
+
+    expect(general).not.toContain('si procede un trámite o desplazamiento');
+    expect(buildEvidenceSystemPrompt({ asksForProcedure: false })).toBe(general);
+    expect(procedure.startsWith(general)).toBe(true);
+    expect(procedure).toContain('la exhaustividad de esas condiciones prevalece');
+    expect(asksForProcedure('¿Un auxiliar puede pedir reasignación?')).toBe(true);
+    expect(asksForProcedure('¿Cuánto gana un auxiliar?')).toBe(false);
+  });
+
+  it('solo añade la política de licencias cuando la consulta trata una enfermedad', () => {
+    const general = buildEvidenceSystemPrompt();
+    const leave = buildEvidenceSystemPrompt({ asksForMedicalLeave: true });
+
+    expect(general).not.toContain('La pregunta actual trata una licencia por enfermedad');
+    expect(leave.startsWith(general)).toBe(true);
+    expect(leave).toContain('no resumas la lista ni menciones solo el documento principal');
+    expect(asksForMedicalLeave('¿Tengo derecho a licencia por enfermedad?')).toBe(true);
+    expect(asksForMedicalLeave('Trabajo 30 horas en secundaria')).toBe(false);
   });
 });

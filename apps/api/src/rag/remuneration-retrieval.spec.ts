@@ -1,6 +1,7 @@
 import type { RetrievedChunk } from './retrieval.gateway';
 import {
   isDirectRemunerationEvidence,
+  isPayrollReviewQuestion,
   remunerationEvidenceQueries,
 } from './remuneration-retrieval';
 
@@ -34,7 +35,9 @@ describe('remunerationEvidenceQueries', () => {
 
   it('reconoce la flexión coloquial de ascender y busca el acto de planilla', () => {
     expect(
-      remunerationEvidenceQueries('Si asciendo de escala, cambia mi remuneración?'),
+      remunerationEvidenceQueries(
+        'Si asciendo de escala, cambia mi remuneración?',
+      ),
     ).toContain(
       'ascenso de escala magisterial acto resolutivo pago planilla única de pagos',
     );
@@ -52,12 +55,24 @@ describe('remunerationEvidenceQueries', () => {
 });
 
 describe('isDirectRemunerationEvidence', () => {
+  it('no confunde una finalidad de planilla ni un reintegro administrativo con revisión remunerativa', () => {
+    expect(
+      isPayrollReviewQuestion(
+        '¿Cuál es la finalidad del instructivo para elaborar la planilla de pagos?',
+      ),
+    ).toBe(false);
+    expect(
+      isPayrollReviewQuestion('¿Qué dice sobre reintegro extraordinario?'),
+    ).toBe(false);
+  });
   it('prioriza un acto de ascenso que deriva en pago y no una escala genérica', () => {
     const question = 'Si asciendo de escala, cambia mi remuneración?';
     expect(
       isDirectRemunerationEvidence(
         question,
-        source('El acto resolutivo de ascenso de escala magisterial deriva en pago por planilla.'),
+        source(
+          'El acto resolutivo de ascenso de escala magisterial deriva en pago por planilla.',
+        ),
       ),
     ).toBe(true);
     expect(
@@ -124,7 +139,8 @@ describe('isDirectRemunerationEvidence', () => {
   });
 
   it('exige padrón habilitante para una asignación rural y excluye jornada adicional', () => {
-    const question = 'Si trabajo en una zona rural, ¿me corresponde una asignación?';
+    const question =
+      'Si trabajo en una zona rural, ¿me corresponde una asignación?';
     expect(
       isDirectRemunerationEvidence(
         question,

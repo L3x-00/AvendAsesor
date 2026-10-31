@@ -33,10 +33,10 @@ const AMOUNT_PATTERN_ALL = new RegExp(AMOUNT_PATTERN.source, 'gu');
 const SALARY_CLAUSE_SPLIT = /,(?!\d)|\s+(?:y|e|pero|mientras|aunque)\s+|[;]/u;
 
 const SALARY_TERMS =
-  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gan(?:a|an|amos|ar|aria|arian)|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
+  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gan(?:a|an|amos)|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
 /** «Ganar un concurso» no pregunta un importe; «cuánto debería ganar» sí. */
 const SALARY_AMOUNT_QUESTION =
-  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b|\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)\b|\bme\s+corresponde\b/u;
+  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano|gana)\b|\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)\b|\bme\s+corresponde\b/u;
 
 /** La finalidad de una norma de pagos no pide un importe de esa norma. */
 const DOCUMENT_PURPOSE_REQUEST =
@@ -279,16 +279,14 @@ const ORDINAL_SCALES: ReadonlyMap<string, string> = new Map([
 
 /** Todas las escalas nombradas; «escala III» y «escala 3» son la misma. */
 function scalesIn(text: string): string[] {
-  return sortedUnique(
-    [
-      ...[...text.matchAll(SCALE_PATTERN_ALL)].map(
-        (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
-      ),
-      ...[...text.matchAll(ORDINAL_SCALE_PATTERN_ALL)].map(
-        (match) => ORDINAL_SCALES.get(match[1]) ?? match[1],
-      ),
-    ],
-  );
+  return sortedUnique([
+    ...[...text.matchAll(SCALE_PATTERN_ALL)].map(
+      (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
+    ),
+    ...[...text.matchAll(ORDINAL_SCALE_PATTERN_ALL)].map(
+      (match) => ORDINAL_SCALES.get(match[1]) ?? match[1],
+    ),
+  ]);
 }
 
 /**
@@ -526,7 +524,7 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
     // Una comparación («nombrados y contratados») no pertenece a un solo
     // vínculo. Dejarlo en null evita descartar la evidencia del segundo régimen
     // antes de que la respuesta pueda contrastarlos.
-    condition: conditions.length === 1 ? conditions[0] ?? null : null,
+    condition: conditions.length === 1 ? (conditions[0] ?? null) : null,
     isSalaryQuestion:
       SALARY_TERMS.test(salaryText) || SALARY_AMOUNT_QUESTION.test(salaryText),
     jornadaHours: hoursIn(text)[0] ?? null,
@@ -639,9 +637,7 @@ function salarySourceConflictsWithProfile(
     // no declara este factor, no se puede usar la otra para excluir todo el
     // fragmento; la ausencia del dato no prueba incompatibilidad.
     if (valuesByAmount.some((values) => values.length === 0)) return false;
-    return valuesByAmount.every(
-      (values) => !values.includes(String(expected)),
-    );
+    return valuesByAmount.every((values) => !values.includes(String(expected)));
   });
 }
 

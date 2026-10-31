@@ -1247,10 +1247,13 @@ describe('buildExtractiveSalaryAnswer', () => {
   it('declara el límite temporal del padrón sin inferir una inclusión actual', () => {
     const result = buildExtractiveSalaryAnswer(
       [
-        source('Anexo 1: Padrón de Instituciones Educativas Públicas rurales.', {
-          chunkId: 'padron-2015',
-          issuanceYear: 2015,
-        }),
+        source(
+          'Anexo 1: Padrón de Instituciones Educativas Públicas rurales.',
+          {
+            chunkId: 'padron-2015',
+            issuanceYear: 2015,
+          },
+        ),
       ],
       '¿Cómo sé si mi institución figura en los padrones de ruralidad?',
       'current',
@@ -1279,7 +1282,9 @@ describe('buildExtractiveSalaryAnswer', () => {
 
     expect(result?.answer).toContain('deducciones en planilla');
     expect(result?.answer).toContain('Oficina de Personal');
-    expect(result?.answer).toContain('no establecen un canal, plazo ni recurso');
+    expect(result?.answer).toContain(
+      'no establecen un canal, plazo ni recurso',
+    );
     expect(result?.sources).toHaveLength(2);
   });
 });

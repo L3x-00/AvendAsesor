@@ -16,17 +16,17 @@ const RURAL_SIGNAL =
   /\b(?:rural(?:es|idad)?|zona\s+rural|[aá]mbito\s+rural)\b/u;
 const PADRON_SIGNAL = /\b(?:padr[oó]n(?:es)?|figura|incluid[oa]|listad[oa])\b/u;
 const PAYROLL_DETAIL_SIGNAL =
-  /\b(?:descuento(?:s)?|deducci[oó]n|reintegro(?:s)?|diferencia(?:s)?\s+remunerativa(?:s)?|monto\s+menor)\b/u;
+  /\b(?:descuento(?:s)?|deducci[oó]n|diferencia(?:s)?\s+remunerativa(?:s)?|monto\s+menor)\b/u;
+const REINTEGRATION_SIGNAL = /\breintegro(?:s)?\b/u;
 const PAYROLL_DOCUMENT_SIGNAL = /\b(?:boleta|planilla)\b/u;
 const PAYROLL_DOCUMENT_CONTEXT =
-  /\b(?:pago(?:s)?|remuneraci[oó]n(?:es)?|sueldo(?:s)?|haberes|descuento(?:s)?|deducci[oó]n|reintegro(?:s)?)\b/u;
+  /\b(?:remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|haberes|descuento(?:s)?|deducci[oó]n|reintegro(?:s)?)\b/u;
 const CLAIM_SIGNAL = /\b(?:reclamo|reclamar|revision|revisar)\b/u;
 const SALARY_REVIEW_CONTEXT =
   /\b(?:remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|haberes)\b/u;
 const ASCENSO_SIGNAL =
   /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u;
-const ALLOCATION_SIGNAL =
-  /\b(?:asignaci[oó]n|bono|beneficio|pago)\b/u;
+const ALLOCATION_SIGNAL = /\b(?:asignaci[oó]n|bono|beneficio|pago)\b/u;
 const AMOUNT_REQUEST_SIGNAL =
   /\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)|\bme\s+corresponde\b/u;
 
@@ -45,9 +45,10 @@ function ownDocumentReferencePrecedes(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
   contentIndex: number,
 ): boolean {
-  const reference = /(\d{1,8})\s*-\s*((?:19|20)\d{2})\s*-\s*([a-z]{2,20})/iu.exec(
-    source.documentTitle,
-  );
+  const reference =
+    /(\d{1,8})\s*-\s*((?:19|20)\d{2})\s*-\s*([a-z]{2,20})/iu.exec(
+      source.documentTitle,
+    );
   // Los dobles de prueba y algunos documentos no normativos no declaran número
   // en el título; no se les atribuye una cabecera inexistente.
   if (!reference) return true;
@@ -110,6 +111,9 @@ export function isPayrollReviewQuestion(question: string): boolean {
     PAYROLL_DETAIL_SIGNAL.test(text) ||
     (PAYROLL_DOCUMENT_SIGNAL.test(text) &&
       PAYROLL_DOCUMENT_CONTEXT.test(text)) ||
+    (REINTEGRATION_SIGNAL.test(text) &&
+      (PAYROLL_DOCUMENT_SIGNAL.test(text) ||
+        SALARY_REVIEW_CONTEXT.test(text))) ||
     (CLAIM_SIGNAL.test(text) && SALARY_REVIEW_CONTEXT.test(text))
   );
 }
@@ -180,7 +184,6 @@ export function isDirectRemunerationEvidence(
   question: string,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): boolean {
-  const requested = normalizeSpanishText(question);
   const evidence = evidenceText(source);
   if (isRuralPadronQuestion(question)) {
     return isRuralPadronEvidence(source);
@@ -197,7 +200,9 @@ export function isDirectRemunerationEvidence(
   if (isPayrollReviewQuestion(question)) {
     return (
       /\b(?:planilla|boleta)\b/u.test(evidence) &&
-      /\b(?:descuento|deducci[oó]n|reintegro|validaci[oó]n|pago)\b/u.test(evidence)
+      /\b(?:descuento|deducci[oó]n|reintegro|validaci[oó]n|pago)\b/u.test(
+        evidence,
+      )
     );
   }
   return false;

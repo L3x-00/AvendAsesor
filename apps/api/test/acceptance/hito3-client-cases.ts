@@ -1570,14 +1570,16 @@ async function main(): Promise<void> {
   const aux01Pass =
     grounded(aux01) &&
     hasSource(aux01, /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu) &&
-    answerHas(aux01, /requisit|estudios|ciclo/u) &&
+    answerHas(aux01, /requisit|estudios|ciclo/u, /\b70\b/u, /\b50\b/u) &&
+    answerHas(aux01, /anexo|expediente|declaracion jurada/u) &&
+    !/\b65\b/u.test(normalizeSpanishText(aux01.answer)) &&
     !has(aux01, 'no_evidence');
   record(
     'AUX-01',
-    'Contratación: requisitos por nivel y expediente',
+    'Contratación: requisitos por nivel, edad y expediente',
     [aux01],
     aux01Pass,
-    `Fuente de contratación: ${hasSource(aux01, /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu)}; requisitos o estudios: ${answerHas(aux01, /requisit|estudios|ciclo/u)}; no cae en insuficiencia: ${!has(aux01, 'no_evidence')}.`,
+    `Fuente de contratación: ${hasSource(aux01, /contratat?ci[oó]n.*aux|aux.*contratat?ci[oó]n/iu)}; requisitos específicos (70 años, 50 horas): ${answerHas(aux01, /\b70\b/u, /\b50\b/u)}; expediente o anexos: ${answerHas(aux01, /anexo|expediente|declaracion jurada/u)}; no confunde con la edad de nombramiento: ${!/\b65\b/u.test(normalizeSpanishText(aux01.answer))}; no cae en insuficiencia: ${!has(aux01, 'no_evidence')}.`,
   );
 
   const aux02 = await ask(
@@ -1585,7 +1587,9 @@ async function main(): Promise<void> {
     { moduleId: auxiliares },
   );
   const aux02SafeAbsence =
-    has(aux02, 'no_evidence') && noEvidenceIsSafe(aux02) && !aux02.sources.length;
+    has(aux02, 'no_evidence') &&
+    noEvidenceIsSafe(aux02) &&
+    !aux02.sources.length;
   const aux02LimitedEvidence =
     grounded(aux02) &&
     hasSource(aux02, /158.*2025.*auxiliares/iu) &&
@@ -1608,15 +1612,22 @@ async function main(): Promise<void> {
   const aux03Pass =
     grounded(aux03) &&
     hasSource(aux03, /126.*2023.*auxiliares/iu) &&
-    answerHas(aux03, /incapacidad temporal|descanso medico|citt/u) &&
-    answerHas(aux03, /contratad/u) &&
+    answerHas(
+      aux03,
+      /incapacidad temporal/u,
+      /\bcitt\b/u,
+      /certificado medico|\bcm\b/u,
+      /contratad/u,
+      /vigencia (?:de (?:tu|su)|del) contrato/u,
+    ) &&
+    answerHas(aux03, /dos \(2\)|2 dias/u, /cinco \(5\)|5 dias/u) &&
     !has(aux03, 'no_evidence');
   record(
     'AUX-03',
-    'Licencia: incapacidad temporal, CITT y vínculo contratado',
+    'Licencia: incapacidad temporal, CITT/CM y vínculo contratado',
     [aux03],
     aux03Pass,
-    `Fuente de auxiliares: ${hasSource(aux03, /126.*2023.*auxiliares/iu)}; CITT o incapacidad: ${answerHas(aux03, /incapacidad temporal|descanso medico|citt/u)}; vínculo contratado: ${answerHas(aux03, /contratad/u)}.`,
+    `Fuente de auxiliares: ${hasSource(aux03, /126.*2023.*auxiliares/iu)}; incapacidad y CITT: ${answerHas(aux03, /incapacidad temporal/u, /\bcitt\b/u)}; alternativa CM: ${answerHas(aux03, /certificado medico|\bcm\b/u)}; vínculo contratado: ${answerHas(aux03, /contratad/u)}; vigencia del contrato: ${answerHas(aux03, /vigencia (?:de (?:tu|su)|del) contrato/u)}; plazos 2/5 días: ${answerHas(aux03, /dos \(2\)|2 dias/u, /cinco \(5\)|5 dias/u)}.`,
   );
 
   const aux04 = await ask(
@@ -1627,16 +1638,17 @@ async function main(): Promise<void> {
     grounded(aux04) &&
     hasSource(aux04, /nombramiento.*auxiliares|013.*2021/iu) &&
     answerHas(aux04, /concurso/u, /nombramiento/u) &&
+    answerHas(aux04, /\b65\b|requisitos generales/u) &&
     /(?:no|nunca).{0,80}(?:automatic|por si sola|de forma directa)/iu.test(
       normalizeSpanishText(aux04.answer),
     ) &&
     !has(aux04, 'no_evidence');
   record(
     'AUX-04',
-    'Nombramiento: concurso sin confundir experiencia de contratación',
+    'Nombramiento: concurso, edad máxima y experiencia que no nombra',
     [aux04],
     aux04Pass,
-    `Fuente de nombramiento: ${hasSource(aux04, /nombramiento.*auxiliares|013.*2021/iu)}; explica concurso: ${answerHas(aux04, /concurso/u, /nombramiento/u)}; no atribuye nombramiento automático: ${/(?:no|nunca).{0,80}(?:automatic|por si sola|de forma directa)/iu.test(normalizeSpanishText(aux04.answer))}.`,
+    `Fuente de nombramiento: ${hasSource(aux04, /nombramiento.*auxiliares|013.*2021/iu)}; explica concurso: ${answerHas(aux04, /concurso/u, /nombramiento/u)}; requisitos propios (65 años): ${answerHas(aux04, /\b65\b|requisitos generales/u)}; no atribuye nombramiento automático: ${/(?:no|nunca).{0,80}(?:automatic|por si sola|de forma directa)/iu.test(normalizeSpanishText(aux04.answer))}.`,
   );
 
   const aux05 = await ask(
@@ -1647,14 +1659,15 @@ async function main(): Promise<void> {
     grounded(aux05) &&
     hasSource(aux05, /126.*2023.*auxiliares/iu) &&
     answerHas(aux05, /reasignaci[oó]n/u, /ugel|dre/u) &&
+    answerHas(aux05, /nombrad/u, /mismo (?:cargo, )?nivel y modalidad/u, /causal/u) &&
     !has(aux05, 'clarification') &&
     !has(aux05, 'no_evidence');
   record(
     'AUX-05',
-    'Reasignación: explica la posibilidad antes de pedir causal',
+    'Reasignación: posibilidad, condiciones y causal antes de aclarar',
     [aux05],
     aux05Pass,
-    `Fuente de reasignación: ${hasSource(aux05, /126.*2023.*auxiliares/iu)}; explica UGEL/DRE: ${answerHas(aux05, /reasignaci[oó]n/u, /ugel|dre/u)}; no corta con aclaración: ${!has(aux05, 'clarification')}.`,
+    `Fuente de reasignación: ${hasSource(aux05, /126.*2023.*auxiliares/iu)}; explica UGEL/DRE: ${answerHas(aux05, /reasignaci[oó]n/u, /ugel|dre/u)}; vínculo nombrado: ${answerHas(aux05, /nombrad/u)}; mismo nivel y modalidad: ${answerHas(aux05, /mismo (?:cargo, )?nivel y modalidad/u)}; exige causal: ${answerHas(aux05, /causal/u)}; no corta con aclaración: ${!has(aux05, 'clarification')}.`,
   );
 
   const aux06 = await ask(
@@ -1663,15 +1676,16 @@ async function main(): Promise<void> {
   );
   const aux06Pass =
     grounded(aux06) &&
-    hasSource(aux06, /126.*2023.*auxiliares|121.*2018/iu) &&
-    answerHas(aux06, /vacacion/u, /nombrad|contratad/u) &&
+    hasSource(aux06, /126.*2023.*auxiliares/iu) &&
+    answerHas(aux06, /vacacion/u, /nombrad/u, /\b60\b|sesenta/u) &&
+    answerHas(aux06, /contratad/u, /truncas/u, /enero y febrero/u) &&
     !has(aux06, 'no_evidence');
   record(
     'AUX-06',
-    'Vacaciones: diferencia nombrados y contratados',
+    'Vacaciones: 60 días para nombrados y truncas para contratados',
     [aux06],
     aux06Pass,
-    `Fuente aplicable: ${hasSource(aux06, /126.*2023.*auxiliares|121.*2018/iu)}; diferencia vínculos: ${answerHas(aux06, /vacacion/u, /nombrad|contratad/u)}.`,
+    `Fuente aplicable: ${hasSource(aux06, /126.*2023.*auxiliares/iu)}; 60 días para nombrados: ${answerHas(aux06, /nombrad/u, /\b60\b|sesenta/u)}; truncas de contratados en enero y febrero: ${answerHas(aux06, /contratad/u, /truncas/u, /enero y febrero/u)}.`,
   );
 
   const aux07 = await ask(
@@ -1681,14 +1695,21 @@ async function main(): Promise<void> {
   const aux07Pass =
     grounded(aux07) &&
     hasSource(aux07, /126.*2023.*auxiliares/iu) &&
-    answerHas(aux07, /permuta/u) &&
+    answerHas(aux07, /permuta/u, /mismo nivel y modalidad/u) &&
+    answerHas(
+      aux07,
+      /cinco(?: \(5\))? a(?:n|ñ)os|\b5 a(?:n|ñ)os\b/iu,
+      /tres(?: \(3\))? a(?:n|ñ)os|\b3 a(?:n|ñ)os\b/iu,
+      /\b61\b/u,
+    ) &&
+    answerHas(aux07, /informe escalafonario/u, /octubre/u, /marzo/u) &&
     !has(aux07, 'no_evidence');
   record(
     'AUX-07',
-    'Permuta: condiciones citadas desde la norma de auxiliares',
+    'Permuta: requisitos, plazos y vigencia desde la norma de auxiliares',
     [aux07],
     aux07Pass,
-    `Fuente de permuta: ${hasSource(aux07, /126.*2023.*auxiliares/iu)}; identifica el procedimiento: ${answerHas(aux07, /permuta/u)}.`,
+    `Fuente de permuta: ${hasSource(aux07, /126.*2023.*auxiliares/iu)}; mismo nivel y modalidad: ${answerHas(aux07, /mismo nivel y modalidad/u)}; años y edad: ${answerHas(aux07, /cinco(?: \(5\))? a(?:n|ñ)os|\b5 a(?:n|ñ)os\b/iu, /tres(?: \(3\))? a(?:n|ñ)os|\b3 a(?:n|ñ)os\b/iu, /\b61\b/u)}; informe escalafonario, plazo y vigencia: ${answerHas(aux07, /informe escalafonario/u, /octubre/u, /marzo/u)}.`,
   );
 
   // Red-team evidence-only y charla.

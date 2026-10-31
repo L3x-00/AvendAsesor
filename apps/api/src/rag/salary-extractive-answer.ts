@@ -629,9 +629,7 @@ function ruralAllocationAnswer(
   if (!source) return null;
   const year = source.issuanceYear;
   const datedScope =
-    typeof year === 'number'
-      ? ` La fuente es del año ${year}.`
-      : '';
+    typeof year === 'number' ? ` La fuente es del año ${year}.` : '';
   return {
     answer:
       'La fuente recuperada regula una asignación por trabajo en ámbito rural. [1]' +
@@ -671,7 +669,9 @@ function payrollReviewAnswer(
   if (!asksPayrollReview(question)) return null;
   const deductions = sources.find((candidate) => {
     const text = normalizeSpanishText(candidate.chunkContent);
-    return /\b(?:deduccion|descuento)\b/u.test(text) && /\bplanilla\b/u.test(text);
+    return (
+      /\b(?:deduccion|descuento)\b/u.test(text) && /\bplanilla\b/u.test(text)
+    );
   });
   const responsibility = sources.find((candidate) => {
     const text = normalizeSpanishText(candidate.chunkContent);
@@ -798,8 +798,12 @@ function splitFirstScaleHourlyAmountIn(
   const scope = candidate.chunkContent.slice(0, secondArticleIndex);
   for (const match of amountMatchesIn(scope)) {
     const index = match.index ?? 0;
-    const before = normalizeSpanishText(scope.slice(Math.max(0, index - 100), index));
-    if (/\b(?:en\s+la\s+suma\s+de|asciende\s+a|equivale\s+a)\s*$/u.test(before)) {
+    const before = normalizeSpanishText(
+      scope.slice(Math.max(0, index - 100), index),
+    );
+    if (
+      /\b(?:en\s+la\s+suma\s+de|asciende\s+a|equivale\s+a)\s*$/u.test(before)
+    ) {
       return canonicalAmount(match[0]);
     }
   }
@@ -874,8 +878,12 @@ function firstScaleRimAnswer(
   const total = hourlyCents * profile.jornadaHours;
   if (!Number.isSafeInteger(total)) return null;
   const sourcesForAnswer =
-    article.chunkId === amountSource.chunkId ? [article] : [article, amountSource];
-  const citations = sourcesForAnswer.map((_, index) => `[${index + 1}]`).join('');
+    article.chunkId === amountSource.chunkId
+      ? [article]
+      : [article, amountSource];
+  const citations = sourcesForAnswer
+    .map((_, index) => `[${index + 1}]`)
+    .join('');
   return {
     answer: `La RIM por hora de la primera escala magisterial es ${formatSoles(hourlyCents)}. Para la jornada indicada de ${profile.jornadaHours} horas, el cálculo es ${formatSoles(total)} (${formatSoles(hourlyCents)} × ${profile.jornadaHours}). ${citations}`,
     hasVerifiedAmount: true,
@@ -933,8 +941,11 @@ function namedContractComparisonAnswer(
     return cents === null ? amount : formatSoles(cents);
   };
   const answerSources = [namedReference];
-  if (amountSource.chunkId !== namedReference.chunkId) answerSources.push(amountSource);
-  if (!answerSources.some((source) => source.chunkId === contractSource.chunkId)) {
+  if (amountSource.chunkId !== namedReference.chunkId)
+    answerSources.push(amountSource);
+  if (
+    !answerSources.some((source) => source.chunkId === contractSource.chunkId)
+  ) {
     answerSources.push(contractSource);
   }
   const namedCitation = answerSources.indexOf(namedReference) + 1;
@@ -1212,10 +1223,7 @@ export function buildExtractiveSalaryAnswer(
   // revisión de una boleta no piden el sueldo general. Si una tabla salarial
   // aparece por vecindad semántica, debe responder el modelo solo con la
   // evidencia del concepto solicitado y no sustituirlo por esa tabla.
-  if (
-    profile.asksSpecialAllocation ||
-    isAscensoQuestion(question)
-  ) {
+  if (profile.asksSpecialAllocation || isAscensoQuestion(question)) {
     return null;
   }
   const comparison = namedContractComparisonAnswer(sources, question);

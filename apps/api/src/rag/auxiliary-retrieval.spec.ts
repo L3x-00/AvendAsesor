@@ -5,10 +5,10 @@ import {
   isDirectAuxiliaryEvidence,
 } from './auxiliary-retrieval';
 
-function source(chunkContent: string, documentTitle = 'Norma auxiliar'): Pick<
-  RetrievedChunk,
-  'chunkContent' | 'documentTitle'
-> {
+function source(
+  chunkContent: string,
+  documentTitle = 'Norma auxiliar',
+): Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> {
   return { chunkContent, documentTitle };
 }
 
@@ -35,9 +35,9 @@ describe('auxiliaryEvidenceQueries', () => {
   });
 
   it('no activa una búsqueda de auxiliar ante una consulta docente', () => {
-    expect(auxiliaryEvidenceQueries('¿Qué vacaciones tiene un docente?')).toEqual(
-      [],
-    );
+    expect(
+      auxiliaryEvidenceQueries('¿Qué vacaciones tiene un docente?'),
+    ).toEqual([]);
   });
 });
 
@@ -46,7 +46,9 @@ describe('isAuxiliarySourceCompatible', () => {
     expect(
       isAuxiliarySourceCompatible(
         '¿Puedo nombrarme como auxiliar si ya llevo años contratado?',
-        source('Contratación de auxiliar de educación: experiencia laboral y puntaje.'),
+        source(
+          'Contratación de auxiliar de educación: experiencia laboral y puntaje.',
+        ),
       ),
     ).toBe(false);
   });
@@ -66,7 +68,10 @@ describe('isAuxiliarySourceCompatible', () => {
     expect(
       isAuxiliarySourceCompatible(
         '¿Cuánto gana un auxiliar de educación nombrado?',
-        source('Remuneración mensual del profesor nombrado.', 'Ley remunerativa'),
+        source(
+          'Remuneración mensual del profesor nombrado.',
+          'Ley remunerativa',
+        ),
       ),
     ).toBe(false);
   });
