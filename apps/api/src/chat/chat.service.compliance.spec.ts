@@ -784,7 +784,13 @@ describe('ChatService — lineamientos del cliente', () => {
         'De reasignación',
         null,
         ['¿Cuáles son los requisitos?'],
-        { forceContext: true },
+        {
+          forceContext: true,
+          topicIntent: expect.objectContaining({
+            id: 'reassignment',
+            moduleName: 'Contratación y desplazamientos',
+          }),
+        },
       );
     });
 

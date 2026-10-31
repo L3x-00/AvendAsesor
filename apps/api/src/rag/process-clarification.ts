@@ -19,7 +19,13 @@ const REASSIGNMENT_ELIGIBILITY = /\b(?:puedo|puede|es\s+posible)\b/u;
 const REASSIGNMENT_DESTINATION =
   /\b(?:otra|distinta)\s+(?:ugel|dre|provincia|region)\b|\b(?:ir(?:se)?|trasladar(?:me|se)?)\s+a\s+(?:otra|distinta)\b/u;
 
-const CAUSALS: ReadonlyArray<{ id: string; label: string; pattern: RegExp }> = [
+const CAUSALS: ReadonlyArray<{
+  id: string;
+  label: string;
+  pattern: RegExp;
+  /** La evidencia solo acredita la causal con su nombre técnico. */
+  evidencePattern?: RegExp;
+}> = [
   {
     id: 'salud',
     label: 'salud',
@@ -31,7 +37,12 @@ const CAUSALS: ReadonlyArray<{ id: string; label: string; pattern: RegExp }> = [
   {
     id: 'unidad-familiar',
     label: 'unidad familiar',
-    pattern: /\bunidad familiar\b/u,
+    // La persona suele describir la causal con su situación, no con el nombre
+    // técnico: «mi familia vive allá», «mis hijos», «mi esposo». La evidencia,
+    // en cambio, debe nombrar la causal del proceso.
+    pattern:
+      /\b(?:unidad familiar|familia(?:r|res)?|hij[oa]s?|conyuge|espos[oa]|pareja|reunirme con mi familia)\b/u,
+    evidencePattern: /\bunidad familiar\b/u,
   },
   {
     id: 'interes-personal',
@@ -54,7 +65,9 @@ export function causalsInEvidence(sources: RetrievedChunk[]): string[] {
   for (const source of sources) {
     const text = normalizeSpanishText(source.chunkContent);
     for (const causal of CAUSALS) {
-      if (causal.pattern.test(text)) found.add(causal.id);
+      if ((causal.evidencePattern ?? causal.pattern).test(text)) {
+        found.add(causal.id);
+      }
     }
   }
   return CAUSALS.filter((causal) => found.has(causal.id)).map(

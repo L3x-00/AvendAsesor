@@ -37,6 +37,23 @@ export function isAuxiliaryQuestion(question: string): boolean {
   return AUXILIARY_SIGNAL.test(normalizeSpanishText(question));
 }
 
+/**
+ * La consulta pide los requisitos para trabajar como auxiliar (formación,
+ * estudios, experiencia) y no su remuneración. Permite identificar la
+ * intención principal en el chat general sin depender de la palabra
+ * «contratación».
+ */
+export function isAuxiliaryRequirementsQuestion(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  if (!AUXILIARY_SIGNAL.test(text) || SALARY_SIGNAL.test(text)) return false;
+  return (
+    CONTRACT_SIGNAL.test(text) ||
+    /\b(?:estudios?|necesita|necesario|formacion|capacitacion|titulo|grado|experiencia)\b/u.test(
+      text,
+    )
+  );
+}
+
 export function auxiliaryEvidenceQueries(question: string): string[] {
   const text = normalizeSpanishText(question);
   if (!AUXILIARY_SIGNAL.test(text)) return [];

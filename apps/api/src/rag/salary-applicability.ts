@@ -1,5 +1,10 @@
 import { CITATION_GROUP, citedIndexes } from './citations';
+import { isCareerProgressionQuestion } from './evaluation-retrieval';
 import { normalizeDomainQuery } from './query-normalization';
+import {
+  isRuralAllocationQuestion,
+  isRuralPadronQuestion,
+} from './remuneration-retrieval';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -552,6 +557,11 @@ const LEADING_SALARY_FOLLOW_UP = /^(?:y|e|pero|entonces|ademas|tambien)\b/u;
 
 export function isPersonalSalaryQuestion(question: string): boolean {
   if (!salaryQuestionProfile(question).isSalaryQuestion) return false;
+  // Un beneficio por ruralidad se pregunta por la regla y sus condiciones
+  // (IE rural, padrón), no por una cifra personal de la tabla general.
+  if (isRuralAllocationQuestion(question) || isRuralPadronQuestion(question)) {
+    return false;
+  }
   const normalized = normalizeSpanishText(question);
   const raw = question.toLocaleLowerCase('es');
   // «Ganó» es tercera persona; sin la tilde, «gano» es primera persona.
@@ -973,16 +983,18 @@ export function salaryClarificationFor(
 ): SalaryClarification | null {
   const profile = salaryQuestionProfile(question);
   if (!profile.isSalaryQuestion) return null;
+  // Un beneficio por ruralidad tiene sus propias condiciones documentales
+  // (ámbito rural, padrón habilitante). Preguntar el vínculo ocultaría la regla
+  // que sí se puede explicar con la fuente.
+  if (isRuralAllocationQuestion(question) || isRuralPadronQuestion(question)) {
+    return null;
+  }
   // Una asignación específica o la consecuencia en planilla de un ascenso no
   // solicita una cifra personal de la tabla general. Preguntar por cargo,
   // jornada o vínculo en este punto ocultaría la regla documental que sí se
-  // puede explicar con sus propias condiciones.
-  if (
-    profile.asksSpecialAllocation ||
-    /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u.test(
-      normalizeSpanishText(question),
-    )
-  ) {
+  // puede explicar con sus propias condiciones. La progresión de carrera
+  // («subir a segunda escala») pertenece a ascenso aunque no nombre la palabra.
+  if (profile.asksSpecialAllocation || isCareerProgressionQuestion(question)) {
     return null;
   }
   // Una consulta general («cuánto gana un docente») se responde con el
