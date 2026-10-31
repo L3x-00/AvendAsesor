@@ -7,6 +7,7 @@ import {
 } from '../config/ai-gateway';
 import type { AnswerGateway, AnswerGatewayInput } from './answer.gateway';
 import { asksForDates } from './dated-evidence';
+import { isLegalModuleName, isLegalQuestion } from './legal-retrieval';
 import {
   buildAdvisorySystemPrompt,
   buildAdvisoryUserPrompt,
@@ -78,6 +79,9 @@ export class OpenAiAnswerGateway implements AnswerGateway {
           ? buildAdvisorySystemPrompt()
           : buildEvidenceSystemPrompt({
               asksForDates: asksForDates(input.question),
+              asksForLegalQuestion:
+                isLegalQuestion(input.question) &&
+                isLegalModuleName(input.selectedModuleName),
             });
     const userPrompt =
       mode === 'summary'

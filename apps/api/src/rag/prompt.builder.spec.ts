@@ -565,3 +565,16 @@ describe('fragmentos que empiezan a mitad de una oración', () => {
     expect(prompt).not.toContain('[…]');
   });
 });
+
+
+describe('preguntas jurídicas', () => {
+  it('solo añade la política legal cuando la consulta es jurídica', () => {
+    const general = buildEvidenceSystemPrompt();
+    const legal = buildEvidenceSystemPrompt({ asksForLegalQuestion: true });
+
+    expect(general).not.toContain('La consulta es jurídica');
+    expect(legal.startsWith(general)).toBe(true);
+    expect(legal).toContain('Distingue siempre la Ley N.º 29944');
+    expect(legal).toContain('No infieras derechos, deberes ni sanciones');
+  });
+});
