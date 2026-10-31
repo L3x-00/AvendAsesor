@@ -98,24 +98,80 @@
   outline: none;
 }
 
+/* Indicadores: grupos de métricas y tarjetas de destacados. */
+
+.dashboardHeader h2 {
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.dashboardHeader .periodRange {
+  margin-top: 0.5rem;
+}
+
+.periodButton {
+  gap: 0.5rem;
+}
+
+.buttonIcon {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+}
+
+.metricGroup {
+  background: #f9fbfd;
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  margin-top: 1rem;
+  padding: 1rem 1.125rem 1.125rem;
+}
+
+.groupTitle {
+  align-items: center;
+  color: var(--avend-navy);
+  display: flex;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  gap: 0.625rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.groupIcon {
+  align-items: center;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  flex: none;
+}
+
 .metrics {
   display: grid;
   gap: 0.875rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  list-style: none;
-  margin: 1rem 0 0;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0.875rem 0 0;
   padding: 0;
 }
 
+/* Tres columnas solo cuando la ventana deja sitio para tarjetas legibles
+   junto a la barra lateral del panel. */
+@media (min-width: 72rem) {
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .metric {
-  background: var(--avend-surface-muted);
+  background: var(--avend-surface);
   border: 1px solid var(--avend-border);
   border-left: 4px solid var(--avend-accent);
   border-radius: 0.75rem;
+  container-type: inline-size;
   display: grid;
   gap: 0.25rem;
-  min-height: 8.75rem;
-  padding: 1rem;
+  min-height: 8rem;
+  padding: 1rem 1.125rem;
+  position: relative;
 }
 
 .metric[data-tone="attention"] {
@@ -133,13 +189,16 @@
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.35;
+  padding-right: 3.5rem;
 }
 
 .metric dd {
   color: var(--avend-navy);
-  font-size: 1.875rem;
+  display: grid;
+  font-size: 2.25rem;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
+  gap: 0.25rem;
   line-height: 1.1;
   margin: 0;
   overflow-wrap: anywhere;
@@ -148,7 +207,148 @@
 .metric small {
   color: var(--avend-text-muted);
   font-size: 1rem;
+  font-variant-numeric: normal;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.metricIcon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  width: 2.75rem;
+}
+
+/* En tarjetas angostas el icono decorativo se retira para dar aire al título. */
+@container (max-width: 12rem) {
+  .metricIcon {
+    display: none;
+  }
+
+  .metric dt {
+    padding-right: 0;
+  }
+}
+
+.metric[data-tone="attention"] .metricIcon {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.metric[data-tone="risk"] .metricIcon {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.metric[data-tone="success"] .metricIcon {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+/* Destacados: lo más consultado y dónde se concentran las incidencias. */
+
+.highlights {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.highlightTitle {
+  align-items: center;
+  color: var(--avend-navy);
+  display: flex;
+  font-size: 1.125rem;
+  font-weight: 700;
+  gap: 0.625rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.highlightIcon {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 0.625rem;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  flex: none;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.highlightIcon[data-tone="attention"] {
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.highlightRows {
+  display: grid;
+  gap: 0.625rem;
+  margin: 1rem 0 0;
+}
+
+.highlightRow {
+  background: var(--avend-surface-muted);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.625rem;
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.625rem 0.875rem;
+}
+
+.highlightRow dt {
+  color: var(--avend-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
   line-height: 1.4;
+}
+
+.highlightRow dd {
+  align-items: center;
+  color: var(--avend-navy);
+  display: flex;
+  font-size: 1rem;
+  gap: 0.75rem;
+  justify-content: space-between;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.highlightName {
+  font-weight: 650;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.highlightCount {
+  background: var(--avend-soft-blue);
+  border-radius: 999px;
+  color: var(--avend-navy);
+  flex: none;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 0.3rem 0.7rem;
+  white-space: nowrap;
+}
+
+.highlightCount[data-tone="attention"] {
+  background: #fff4e5;
+  color: #93370d;
+}
+
+.highlightNote {
+  color: var(--avend-text-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0.75rem 0 0;
 }
 
 .rankings {
@@ -173,28 +373,64 @@
 }
 
 .ranking ol {
+  counter-reset: rank;
   display: grid;
-  gap: 0.625rem;
-  list-style-position: inside;
+  gap: 0.5rem;
+  list-style: none;
   margin: 0.75rem 0 0;
   padding: 0;
+}
+
+.ranking li {
+  counter-increment: rank;
+  min-width: 0;
 }
 
 .ranking a {
   align-items: center;
   color: var(--avend-navy);
-  display: flex;
+  display: grid;
   font-size: 1rem;
   font-weight: 600;
-  gap: 0.5rem;
-  justify-content: space-between;
+  gap: 0.625rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 2.75rem;
+  padding: 0.375rem 0;
   text-decoration: none;
+}
+
+.ranking a::before {
+  align-items: center;
+  background: var(--avend-soft-blue);
+  border-radius: 999px;
+  color: var(--avend-accent-strong);
+  content: counter(rank);
+  display: inline-flex;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  height: 1.5rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.5rem;
+}
+
+.ranking a span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ranking a:hover {
   color: var(--avend-accent-strong);
   text-decoration: underline;
 }
+
+.ranking a:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid var(--avend-accent);
+  outline-offset: 2px;
+}
+
 .ranking strong {
   font-variant-numeric: tabular-nums;
 }
@@ -438,6 +674,10 @@
   .pagination {
     align-items: stretch;
     flex-direction: column;
+  }
+  .periodForm {
+    flex-basis: 100%;
+    width: 100%;
   }
   .periodForm > *,
   .filters > *,
