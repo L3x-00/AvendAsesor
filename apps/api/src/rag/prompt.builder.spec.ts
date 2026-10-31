@@ -566,7 +566,6 @@ describe('fragmentos que empiezan a mitad de una oración', () => {
   });
 });
 
-
 describe('preguntas jurídicas', () => {
   it('solo añade la política legal cuando la consulta es jurídica', () => {
     const general = buildEvidenceSystemPrompt();

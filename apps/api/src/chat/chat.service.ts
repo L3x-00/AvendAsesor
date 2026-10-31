@@ -1302,8 +1302,8 @@ export class ChatService {
     const legalModule = isLegalModuleName(selectedModuleName);
     const legalCrossModule = Boolean(
       legalModule &&
-        (isLegalQuestion(effectiveQuestion) ||
-          priorUserQuestions.some((prior) => isLegalQuestion(prior))),
+      (isLegalQuestion(effectiveQuestion) ||
+        priorUserQuestions.some((prior) => isLegalQuestion(prior))),
     );
     // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
     // consulta actual ni las anteriores nombran un proceso, hay tantas

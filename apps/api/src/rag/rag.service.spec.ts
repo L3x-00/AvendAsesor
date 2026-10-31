@@ -309,10 +309,15 @@ describe('RagService', () => {
     ]);
 
     await expect(
-      service.retrieve('¿Cuáles son los derechos de los docentes?', 'legal-module', [], {
-        legalCrossModule: true,
-        selectedModuleName: 'Ley y reglamento',
-      }),
+      service.retrieve(
+        '¿Cuáles son los derechos de los docentes?',
+        'legal-module',
+        [],
+        {
+          legalCrossModule: true,
+          selectedModuleName: 'Ley y reglamento',
+        },
+      ),
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 

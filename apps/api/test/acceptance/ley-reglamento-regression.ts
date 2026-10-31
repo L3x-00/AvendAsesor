@@ -20,10 +20,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { AuthorizationContext } from '../../src/authorization';
-import type {
-  ChatHistoryGateway,
-  ChatReplyRole,
-} from '../../src/chat/chat-history.gateway';
+import type { ChatHistoryGateway } from '../../src/chat/chat-history.gateway';
 import { ChatCatalogService } from '../../src/chat/catalog/chat-catalog.service';
 import { ChatService, type ChatStreamEvent } from '../../src/chat/chat.service';
 import { validateEnvironment } from '../../src/config/environment.validation';
@@ -110,7 +107,10 @@ async function main(): Promise<void> {
     beginTurn: (input: { conversationId: string | null }) => {
       const id = input.conversationId ?? randomUUID();
       if (!conversations.has(id)) conversations.set(id, []);
-      return Promise.resolve({ conversationId: id, userMessageId: randomUUID() });
+      return Promise.resolve({
+        conversationId: id,
+        userMessageId: randomUUID(),
+      });
     },
     completeTurn: (input: {
       answer: string;
@@ -232,9 +232,8 @@ async function main(): Promise<void> {
 
   const has = (turn: TurnResult, type: string) => turn.events.includes(type);
   const answer = (turn: TurnResult) => normalizeSpanishText(turn.answer);
-  const sourcesInclude =
-    (turn: TurnResult, pattern: RegExp) =>
-    (): boolean => turn.sources.some((source) => pattern.test(source.title));
+  const sourcesInclude = (turn: TurnResult, pattern: RegExp) => (): boolean =>
+    turn.sources.some((source) => pattern.test(source.title));
   const cites = (turn: TurnResult): boolean => /\[\d+\]/u.test(turn.answer);
   const common = (turn: TurnResult) => [
     {
@@ -270,9 +269,7 @@ async function main(): Promise<void> {
     turn: TurnResult,
   ): Promise<{ label: string; pass: boolean }> => {
     const citedIndexes = new Set(
-      [...turn.answer.matchAll(/\[(\d+)\]/gu)].map((match) =>
-        Number(match[1]),
-      ),
+      [...turn.answer.matchAll(/\[(\d+)\]/gu)].map((match) => Number(match[1])),
     );
     const citedSources = turn.sources.filter((_source, index) =>
       citedIndexes.has(index + 1),
@@ -438,7 +435,8 @@ async function main(): Promise<void> {
         },
         {
           label: 'explica-destitucion',
-          pass: /destitucion/u.test(text) && /sancion|pad|disciplinari/u.test(text),
+          pass:
+            /destitucion/u.test(text) && /sancion|pad|disciplinari/u.test(text),
         },
         { label: 'citas', pass: cites(turn) },
         { label: 'sin-no-evidencia', pass: !has(turn, 'no_evidence') },
@@ -461,10 +459,9 @@ async function main(): Promise<void> {
         { label: 'nombra-derechos', pass: /derechos/u.test(text) },
         {
           label: 'declara-carencia',
-          pass:
-            /(?:no encontre|no se encuentra|no esta).{0,80}texto|no puedo enumerar/u.test(
-              text,
-            ),
+          pass: /(?:no encontre|no se encuentra|no esta).{0,80}texto|no puedo enumerar/u.test(
+            text,
+          ),
         },
         {
           label: 'sin-lista-inventada',
@@ -488,10 +485,9 @@ async function main(): Promise<void> {
         { label: 'nombra-deberes', pass: /deberes/u.test(text) },
         {
           label: 'declara-carencia',
-          pass:
-            /(?:no encontre|no se encuentra|no esta).{0,80}texto|no puedo enumerar/u.test(
-              text,
-            ),
+          pass: /(?:no encontre|no se encuentra|no esta).{0,80}texto|no puedo enumerar/u.test(
+            text,
+          ),
         },
         {
           label: 'sin-lista-inventada',
@@ -530,8 +526,7 @@ async function main(): Promise<void> {
           pass:
             /(?:mas de un|mas de 1|un \(01\)|1)[^.]{0,16}\banos?\b/u.test(
               text,
-            ) &&
-            /(?:dos|2)[^.]{0,16}\banos\b/u.test(text),
+            ) && /(?:dos|2)[^.]{0,16}\banos\b/u.test(text),
         },
         {
           label: 'referencia-numeral',
@@ -566,7 +561,10 @@ async function main(): Promise<void> {
       )
       .digest('hex'),
     project: new URL(env.SUPABASE_URL).hostname,
-    generationModel: values.RAG_ANSWER_MODEL ?? null,
+    generationModel:
+      typeof values.RAG_ANSWER_MODEL === 'string'
+        ? values.RAG_ANSWER_MODEL
+        : null,
     persistence: 'in_memory',
     corpusWrites: false,
   };

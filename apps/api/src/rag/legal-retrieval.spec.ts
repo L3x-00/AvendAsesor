@@ -12,9 +12,9 @@ import {
 describe('legal-retrieval', () => {
   it('reconoce el módulo legal por su nombre', () => {
     expect(isLegalModuleName('Ley y reglamento')).toBe(true);
-    expect(isLegalModuleName('Reglamento de la Ley de Reforma Magisterial')).toBe(
-      true,
-    );
+    expect(
+      isLegalModuleName('Reglamento de la Ley de Reforma Magisterial'),
+    ).toBe(true);
     expect(isLegalModuleName('Remuneraciones')).toBe(false);
   });
 
@@ -27,12 +27,12 @@ describe('legal-retrieval', () => {
     expect(legalTopic('¿Cuáles son los deberes de los docentes?')).toBe(
       'duties',
     );
-    expect(legalTopic('¿Puedo solicitar licencia por motivos particulares?')).toBe(
-      'licenses',
-    );
     expect(
-      legalTopic('¿En qué casos un docente pierde el nombramiento?'),
-    ).toBe('sanctions');
+      legalTopic('¿Puedo solicitar licencia por motivos particulares?'),
+    ).toBe('licenses');
+    expect(legalTopic('¿En qué casos un docente pierde el nombramiento?')).toBe(
+      'sanctions',
+    );
   });
 
   it('exige el texto primario solo en las materias que lo necesitan', () => {
@@ -45,19 +45,21 @@ describe('legal-retrieval', () => {
 
   it('no confunde la ley con una norma que la cita', () => {
     expect(
-      isPrimaryLegalSource({ documentTitle: 'Ley N.º 29944, Ley de Reforma Magisterial' }),
+      isPrimaryLegalSource({
+        documentTitle: 'Ley N.º 29944, Ley de Reforma Magisterial',
+      }),
     ).toBe(true);
-    expect(
-      isPrimaryLegalSource({ documentTitle: 'Ley N.° 29944' }),
-    ).toBe(true);
+    expect(isPrimaryLegalSource({ documentTitle: 'Ley N.° 29944' })).toBe(true);
     expect(
       isPrimaryLegalSource({
-        documentTitle: 'Norma Técnica de licencias, permisos y vacaciones de profesores',
+        documentTitle:
+          'Norma Técnica de licencias, permisos y vacaciones de profesores',
       }),
     ).toBe(false);
     expect(
       isLegalSource({
-        chunkContent: 'Licencia por motivos particulares del profesor nombrado.',
+        chunkContent:
+          'Licencia por motivos particulares del profesor nombrado.',
         documentTitle:
           'Norma Técnica de licencias, permisos y vacaciones de profesores',
       }),
@@ -71,12 +73,12 @@ describe('legal-retrieval', () => {
   });
 
   it('clasifica materias genéricas y no adelanta derechos o reglamento', () => {
-    expect(legalTopic('¿Qué norma regula la carrera pública magisterial?')).toBe(
-      'generic',
-    );
     expect(
-      legalTopic('¿Qué derechos tengo si me niegan una licencia?'),
-    ).toBe('rights');
+      legalTopic('¿Qué norma regula la carrera pública magisterial?'),
+    ).toBe('generic');
+    expect(legalTopic('¿Qué derechos tengo si me niegan una licencia?')).toBe(
+      'rights',
+    );
     expect(legalTopic('¿Qué dice el artículo 5 del reglamento?')).toBe(
       'regulation',
     );
@@ -101,9 +103,7 @@ describe('legal-retrieval', () => {
       '5.20 licencia por motivos particulares dos años continuos o discontinuos período cinco años docente nombrado',
     ]);
     expect(legalEvidenceQueries('¿Cuánto gana un docente?')).toEqual([]);
-    expect(
-      legalEvidenceQueries('¿Qué es la Ley N.º 29944?', true),
-    ).toContain(
+    expect(legalEvidenceQueries('¿Qué es la Ley N.º 29944?', true)).toContain(
       'Ley 29944 Ley de Reforma Magisterial reglamento Decreto Supremo 004-2013-ED artículos vigencia',
     );
   });

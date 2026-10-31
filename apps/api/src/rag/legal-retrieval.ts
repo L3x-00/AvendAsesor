@@ -91,7 +91,9 @@ export function namesOtherLaw(question: string): boolean {
 }
 
 /** Documento que es la propia ley o su reglamento, no una norma que los cita. */
-export function isPrimaryLegalSource(source: { documentTitle: string }): boolean {
+export function isPrimaryLegalSource(source: {
+  documentTitle: string;
+}): boolean {
   const title = normalizeSpanishText(source.documentTitle);
   return /\bley\s*(?:n\s*[.º°]*\s*)?29944\b|\bley de reforma magisterial\b|\breglamento de la ley\b|\b004-2013-ed\b/u.test(
     title,
