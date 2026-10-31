@@ -46,6 +46,18 @@ describe('buildEvidenceSystemPrompt', () => {
     expect(prompt).toContain('directivos');
   });
 
+  it('no convierte experiencia acumulada en nombramiento automático', () => {
+    expect(buildEvidenceSystemPrompt()).toContain(
+      'Nunca concluyas que los años acumulados producen un nombramiento automático',
+    );
+  });
+
+  it('prioriza una regla que la fuente trata de forma directa', () => {
+    expect(buildEvidenceSystemPrompt()).toContain(
+      'No declares insuficiencia solo porque falten detalles secundarios',
+    );
+  });
+
   it('pide un tono cercano y formal y preferir la fuente vigente más reciente', () => {
     const prompt = buildEvidenceSystemPrompt();
 

@@ -1,4 +1,7 @@
-import { sanitizeRetrievedEvidence } from './evidence-sanitizer';
+import {
+  reconcileRetrievedDocumentIdentities,
+  sanitizeRetrievedEvidence,
+} from './evidence-sanitizer';
 import type { RetrievedChunk } from './retrieval.gateway';
 
 const source: RetrievedChunk = {
@@ -249,5 +252,60 @@ describe('sanitizeRetrievedEvidence', () => {
 
       expect(cleaned?.chunkContent).toBe(SCHEDULE);
     });
+  });
+});
+
+describe('reconcileRetrievedDocumentIdentities', () => {
+  it('corrige en memoria una ficha de decreto cuando su cabecera verificable la contradice', () => {
+    const [reconciled] = reconcileRetrievedDocumentIdentities([
+      {
+        ...source,
+        chunkContent:
+          'DECRETO SUPREMO Nº 277-2025-EF EL PRESIDENTE DE LA REPÚBLICA DECRETA: Artículo 1.- Fijar el monto de la Remuneración Íntegra Mensual.',
+        documentTitle: 'Ley 32498 remuneraciones',
+        documentType: 'DECRETO_SUPREMO',
+        issuanceYear: 2026,
+        pageStart: 1,
+        resolutionNumber: null,
+      },
+    ]);
+
+    expect(reconciled).toMatchObject({
+      documentTitle: 'Decreto Supremo N.° 277-2025-EF',
+      issuanceYear: 2025,
+      resolutionNumber: '277-2025-EF',
+    });
+  });
+
+  it('no toma como identidad propia un decreto citado dentro del texto', () => {
+    const [unchanged] = reconcileRetrievedDocumentIdentities([
+      {
+        ...source,
+        chunkContent:
+          'La asignación se regula conforme al Decreto Supremo Nº 306-2017-EF. El presente documento continúa con las disposiciones aplicables.',
+        documentTitle: 'Ley 32498 remuneraciones',
+        documentType: 'DECRETO_SUPREMO',
+        issuanceYear: 2026,
+      },
+    ]);
+
+    expect(unchanged?.documentTitle).toBe('Ley 32498 remuneraciones');
+  });
+
+  it('no corrige la identidad a partir de una cabecera fuera de la primera página', () => {
+    const [unchanged] = reconcileRetrievedDocumentIdentities([
+      {
+        ...source,
+        chunkContent:
+          'DECRETO SUPREMO Nº 277-2025-EF EL PRESIDENTE DE LA REPÚBLICA DECRETA: Artículo 1.- Fijar el monto de la Remuneración Íntegra Mensual.',
+        documentTitle: 'Ley 32498 remuneraciones',
+        documentType: 'DECRETO_SUPREMO',
+        issuanceYear: 2026,
+        pageStart: 2,
+      },
+    ]);
+
+    expect(unchanged?.documentTitle).toBe('Ley 32498 remuneraciones');
+    expect(unchanged?.issuanceYear).toBe(2026);
   });
 });

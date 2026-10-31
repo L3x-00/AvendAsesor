@@ -33,10 +33,10 @@ const AMOUNT_PATTERN_ALL = new RegExp(AMOUNT_PATTERN.source, 'gu');
 const SALARY_CLAUSE_SPLIT = /,(?!\d)|\s+(?:y|e|pero|mientras|aunque)\s+|[;]/u;
 
 const SALARY_TERMS =
-  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gana|ganan|ganaria|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
+  /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gan(?:a|an|amos|ar|aria|arian)|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
 /** «Ganar un concurso» no pregunta un importe; «cuánto debería ganar» sí. */
 const SALARY_AMOUNT_QUESTION =
-  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b/u;
+  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano)\b|\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)\b|\bme\s+corresponde\b/u;
 
 /** La finalidad de una norma de pagos no pide un importe de esa norma. */
 const DOCUMENT_PURPOSE_REQUEST =
@@ -120,6 +120,8 @@ const HOURS_PATTERN = /\b(\d{1,2})\)?\s*(?:h|horas)\b/u;
 const HOURS_PATTERN_ALL = new RegExp(HOURS_PATTERN.source, 'gu');
 const SCALE_PATTERN_ALL =
   /\bescala\s*:?\s*(?:(?:magisterial|remunerativa)\s*:?\s*)?(\d{1,2}|[ivx]{1,4})\b/gu;
+const ORDINAL_SCALE_PATTERN_ALL =
+  /\b(?:de\s+)?(primera|segunda|tercera|cuarta|quinta|sexta|septima|octava)\s+escala(?:\s+magisterial)?\b/gu;
 
 /**
  * Un plazo no es una jornada: «dentro de las 24 horas», «el plazo de 48 horas»
@@ -264,13 +266,27 @@ const ROMAN_SCALES: ReadonlyMap<string, string> = new Map([
   ['x', '10'],
 ]);
 
+const ORDINAL_SCALES: ReadonlyMap<string, string> = new Map([
+  ['primera', '1'],
+  ['segunda', '2'],
+  ['tercera', '3'],
+  ['cuarta', '4'],
+  ['quinta', '5'],
+  ['sexta', '6'],
+  ['septima', '7'],
+  ['octava', '8'],
+]);
+
 /** Todas las escalas nombradas; «escala III» y «escala 3» son la misma. */
 function scalesIn(text: string): string[] {
-  return sortedUnique(
-    [...text.matchAll(SCALE_PATTERN_ALL)].map(
+  return sortedUnique([
+    ...[...text.matchAll(SCALE_PATTERN_ALL)].map(
       (match) => ROMAN_SCALES.get(match[1]) ?? match[1],
     ),
-  );
+    ...[...text.matchAll(ORDINAL_SCALE_PATTERN_ALL)].map(
+      (match) => ORDINAL_SCALES.get(match[1]) ?? match[1],
+    ),
+  ]);
 }
 
 /**
@@ -502,9 +518,13 @@ export function salaryQuestionProfile(question: string): SalaryQuestionProfile {
   // para no perder una intención salarial que ya fue reconocida al inicio.
   const text = normalizeSpanishText(normalizeDomainQuery(question));
   const salaryText = salaryRequestText(text);
+  const conditions = conditionsIn(text);
   return {
     asksSpecialAllocation: SPECIAL_ALLOCATION_REQUEST.test(text),
-    condition: conditionsIn(text)[0] ?? null,
+    // Una comparación («nombrados y contratados») no pertenece a un solo
+    // vínculo. Dejarlo en null evita descartar la evidencia del segundo régimen
+    // antes de que la respuesta pueda contrastarlos.
+    condition: conditions.length === 1 ? (conditions[0] ?? null) : null,
     isSalaryQuestion:
       SALARY_TERMS.test(salaryText) || SALARY_AMOUNT_QUESTION.test(salaryText),
     jornadaHours: hoursIn(text)[0] ?? null,
@@ -607,8 +627,17 @@ function salarySourceConflictsWithProfile(
   return FACTOR_ORDER.some((factor) => {
     const expected = declaredFactorValue(profile, factor);
     if (expected === null) return false;
-    const values = factorValuesInSource(source, factor, true);
-    return values.length > 0 && !values.includes(String(expected));
+    const amountSentences = amountSentencesIn(source.chunkContent);
+    if (!amountSentences.length) return false;
+    const valuesByAmount = amountSentences.map(
+      (sentence) => evidenceFactorsIn(sentence)[factor],
+    );
+    // Un fragmento puede contener varias reglas: por ejemplo, la RIM de la
+    // primera escala y, a continuación, la tabla del contratado. Si una cifra
+    // no declara este factor, no se puede usar la otra para excluir todo el
+    // fragmento; la ausencia del dato no prueba incompatibilidad.
+    if (valuesByAmount.some((values) => values.length === 0)) return false;
+    return valuesByAmount.every((values) => !values.includes(String(expected)));
   });
 }
 
@@ -944,12 +973,38 @@ export function salaryClarificationFor(
 ): SalaryClarification | null {
   const profile = salaryQuestionProfile(question);
   if (!profile.isSalaryQuestion) return null;
+  // Una asignación específica o la consecuencia en planilla de un ascenso no
+  // solicita una cifra personal de la tabla general. Preguntar por cargo,
+  // jornada o vínculo en este punto ocultaría la regla documental que sí se
+  // puede explicar con sus propias condiciones.
+  if (
+    profile.asksSpecialAllocation ||
+    /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u.test(
+      normalizeSpanishText(question),
+    )
+  ) {
+    return null;
+  }
   // Una consulta general («cuánto gana un docente») se responde con el
   // panorama y sus condiciones, no con una pregunta que retrase la respuesta.
   // La aclaración se reserva para el caso propio, donde el dato personal sí
   // decide entre cifras que no se pueden presentar conjuntamente, o para la
   // sustitución segura de una respuesta que mezcló filas de una tabla.
   if (!personal && isBroadSalaryQuestion(question)) return null;
+
+  // La persona ya entregó todos los factores que esta política puede usar para
+  // distinguir una cifra. Si el corpus todavía no contiene el importe para esa
+  // combinación, corresponde explicar esa ausencia con las fuentes; pedir de
+  // nuevo jornada, vínculo, cargo o escala no aportaría precisión.
+  if (
+    personal &&
+    profile.jornadaHours !== null &&
+    profile.condition !== null &&
+    profile.role !== null &&
+    profile.scale !== null
+  ) {
+    return null;
+  }
 
   const evidence = salaryEvidenceProfile(sources);
   // La remuneración general manda; los conceptos adicionales solo se comparan

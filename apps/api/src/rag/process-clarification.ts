@@ -12,6 +12,12 @@ import { normalizeSpanishText } from './text-normalization';
  */
 
 const CAUSAL_PROCESS = /\b(?:reasignacion(?:es)?|reasignar(?:me|se)?)\b/u;
+// Preguntas de posibilidad o destino («¿puedo ir a otra UGEL?») tienen una
+// respuesta general verificable antes de que la causal refine requisitos y
+// documentos. No se deben cortar con una aclaración vacía.
+const REASSIGNMENT_ELIGIBILITY = /\b(?:puedo|puede|es\s+posible)\b/u;
+const REASSIGNMENT_DESTINATION =
+  /\b(?:otra|distinta)\s+(?:ugel|dre|provincia|region)\b|\b(?:ir(?:se)?|trasladar(?:me|se)?)\s+a\s+(?:otra|distinta)\b/u;
 
 const CAUSALS: ReadonlyArray<{ id: string; label: string; pattern: RegExp }> = [
   {
@@ -71,6 +77,11 @@ export function causalClarificationFor(
 ): { message: string } | null {
   const text = normalizeSpanishText(question);
   if (!CAUSAL_PROCESS.test(text)) return null;
+  if (
+    REASSIGNMENT_ELIGIBILITY.test(text) &&
+    REASSIGNMENT_DESTINATION.test(text)
+  )
+    return null;
   if (causalsInQuestion(question).length) return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con
   // su número y año) acota la consulta a ese documento; pedir la causal dejaría

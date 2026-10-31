@@ -1882,3 +1882,38 @@ describe('assessSalaryAnswerCoverage', () => {
     ).toContain('vigente');
   });
 });
+
+describe('factores coloquiales de remuneración', () => {
+  it('reconoce las escalas ordinales y conserva los factores ya declarados', () => {
+    expect(
+      salaryQuestionProfile(
+        'Soy docente de quinta escala, cuánto me corresponde?',
+      ),
+    ).toMatchObject({
+      isSalaryQuestion: true,
+      role: 'docente',
+      scale: '5',
+    });
+    expect(
+      withInheritedSalaryFactors(
+        'Ahora estoy en quinta escala, cuánto me corresponde?',
+        ['Soy docente nombrado de primera escala con jornada de 30 horas.'],
+      ),
+    ).toContain('jornada de 30 horas');
+  });
+
+  it('no pide factores de una cifra general al explicar el efecto del ascenso', () => {
+    expect(
+      salaryClarificationFor(
+        'Si asciendo de escala, cambia mi remuneración?',
+        [
+          chunk({
+            chunkContent:
+              'El acto resolutivo de ascenso de escala magisterial deriva en pago por planilla.',
+          }),
+        ],
+        true,
+      ),
+    ).toBeNull();
+  });
+});
