@@ -780,12 +780,24 @@ describe('ChatService — lineamientos del cliente', () => {
         question: 'De reasignación',
       });
 
-      expect(ragService.retrieve).toHaveBeenCalledWith(
-        'De reasignación',
-        null,
-        ['¿Cuáles son los requisitos?'],
-        { forceContext: true },
-      );
+      const calls = ragService.retrieve.mock.calls as Array<
+        [
+          string,
+          string | null,
+          string[],
+          { forceContext?: boolean; topicIntent?: { id: string } },
+        ]
+      >;
+      expect(calls[0]?.[0]).toBe('De reasignación');
+      expect(calls[0]?.[1]).toBeNull();
+      expect(calls[0]?.[2]).toEqual(['¿Cuáles son los requisitos?']);
+      expect(calls[0]?.[3]).toMatchObject({
+        forceContext: true,
+        topicIntent: {
+          id: 'reassignment',
+          moduleName: 'Contratación y desplazamientos',
+        },
+      });
     });
 
     it('una negativa larga sin citas nunca se muestra antes de «sin evidencia»', async () => {

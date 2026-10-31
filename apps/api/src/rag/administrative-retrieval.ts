@@ -9,6 +9,14 @@ import { normalizeSpanishText } from './text-normalization';
  */
 const MEDICAL_LEAVE_SIGNAL =
   /\b(?:descanso\s+medic(?:o|a)|incapacidad\s+temporal|enferm(?:o|a|edad).{0,64}\b(?:dia|dias|faltar|ausen|licencia)|(?:dia|dias|faltar|ausen).{0,64}\benferm(?:o|a|edad))\b/u;
+/**
+ * Un descanso prescrito por un profesional de la salud es una licencia por
+ * incapacidad temporal aunque la persona no use el término técnico. Se exige
+ * una señal médica (profesional o reposo) junto con una duración o un
+ * certificado; un descanso vacacional no entra aquí.
+ */
+const PRESCRIBED_REST_SIGNAL =
+  /\b(?:doctor(?:a)?|medic(?:o|a)|profesional de la salud)\b.{0,80}\b(?:descanso|reposo|incapacidad)\b|\b(?:descanso|reposo)\b.{0,40}\b(?:por|de)\s+\d{1,3}\s+(?:dias?|semanas?)\b/u;
 const PERSONAL_ABSENCE_SIGNAL =
   /\b(?:motivos?|asuntos?)\s+particulares?\b|\bfaltar.{0,48}\b(?:dia|dias)\b/u;
 const VACATION_SIGNAL = /\bvacacion(?:es)?\b/u;
@@ -33,6 +41,32 @@ function evidenceText(
   return normalizeSpanishText(`${source.documentTitle} ${source.chunkContent}`);
 }
 
+function hasMedicalLeaveSignal(text: string): boolean {
+  return (
+    MEDICAL_LEAVE_SIGNAL.test(text) ||
+    (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))
+  );
+}
+
+/** La consulta pide una licencia por enfermedad o incapacidad temporal. */
+export function isMedicalLeaveQuestion(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  // Para identificar la intención se exige la figura (descanso, reposo,
+  // incapacidad, licencia o CITT). «Mi hijo está enfermo, ¿puedo faltar?» es
+  // una consulta de ausencia y no convierte el turno en una incapacidad propia.
+  return (
+    /\b(?:descanso\s+medic(?:o|a)|incapacidad\s+temporal|citt|licencia\s+por\s+enfermedad|reposo\s+medic(?:o|a))\b/u.test(
+      text,
+    ) ||
+    (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))
+  );
+}
+
+/** La consulta trata un procedimiento administrativo disciplinario. */
+export function isDisciplinaryQuestion(question: string): boolean {
+  return hasDisciplinarySignal(normalizeSpanishText(question));
+}
+
 function hasDisciplinarySignal(text: string): boolean {
   return (
     DISCIPLINARY_PROCESS_SIGNAL.test(text) ||
@@ -45,7 +79,7 @@ export function administrativeEvidenceQueries(question: string): string[] {
   const text = normalizeSpanishText(question);
   const queries: string[] = [];
 
-  if (MEDICAL_LEAVE_SIGNAL.test(text)) {
+  if (hasMedicalLeaveSignal(text)) {
     queries.push(
       'licencia por incapacidad temporal descanso médico CITT certificado médico profesor',
     );
@@ -98,7 +132,7 @@ export function isDirectAdministrativeEvidence(
   const requested = normalizeSpanishText(question);
   const evidence = evidenceText(source);
 
-  if (MEDICAL_LEAVE_SIGNAL.test(requested)) {
+  if (hasMedicalLeaveSignal(requested)) {
     return /\blicencia\s+por\s+incapacidad\s+temporal\b|\bdescanso\s+medico\b|\bcitt\b/u.test(
       evidence,
     );
