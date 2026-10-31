@@ -18,6 +18,8 @@ export interface AnswerGatewayInput {
   onFinish?: (reason: string | null) => void;
   question: string;
   sources: RetrievedChunk[];
+  /** Módulo elegido, para aplicar políticas propias de su ámbito. */
+  selectedModuleName?: string | null;
   /** Contexto auxiliar del tema elegido; nunca respalda ni cita hechos. */
   topicContext?: InternalTopicContext | null;
 }

@@ -69,6 +69,11 @@ import {
   type ResolvedModule,
 } from '../rag/rag.service';
 import { RAG_ANSWER_GATEWAY } from '../rag/rag.tokens';
+import {
+  isLegalModuleName,
+  isLegalQuestion,
+  legalTopic,
+} from '../rag/legal-retrieval';
 import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
 import {
   CITATION_GROUP,
@@ -808,6 +813,37 @@ export function moduleWithoutDocumentsMessage(
 }
 
 /**
+ * Hueco del módulo legal: la ley y su reglamento no están cargados como
+ * documentos. Se nombra la carencia concreta para no sustituirla por normas
+ * relacionadas ni por conocimiento externo.
+ */
+export function legalEvidenceGapMessage(question: string): string {
+  const subject = '';
+  const asked = normalizeSpanishText(question);
+  if (/\bderechos?\b/u.test(asked) && /\bdeberes?\b/u.test(asked)) {
+    return `No encontré en el corpus el texto de la Ley N.º 29944 (Ley de Reforma Magisterial) ni el de su Reglamento, aprobado por D. S. N.º 004-2013-ED${subject}. Sin ese texto no puedo enumerar los derechos ni los deberes de los docentes ni citar sus artículos. Las normas relacionadas que citan la ley no sustituyen su texto.`;
+  }
+  const base = `No encontré en el corpus el texto de la Ley N.º 29944 (Ley de Reforma Magisterial) ni el de su Reglamento, aprobado por D. S. N.º 004-2013-ED${subject}.`;
+  const matter = legalTopic(question);
+  if (matter === 'generic') {
+    return `No encontré en el corpus la norma específica que responde a esta consulta dentro del módulo «Ley y reglamento»${subject}. Las normas que solo citan la ley no sustituyen su texto; indícame el número o el artículo concreto si lo conoces.`;
+  }
+  if (matter === 'rights') {
+    return `${base} Sin ese texto no puedo enumerar los derechos de los docentes ni citar sus artículos. Las normas relacionadas que citan la ley no sustituyen su texto.`;
+  }
+  if (matter === 'duties') {
+    return `${base} Sin ese texto no puedo enumerar los deberes de los docentes ni citar sus artículos. Las normas relacionadas que citan la ley no sustituyen su texto.`;
+  }
+  if (matter === 'modification') {
+    return `${base} Sin el texto de la norma modificatoria no puedo determinar qué artículo cambió ni si el texto original sigue vigente. Las normas relacionadas que citan la ley no sustituyen su texto.`;
+  }
+  if (matter === 'regulation') {
+    return `${base} Son dos normas distintas: la ley y su reglamento; como no están cargadas, no puedo comparar su contenido ni citar sus artículos.`;
+  }
+  return `${base} Por eso no puedo darte una explicación verificada de sus artículos. Las normas relacionadas que citan la ley no sustituyen su texto.`;
+}
+
+/**
  * Hueco de evidencia dentro de un módulo que sí tiene documentos. Se distingue
  * de `moduleWithoutDocumentsMessage`: aquí el módulo está cargado y lo que
  * falta es un documento que trate esta consulta. Conserva la invitación a
@@ -1407,6 +1443,23 @@ export class ChatService {
           ),
       )
       .map((message) => message.content);
+    let selectedModuleName: string | null = null;
+    if (selectedModuleId) {
+      try {
+        selectedModuleName =
+          (await this.cachedModules())
+            .find((module) => module.id === selectedModuleId)
+            ?.name?.trim() ?? null;
+      } catch {
+        selectedModuleName = null;
+      }
+    }
+    const legalModule = isLegalModuleName(selectedModuleName);
+    const legalCrossModule = Boolean(
+      legalModule &&
+      (isLegalQuestion(effectiveQuestion) ||
+        priorUserQuestions.some((prior) => isLegalQuestion(prior))),
+    );
     // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
     // consulta actual ni las anteriores nombran un proceso, hay tantas
     // interpretaciones como temas y corresponde pedir precisión. Cubre el
@@ -1523,6 +1576,13 @@ export class ChatService {
       retrievalContext,
       {
         forceContext,
+        ...(legalModule
+          ? {
+              legalModule: true,
+              legalCrossModule: true,
+              selectedModuleName,
+            }
+          : {}),
         ...(topicIntent ? { topicIntent } : {}),
         ...(personalSalary ? { personalSalary: true } : {}),
         ...(acceptedQuestion
@@ -1727,7 +1787,9 @@ export class ChatService {
             )
           : undefined;
       let message: string | undefined;
-      if (retrieval.incompleteExactReferences?.length) {
+      if (legalCrossModule) {
+        message = legalEvidenceGapMessage(effectiveQuestion);
+      } else if (retrieval.incompleteExactReferences?.length) {
         message = incompleteExactReferencesMessage(
           retrieval.incompleteExactReferences,
         );
@@ -2040,6 +2102,7 @@ export class ChatService {
       },
       question: acceptedQuestion ?? input.question,
       sources: retrieval.sources,
+      selectedModuleName,
       topicContext,
     })) {
       if (input.abortSignal?.aborted) return;

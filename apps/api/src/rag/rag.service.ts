@@ -79,6 +79,15 @@ import {
   isDirectAuxiliaryEvidence,
 } from './auxiliary-retrieval';
 import {
+  isCoreLegalEvidence,
+  isLegalSource,
+  isPrimaryLegalSource,
+  legalEvidenceQueries,
+  legalTopic,
+  legalTopicNeedsPrimaryText,
+  namesOtherLaw,
+} from './legal-retrieval';
+import {
   isDirectReassignmentEvidence,
   isReassignmentCausalEvidence,
   reassignmentEvidenceQueries,
@@ -1083,6 +1092,16 @@ interface RetrieveOptions {
   salaryContextQuestions?: readonly string[];
   /** La persona pregunta por su propio caso; no se usa el atajo de panorama. */
   personalSalary?: boolean;
+  /** La conversación está abierta en el módulo legal. */
+  legalModule?: boolean;
+  /**
+   * La conversación está abierta en un módulo legal sin documentos propios.
+   * La evidencia relacionada de otros módulos se usa como apoyo, pero la
+   * intención y el módulo elegido se conservan: no se declara un cambio de tema.
+   */
+  legalCrossModule?: boolean;
+  /** Nombre visible del módulo elegido, para conservarlo en la respuesta. */
+  selectedModuleName?: string | null;
   /**
    * Intención temática principal detectada en el chat general. La recuperación
    * conserva solo la documentación que trata ese proceso y no reparte la
@@ -1401,7 +1420,9 @@ export class RagService {
     priorUserQuestions: string[],
     options: RetrieveOptions,
   ): Promise<RetrievalResult> {
-    const directReferences = exactDocumentReferencesIn(question);
+    const directReferences = options.legalCrossModule
+      ? []
+      : exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
     // Un seguimiento elíptico (o la respuesta a una aclaración, que completa la
     // pregunta pendiente) se busca con las consultas previas en TODAS las
@@ -1583,6 +1604,10 @@ export class RagService {
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
         ...rationalizationEvidenceQueries(question),
+        ...legalEvidenceQueries(
+          question,
+          Boolean(options.legalModule || options.legalCrossModule),
+        ),
       ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embeddings.embed(
@@ -1677,6 +1702,48 @@ export class RagService {
       );
     let globalRoutingSources = routingSources(rawGlobalSources);
     let selectedRoutingSources = routingSources(rawSelectedSources);
+    // Derechos, deberes, la ley en general y las modificaciones solo pueden
+    // responderse con el texto de la ley o del reglamento. Si esos documentos
+    // no están cargados, no se sustituyen por normas que solo los citan.
+    const legalSubject = legalTopic(question);
+    if (
+      (options.legalModule || options.legalCrossModule) &&
+      !namesOtherLaw(question) &&
+      legalTopicNeedsPrimaryText(legalSubject) &&
+      ![...selectedRoutingSources, ...globalRoutingSources].some(
+        isPrimaryLegalSource,
+      )
+    ) {
+      return { kind: 'no_evidence', topRelevanceScore: null };
+    }
+    // Un módulo legal sin documentos propios no debe convertir la consulta en
+    // un cambio de tema. Se responde con la evidencia relacionada que sí exista
+    // (licencias, PAD, reglamento) y se conserva el módulo elegido; el prompt
+    // declara qué texto legal falta.
+    if (options.legalCrossModule && selectedModuleId) {
+      const candidates = [...selectedRoutingSources, ...globalRoutingSources];
+      const legalCandidates = candidates.filter(isLegalSource);
+      const coreCandidates = legalCandidates.filter((source) =>
+        isCoreLegalEvidence(question, source),
+      );
+      const pool = coreCandidates.length
+        ? coreCandidates
+        : legalCandidates.length
+          ? legalCandidates
+          : candidates;
+      const sources = relevantSources(byScoreDescending(pool), matchCount);
+      if (sources.length) {
+        return {
+          kind: 'evidence',
+          resolvedModule: {
+            id: selectedModuleId,
+            name: options.selectedModuleName?.trim() || 'Ley y reglamento',
+          },
+          sources,
+          topRelevanceScore: topScore(sources),
+        };
+      }
+    }
     // Una pregunta salarial general suele mezclar documentos de contratación,
     // CTS y bonificaciones. Si esos fragmentos no contienen la escala general,
     // se busca además la tabla de remuneraciones con una consulta canónica para

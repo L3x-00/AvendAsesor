@@ -23,12 +23,12 @@ const source: QualitySource = {
   issuanceYear: 2025,
   mimeType: 'application/pdf',
   moduleName: 'Remuneraciones',
-  page: 3,
-  pageEnd: 3,
+  page: 2,
+  pageEnd: 2,
   pageCount: 4,
   rank: 1,
   relatedModuleName: 'Remuneraciones',
-  title: 'Decreto Supremo N.° 049-2025-EF',
+  title: 'Decreto Supremo N.° 277-2025-EF',
   articleReference: null,
   numeralReference: null,
   sectionTitle: null,
@@ -42,12 +42,12 @@ const corpus: CorpusSnapshot = {
       versionId: source.documentVersionId,
       title: source.title,
       issuanceYear: 2025,
-      resolutionNumber: '049-2025-EF',
+      resolutionNumber: '277-2025-EF',
       documentType: 'DECRETO_SUPREMO',
       mimeType: 'application/pdf',
       moduleNames: ['Remuneraciones'],
       moduleIds: ['salary'],
-      originalFileName: '049.pdf',
+      originalFileName: '277.pdf',
       pageCount: 4,
       sectionTitles: [],
     },
@@ -66,7 +66,7 @@ const negative =
   'Por ahora no encontré información suficiente para orientarte bien sobre esto. Cuéntame el trámite, tu cargo y qué necesitas resolver para buscar una respuesta más precisa.';
 const denied = () =>
   turn({ answer: negative, events: ['no_evidence', 'done'], sources: [] });
-const salaryTable = (amount = '3 300,60', rank = '1') =>
+const salaryTable = (amount = '3 500,70', rank = '1') =>
   turn({
     answer: `Docente contratado, 30 horas, año 2025.\n\n| Año | Jornada | Monto | Cita |\n| --- | --- | --- | --- |\n| 2025 | 30 horas | S/ ${amount} | [${rank}] |`,
   });
@@ -203,9 +203,9 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
   });
   it('el monto correcto requiere decimales exactos y la fuente aplicable (OBS-002/011)', () => {
     expect(salary2025TableMatchesControl(salaryTable())).toBe(true);
-    expect(salary2025TableMatchesControl(salaryTable('3300.60'))).toBe(true);
-    expect(salary2025TableMatchesControl(salaryTable('3,300.60'))).toBe(true);
-    expect(salary2025TableMatchesControl(salaryTable('3.300,60'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3500.70'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3,500.70'))).toBe(true);
+    expect(salary2025TableMatchesControl(salaryTable('3.500,70'))).toBe(true);
     for (const amount of [
       '3 300',
       '3 300,00',
@@ -228,8 +228,8 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
       salary2025TableMatchesControl({
         ...salaryTable(),
         answer: salaryTable().answer.replace(
-          'S/ 3 300,60',
-          'No es S/ 3 300,60',
+          'S/ 3 500,70',
+          'No es S/ 3 500,70',
         ),
       }),
     ).toBe(false);
@@ -512,7 +512,7 @@ describe('oráculos de calidad — contramuestras OBS-020', () => {
         first,
         {
           ...repeated,
-          turns: [{ ...salaryTable(), sources: [{ ...source, page: 2 }] }],
+          turns: [{ ...salaryTable(), sources: [{ ...source, page: 3 }] }],
         },
       ])[0].stable,
     ).toBe(false);

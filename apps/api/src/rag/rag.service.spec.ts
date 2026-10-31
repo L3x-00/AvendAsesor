@@ -272,6 +272,55 @@ describe('RagService', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  it('conserva el módulo legal y responde con la norma relacionada que regula la materia', async () => {
+    gateway.search.mockResolvedValue([
+      {
+        ...source,
+        chunkContent:
+          '5.20 Licencia por motivos particulares: el profesor nombrado puede solicitar hasta dos (02) años continuos o discontinuos en un período de cinco (05) años.',
+        documentTitle:
+          'Norma Técnica de licencias, permisos y vacaciones de profesores',
+        moduleIds: ['situaciones'],
+        moduleNames: ['Situaciones Administrativas'],
+      },
+    ]);
+
+    await expect(
+      service.retrieve(
+        '¿Puedo solicitar licencia por motivos particulares?',
+        'legal-module',
+        [],
+        { legalCrossModule: true, selectedModuleName: 'Ley y reglamento' },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      resolvedModule: { id: 'legal-module', name: 'Ley y reglamento' },
+    });
+  });
+
+  it('no sustituye los derechos de la ley ausente por normas que solo la citan', async () => {
+    gateway.search.mockResolvedValue([
+      {
+        ...source,
+        chunkContent:
+          'La norma se dicta en el marco de la Ley N.º 29944, Ley de Reforma Magisterial, y su Reglamento.',
+        documentTitle: 'Norma técnica relacionada',
+      },
+    ]);
+
+    await expect(
+      service.retrieve(
+        '¿Cuáles son los derechos de los docentes?',
+        'legal-module',
+        [],
+        {
+          legalCrossModule: true,
+          selectedModuleName: 'Ley y reglamento',
+        },
+      ),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
   it('rescata una coincidencia léxica cuando la similitud vectorial no deja candidatos', async () => {
     const lexicalSource = {
       ...source,
