@@ -378,7 +378,11 @@ export default async function OperationsPage({
 
   return (
     <AdminPage
-      description="Centro de control de calidad del asistente: revisa tendencias, reportes y sugerencias sin modificar la conversación original."
+      description={
+        view === "consultar"
+          ? "Revisa las consultas pendientes y la documentación que falta."
+          : "Tendencias, reportes y sugerencias de los docentes en el periodo seleccionado."
+      }
       title="Consultas y reportes"
     >
       <main className={styles.page}>
