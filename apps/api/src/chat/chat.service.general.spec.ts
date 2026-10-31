@@ -342,7 +342,7 @@ describe('ChatService — siete consultas del chat general', () => {
       selectedModuleId: 'rem',
     });
 
-    await collect(service, questions.reassignment);
+    await collect(service, '¿Cómo solicito una licencia?');
 
     const calls = ragService.retrieve.mock.calls as Array<
       [string, string | null, unknown, { topicIntent?: unknown }]
@@ -352,6 +352,43 @@ describe('ChatService — siete consultas del chat general', () => {
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({ selectedModuleId: 'rem' }),
     );
+  });
+
+  it('una consulta de otro tema no usa los documentos del módulo abierto', async () => {
+    const { historyGateway, ragService, service } = setup();
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: CONVERSATION_ID,
+      messages: [],
+      selectedModuleId: 'rem',
+    });
+
+    const events = await collect(service, questions.reassignment);
+
+    // No se busca en Remuneraciones ni se responde con su tabla salarial.
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    expect(events.some((event) => event.type === 'sources')).toBe(false);
+    const clarification = events.find(
+      (event) => event.type === 'clarification',
+    );
+    expect(clarification?.type).toBe('clarification');
+    if (clarification?.type !== 'clarification') return;
+    expect(clarification.data.message).toContain(
+      'Contratación y desplazamientos',
+    );
+    expect(clarification.data.modules).toEqual([
+      { id: 'con', name: 'Contratación y desplazamientos' },
+    ]);
+    expect(events[0]).toMatchObject({
+      data: { moduleId: 'rem' },
+      type: 'conversation',
+    });
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedModuleId: 'rem' }),
+    );
+    const done = events.at(-1);
+    const doneData =
+      done && 'data' in done ? (done.data as Record<string, unknown>) : {};
+    expect(doneData).not.toHaveProperty('modules');
   });
 
   it('una nueva intención no arrastra la clasificación salarial anterior', async () => {

@@ -128,6 +128,16 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([]);
   });
 
+  it('una pregunta de destitución no hereda la consulta salarial previa', () => {
+    expect(
+      inheritedFactorQuestions(
+        'cuando es expulsado el docente',
+        ['hola cuanto gana un docente'],
+        false,
+      ),
+    ).toEqual([]);
+  });
+
   it('interrumpe la herencia tras explicar la finalidad de un instructivo de pagos', () => {
     expect(
       inheritedFactorQuestions(

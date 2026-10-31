@@ -23,7 +23,7 @@ const TOPIC_PATTERNS: readonly RegExp[] = [
   // Remuneraciones y beneficios
   /\b(remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|pagar(?:me|nos)?|pagan|paguen|cobrar|cobro|cuanto (?:gana|ganan|gano|ganaria)|bonificacion(?:es)?|bonos?|cts|pension(?:es)?|jubilacion|jubilar(?:me|se)?|jubilo|cesantia|descuentos?|descontar(?:on|me)?|descuentan|aguinaldo|gratificacion(?:es)?|escolaridad|asignacion(?:es)?|sepelio)\b/u,
   // Régimen disciplinario, conflictos y término del vínculo
-  /\b(cese|renuncia(?:r)?|sancion(?:es)?|sancionar(?:me)?|amonestacion|suspension|destitucion|destituir|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
+  /\b(cese|renuncia(?:r)?|sancion(?:es)?|sancionar(?:me)?|amonestacion|suspension|destitucion|destitu(?:ir|ido|ida)|expuls(?:ion(?:es)?|ad[oa]s?|ar|an|e|en)|separacion(?:es)? (?:del cargo|definitiva)|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
 ];
 
 const ASPECT_PATTERNS: readonly RegExp[] = [

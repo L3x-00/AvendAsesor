@@ -96,7 +96,11 @@ import {
   isDirectRationalizationEvidence,
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
-import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
+import {
+  detectTopicIntent,
+  isTopicIntentEvidence,
+  type TopicIntent,
+} from './topic-intent';
 
 export interface ResolvedModule {
   id: string;
@@ -899,6 +903,15 @@ export function inheritedFactorQuestions(
   forceContext: boolean,
 ): string[] {
   if (!priorUserQuestions.length) return [];
+  // Una pregunta con intención temática propia (destitución, reasignación,
+  // licencia, etc.) no hereda factores salariales del turno anterior. La
+  // pregunta actual manda; el historial solo completa seguimientos.
+  if (
+    detectTopicIntent(question) &&
+    !salaryQuestionProfile(question).isSalaryQuestion
+  ) {
+    return [];
+  }
   // Una pregunta de ascenso o progresión de carrera tiene su propio tema y no
   // hereda jornada, vínculo ni escala de una consulta salarial anterior: el
   // dato de la escala aquí identifica el proceso, no una cifra. Si la pregunta

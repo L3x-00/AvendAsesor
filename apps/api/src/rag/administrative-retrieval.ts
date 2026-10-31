@@ -27,7 +27,7 @@ const TARDINESS_SIGNAL =
 const DISCIPLINARY_PROCESS_SIGNAL =
   /\b(?:procedimiento\s+disciplinario|proceso\s+administrativo\s+disciplinario|\bpad\b)\b/u;
 const DISCIPLINARY_SUBJECT_SIGNAL =
-  /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?)\b/u;
+  /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?|destitu(?:cion|ido|ir)|expuls(?:ion|ado|ar))\b/u;
 const DISCIPLINARY_CONTEXT_SIGNAL =
   /\b(?:docent(?:e|es)?|derecho|notificaci[oó]n|procedimiento)\b/u;
 const WORKDAY_SIGNAL =
@@ -164,9 +164,12 @@ export function isDirectAdministrativeEvidence(
   }
   if (hasDisciplinarySignal(requested)) {
     return (
-      /\b(?:proceso\s+administrativo\s+disciplinario|\bpad\b)\b/u.test(
+      /\b(?:proceso\s+administrativo\s+disciplinario|pad|destitucion|expulsion)\b/u.test(
         evidence,
-      ) && /\b(?:defensa|descargos?|notificaci[oó]n)\b/u.test(evidence)
+      ) &&
+      /\b(?:defensa|descargos?|notificaci[oó]n|destitucion|sancion(?:es)?)\b/u.test(
+        evidence,
+      )
     );
   }
   if (WORKDAY_SIGNAL.test(requested) && SCHOOL_LEVEL_SIGNAL.test(requested)) {

@@ -14,6 +14,7 @@ import {
   salaryClarificationFor,
   salaryEvidenceProfile,
   salaryQuestionProfile,
+  salaryRegimeClarificationFor,
   withInheritedSalaryFactors,
 } from './salary-applicability';
 
@@ -1913,6 +1914,54 @@ describe('factores coloquiales de remuneración', () => {
           }),
         ],
         true,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('salaryRegimeClarificationFor', () => {
+  it('pide el v�nculo cuando la cifra disponible solo describe un r�gimen', () => {
+    const result = salaryRegimeClarificationFor('hola cuanto gana un docente', [
+      chunk({
+        chunkContent:
+          'La remuneraci�n mensual del profesor contratado es S/ 3 500,70 para una jornada de 30 horas.',
+      }),
+    ]);
+    expect(result?.message).toContain('nombrado o contratado');
+  });
+
+  it('no interrumpe si la evidencia ya compara ambos reg�menes', () => {
+    const result = salaryRegimeClarificationFor('cuanto gana un docente', [
+      chunk({
+        chunkContent:
+          'La remuneraci�n mensual del profesor contratado es S/ 3 500,70.',
+      }),
+      chunk({
+        chunkContent:
+          'La remuneraci�n mensual del profesor nombrado es S/ 4 200,00.',
+      }),
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('no interrumpe una pregunta que ya fija un v�nculo o una norma', () => {
+    expect(
+      salaryRegimeClarificationFor('cuanto gana un docente nombrado', [
+        chunk({
+          chunkContent:
+            'La remuneraci�n mensual del profesor nombrado es S/ 4 200,00.',
+        }),
+      ]),
+    ).toBeNull();
+    expect(
+      salaryRegimeClarificationFor(
+        'segun la RSG 121-2018-MINEDU cuanto gana un docente',
+        [
+          chunk({
+            chunkContent:
+              'La remuneraci�n mensual del profesor contratado es S/ 3 500,70.',
+          }),
+        ],
       ),
     ).toBeNull();
   });

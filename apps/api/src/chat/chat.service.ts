@@ -46,6 +46,7 @@ import {
   isBroadSalaryQuestion,
   salaryClarificationFor,
   salaryQuestionProfile,
+  salaryRegimeClarificationFor,
   salaryRowMismatch,
   withInheritedSalaryFactors,
 } from '../rag/salary-applicability';
@@ -881,6 +882,18 @@ export function topicIntentWithoutEvidenceMessage(
 }
 
 /**
+ * Insuficiencia específica de una consulta salarial de cargo directivo cuando
+ * la evidencia recuperada no atribuye un monto. Pide solo la distinción que
+ * cambia la búsqueda y no completa ninguna cifra.
+ */
+export function directiveSalaryGapMessage(moduleName: string | null): string {
+  const module = moduleName?.trim();
+  return `${
+    module ? `En el módulo «${module}»` : 'En la documentación disponible'
+  } no encontré una fuente que atribuya un monto al cargo directivo consultado. Para no darte una cifra sin respaldo, indícame si te refieres a director de institución educativa o a especialista en educación; con ese dato vuelvo a buscar en la documentación.`;
+}
+
+/**
  * Negativa verificable cuando la persona pide una norma concreta que no forma
  * parte de la evidencia aprobada. Solo repite identidades extraídas de la
  * pregunta: no completa títulos, vigencia ni contenido con conocimiento del
@@ -1329,9 +1342,8 @@ export class ChatService {
     // la entrada para decidir: un chat de módulo lo conserva desde el
     // historial y no debe degradarse a general.
     const generalChat = selectedModuleId === null;
-    const detectedIntent = generalChat
-      ? detectTopicIntent(effectiveQuestion)
-      : null;
+    const questionIntent = detectTopicIntent(effectiveQuestion);
+    const detectedIntent = generalChat ? questionIntent : null;
     // La intención de proceso no manda sobre una pregunta de cifra: la
     // respuesta salarial ya combina la norma con la tabla y sus condiciones.
     // La asignación por ruralidad es la excepción porque el pago es el tema.
@@ -1399,7 +1411,99 @@ export class ChatService {
     // módulo, sin buscar en otros temas, sin ofrecer redirecciones y sin pedir
     // una aclaración que no resolvería nada.
     const moduleCorpus = await this.moduleCorpusState(selectedModuleId);
-    if (moduleCorpus && !moduleCorpus.documented) {
+    let selectedModuleName: string | null = moduleCorpus?.name ?? null;
+    if (!selectedModuleName && selectedModuleId) {
+      try {
+        selectedModuleName =
+          (await this.cachedModules())
+            .find((module) => module.id === selectedModuleId)
+            ?.name?.trim() ?? null;
+      } catch {
+        selectedModuleName = null;
+      }
+    }
+    // Un módulo legal puede no tener la ley cargada y aun así responder con
+    // normas relacionadas (licencias, PAD, reglamento) sin abandonar el tema.
+    // Solo en ese ámbito se permite buscar fuera; el módulo elegido se conserva.
+    const legalModule = isLegalModuleName(selectedModuleName);
+    const legalCrossModule = Boolean(
+      legalModule && isLegalQuestion(effectiveQuestion),
+    );
+    // Una pregunta clara de otro proceso no se responde con los documentos del
+    // módulo abierto (por ejemplo, una destitución dentro de Remuneraciones).
+    // Se informa el tema, se ofrece cambiar y no se redirige automáticamente.
+    if (
+      !legalCrossModule &&
+      selectedModuleId &&
+      questionIntent &&
+      moduleCorpus
+    ) {
+      const modules = await this.cachedModules().catch(() => []);
+      const current = modules.find((module) => module.id === selectedModuleId);
+      const currentRootName = current?.parentModuleId
+        ? (modules.find((module) => module.id === current.parentModuleId)
+            ?.name ?? current.name)
+        : (current?.name ?? moduleCorpus.name);
+      if (
+        normalizeSpanishText(currentRootName) !==
+        normalizeSpanishText(questionIntent.moduleName)
+      ) {
+        const target = modules.find(
+          (module) =>
+            module.parentModuleId === null &&
+            normalizeSpanishText(module.name) ===
+              normalizeSpanishText(questionIntent.moduleName),
+        );
+        const message = `Tu consulta trata sobre ${questionIntent.label}, que corresponde al módulo «${questionIntent.moduleName}». Ahora estás en «${currentRootName}»; si quieres, cambia a ese tema para que pueda responderte con sus fuentes.`;
+        if (input.abortSignal?.aborted) return;
+        const turn = await this.historyGateway.beginTurn({
+          conversationId,
+          question: input.question,
+          selectedModuleId,
+          userId: input.authorization.userId,
+        });
+        yield {
+          data: {
+            conversationId: turn.conversationId,
+            moduleId: selectedModuleId,
+            startedNewConversation,
+            userMessageId: turn.userMessageId,
+          },
+          type: 'conversation',
+        };
+        const completed = await this.historyGateway.completeTurn({
+          answer: message,
+          conversationId: turn.conversationId,
+          faqMemory,
+          qualitySignals: [],
+          replyRole: 'clarification',
+          retrievalScope: detectRetrievalScope(effectiveQuestion),
+          sources: [],
+          topRelevanceScore: null,
+          unansweredReason: 'ambiguous_request',
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        yield {
+          data: {
+            message,
+            modules: target ? [{ id: target.id, name: target.name }] : [],
+          },
+          type: 'clarification',
+        };
+        yield {
+          data: {
+            conversationId: turn.conversationId,
+            inReplyToMessageId: turn.userMessageId,
+            messageId: completed.answerMessageId,
+            provider: 'rule',
+          },
+          type: 'done',
+        };
+        return;
+      }
+    }
+    if (moduleCorpus && !moduleCorpus.documented && !legalCrossModule) {
       if (input.abortSignal?.aborted) return;
       const turn = await this.historyGateway.beginTurn({
         conversationId,
@@ -1443,23 +1547,6 @@ export class ChatService {
           ),
       )
       .map((message) => message.content);
-    let selectedModuleName: string | null = null;
-    if (selectedModuleId) {
-      try {
-        selectedModuleName =
-          (await this.cachedModules())
-            .find((module) => module.id === selectedModuleId)
-            ?.name?.trim() ?? null;
-      } catch {
-        selectedModuleName = null;
-      }
-    }
-    const legalModule = isLegalModuleName(selectedModuleName);
-    const legalCrossModule = Boolean(
-      legalModule &&
-      (isLegalQuestion(effectiveQuestion) ||
-        priorUserQuestions.some((prior) => isLegalQuestion(prior))),
-    );
     // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
     // consulta actual ni las anteriores nombran un proceso, hay tantas
     // interpretaciones como temas y corresponde pedir precisión. Cubre el
@@ -1801,6 +1888,16 @@ export class ChatService {
         // La intención ya está identificada: la falta es documental y se
         // explica por tema, sin pedir una aclaración ni ofrecer módulos.
         message = intentMessage;
+      } else if (
+        selectedModuleId &&
+        salaryQuestionProfile(effectiveQuestion).isSalaryQuestion &&
+        salaryQuestionProfile(effectiveQuestion).role === 'directivo'
+      ) {
+        // Una consulta de remuneración directiva sin monto atribuible pide la
+        // distinción que cambia la búsqueda, no una cifra inventada.
+        message = directiveSalaryGapMessage(
+          moduleCorpus?.name ?? selectedModuleName,
+        );
       } else if (selectedModuleId && moduleCorpus?.name) {
         // Dentro de un módulo la falta de evidencia se explica con su nombre:
         // el tema ya está elegido y no corresponde pedir el trámite ni sugerir
@@ -1892,7 +1989,8 @@ export class ChatService {
           salaryQuestion,
           retrieval.sources,
           personalSalary,
-        );
+        ) ??
+        salaryRegimeClarificationFor(salaryQuestion, retrieval.sources);
       if (clarification) {
         if (input.abortSignal?.aborted) return;
         const completed = await this.historyGateway.completeTurn({

@@ -1050,6 +1050,54 @@ export function salaryClarificationFor(
   return null;
 }
 
+/**
+ * Pregunta simple de monto sin vínculo declarado. Si la evidencia con cifras
+ * solo describe un régimen, responder con esa tabla haría creer que es la
+ * regla general. Se pide el único dato que decide entre las dos escalas.
+ */
+export function salaryRegimeClarificationFor(
+  question: string,
+  sources: RetrievedChunk[],
+): SalaryClarification | null {
+  const text = normalizeSpanishText(question);
+  if (
+    !/^\s*(?:hola[, ]*)?(?:cuanto)\s+(?:gana|ganan|gano|se\s+gana)\b/u.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  // Una norma o un documento concretos acotan la respuesta; no se interrumpe.
+  if (
+    /\b(?:rsg|rm|ds|ley|decreto|resolucion|segun|instructivo|finalidad)\b/u.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  const profile = salaryQuestionProfile(question);
+  if (
+    !profile.isSalaryQuestion ||
+    profile.condition !== null ||
+    profile.asksSpecialAllocation
+  ) {
+    return null;
+  }
+  const conditions = new Set<string>();
+  for (const source of sources) {
+    for (const sentence of amountSentencesIn(source.chunkContent)) {
+      for (const condition of conditionsIn(sentence)) conditions.add(condition);
+    }
+  }
+  if (conditions.size !== 1) return null;
+  const [condition] = [...conditions];
+  const other = condition === 'contratado' ? 'nombrado' : 'contratado';
+  return {
+    factor: 'condicion',
+    message: `Para darte la cifra correcta necesito un solo dato: ¿tu vínculo es ${other} o ${condition}? Con eso te indico el monto vigente que te corresponde y su alcance.`,
+  };
+}
+
 export interface SalaryAnswerFinding {
   excerpt: string;
 }
