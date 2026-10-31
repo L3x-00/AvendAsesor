@@ -148,6 +148,8 @@ function contributesMaterialBeyond(
   const article = /\barticulo\s+(\d+)\b/u.exec(candidateText)?.[1];
   if (
     article &&
+    (markersIn(candidateText).length > 0 ||
+      hasSubstantiveFigure(candidateText)) &&
     !new RegExp(`\\barticulo\\s+${article}\\b`, 'u').test(primaryText)
   ) {
     return true;
