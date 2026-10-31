@@ -169,7 +169,7 @@ export default async function ConsultationCasePage({
       description="Revisa el caso con sus fuentes y conserva cada decisión en el historial operativo."
       title="Detalle de caso"
     >
-      <main className={styles.page}>
+      <main className={`${styles.page} ${styles.caseDetailPage}`}>
         <Link className={styles.backLink} href="/admin/operations">
           ‹ Volver a Consultas y reportes
         </Link>
@@ -202,7 +202,7 @@ export default async function ConsultationCasePage({
               ) : null}
             </div>
           </div>
-          <div className={styles.detailGrid}>
+          <div className={`${styles.detailGrid} ${styles.caseDetailOverview}`}>
             <section className={styles.detailBlock}>
               <h3>Consulta original</h3>
               <p className={styles.caseText}>
@@ -211,9 +211,20 @@ export default async function ConsultationCasePage({
               </p>
             </section>
             {detail.conversationQuestions.length > 0 ? (
-              <section className={styles.detailBlock}>
-                <h3>Preguntas del docente hasta este caso (hasta 100)</h3>
-                <ol>
+              <details
+                className={`${styles.detailBlock} ${styles.caseConversationHistory}`}
+              >
+                <summary className={styles.caseConversationSummary}>
+                  <span>
+                    Preguntas anteriores del docente
+                    <small>
+                      {detail.conversationQuestions.length} preguntas disponibles
+                    </small>
+                  </span>
+                  <span aria-hidden="true">⌄</span>
+                </summary>
+
+                <ol className={styles.caseConversationList}>
                   {detail.conversationQuestions.map((question) => (
                     <li key={question.id}>
                       <p className={styles.caseText}>{question.content}</p>
@@ -223,7 +234,7 @@ export default async function ConsultationCasePage({
                     </li>
                   ))}
                 </ol>
-              </section>
+              </details>
             ) : null}
             <section className={styles.detailBlock}>
               <h3>Respuesta original</h3>
@@ -271,6 +282,121 @@ export default async function ConsultationCasePage({
           ) : null}
         </section>
 
+        
+
+        <section className={styles.section} aria-labelledby="case-action-title">
+          <h2 className={styles.detailTitle} id="case-action-title">
+            Gestionar caso
+          </h2>
+          <p className={styles.description}>
+            Cambia el estado, agrega una nota o corrige la ruta. Las notas nunca
+            reemplazan el historial previo.
+          </p>
+          
+          <AdminActionForm
+            action={updateConsultationCaseAction}
+            className={`${styles.compactForm} ${styles.caseManagementForm}`}
+            rules={{
+              note: [
+                {
+                  kind: "maxLength",
+                  label: "La nota de revisión",
+                  max: 2000,
+                },
+              ],
+            }}
+            submitLabel="Guardar cambios"
+          >
+            <input name="caseId" type="hidden" value={caseId} />
+
+            <div className={styles.caseManagementGrid}>
+              <label htmlFor="case-status-change">
+                Estado
+                <select
+                  defaultValue=""
+                  id="case-status-change"
+                  name="status"
+                >
+                  <option value="">Conservar estado actual</option>
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label htmlFor="case-note">
+                Nota de revisión
+                <textarea
+                  id="case-note"
+                  maxLength={2000}
+                  name="note"
+                  placeholder="Describe brevemente la revisión o decisión tomada..."
+                  rows={3}
+                />
+                <FieldError name="note" />
+              </label>
+            </div>
+
+            {access.modulesAccess ? (
+              <details className={styles.caseRoutingDetails}>
+                <summary className={styles.caseRoutingSummary}>
+                  <span>Corregir módulo o submódulo</span>
+                  <span
+                    aria-hidden="true"
+                    className={styles.caseRoutingIndicator}
+                  >
+                    <svg
+                      fill="none"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      width="18"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                  </span>
+                </summary>
+
+                <div className={styles.caseRoutingContent}>
+                  <p className={styles.caseRoutingHelp}>
+                    Utiliza esta opción únicamente cuando la consulta
+                    haya sido clasificada en un módulo incorrecto.
+                  </p>
+
+                  <label className={styles.caseRoutingCheckbox}>
+                    <input
+                      name="changeRouting"
+                      type="checkbox"
+                      value="true"
+                    />
+                    <span>
+                      <strong>Aplicar corrección de ruta</strong>
+                      <small>
+                        Marca esta casilla para guardar el módulo
+                        o submódulo seleccionado al pulsar
+                        «Guardar cambios».
+                      </small>
+                    </span>
+                  </label>
+
+                  <div className={styles.caseRoutingFields}>
+                    <ConsultationRouteFields
+                      initialModuleId={caseData.detectedModuleId}
+                      initialSubmoduleId={caseData.detectedSubmoduleId}
+                      roots={roots}
+                      submodules={submodules}
+                    />
+                  </div>
+                </div>
+              </details>
+            ) : null}
+          </AdminActionForm>
+        </section>
         {showMissingDocument ? (
           <section
             aria-labelledby="case-missing-title"
@@ -292,70 +418,18 @@ export default async function ConsultationCasePage({
             />
           </section>
         ) : null}
+        <details className={`${styles.section} ${styles.caseSecondaryDetails}`}>
+          <summary className={styles.caseSecondarySummary}>
+            <span className={styles.caseSecondaryHeading}>
+              <span className={styles.detailTitle}>Fuentes utilizadas</span>
+              <span className={styles.caseSecondaryCount}>
+                {detail.sources.length}
+              </span>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
 
-        <section className={styles.section} aria-labelledby="case-action-title">
-          <h2 className={styles.detailTitle} id="case-action-title">
-            Gestionar caso
-          </h2>
-          <p className={styles.description}>
-            Cambia el estado, agrega una nota o corrige la ruta. Las notas nunca
-            reemplazan el historial previo.
-          </p>
-          <AdminActionForm
-            action={updateConsultationCaseAction}
-            className={styles.compactForm}
-            rules={{ note: [{ kind: "maxLength", label: "La nota de revisión", max: 2000 }] }}
-            submitLabel="Guardar cambios"
-          >
-            <input name="caseId" type="hidden" value={caseId} />
-            <div className={styles.formGrid}>
-              <label htmlFor="case-status-change">
-                Estado
-                <select defaultValue="" id="case-status-change" name="status">
-                  <option value="">Conservar estado actual</option>
-                  {Object.entries(statusLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label htmlFor="case-note">
-                Nota de revisión
-                <textarea
-                  id="case-note"
-                  maxLength={2000}
-                  name="note"
-                  rows={3}
-                />
-                <FieldError name="note" />
-              </label>
-            </div>
-            {access.modulesAccess ? (
-              <details>
-                <summary>Corregir ruta de módulo o submódulo</summary>
-                <label className={styles.meta}>
-                  <input name="changeRouting" type="checkbox" value="true" />
-                  Guardar la corrección de ruta mostrada abajo
-                </label>
-                <ConsultationRouteFields
-                  initialModuleId={caseData.detectedModuleId}
-                  initialSubmoduleId={caseData.detectedSubmoduleId}
-                  roots={roots}
-                  submodules={submodules}
-                />
-              </details>
-            ) : null}
-          </AdminActionForm>
-        </section>
-
-        <section
-          className={styles.section}
-          aria-labelledby="case-sources-title"
-        >
-          <h2 className={styles.detailTitle} id="case-sources-title">
-            Fuentes utilizadas
-          </h2>
+          <div className={styles.caseSecondaryContent}>
           {detail.sources.length === 0 ? (
             <p className={styles.empty}>
               Este caso no tiene fuentes persistidas. Se conserva para controlar
@@ -387,7 +461,8 @@ export default async function ConsultationCasePage({
               ))}
             </ol>
           )}
-        </section>
+          </div>
+        </details>
 
         <section
           className={styles.section}
@@ -415,39 +490,75 @@ export default async function ConsultationCasePage({
           ) : (
             <p className={styles.empty}>Aún no hay documentos vinculados.</p>
           )}
-          {access.modulesAccess ? (
-            <AdminActionForm
-              action={linkConsultationCaseDocumentAction}
-              className={styles.compactForm}
-              rules={{ documentId: [{ kind: "required", label: "El documento" }] }}
-              submitLabel="Vincular documento"
-            >
-              <input name="caseId" type="hidden" value={caseId} />
-              <label htmlFor="case-document-link">
-                Documento existente
-                <select id="case-document-link" name="documentId" required>
-                  <option value="">Selecciona un documento</option>
-                  {documents
-                    .filter((document) => !document.isDeleted)
-                    .map((document) => (
-                      <option key={document.id} value={document.id}>
-                        {document.title}
-                      </option>
-                    ))}
-                </select>
-                <FieldError name="documentId" />
-              </label>
-            </AdminActionForm>
-          ) : null}
+         {access.modulesAccess ? (
+          <details className={styles.caseUploadDetails}>
+            <summary className={styles.caseUploadSummary}>
+              <span>Vincular documento existente</span>
+              <span aria-hidden="true" className={styles.caseDisclosureIcon}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  width="20"
+                  height="20"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
+            </summary>
+
+            <div className={styles.caseDocumentLinkContent}>
+              <AdminActionForm
+                action={linkConsultationCaseDocumentAction}
+                className={styles.compactForm}
+                rules={{
+                  documentId: [
+                    { kind: "required", label: "El documento" },
+                  ],
+                }}
+                submitLabel="Vincular documento"
+              >
+                <input name="caseId" type="hidden" value={caseId} />
+
+                <label htmlFor="case-document-link">
+                  Documento existente
+                  <select
+                    id="case-document-link"
+                    name="documentId"
+                    required
+                  >
+                    <option value="">Selecciona un documento</option>
+                    {documents
+                      .filter((document) => !document.isDeleted)
+                      .map((document) => (
+                        <option key={document.id} value={document.id}>
+                          {document.title}
+                        </option>
+                      ))}
+                  </select>
+                  <FieldError name="documentId" />
+                </label>
+              </AdminActionForm>
+            </div>
+          </details>
+        ) : null}
         </section>
 
-        <section
-          className={styles.section}
-          aria-labelledby="case-attachments-title"
-        >
-          <h2 className={styles.detailTitle} id="case-attachments-title">
-            Adjuntos del docente
-          </h2>
+        <details className={`${styles.section} ${styles.caseSecondaryDetails}`}>
+          <summary className={styles.caseSecondarySummary}>
+            <span className={styles.caseSecondaryHeading}>
+              <span className={styles.detailTitle}>Adjuntos del docente</span>
+              <span className={styles.caseSecondaryCount}>
+                {detail.attachments.length}
+              </span>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
+
+          <div className={styles.caseSecondaryContent}>
           {detail.attachments.length === 0 ? (
             <p className={styles.empty}>No hay adjuntos para este caso.</p>
           ) : (
@@ -553,15 +664,21 @@ export default async function ConsultationCasePage({
               ))}
             </ul>
           )}
-        </section>
+          </div>
+        </details>
 
-        <section
-          className={styles.section}
-          aria-labelledby="case-history-title"
-        >
-          <h2 className={styles.detailTitle} id="case-history-title">
-            Historial del caso
-          </h2>
+        <details className={`${styles.section} ${styles.caseSecondaryDetails}`}>
+          <summary className={styles.caseSecondarySummary}>
+            <span className={styles.caseSecondaryHeading}>
+              <span className={styles.detailTitle}>Historial del caso</span>
+              <span className={styles.caseSecondaryCount}>
+                {detail.events.length}
+              </span>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
+
+          <div className={styles.caseSecondaryContent}>
           {detail.events.length === 0 ? (
             <p className={styles.empty}>Todavía no hay eventos registrados.</p>
           ) : (
@@ -583,7 +700,8 @@ export default async function ConsultationCasePage({
               ))}
             </ol>
           )}
-        </section>
+          </div>
+        </details>
       </main>
     </AdminPage>
   );

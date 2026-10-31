@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import styles from "./consultation-reports.module.css";
 import { linkUploadedDocumentToCaseAction } from "@/app/admin/operations/consultation-actions";
 import {
   DOCUMENT_TYPE_OPTIONS,
@@ -47,9 +48,16 @@ export function CaseDocumentUpload({
     roots.find((item) => item.id === destinationId)?.name;
 
   return (
-    <details className="mt-4 rounded-lg border border-avend-border p-4">
-      <summary className="cursor-pointer text-base font-bold">
-        Cargar documento para este caso
+    <details className={styles.caseUploadDetails}>
+      <summary className={styles.caseUploadSummary}>
+        <span>Cargar documento para este caso</span>
+        <span aria-hidden="true" className={styles.caseDisclosureIcon}>
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20"
+            stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
       </summary>
       <p className="mt-2 text-base text-avend-text-muted">
         Elige el módulo y, si corresponde, el submódulo donde quedará el
@@ -57,7 +65,7 @@ export function CaseDocumentUpload({
       </p>
       <DocumentPdfUploadForm
         apiBaseUrl={apiBaseUrl}
-        className="mt-3 space-y-3"
+        className={styles.caseUploadForm}
         endpoint="/admin/documents"
         onUploaded={({ id }) => linkUploadedDocumentToCaseAction(caseId, id)}
         submitLabel="Cargar y vincular al caso"

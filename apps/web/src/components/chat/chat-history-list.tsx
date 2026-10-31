@@ -257,6 +257,7 @@ export function ChatHistoryList({
   );
   const [notice, setNotice] = useState<RemovalNotice | null>(null);
   const [settling, setSettling] = useState(false);
+  const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Última lista que llegó bien. Si una recarga posterior falla (por ejemplo
   // la que sigue a un borrado), se sigue mostrando en vez de vaciar la vista.
   const [lastLoaded, setLastLoaded] = useState<LoadedPage | null>(
@@ -266,14 +267,19 @@ export function ChatHistoryList({
     setLastLoaded({ conversations, nextCursor, updates });
   }
 
-  useEffect(() => {
-    // Falso al salir de Historial (desmontada u oculta por el router): una
-    // respuesta tardía no debe navegar ni abrir avisos en otra sección.
-    activeRef.current = true;
-    return () => {
-      activeRef.current = false;
-    };
-  }, []);
+ useEffect(() => {
+  // Impide que operaciones tardías actúen al salir de Historial.
+  activeRef.current = true;
+
+  return () => {
+    activeRef.current = false;
+
+    if (settleTimeoutRef.current !== null) {
+      globalThis.clearTimeout(settleTimeoutRef.current);
+      settleTimeoutRef.current = null;
+    }
+  };
+}, []);
 
   const closeNotice = useCallback(() => setNotice(null), []);
 
@@ -331,7 +337,17 @@ export function ChatHistoryList({
       });
       setSettling(true);
     });
-    globalThis.setTimeout(() => setSettling(false), SETTLE_MS);
+    if (settleTimeoutRef.current !== null) {
+      globalThis.clearTimeout(settleTimeoutRef.current);
+    }
+
+    settleTimeoutRef.current = globalThis.setTimeout(() => {
+      settleTimeoutRef.current = null;
+
+      if (activeRef.current) {
+        setSettling(false);
+      }
+    }, SETTLE_MS);
     document
       .getElementById(
         neighbour ? historyItemId(neighbour) : HISTORY_TITLE_ID,
