@@ -40,6 +40,11 @@ describe('detectTopicIntent', () => {
       'Situaciones Administrativas',
     ],
     [
+      'cuando es expulsado el docente',
+      'disciplinary',
+      'Situaciones Administrativas',
+    ],
+    [
       'en mi colegio estan bajando los alumnos y dicen que van a reducir plazas eso se puede',
       'rationalization',
       'Cargos y plazas',
