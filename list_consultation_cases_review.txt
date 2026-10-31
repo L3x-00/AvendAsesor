@@ -1,0 +1,300 @@
+create or replace function public.list_consultation_cases(
+  p_actor_id uuid,
+  p_period text default 'month',
+  p_status text default null,
+  p_kind text default null,
+  p_issue_type text default null,
+  p_module_id uuid default null,
+  p_submodule_id uuid default null,
+  p_query text default null,
+  p_limit integer default 50,
+  p_offset integer default 0
+)
+returns table (
+  id uuid,
+  kind public.consultation_case_kind,
+  issue_type public.consultation_case_issue,
+  status public.consultation_case_status,
+  conversation_id uuid,
+  requested_module_id uuid,
+  detected_module_id uuid,
+  detected_submodule_id uuid,
+  requested_module_name text,
+  detected_module_name text,
+  detected_submodule_name text,
+  question_snapshot text,
+  answer_snapshot text,
+  review_excerpt text,
+  report_reason public.consultation_report_reason,
+  reporter_comment text,
+  top_relevance_score real,
+  attachment_count bigint,
+  source_count bigint,
+  linked_document_count bigint,
+  created_at timestamptz,
+  updated_at timestamptz,
+  total_count bigint
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  start_at timestamptz;
+  -- Keep the range boundary current even when the caller created a case in
+  -- this transaction immediately before requesting the list.
+  end_at timestamptz := clock_timestamp();
+  normalized_query text := nullif(btrim(coalesce(p_query, '')), '');
+begin
+  perform private.require_active_consultation_administrator(p_actor_id);
+  start_at := private.consultation_period_start(p_period);
+
+  if p_limit not between 1 and 100 or p_offset < 0 then
+    raise exception using errcode = '22023', message = 'The consultation case page is invalid';
+  end if;
+  if p_status is not null and p_status not in ('pending', 'in_review', 'resolved', 'discarded') then
+    raise exception using errcode = '22023', message = 'The consultation case status is invalid';
+  end if;
+  if p_kind is not null and p_kind not in ('automatic_alert', 'teacher_report', 'teacher_suggestion') then
+    raise exception using errcode = '22023', message = 'The consultation case kind is invalid';
+  end if;
+  if p_issue_type is not null and p_issue_type not in (
+    'support_insufficient', 'support_partial', 'stale_document', 'citation_insufficient',
+    'possible_contradiction', 'low_confidence', 'technical_error', 'ambiguous_request',
+    'teacher_report', 'teacher_suggestion'
+  ) then
+    raise exception using errcode = '22023', message = 'The consultation case issue is invalid';
+  end if;
+  if normalized_query is not null and char_length(normalized_query) > 200 then
+    raise exception using errcode = '22023', message = 'The consultation search text is invalid';
+  end if;
+
+  return query
+  with filtered as materialized (
+    select consultation_case.*
+    from public.consultation_cases as consultation_case
+    where consultation_case.created_at >= start_at
+      and consultation_case.created_at < end_at
+      and (p_status is null or consultation_case.status::text = p_status)
+      and (p_kind is null or consultation_case.kind::text = p_kind)
+      and (p_issue_type is null or consultation_case.issue_type::text = p_issue_type)
+      and (
+        p_module_id is null
+        or exists (
+          select 1
+          from private.consultation_module_context(
+            coalesce(
+              consultation_case.detected_module_id,
+              consultation_case.requested_module_id
+            )
+          ) as route_context
+          where route_context.root_module_id = p_module_id
+        )
+      )
+      and (p_submodule_id is null or consultation_case.detected_submodule_id = p_submodule_id)
+      and (
+        normalized_query is null
+        or consultation_case.question_snapshot ilike '%' || normalized_query || '%'
+        or consultation_case.answer_snapshot ilike '%' || normalized_query || '%'
+        or consultation_case.reporter_comment ilike '%' || normalized_query || '%'
+        or consultation_case.review_excerpt ilike '%' || normalized_query || '%'
+      )
+  ), counted as (
+    select filtered.*, count(*) over () as matched_total
+    from filtered
+  )
+  select
+    consultation_case.id,
+    consultation_case.kind,
+    consultation_case.issue_type,
+    consultation_case.status,
+    consultation_case.conversation_id,
+    consultation_case.requested_module_id,
+    consultation_case.detected_module_id,
+    consultation_case.detected_submodule_id,
+    consultation_case.requested_module_name,
+    consultation_case.detected_module_name,
+    consultation_case.detected_submodule_name,
+    consultation_case.question_snapshot,
+    consultation_case.answer_snapshot,
+    consultation_case.review_excerpt,
+    consultation_case.report_reason,
+    consultation_case.reporter_comment,
+    consultation_case.top_relevance_score,
+    coalesce(attachments.count_value, 0)::bigint,
+    coalesce(sources.count_value, 0)::bigint,
+    coalesce(links.count_value, 0)::bigint,
+    consultation_case.created_at,
+    consultation_case.updated_at,
+    consultation_case.matched_total
+  from counted as consultation_case
+  left join lateral (
+    select count(*)::bigint as count_value
+    from public.consultation_case_attachments as attachment
+    where attachment.consultation_case_id = consultation_case.id
+  ) as attachments on true
+  left join lateral (
+    select count(*)::bigint as count_value
+    from public.consultation_case_sources as source
+    where source.consultation_case_id = consultation_case.id
+  ) as sources on true
+  left join lateral (
+    select count(*)::bigint as count_value
+    from public.consultation_case_document_links as link
+    where link.consultation_case_id = consultation_case.id
+  ) as links on true
+  order by consultation_case.created_at desc, consultation_case.id desc
+  limit p_limit offset p_offset;
+end;
+$$;
+
+-- A topic is the most specific route the system actually detected. The module
+-- initially selected by the teacher is intentionally never used as a topic:
+-- it can be unrelated to the question.
+create or replace function public.list_consultation_topics(
+  p_actor_id uuid,
+  p_period text default 'month',
+  p_limit integer default 5
+)
+returns table (
+  id uuid,
+  name text,
+  module_id uuid,
+  module_name text,
+  topic_kind text,
+  count_value bigint
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  start_at timestamptz;
+  end_at timestamptz := clock_timestamp();
+begin
+  perform private.require_active_consultation_administrator(p_actor_id);
+  start_at := private.consultation_period_start(p_period);
+
+  if p_limit not between 1 and 10 then
+    raise exception using errcode = '22023', message = 'The consultation topic limit is invalid';
+  end if;
+
+  return query
+  select
+    coalesce(submodule.id, root.id),
+    coalesce(submodule.name, root.name),
+    root.id,
+    root.name,
+    case when submodule.id is null then 'module' else 'submodule' end,
+    count(*)::bigint
+  from public.consultation_turns as turn
+  join public.modules as root on root.id = turn.detected_module_id
+  left join public.modules as submodule on submodule.id = turn.detected_submodule_id
+  where turn.detected_module_id is not null
+    and turn.created_at >= start_at
+    and turn.created_at < end_at
+  group by root.id, root.name, submodule.id, submodule.name
+  order by count(*) desc, coalesce(submodule.name, root.name), coalesce(submodule.id, root.id)
+  limit p_limit;
+end;
+$$;
+
+-- The dashboard must expose answers that need a human decision first,
+-- independently from its chronological working queue. A response can produce
+-- several alerts and a teacher report, so group them by answer to avoid
+-- inflating its priority. Resolved/discarded cases and suggestions are not
+-- candidates for this answer-quality queue.
+drop function if exists public.list_consultation_review_priorities(uuid, text, integer);
+create or replace function public.list_consultation_review_priorities(
+  p_actor_id uuid,
+  p_period text default 'month',
+  p_limit integer default 5
+)
+returns table (
+  case_id uuid,
+  answer_message_id uuid,
+  question_snapshot text,
+  answer_snapshot text,
+  review_excerpt text,
+  detected_module_name text,
+  detected_submodule_name text,
+  created_at timestamptz,
+  issue_types text[],
+  open_case_count bigint,
+  priority text
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  start_at timestamptz;
+  end_at timestamptz := clock_timestamp();
+begin
+  perform private.require_active_consultation_administrator(p_actor_id);
+  start_at := private.consultation_period_start(p_period);
+
+  if p_limit not between 1 and 10 then
+    raise exception using errcode = '22023', message = 'The consultation priority limit is invalid';
+  end if;
+
+  return query
+  with open_answer_cases as materialized (
+    select
+      consultation_case.*,
+      case consultation_case.issue_type
+        when 'support_insufficient' then 4
+        when 'stale_document' then 4
+        when 'possible_contradiction' then 4
+        when 'citation_insufficient' then 3
+        when 'support_partial' then 3
+        when 'teacher_report' then 3
+        when 'low_confidence' then 2
+        else 0
+      end as severity
+    from public.consultation_cases as consultation_case
+    where consultation_case.created_at >= start_at
+      and consultation_case.created_at < end_at
+      and consultation_case.status in ('pending', 'in_review')
+      and consultation_case.answer_message_id is not null
+      and consultation_case.kind in ('automatic_alert', 'teacher_report')
+      and consultation_case.issue_type in (
+        'support_insufficient', 'stale_document', 'possible_contradiction',
+        'citation_insufficient', 'support_partial', 'teacher_report',
+        'low_confidence'
+      )
+  ), grouped as (
+    select
+      (array_agg(answer_case.id order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_case_id,
+      answer_case.answer_message_id,
+      (array_agg(answer_case.question_snapshot order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_question,
+      (array_agg(answer_case.answer_snapshot order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_answer,
+      (array_agg(answer_case.review_excerpt order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_excerpt,
+      (array_agg(answer_case.detected_module_name order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_module,
+      (array_agg(answer_case.detected_submodule_name order by answer_case.severity desc, answer_case.created_at asc, answer_case.id))[1] as representative_submodule,
+      min(answer_case.created_at) as first_created_at,
+      array_agg(distinct answer_case.issue_type::text order by answer_case.issue_type::text) as grouped_issue_types,
+      count(*)::bigint as grouped_case_count,
+      count(distinct answer_case.issue_type)::integer as issue_variety,
+      max(answer_case.severity) as max_severity
+    from open_answer_cases as answer_case
+    group by answer_case.answer_message_id
+  )
+  select
+    summary.representative_case_id,
+    summary.answer_message_id,
+    summary.representative_question,
+    summary.representative_answer,
+    summary.representative_excerpt,
+    summary.representative_module,
+    summary.representative_submodule,
+    summary.first_created_at,
+    summary.grouped_issue_types,
+    summary.grouped_case_count,
+    case summary.max_severity when 4 then 'critical' when 3 then 'high' else 'medium' end
+  from grouped as summary
+  order by summary.max_severity desc, summary.issue_variety desc, summary.first_created_at asc, summary.answer_message_id
+  limit p_limit;
+end;
+$$;
+
