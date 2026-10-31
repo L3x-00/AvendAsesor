@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AdminPage } from "@/components/admin/admin-page";
 import styles from "@/components/admin/consultation-reports.module.css";
 import { UnansweredGroups } from "@/components/admin/unanswered-groups";
@@ -88,28 +89,191 @@ const reportReasonLabels = {
   other: "Otro",
 } as const;
 
+type IconName =
+  | "bulb"
+  | "chart"
+  | "chat"
+  | "document"
+  | "flag"
+  | "refresh"
+  | "users"
+  | "warning";
+
+function IconGraphic({ name }: { name: IconName }) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      {iconPaths[name]}
+    </svg>
+  );
+}
+
+const iconPaths: Record<IconName, ReactNode> = {
+  chat: (
+    <path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5 8.6 8.6 0 0 1-3.9-1L3 21l1.9-4.6a8.5 8.5 0 1 1 15.6-4.9z" />
+  ),
+  chart: <path d="M5 20V12M11 20V5M17 20v-9" />,
+  document: (
+    <>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M5 21V4" />
+      <path d="M5 5h11l-1.6 3L16 11H5z" />
+    </>
+  ),
+  bulb: (
+    <>
+      <path d="M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z" />
+      <path d="M10 19h4M10.5 22h3" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 20v-1.6a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 20v-1.6a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" />
+      <path d="M3 21v-5h5" />
+    </>
+  ),
+  warning: (
+    <>
+      <path d="M12 4 21 20H3z" />
+      <path d="M12 10v4M12 17h.01" />
+    </>
+  ),
+};
+
+type MetricTone = "attention" | "info" | "risk" | "success";
+
 function MetricCard({
   label,
   value,
   hint,
-  tone,
+  icon,
+  tone = "info",
 }: {
   hint: string;
+  icon: IconName;
   label: string;
-  tone?: "attention" | "risk" | "success";
+  tone?: MetricTone;
   value: number | string;
 }) {
   return (
     <div className={styles.metric} data-tone={tone}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-      <small>{hint}</small>
+      <dt>
+        {label}
+        <span aria-hidden="true" className={styles.metricIcon}>
+          <IconGraphic name={icon} />
+        </span>
+      </dt>
+      <dd>
+        {value}
+        <small>{hint}</small>
+      </dd>
     </div>
   );
 }
 
-function rankingValue(item: { count: number; name: string } | null): string {
-  return item ? `${item.name} · ${item.count}` : "Sin datos";
+function MetricGroup({
+  children,
+  icon,
+  title,
+}: {
+  children: ReactNode;
+  icon: IconName;
+  title: string;
+}) {
+  return (
+    <div className={styles.metricGroup}>
+      <h3 className={styles.groupTitle}>
+        <span aria-hidden="true" className={styles.groupIcon}>
+          <IconGraphic name={icon} />
+        </span>
+        {title}
+      </h3>
+      <dl className={styles.metrics}>{children}</dl>
+    </div>
+  );
+}
+
+function HighlightCard({
+  countLabel,
+  footnote,
+  icon,
+  module,
+  submodule,
+  title,
+  titleId,
+  tone,
+}: {
+  countLabel: "consultas" | "incidencias";
+  footnote: string;
+  icon: IconName;
+  module: { count: number; name: string } | null;
+  submodule: { count: number; name: string } | null;
+  title: string;
+  titleId: string;
+  tone: MetricTone;
+}) {
+  const plural = countLabel === "consultas" ? "consultas" : "incidencias";
+  const singular = countLabel === "consultas" ? "consulta" : "incidencia";
+  const rows = [
+    { item: module, label: "Módulo" },
+    { item: submodule, label: "Submódulo" },
+  ];
+
+  return (
+    <section aria-labelledby={titleId} className={styles.section}>
+      <h2 className={styles.highlightTitle} id={titleId}>
+        <span
+          aria-hidden="true"
+          className={styles.highlightIcon}
+          data-tone={tone}
+        >
+          <IconGraphic name={icon} />
+        </span>
+        {title}
+      </h2>
+      <dl className={styles.highlightRows}>
+        {rows.map(({ item, label }) => (
+          <div className={styles.highlightRow} key={label}>
+            <dt>{label}</dt>
+            <dd>
+              <span className={styles.highlightName}>
+                {item ? item.name : "Sin datos"}
+              </span>
+              {item ? (
+                <span className={styles.highlightCount} data-tone={tone}>
+                  {item.count} {item.count === 1 ? singular : plural}
+                </span>
+              ) : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className={styles.highlightNote}>{footnote}</p>
+    </section>
+  );
 }
 
 function Ranking({
@@ -129,7 +293,7 @@ function Ranking({
       {items.length === 0 ? (
         <p className={styles.empty}>No hay datos para este periodo.</p>
       ) : (
-        <ol>
+        <ol role="list">
           {items.map((item) => (
             <li key={item.id}>
               <Link
@@ -170,7 +334,7 @@ function TopicsRanking({
           No hay rutas detectadas para este periodo.
         </p>
       ) : (
-        <ol>
+        <ol role="list">
           {topics.map((topic) => (
             <li key={topic.id}>
               <Link
@@ -428,14 +592,14 @@ export default async function OperationsPage({
           aria-labelledby="consultation-dashboard-title"
           className={styles.section}
         >
-          <div className={styles.sectionHeader}>
+          <div className={`${styles.sectionHeader} ${styles.dashboardHeader}`}>
             <div>
               <h2 id="consultation-dashboard-title">
                 Indicadores de consultas
               </h2>
-              <p>
-                Datos desde {formatDate(dashboard.periodStart)} hasta{" "}
-                {formatDate(dashboard.periodEnd)} (hora de Lima).
+              <p className={styles.periodRange}>
+                Datos del {formatDate(dashboard.periodStart)} al{" "}
+                {formatDate(dashboard.periodEnd)} (hora de Lima)
               </p>
             </div>
             <form className={styles.periodForm} method="get">
@@ -457,72 +621,88 @@ export default async function OperationsPage({
                 </select>
               </label>
               <button
-                className="avend-button avend-button--secondary"
+                className={`avend-button avend-button--primary ${styles.periodButton}`}
                 type="submit"
               >
+                <span aria-hidden="true" className={styles.buttonIcon}>
+                  <IconGraphic name="refresh" />
+                </span>
                 Actualizar
               </button>
             </form>
           </div>
-          <dl className={styles.metrics}>
+
+          <MetricGroup icon="chart" title="Resumen de actividad">
             <MetricCard
               hint="Preguntas de docentes registradas."
+              icon="chat"
               label="Consultas realizadas"
               value={dashboard.totalQuestions}
             />
             <MetricCard
               hint="Consultas con al menos un caso de control."
+              icon="warning"
               label="Respuestas con incidencias"
-              tone="attention"
+              tone="risk"
               value={dashboard.answersWithIncidents}
             />
             <MetricCard
-              hint="No hubo evidencia documental suficiente."
+              hint="Sin evidencia documental suficiente."
+              icon="document"
               label="Sin sustento suficiente"
-              tone="risk"
+              tone="attention"
               value={dashboard.noSupport}
             />
+          </MetricGroup>
+
+          <MetricGroup icon="users" title="Aportes de docentes">
             <MetricCard
               hint="Respuestas reportadas por docentes."
+              icon="flag"
               label="Reportes de docentes"
               tone="attention"
               value={dashboard.teacherReports}
             />
             <MetricCard
               hint="Aportes que esperan revisión humana."
+              icon="bulb"
               label="Sugerencias de docentes"
               value={dashboard.teacherSuggestions}
             />
             <MetricCard
-              hint="Archivos compartidos por docentes en sugerencias."
+              hint="Archivos compartidos en sugerencias."
+              icon="document"
               label="Documentos o normas sugeridos"
               tone="success"
               value={dashboard.documentsSuggested}
             />
-            <MetricCard
-              hint="Ranking independiente por consultas."
-              label="Módulo más consultado"
-              value={rankingValue(dashboard.topConsultedModule)}
-            />
-            <MetricCard
-              hint="Solo cuando la ruta se detectó con certeza."
-              label="Submódulo más consultado"
-              value={rankingValue(dashboard.topConsultedSubmodule)}
-            />
-            <MetricCard
-              hint="Reportes, alertas y sugerencias por módulo."
-              label="Módulo con más incidencias"
-              tone="attention"
-              value={rankingValue(dashboard.topIncidentModule)}
-            />
-            <MetricCard
-              hint="Reportes, alertas y sugerencias por submódulo."
-              label="Submódulo con más incidencias"
-              tone="attention"
-              value={rankingValue(dashboard.topIncidentSubmodule)}
-            />
-          </dl>
+          </MetricGroup>
         </section>
+        ) : null}
+
+        {view === "reportes" && dashboard ? (
+          <div className={styles.highlights}>
+            <HighlightCard
+              countLabel="consultas"
+              footnote="Submódulo identificado con certeza."
+              icon="chart"
+              module={dashboard.topConsultedModule}
+              submodule={dashboard.topConsultedSubmodule}
+              title="Lo más consultado"
+              titleId="top-consulted-title"
+              tone="info"
+            />
+            <HighlightCard
+              countLabel="incidencias"
+              footnote="Reportes, alertas y sugerencias por módulo y submódulo."
+              icon="warning"
+              module={dashboard.topIncidentModule}
+              submodule={dashboard.topIncidentSubmodule}
+              title="Dónde se concentran las incidencias"
+              titleId="top-incidents-title"
+              tone="attention"
+            />
+          </div>
         ) : null}
 
         {view === "reportes" && dashboard ? (
