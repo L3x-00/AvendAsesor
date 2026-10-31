@@ -747,16 +747,84 @@ export function salaryQuestionsForTurn(input: {
 }
 
 /**
+ * Aviso de alcance histórico que acompaña a una insuficiencia. Se detecta de
+ * forma heurística, así que se ofrece revisar antecedentes solo en el alcance
+ * vigente. Compartido por todas las insuficiencias para que no diverjan.
+ */
+function historicalScopeHint(retrievalScope: RetrievalScope): string {
+  return retrievalScope === 'current'
+    ? ' Si tu consulta se refiere a una norma anterior o a un antecedente histórico, indícamelo y con gusto lo reviso.'
+    : '';
+}
+
+/**
  * Mensaje de "sin evidencia" (Hito 3, Fase 9). Amable y sin suposiciones. Cuando
  * la consulta se resolvió con alcance vigente (`current`), invita a revisar
  * antecedentes/versiones anteriores por si la intención era histórica, ya que el
  * alcance se detecta de forma heurística. NUNCA completa la respuesta.
  */
 export function noEvidenceMessage(retrievalScope: RetrievalScope): string {
-  if (retrievalScope === 'current') {
-    return `${RAG_NO_EVIDENCE_MESSAGE} Si tu consulta se refiere a una norma anterior o a un antecedente histórico, indícamelo y con gusto lo reviso.`;
+  return `${RAG_NO_EVIDENCE_MESSAGE}${historicalScopeHint(retrievalScope)}`;
+}
+
+/**
+ * Tema de la consulta para nombrarlo en una insuficiencia específica. No
+ * interpreta ni completa la pregunta: solo la cita limpia y acotada, para que
+ * la persona reconozca de qué se está hablando.
+ */
+function consultationTopic(question: string): string | null {
+  const clean = question
+    .replace(/\s+/gu, ' ')
+    .replace(/^¿\s*/u, '')
+    .replace(/[?!.]+$/u, '')
+    .trim();
+  if (!clean) return null;
+  if (clean.length <= 120) return clean;
+  const cut = clean.slice(0, 120);
+  const boundary = cut.lastIndexOf(' ');
+  return `${(boundary > 60 ? cut.slice(0, boundary) : cut).trim()}…`;
+}
+
+/**
+ * Insuficiencia específica de un módulo sin documentación cargada. No pide una
+ * aclaración ni propone otros temas: la pregunta puede ser comprensible y aun
+ * así no existir fuente. No afirma nada normativo ni reutiliza documentos de
+ * otro módulo.
+ */
+export function moduleWithoutDocumentsMessage(
+  moduleName: string | null,
+  question: string,
+): string {
+  const topic = consultationTopic(question);
+  const module = moduleName?.trim() || null;
+  if (module && topic) {
+    return `Por ahora no cuento con documentación disponible sobre «${topic}» en el módulo «${module}», por lo que no puedo darte una explicación normativa verificada.`;
+  }
+  if (module) {
+    return `Por ahora no cuento con documentación disponible en el módulo «${module}», por lo que no puedo darte una explicación normativa verificada sobre esta consulta.`;
   }
   return RAG_NO_EVIDENCE_MESSAGE;
+}
+
+/**
+ * Hueco de evidencia dentro de un módulo que sí tiene documentos. Se distingue
+ * de `moduleWithoutDocumentsMessage`: aquí el módulo está cargado y lo que
+ * falta es un documento que trate esta consulta. Conserva la invitación a
+ * revisar antecedentes cuando el alcance es vigente, igual que la insuficiencia
+ * general, y no reutiliza fuentes de otros módulos.
+ */
+export function moduleEvidenceGapMessage(
+  moduleName: string | null,
+  question: string,
+  retrievalScope: RetrievalScope,
+): string {
+  const topic = consultationTopic(question);
+  const module = moduleName?.trim() || null;
+  if (!module) return noEvidenceMessage(retrievalScope);
+  const base = topic
+    ? `No encontré evidencia documental disponible en el módulo «${module}» sobre «${topic}», así que no puedo darte una explicación normativa verificada.`
+    : `No encontré evidencia documental disponible en el módulo «${module}» para responder esta consulta, así que no puedo darte una explicación normativa verificada.`;
+  return `${base}${historicalScopeHint(retrievalScope)}`;
 }
 
 /**
@@ -961,13 +1029,21 @@ export class ChatService {
       (!input.conversationId ||
         hasStrongDomainSignal(normalizeSpanishText(question)))
     ) {
-      yield* this.askForOrthographicClarification({
-        clarification: recovery.clarification,
-        conversationId: input.conversationId,
-        question: input.question,
-        userId: input.authorization.userId,
-      });
-      return;
+      // En un módulo sin documentación no hay nada que la corrección pueda
+      // desbloquear: pedir que reescriba la palabra sería una aclaración
+      // inútil. Se deja seguir el flujo, que informa la ausencia documental.
+      const selectedCorpus = await this.moduleCorpusState(
+        input.selectedModuleId,
+      );
+      if (!selectedCorpus || selectedCorpus.documented) {
+        yield* this.askForOrthographicClarification({
+          clarification: recovery.clarification,
+          conversationId: input.conversationId,
+          question: input.question,
+          userId: input.authorization.userId,
+        });
+        return;
+      }
     }
 
     // Metapetición sobre la propia conversación: se responde con la memoria de
@@ -1240,6 +1316,46 @@ export class ChatService {
           provider: 'rule',
         },
       };
+      return;
+    }
+    // Un módulo elegido sin documentación no puede sostener ninguna respuesta
+    // normativa. La pregunta puede ser clara: el problema es la falta de
+    // fuentes, no la intención. Se responde dentro del mismo chat y del mismo
+    // módulo, sin buscar en otros temas, sin ofrecer redirecciones y sin pedir
+    // una aclaración que no resolvería nada.
+    const moduleCorpus = await this.moduleCorpusState(selectedModuleId);
+    if (moduleCorpus && !moduleCorpus.documented) {
+      if (input.abortSignal?.aborted) return;
+      const turn = await this.historyGateway.beginTurn({
+        conversationId,
+        question:
+          acceptedQuestion && startedNewConversation
+            ? effectiveQuestion
+            : input.question,
+        selectedModuleId,
+        userId: input.authorization.userId,
+      });
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          moduleId: selectedModuleId,
+          startedNewConversation,
+          userMessageId: turn.userMessageId,
+        },
+        type: 'conversation',
+      };
+      yield* this.completeWithoutEvidence({
+        conversationId: turn.conversationId,
+        faqMemory,
+        message: moduleWithoutDocumentsMessage(
+          moduleCorpus.name,
+          effectiveQuestion,
+        ),
+        retrievalScope: detectRetrievalScope(effectiveQuestion),
+        topRelevanceScore: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
       return;
     }
     const priorUserQuestions = conversationContext
@@ -1545,9 +1661,19 @@ export class ChatService {
         ? incompleteExactReferencesMessage(retrieval.incompleteExactReferences)
         : retrieval.missingExactReferences?.length
           ? missingExactReferencesMessage(retrieval.missingExactReferences)
-          : unrelated
-            ? buildConversationalReply('unrelated_no_evidence')
-            : undefined;
+          : selectedModuleId && moduleCorpus?.name
+            ? // Dentro de un módulo la falta de evidencia se explica con su
+              // nombre: el tema ya está elegido y no corresponde pedir el
+              // trámite ni sugerir otros módulos. El módulo sí tiene corpus; lo
+              // que falta es un documento que trate esta consulta.
+              moduleEvidenceGapMessage(
+                moduleCorpus.name,
+                effectiveQuestion,
+                retrievalScope,
+              )
+            : unrelated
+              ? buildConversationalReply('unrelated_no_evidence')
+              : undefined;
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -2708,6 +2834,43 @@ export class ChatService {
     } catch (error) {
       this.logger.warn(
         `No se pudo preparar el contexto interno del tema: ${
+          error instanceof Error ? error.message : 'error desconocido'
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Cobertura documental del módulo elegido. `documented: false` significa que
+   * el catálogo —el mismo que exige documento aprobado, versión indexada y
+   * módulo activo para poder citar— no tiene ningún documento para ese módulo
+   * ni para su tema padre. `null` cuando no se puede comprobar (sin catálogo o
+   * con la base caída): en ese caso decide la recuperación normal.
+   */
+  private async moduleCorpusState(
+    moduleId: string | null,
+  ): Promise<{ documented: boolean; name: string } | null> {
+    if (!moduleId || !this.catalogService) return null;
+    try {
+      const modules = await this.cachedModules();
+      const module = modules.find((item) => item.id === moduleId);
+      const name = module?.name?.trim();
+      if (!name) return null;
+      const scope = new Set<string>([moduleId]);
+      // Un subtema se apoya también en los documentos de su tema principal,
+      // igual que el panorama del catálogo.
+      if (module?.parentModuleId) scope.add(module.parentModuleId);
+      const documents = await this.catalogService.availableDocuments();
+      return {
+        documented: documents.some((document) =>
+          document.moduleIds.some((id) => scope.has(id)),
+        ),
+        name,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo comprobar la cobertura del módulo: ${
           error instanceof Error ? error.message : 'error desconocido'
         }`,
       );
