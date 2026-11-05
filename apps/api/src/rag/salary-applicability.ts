@@ -41,7 +41,7 @@ const SALARY_TERMS =
   /\b(?:remuneracion(?:es)?|sueldos?|salarios?|haber(?:es)?|retribucion(?:es)?|pagos?|paga|pagan|paguen|cobro|cobrar|cobra|gan(?:a|an|amos)|percibe|perciben|ingresos?|asignacion(?:es)?|bonificacion(?:es)?|gratificacion(?:es)?|aguinaldos?|escolaridad|subsidios?)\b/u;
 /** «Ganar un concurso» no pregunta un importe; «cuánto debería ganar» sí. */
 const SALARY_AMOUNT_QUESTION =
-  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a))?\s+(?:ganar|gano|gana)\b|\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)\b|\bme\s+corresponde\b/u;
+  /\bcuanto(?:\s+(?:deberia|debo|podria|puedo|voy\s+a|me\s+toca))?\s+(?:ganar|gano|gana)\b|\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)\b|\bme\s+corresponde\b/u;
 
 /** La finalidad de una norma de pagos no pide un importe de esa norma. */
 const DOCUMENT_PURPOSE_REQUEST =

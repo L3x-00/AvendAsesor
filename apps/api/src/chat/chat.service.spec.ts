@@ -952,7 +952,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('al aceptar una propuesta que cambia de tema abre una conversación nueva con la pregunta efectiva', async () => {
+  it('mantiene el chat al aceptar una propuesta fuera del módulo', async () => {
     const selectedModuleId = source.moduleIds[0];
     const newModuleId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -988,9 +988,9 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        question: 'Explícame los requisitos.',
-        selectedModuleId: newModuleId,
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        question: 'sí',
+        selectedModuleId,
       }),
     );
   });
@@ -1046,9 +1046,7 @@ describe('ChatService', () => {
       selectedModuleId,
     });
 
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ topicContext: null }),
-    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
   it('no pasa al RAG un año previo si la propuesta aceptada cambia de cargo', async () => {
@@ -2062,7 +2060,7 @@ describe('ChatService', () => {
     });
   });
 
-  it('abre chat general al responder un panorama ambiguo desde otro módulo', async () => {
+  it('mantiene el módulo ante un panorama ambiguo', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId,
@@ -2093,7 +2091,10 @@ describe('ChatService', () => {
       question: '¿Cuánto gana un auxiliar de educación?',
     });
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: null, selectedModuleId: null }),
+      expect.objectContaining({
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
+      }),
     );
   });
 
@@ -2907,7 +2908,20 @@ describe('ChatService', () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
       resolvedModule: { id: parentModuleId, name: 'Evaluación docente' },
-      sources: [source],
+      sources: [
+        {
+          ...source,
+          moduleIds: [parentModuleId],
+          moduleAssociations: [
+            {
+              rootModuleId: parentModuleId,
+              rootModuleName: 'Evaluación docente',
+              submoduleId: source.moduleIds[0],
+              submoduleName: 'Subtema',
+            },
+          ],
+        },
+      ],
       topRelevanceScore: 0.9,
     });
     answerGateway.generate.mockReturnValue({
@@ -3444,7 +3458,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('starts a separate conversation when the current question changes modules', async () => {
+  it('keeps the conversation and rejects evidence outside its module', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     const newSubmoduleId = 'ec8b56af-6d0c-4fef-881e-7c00907540dd';
@@ -3487,31 +3501,29 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        selectedModuleId: newModuleId,
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
       }),
     );
     expect(events[0]).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
-        moduleId: newModuleId,
-        startedNewConversation: true,
+        moduleId: source.moduleIds[0],
+        startedNewConversation: false,
         userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
       },
       type: 'conversation',
     });
-    expect(answerGateway.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationContext: [] }),
-    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        detectedModuleId: newModuleId,
-        detectedSubmoduleId: newSubmoduleId,
+        replyRole: 'no_evidence',
+        sources: [],
       }),
     );
   });
 
-  it('pide la causal en la conversación nueva cuando el cambio de módulo solo recupera una regla especial', async () => {
+  it('no usa una regla especial de otro módulo en el chat actual', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -3542,27 +3554,84 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        selectedModuleId: newModuleId,
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
       }),
     );
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'clarification',
+      'no_evidence',
       'done',
     ]);
-    const clarification = events.find(
-      (event) => event.type === 'clarification',
-    );
-    if (!clarification || clarification.type !== 'clarification') {
-      throw new Error('Expected a clarification event.');
-    }
-    expect(clarification.data.message).toContain('salud');
-    expect(clarification.data.message.match(/\?/gu)).toHaveLength(1);
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
-  it('moves an ambiguous topic away from the prior selected-module conversation', async () => {
+  it('no emite una fuente ajena oculta en evidencia del módulo seleccionado', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const selectedModuleId = source.moduleIds[0];
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [],
+      selectedModuleId,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: selectedModuleId, name: 'Módulo seleccionado' },
+      sources: [
+        source,
+        {
+          ...source,
+          chunkId: 'foreign-chunk',
+          moduleIds: ['foreign-module'],
+          moduleAssociations: [],
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    const events = await collect(service, { conversationId, selectedModuleId });
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'no_evidence',
+      'done',
+    ]);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ sources: [], replyRole: 'no_evidence' }),
+    );
+  });
+
+  it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {
+    const selectedModuleId = source.moduleIds[0];
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: selectedModuleId, name: 'Módulo seleccionado' },
+      sources: [
+        source,
+        {
+          ...source,
+          chunkId: 'foreign-chunk',
+          moduleIds: ['foreign-module'],
+          moduleAssociations: [],
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    const events = await collect(service, {
+      question: '¿Cómo solicito una licencia?',
+      selectedModuleId: null,
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'no_evidence',
+      'done',
+    ]);
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ sources: [], replyRole: 'no_evidence' }),
+    );
+  });
+
+  it('preserves the selected-module conversation for an ambiguous topic', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
       conversationId,
@@ -3592,8 +3661,8 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        selectedModuleId: null,
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
       }),
     );
     expect(answerGateway.generate).not.toHaveBeenCalled();

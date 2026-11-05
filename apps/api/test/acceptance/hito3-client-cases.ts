@@ -33,6 +33,7 @@ import type {
 } from '../../src/chat/chat-history.gateway';
 import { ChatCatalogService } from '../../src/chat/catalog/chat-catalog.service';
 import { ChatService, type ChatStreamEvent } from '../../src/chat/chat.service';
+import { classifyStreamFailure } from '../../src/chat/stream-failure';
 import { validateEnvironment } from '../../src/config/environment.validation';
 import { OpenAiEmbeddingsGateway } from '../../src/ingestion/openai-embeddings.gateway';
 import { OpenAiAnswerGateway } from '../../src/rag/openai-answer.gateway';
@@ -78,6 +79,7 @@ interface StoredConversation {
 
 interface TurnResult extends QualityTurn {
   answer: string;
+  errorCode?: string;
   clarificationModules: string[];
   conversationId: string | null;
   events: string[];
@@ -368,6 +370,7 @@ async function main(): Promise<void> {
   ): Promise<TurnResult> {
     const events: ChatStreamEvent[] = [];
     let errorName: string | undefined;
+    let errorCode: string | undefined;
     try {
       for await (const event of chat.stream({
         authorization: options.user ?? teacher,
@@ -380,6 +383,7 @@ async function main(): Promise<void> {
     } catch (error) {
       if (error instanceof NotFoundError) throw error;
       errorName = error instanceof Error ? error.name : 'UnknownError';
+      errorCode = classifyStreamFailure(error);
     }
     let answer = '';
     let clarificationModules: string[] = [];
@@ -429,6 +433,7 @@ async function main(): Promise<void> {
     return {
       answer,
       error: errorName,
+      ...(errorCode ? { errorCode } : {}),
       clarificationModules,
       conversationId,
       events: [
@@ -442,6 +447,139 @@ async function main(): Promise<void> {
       sources,
       startedNewConversation,
     };
+  }
+
+  // Campaña QA de producción reproducida con el pipeline local y el corpus
+  // configurado; el historial permanece en memoria y nunca se escribe en él.
+  // Los resultados requieren revisión humana de cada cita y no se califican
+  // automáticamente como correctos por contener palabras clave.
+  if (process.env.ACCEPTANCE_QA16 === '1') {
+    const cases: Array<[string, string | null, string]> = [
+      [
+        'P1',
+        'Contratación y desplazamientos',
+        'soy nombrado en huancayo y mi esposa vive en lima, puedo pedir mi cambio para estar con ella',
+      ],
+      [
+        'P2',
+        'Contratación y desplazamientos',
+        'quiero trabajar solo por un tiempo en otro colegio pero sin perder mi plaza, que tramite hago',
+      ],
+      [
+        'P3',
+        'Situaciones Administrativas',
+        'me dieron descanso medico por una semana, como presento mi licencia al colegio',
+      ],
+      [
+        'P4',
+        'Situaciones Administrativas',
+        'mi director me inicio un proceso disciplinario, cuanto tiempo tengo para defenderme',
+      ],
+      [
+        'P5',
+        'Remuneraciones',
+        'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+      ],
+      [
+        'P6',
+        'Remuneraciones',
+        'mi colegio es rural tipo 1, que asignacion me corresponde',
+      ],
+      [
+        'P7',
+        'Evaluación docente',
+        'ya estoy varios años en primera escala como hago para subir a segunda',
+      ],
+      [
+        'P8',
+        'Evaluación docente',
+        'si desapruebo mi evaluacion de desempeño me pueden botar del colegio',
+      ],
+      [
+        'P9',
+        'Auxiliar de educación',
+        'quiero postular de auxiliar de inicial este 2026, que estudios necesito',
+      ],
+      [
+        'P10',
+        'Auxiliar de educación',
+        'soy auxiliar nombrado y quiero intercambiar mi plaza con otra auxiliar de otra ugel, se puede',
+      ],
+      [
+        'P11',
+        'Ley y reglamento',
+        'que dice el articulo de la ley 29944 sobre los derechos de los profesores',
+      ],
+      [
+        'P12',
+        'Ley y reglamento',
+        'si mi director quiere sancionarme que dice la ley sobre mi derecho a defenderme',
+      ],
+      [
+        'P13',
+        'Cargos y plazas',
+        'en mi colegio hay menos alumnos y dicen que van a quitar una plaza, eso se puede',
+      ],
+      [
+        'P14',
+        'Cargos y plazas',
+        'que diferencia hay entre plaza organica y eventual, no entiendo',
+      ],
+      [
+        'P15',
+        null,
+        'soy auxiliar contratado y me enferme, puedo pedir descanso medico',
+      ],
+      [
+        'P16',
+        null,
+        'soy profesor y quiero saber cuando me pueden destituir por una falta',
+      ],
+    ];
+    const qaResults: Array<{ id: string; turn: TurnResult }> = [];
+    const save = () =>
+      writeFileSync(
+        `${out}.json`,
+        JSON.stringify({ metadata, corpus, results: qaResults }, null, 2),
+      );
+    for (const [id, moduleName, question] of cases) {
+      if (process.env.ACCEPTANCE_QA_SEQUENCE_ONLY === '1') break;
+      if (
+        process.env.ACCEPTANCE_QA_CASE &&
+        process.env.ACCEPTANCE_QA_CASE !== id
+      )
+        continue;
+      const turn = await ask(question, {
+        moduleId: moduleName ? requireModule(moduleName) : null,
+      });
+      qaResults.push({ id, turn });
+      save();
+      process.stdout.write(`${id}: ${turn.events.join(', ')}\n`);
+      if (turn.error || turn.events.includes('technical_error'))
+        process.exitCode = 1;
+    }
+    if (process.env.ACCEPTANCE_QA_CASE) return;
+    let conversationId: string | null = null;
+    let conversationModuleId: string | null = remuneraciones;
+    for (const [index, question] of [
+      'cuanto gana un profesor contratado',
+      'y uno nombrado de primera escala',
+      'cuando pueden destituir a un docente',
+      'volviendo al sueldo, cuanto gana un nombrado con 30 horas',
+    ].entries()) {
+      const turn = await ask(question, {
+        conversationId,
+        moduleId: conversationModuleId,
+      });
+      conversationId = turn.conversationId;
+      conversationModuleId = turn.moduleId ?? null;
+      qaResults.push({ id: `S${index + 1}`, turn });
+      save();
+      process.stdout.write(`S${index + 1}: ${turn.events.join(', ')}\n`);
+      if (turn.error || turn.events.includes('technical_error'))
+        process.exitCode = 1;
+    }
+    return;
   }
 
   const results: CaseResult[] = [];

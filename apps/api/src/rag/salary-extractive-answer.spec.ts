@@ -1,5 +1,6 @@
 import type { RetrievedChunk } from './retrieval.gateway';
 import { buildExtractiveSalaryAnswer } from './salary-extractive-answer';
+import { salaryQuestionProfile } from './salary-applicability';
 
 const source = (
   chunkContent: string,
@@ -26,6 +27,57 @@ const source = (
   }) satisfies RetrievedChunk;
 
 describe('buildExtractiveSalaryAnswer', () => {
+  it('reconoce una pregunta coloquial por remuneración de nombrado', () => {
+    expect(
+      salaryQuestionProfile(
+        'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+      ),
+    ).toMatchObject({
+      isSalaryQuestion: true,
+      condition: 'nombrado',
+      scale: '1',
+      jornadaHours: 30,
+    });
+  });
+  it('no atribuye una tabla de contratados a un docente nombrado de segunda escala', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'El profesor contratado percibe remuneración mensual de S/ 3 500,70 por 30 horas.',
+        ),
+      ],
+      'cuanto gana un profesor nombrado de segunda escala con 30 horas',
+      'current',
+    );
+    expect(result).toBeNull();
+  });
+
+  it('no usa una tabla de contratados cuando se pregunta por un nombrado sin cargo explícito', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'El profesor contratado percibe remuneración mensual de S/ 3 500,70 por 30 horas.',
+        ),
+      ],
+      'volviendo al sueldo, cuanto gana un nombrado con 30 horas',
+      'current',
+    );
+    expect(result).toBeNull();
+  });
+
+  it('no usa una RIM reemplazada para una consulta actual', () => {
+    const result = buildExtractiveSalaryAnswer(
+      [
+        source(
+          'Artículo 1.- Remuneración íntegra mensual de la primera escala magisterial por hora en la suma de S/ 116,69.',
+          { documentSituation: 'replaced', issuanceYear: 2025 },
+        ),
+      ],
+      'cuanto gana un profesor nombrado de primera escala con 30 horas',
+      'current',
+    );
+    expect(result).toBeNull();
+  });
   it('conserva literalmente el importe, el período y la reserva de la fuente', () => {
     const content =
       'La remuneración mensual bruta del auxiliar de educación privado es S/ 2 000,00, solo para jornada de 30 horas.';
@@ -344,6 +396,21 @@ describe('buildExtractiveSalaryAnswer', () => {
     );
 
     expect(result).toBeNull();
+  });
+
+  it('no sustituye un reclamo por la regla general de asignación rural', () => {
+    expect(
+      buildExtractiveSalaryAnswer(
+        [
+          source(
+            'Asignación por trabajo en ámbito rural tipo 1 para profesores.',
+            { issuanceYear: 2015 },
+          ),
+        ],
+        'mi boleta tiene descuento de asignacion rural, como reclamo',
+        'current',
+      ),
+    ).toBeNull();
   });
 
   it('descarta fragmentos que podrían crear una cita ajena en la interfaz', () => {
@@ -1264,27 +1331,20 @@ describe('buildExtractiveSalaryAnswer', () => {
     expect(result?.sources).toHaveLength(1);
   });
 
-  it('explica descuentos y responsabilidades sin inventar el reclamo personal', () => {
-    const result = buildExtractiveSalaryAnswer(
-      [
-        source(
-          'Las deducciones en la planilla única de pagos consideran la prelación y límites según el tipo de descuento.',
-          { chunkId: 'deducciones' },
+  it.each([
+    'La siguiente regla no se aplica a los profesores. La planilla contiene descuentos.',
+    'La planilla del profesor no admite descuento, salvo',
+    'La planilla contiene descuentos. Para reclamar una diferencia remunerativa presenta una solicitud ante la oficina de personal.',
+  ])(
+    'no extrapola el ámbito ni el procedimiento desde un fragmento aislado: %s',
+    (text) => {
+      expect(
+        buildExtractiveSalaryAnswer(
+          [source(text)],
+          'Mi boleta tiene descuentos y diferencias remunerativas. ¿Cómo reclamo?',
+          'current',
         ),
-        source(
-          'La Oficina de Personal emite los actos administrativos que derivan en pago o descuento de manera oportuna.',
-          { chunkId: 'responsabilidad' },
-        ),
-      ],
-      'Mi boleta tiene descuentos y diferencias remunerativas. ¿Cómo reclamo?',
-      'current',
-    );
-
-    expect(result?.answer).toContain('deducciones en planilla');
-    expect(result?.answer).toContain('Oficina de Personal');
-    expect(result?.answer).toContain(
-      'no establecen un canal, plazo ni recurso',
-    );
-    expect(result?.sources).toHaveLength(2);
-  });
+      ).toBeNull();
+    },
+  );
 });

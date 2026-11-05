@@ -808,7 +808,7 @@ describe('ChatService + RagService integration', () => {
     expect(history.completions[1]?.sources[0]?.chunkId).toBe(licenseV1.chunkId);
   });
 
-  it('starts a new topic conversation and never mixes former-module sources', async () => {
+  it('preserves a scoped conversation without mixing sources from a new topic', async () => {
     const first = await collect(service, {
       question: 'Necesito una licencia por salud.',
     });
@@ -825,16 +825,12 @@ describe('ChatService + RagService integration', () => {
     >;
 
     expect(conversation.data).toMatchObject({
-      moduleId: CONTRACTS_MODULE_ID,
-      startedNewConversation: true,
+      moduleId: LICENSES_MODULE_ID,
+      startedNewConversation: false,
     });
-    expect(conversation.data.conversationId).not.toBe(priorConversationId);
-    expect(history.completions[1]?.sources).toEqual([
-      expect.objectContaining({
-        chunkId: contractV1.chunkId,
-        moduleId: CONTRACTS_MODULE_ID,
-      }),
-    ]);
+    expect(conversation.data.conversationId).toBe(priorConversationId);
+    expect(history.completions[1]?.replyRole).toBe('no_evidence');
+    expect(history.completions[1]?.sources).toEqual([]);
   });
 
   it('distinguishes Contrato Docente from Auxiliares without mixing their sources', async () => {

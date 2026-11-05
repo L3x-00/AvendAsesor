@@ -265,6 +265,42 @@ describe('RagService', () => {
     } as never);
   });
 
+  it('no entrega una sección exclusiva de permuta al consultar reasignación familiar', async () => {
+    const exchange = {
+      ...source,
+      chunkId: 'exchange-section',
+      documentTitle: 'Norma técnica de reasignación y permuta',
+      sectionTitle: 'DISPOSICIONES ESPECÍFICAS DE LA PERMUTA',
+      chunkContent:
+        'DISPOSICIONES ESPECÍFICAS DE LA PERMUTA. Requisitos de permuta.',
+      pageStart: 32,
+      pageEnd: 33,
+    };
+    const reassignment = {
+      ...source,
+      chunkId: 'reassignment-section',
+      documentTitle: 'Norma técnica de reasignación y permuta',
+      sectionTitle: 'Reasignación por unidad familiar',
+      chunkContent: 'Reasignación de profesores por unidad familiar.',
+      pageStart: 13,
+      pageEnd: 13,
+      semanticScore: 0.85,
+    };
+    gateway.search.mockResolvedValue([exchange, reassignment]);
+    const result = await service.retrieve(
+      'Soy profesor nombrado y quiero solicitar reasignación por unidad familiar',
+      'module-a',
+    );
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('Se esperaba evidencia');
+    expect(result.sources.map((item) => item.chunkId)).toContain(
+      'reassignment-section',
+    );
+    expect(result.sources.map((item) => item.chunkId)).not.toContain(
+      'exchange-section',
+    );
+  });
+
   it('returns no evidence without invoking a chat generator', async () => {
     gateway.search.mockResolvedValue([]);
     await expect(

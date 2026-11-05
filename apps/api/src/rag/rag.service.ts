@@ -89,6 +89,7 @@ import {
 } from './legal-retrieval';
 import {
   isDirectReassignmentEvidence,
+  isExclusiveExchangeSectionForReassignment,
   isReassignmentCausalEvidence,
   reassignmentEvidenceQueries,
 } from './reassignment-retrieval';
@@ -97,6 +98,7 @@ import {
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
+import { temporaryPlacementQueries } from './temporary-placement-retrieval';
 
 export interface ResolvedModule {
   id: string;
@@ -1603,6 +1605,7 @@ export class RagService {
         ...evaluationEvidenceQueries(question),
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
+        ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
         ...legalEvidenceQueries(
           question,
@@ -1697,6 +1700,9 @@ export class RagService {
             ),
             salaryQuestion,
             retrievalScope,
+          ).filter(
+            (source) =>
+              !isExclusiveExchangeSectionForReassignment(question, source),
           ),
         ),
       );

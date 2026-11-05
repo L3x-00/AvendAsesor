@@ -4,6 +4,100 @@ import {
 } from './administrative-answer-safety';
 
 describe('administrative answer safety', () => {
+  it('retiene la confusión entre CITT y receta de certificado médico', () => {
+    const question =
+      'me dieron descanso medico por una semana, como presento mi licencia';
+    expect(needsAdministrativeAnswerSafety(question)).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Adjunta la receta médica suscrita por el médico que expide el CITT.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puedes presentar CITT o certificado médico; para el certificado médico adjunta la receta médica.',
+      ),
+    ).toBe(false);
+  });
+
+  it('retiene una constancia de hospitalización presentada como obligatoria', () => {
+    expect(
+      hasUnsupportedAdministrativeInference(
+        'soy auxiliar contratado y me enferme, puedo pedir descanso medico',
+        'Deberás adjuntar la constancia de hospitalización.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        'soy auxiliar contratado y me enferme, puedo pedir descanso medico',
+        'Puedes adjuntar la constancia de hospitalización.',
+      ),
+    ).toBe(false);
+  });
+
+  it('retiene requisitos acumulados y obligatoriedad con orden inverso', () => {
+    const question = 'licencia por descanso medico';
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Debes adjuntar el CITT y presentar receta médica y recibos.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'La constancia de hospitalización es obligatoria.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Debe presentar CITT, junto con receta y recibos. Consulte al director o a la UGEL.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Debes adjuntar el CITT y receta médica o recibos de atención.',
+      ),
+    ).toBe(true);
+  });
+
+  it('no acepta una alternativa seguida de una obligación incompatible', () => {
+    const question = 'licencia por descanso medico';
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puede presentar CITT o certificado médico. Debe adjuntar el CITT y la receta médica para toda solicitud.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puedes presentar CITT o certificado médico. En ambos casos debes acompañar la receta médica y recibos.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puede presentar CITT o certificado médico. Deberás adjuntar receta y comprobantes independientemente del documento presentado.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puede presentar CITT o certificado médico. Debes adjuntar la receta médica y los recibos.',
+      ),
+    ).toBe(true);
+    expect(
+      hasUnsupportedAdministrativeInference(
+        question,
+        'Puedes presentar CITT o certificado médico. Además, adjunta siempre la receta médica y los recibos.',
+      ),
+    ).toBe(true);
+  });
   it('retiene una afirmación que convierte los primeros veinte días en máximo', () => {
     const question =
       'Estoy enfermo, ¿cuántos días puedo faltar con descanso médico?';

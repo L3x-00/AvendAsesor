@@ -1,6 +1,7 @@
 import type { RetrievedChunk } from './retrieval.gateway';
 import {
   isDirectRemunerationEvidence,
+  isPayrollReviewQuestion,
   remunerationEvidenceQueries,
 } from './remuneration-retrieval';
 
@@ -12,6 +13,42 @@ function source(
 }
 
 describe('remunerationEvidenceQueries', () => {
+  it.each([
+    'mi boleta está equivocada, cómo la reclamo',
+    'quiero que revisen mi boleta porque me falta plata',
+    'mi pago vino incompleto en la boleta, donde reclamo',
+    'mi boleta de pago está mal',
+    'quiero revisar mi boleta y mis notas personales',
+    'no necesito revisar mis notas pero mi boleta de pago está equivocada y quiero reclamar',
+    'no quiero revisar mi boleta del mes pasado, quiero reclamar mi boleta de pago actual',
+    'mi boleta de notas no está mal pero quiero reclamar la boleta de pago',
+    'mi boleta de pago, quiero reclamarla',
+    'mi sueldo, tiene un descuento injustificado',
+    'mi boleta de pago tiene errores, como reclamo',
+    'mi boleta de notas está bien y quiero reclamar mi boleta de pago',
+  ])(
+    'reconoce una solicitud coloquial de revisión de boleta: %s',
+    (question) => {
+      expect(isPayrollReviewQuestion(question)).toBe(true);
+    },
+  );
+
+  it('no confunde una boleta de notas con un reclamo remunerativo', () => {
+    expect(isPayrollReviewQuestion('quiero reclamar la boleta de notas')).toBe(
+      false,
+    );
+  });
+  it.each([
+    'quiero reclamar la boleta de venta',
+    'cuál es la sanción por tardanza y descuento',
+    'no necesito revisar mi boleta de pago',
+    'mi boleta ya está correcta, no quiero hacer un reclamo',
+    'qué es la boleta de sueldo',
+    'cómo descargar mi boleta de sueldo',
+    'no voy a reclamar mi boleta de pago',
+  ])('no trata como reclamo remunerativo: %s', (question) => {
+    expect(isPayrollReviewQuestion(question)).toBe(false);
+  });
   it('reconoce una consulta personal coloquial por quinta escala', () => {
     expect(
       remunerationEvidenceQueries(

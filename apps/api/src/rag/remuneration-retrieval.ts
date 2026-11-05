@@ -107,10 +107,42 @@ export function isRuralAllocationQuestion(question: string): boolean {
 /** Un reclamo genérico no se asume remunerativo: necesita una boleta o un dato salarial. */
 export function isPayrollReviewQuestion(question: string): boolean {
   const text = normalizeSpanishText(question);
+  // Las salvedades se aplican a su propia cláusula: una boleta escolar o una
+  // revisión negada no deben ocultar un reclamo salarial posterior.
   return (
-    PAYROLL_DETAIL_SIGNAL.test(text) ||
+    isPayrollReviewClause(text) ||
+    text
+      .split(/[,;]|\b(?:pero|aunque|sino|y)\b/u)
+      .some((clause) => isPayrollReviewClause(clause))
+  );
+}
+
+function isPayrollReviewClause(text: string): boolean {
+  if (
+    /\bboleta\s+(?:de\s+)?(?:notas?|calificaciones?|compras?|ventas?)\b/u.test(
+      text,
+    )
+  )
+    return false;
+  if (
+    /\bno\s+(?:(?:necesito|quiero|deseo|voy\s+a)\s+(?:revisar|reclamar)\s+(?:mi\s+|la\s+)?(?:boleta|planilla)|(?:quiero|deseo)\s+hacer\s+(?:un\s+)?reclamo)\b/u.test(
+      text,
+    )
+  )
+    return false;
+  return (
+    (PAYROLL_DETAIL_SIGNAL.test(text) &&
+      (PAYROLL_DOCUMENT_SIGNAL.test(text) ||
+        SALARY_REVIEW_CONTEXT.test(text))) ||
     (PAYROLL_DOCUMENT_SIGNAL.test(text) &&
-      PAYROLL_DOCUMENT_CONTEXT.test(text)) ||
+      /\b(?:reclam\p{L}*|revis\p{L}*|equivocad[oa]s?|incomplet[oa]s?|errores?|mal|falta\s+(?:plata|pago|dinero))\b/u.test(
+        text,
+      )) ||
+    (PAYROLL_DOCUMENT_SIGNAL.test(text) &&
+      PAYROLL_DOCUMENT_CONTEXT.test(text) &&
+      /\b(?:reclam\p{L}*|revis\p{L}*|equivocad[oa]s?|incomplet[oa]s?|mal|diferencia(?:s)?)\b/u.test(
+        text,
+      )) ||
     (REINTEGRATION_SIGNAL.test(text) &&
       (PAYROLL_DOCUMENT_SIGNAL.test(text) ||
         SALARY_REVIEW_CONTEXT.test(text))) ||

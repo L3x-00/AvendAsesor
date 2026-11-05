@@ -8,7 +8,29 @@ import { reassignmentRole } from './reassignment-retrieval';
  * salarial, una licencia genérica, una permuta o una pregunta de jornada).
  */
 describe('detectTopicIntent', () => {
+  it('no confunde cambio de horario familiar con reasignación', () => {
+    expect(
+      detectTopicIntent(
+        'soy nombrado y quiero pedir mi cambio de horario porque mi esposa trabaja de noche',
+      )?.id,
+    ).not.toBe('reassignment');
+  });
   it.each([
+    [
+      'soy nombrado en huancayo y mi esposa vive en lima, puedo pedir mi cambio para estar con ella',
+      'reassignment',
+      'Contratación y desplazamientos',
+    ],
+    [
+      'soy profesor y quiero saber cuando me pueden destituir por una falta',
+      'disciplinary',
+      'Situaciones Administrativas',
+    ],
+    [
+      'soy profesor y cuando me destituyen por faltas',
+      'disciplinary',
+      'Situaciones Administrativas',
+    ],
     [
       'soy nombrado en junin pero quiero irme a lima porque mi familia vive alla que hago',
       'reassignment',

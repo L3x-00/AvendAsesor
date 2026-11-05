@@ -21,6 +21,44 @@ const FIRST_PERSON_TEACHER =
 const RELOCATION_SIGNAL =
   /\b(?:quiero|quisiera|deseo|necesito|planeo|pienso)\s+(?:irme|mudarme|trasladarme|reubicarme|cambiarme)\b|\b(?:irme|mudarme|trasladarme|reubicarme)\s+(?:a|hacia|para)\b|\b(?:trasladar(?:me|se|nos)?|reubicar(?:me|nos)?|mudar(?:me|se|nos)?)\s+(?:a|hacia|de)\b|\bcambiar(?:me)?\s+de\s+(?:colegio|ie|institucion educativa|region|ciudad|departamento|ugel|dre|plaza|lugar)\b/u;
 
+/**
+ * Excluye solo una sección explícitamente dedicada a otra figura: esto evita
+ * entregar requisitos de permuta como si fueran requisitos de reasignación.
+ * No certifica que las demás fuentes respalden una afirmación. Las consultas
+ * que también mencionan permuta y los fragmentos mixtos conservan su alcance.
+ */
+export function isExclusiveExchangeSectionForReassignment(
+  question: string,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'sectionTitle'>,
+): boolean {
+  if (!isReassignmentQuestion(question)) return false;
+  const asked = normalizeSpanishText(question);
+  // Una negación inequívoca no convierte la consulta en comparación. Si la
+  // figura se menciona otra vez, se conserva por ambigüedad.
+  const exchangeRequest = asked.replace(
+    /\b(?:no\s+(?:quiero|deseo|solicito|pido)\s+(?:(?:una|la)\s+)?|sin\s+)permut\p{L}*\b/gu,
+    ' ',
+  );
+  if (
+    /\b(?:permut\p{L}*|intercambi\p{L}*)\b/u.test(exchangeRequest) ||
+    /\bcambiar\b.{0,50}\bplazas?\b.{0,50}\bcon\s+(?:otro|otra|alguien)\b/u.test(
+      asked,
+    )
+  )
+    return false;
+  const heading = normalizeSpanishText(source.sectionTitle ?? '');
+  const content = normalizeSpanishText(source.chunkContent);
+  const exclusiveHeading =
+    /^disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+  const headingAfterPageLabel =
+    /^pagina\s+\d+\s+de\s+\d+\s+disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+  return (
+    exclusiveHeading.test(heading) &&
+    (exclusiveHeading.test(content) || headingAfterPageLabel.test(content)) &&
+    !/\bdisposiciones\s+especificas\s+de\s+la\s+reasignacion\b/u.test(content)
+  );
+}
+
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): string {
@@ -35,6 +73,17 @@ function evidenceText(
 export function isReassignmentQuestion(question: string): boolean {
   const text = normalizeSpanishText(question);
   if (REASSIGNMENT_SIGNAL.test(text)) return true;
+  if (
+    TEACHING_ROLE_SIGNAL.test(text) &&
+    /\b(?:pedir|solicitar)\s+(?:mi|el|un)\s+(?:cambio|traslado)\b/u.test(
+      text,
+    ) &&
+    !/\bcambio\s+de\s+(?:horario|jornada|turno|nivel|especialidad)\b/u.test(
+      text,
+    ) &&
+    /\b(?:espos[oa]|conyuge|pareja|familia|hij[oa]s?)\b/u.test(text)
+  )
+    return true;
   return TEACHING_ROLE_SIGNAL.test(text) && RELOCATION_SIGNAL.test(text);
 }
 
