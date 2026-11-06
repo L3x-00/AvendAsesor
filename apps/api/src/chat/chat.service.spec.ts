@@ -3078,7 +3078,7 @@ describe('ChatService', () => {
       question: '¿Cuánto gana un auxiliar de educación?',
     });
 
-    expect(events.map((event) => event.type)).toEqual(['conversation']);
+    expect(events).toEqual([]);
     expect(answerGateway.generate).not.toHaveBeenCalled();
     expect(historyGateway.completeTurn).not.toHaveBeenCalled();
   });

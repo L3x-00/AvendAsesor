@@ -666,6 +666,192 @@ describe('ChatService + RagService integration', () => {
     ]);
   });
 
+  const streamInput = (abortSignal?: AbortSignal) => ({
+    authorization,
+    conversationId: null,
+    question: '¿Cómo solicito una licencia por salud?',
+    selectedModuleId: null,
+    abortSignal,
+  });
+
+  it('A03 evaluates unknown support and persists before the first factual event', async () => {
+    answers.answer =
+      'Para solicitar la licencia por salud, acude a tu institución educativa. [1]';
+    const original = history.completeTurn.bind(history);
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const complete = jest
+      .spyOn(history, 'completeTurn')
+      .mockImplementation(async (input) => {
+        expect(input.qualitySignals).toContain('support_partial');
+        await barrier;
+        return original(input);
+      });
+    const iterator = service.stream(streamInput())[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    if (first.done) throw new Error('Missing conversation');
+    expect(first.value.type).toBe('conversation');
+    let emitted = false;
+    const next = iterator.next().then((value) => {
+      emitted = true;
+      return value;
+    });
+    // Wait until persistence was actually reached, without relying on timers.
+    for (let i = 0; i < 100 && !complete.mock.calls.length; i++)
+      await Promise.resolve();
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    release();
+    const ready = await next;
+    if (ready.done) throw new Error('Missing sources');
+    const events: ChatStreamEvent[] = [ready.value];
+    for (;;) {
+      const item = await iterator.next();
+      if (item.done) break;
+      events.push(item.value);
+    }
+    expect(events.map((event) => event.type)).toEqual([
+      'sources',
+      'token',
+      'done',
+    ]);
+    expect(events.find((event) => event.type === 'token')?.data.text).toBe(
+      history.completions[0].answer,
+    );
+    expect(
+      events.find((event) => event.type === 'sources')?.data.sources[0],
+    ).toMatchObject({
+      documentVersionId: licenseV1.documentVersionId,
+      pageStart: licenseV1.pageStart,
+      pageEnd: licenseV1.pageEnd,
+    });
+  });
+
+  it('A03 keeps a textually supported answer distinct from unverified paraphrases', async () => {
+    answers.answer = licenseV1.chunkContent + ' [1]';
+    const events = await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+      'token',
+      'done',
+    ]);
+    expect(history.completions[0].qualitySignals).not.toContain(
+      'support_partial',
+    );
+    expect(events.find((event) => event.type === 'token')?.data.text).toBe(
+      history.completions[0].answer,
+    );
+  });
+
+  it('A03 never exposes a response when persistence fails', async () => {
+    jest
+      .spyOn(history, 'completeTurn')
+      .mockRejectedValue(new Error('store unavailable'));
+    const seen: ChatStreamEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of service.stream(streamInput()))
+          seen.push(event);
+      })(),
+    ).rejects.toThrow('store unavailable');
+    expect(seen.map((event) => event.type)).toEqual(['conversation']);
+  });
+
+  it('A03 cancellation during generation prevents completion and factual events', async () => {
+    const cancellation = new AbortController();
+    jest.spyOn(answers, 'generate').mockImplementation(async function* () {
+      await Promise.resolve();
+      yield 'La licencia por salud se solicita ante la institución educativa. [1]';
+      cancellation.abort();
+      yield ' Contenido posterior que no debe llegar.';
+    });
+    const seen: ChatStreamEvent[] = [];
+    for await (const event of service.stream(streamInput(cancellation.signal)))
+      seen.push(event);
+    expect(seen.map((event) => event.type)).toEqual(['conversation']);
+    expect(history.completions).toEqual([]);
+  });
+
+  it('A03 cancellation while persistence is in flight suppresses every later event', async () => {
+    const cancellation = new AbortController();
+    const original = history.completeTurn.bind(history);
+    jest.spyOn(history, 'completeTurn').mockImplementation(async (input) => {
+      const result = await original(input);
+      cancellation.abort();
+      return result;
+    });
+    const seen: ChatStreamEvent[] = [];
+    for await (const event of service.stream(streamInput(cancellation.signal)))
+      seen.push(event);
+    expect(seen.map((event) => event.type)).toEqual(['conversation']);
+    // A committed RPC cannot be rolled back by disconnecting the client.
+    expect(history.completions).toHaveLength(1);
+  });
+
+  it.each(['rim', 'clarification'] as const)(
+    'A03 suppresses events when cancellation happens during %s persistence',
+    async (route) => {
+      if (route === 'rim') addRimCapture();
+      const cancellation = new AbortController();
+      const original = history.completeTurn.bind(history);
+      jest.spyOn(history, 'completeTurn').mockImplementation(async (input) => {
+        const completion = await original(input);
+        cancellation.abort();
+        return completion;
+      });
+      const seen: ChatStreamEvent[] = [];
+      const request =
+        route === 'rim'
+          ? {
+              ...streamInput(cancellation.signal),
+              question:
+                'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+              selectedModuleId: REMUNERATIONS_MODULE_ID,
+            }
+          : {
+              ...streamInput(cancellation.signal),
+              question: '¿Cuáles son los requisitos?',
+            };
+      for await (const event of service.stream(request)) seen.push(event);
+      expect(seen.map((event) => event.type)).toEqual(['conversation']);
+      expect(history.completions).toHaveLength(1);
+      expect(history.completions[0].replyRole).toBe(
+        route === 'rim' ? 'assistant' : 'clarification',
+      );
+    },
+  );
+
+  it('A03 cancellation after sources emits neither token nor done', async () => {
+    const cancellation = new AbortController();
+    const seen: ChatStreamEvent[] = [];
+    for await (const event of service.stream(
+      streamInput(cancellation.signal),
+    )) {
+      seen.push(event);
+      if (event.type === 'sources') cancellation.abort();
+    }
+    expect(seen.map((event) => event.type)).toEqual([
+      'conversation',
+      'sources',
+    ]);
+  });
+
+  it('A03 a pre-cancelled request creates no turn', async () => {
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const begin = jest.spyOn(history, 'beginTurn');
+    const seen: ChatStreamEvent[] = [];
+    for await (const event of service.stream(streamInput(cancellation.signal)))
+      seen.push(event);
+    expect(seen).toEqual([]);
+    expect(begin).not.toHaveBeenCalled();
+  });
+
   it('rejects a polarity inversion before emitting or persisting the generated claim', async () => {
     answers.answer =
       'La licencia por salud no se solicita ante la institución educativa. [1]';
