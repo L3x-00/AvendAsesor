@@ -546,6 +546,47 @@ describe('fragmentos que empiezan a mitad de una oración', () => {
       'Si el contenido de una fuente empieza con «[…]», su primera oración está cortada',
     );
     expect(prompt).toContain('pueden incluir una negación («No se…»)');
+    expect(prompt).toContain(
+      'Si el contenido de una fuente empieza con «[…]», su primera oración está cortada: le faltan palabras anteriores, que pueden incluir una negación («No se…»). No la presentes como una regla afirmativa salvo que otra parte de las fuentes lo confirme.',
+    );
+  });
+
+  it('marca como posiblemente incompleto un inicio médico con cifras sin quitar sus datos', () => {
+    const chunkContent =
+      'miembro de la comunidad educativa, presentando el CITT en un plazo de dos (2) días hábiles.';
+    const prompt = buildEvidenceUserPrompt(
+      'Tengo descanso médico, ¿cómo solicito licencia?',
+      [],
+      [{ ...source, chunkContent }],
+    );
+    expect(prompt).toContain(`Contenido:\n[…] ${chunkContent}`);
+    expect(prompt).toContain('su primera oración podría estar cortada');
+    expect(prompt).toContain('No completes ni atribuyas cifras sin contexto');
+  });
+
+  it('mantiene intacto el comportamiento de una pregunta salarial', () => {
+    const chunkContent = 'y secundaria con jornada de 30 horas: S/ 3 300,60.';
+    const prompt = buildEvidenceUserPrompt(
+      '¿Cuánto gana un profesor con 30 horas?',
+      [],
+      [{ ...source, chunkContent }],
+    );
+    expect(prompt).toContain(`Contenido:\n${chunkContent}`);
+    expect(prompt).not.toContain('[…]');
+    expect(prompt).not.toContain(
+      'No completes ni atribuyas cifras sin contexto',
+    );
+  });
+
+  it('conserva el tratamiento salarial cuando también se menciona descanso médico', () => {
+    const chunkContent = 'y secundaria con jornada de 30 horas: S/ 3 300,60.';
+    const prompt = buildEvidenceUserPrompt(
+      '¿Cuánto gano durante mi descanso médico?',
+      [],
+      [{ ...source, chunkContent }],
+    );
+    expect(prompt).toContain(`Contenido:\n${chunkContent}`);
+    expect(prompt).not.toContain('[…]');
   });
 
   it.each([

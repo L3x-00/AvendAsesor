@@ -14,6 +14,8 @@ import { RAG_NO_SUPPORT_MARKER } from './no-support-marker';
 import type { RetrievedChunk } from './retrieval.gateway';
 import type { InternalTopicContext } from './topic-context';
 import { splitDeliverySources } from './temporal-precedence';
+import { isMedicalLeaveQuestion } from './administrative-retrieval';
+import { salaryQuestionProfile } from './salary-applicability';
 
 const RESERVED_PROMPT_MARKERS = [
   /INICIO\s+HISTORIAL\s+NO\s+CONFIABLE/giu,
@@ -112,30 +114,38 @@ function situationLabel(source: RetrievedChunk): string {
  * comienza a mitad de una oración y pudo perder palabras previas, como la
  * negación de «No se considera para destaque las siguientes plazas…», que
  * llegó al modelo como «considera para destaque…» y se respondió al revés. Un
- * literal («a)», «ii.») abre su propia oración. Si esa primera oración trae
- * cifras (montos, fechas, plazos) no se marca, para no restarle peso a un dato.
+ * literal («a)», «ii.») abre su propia oración. La presencia de una cifra no
+ * demuestra que la oración esté completa; la marca no elimina el dato.
+ * La minúscula es una señal, no una prueba de que falte contexto.
  */
-export function startsMidSentence(content: string): boolean {
+export function startsMidSentence(
+  content: string,
+  includeFigures = false,
+): boolean {
   const text = content.trimStart();
   if (!/^\p{Ll}/u.test(text)) return false;
   if (/^(?:[a-z]|[ivxl]{1,5})[).]\s/u.test(text)) return false;
   const firstSentence = text.split(/(?<=[.!?:;])\s|\n/u)[0] ?? text;
-  return !/\d/u.test(firstSentence);
+  return includeFigures || !/\d/u.test(firstSentence);
 }
 
 const MID_SENTENCE_MARK = '[…]';
 
-function sourceContent(source: RetrievedChunk): string {
+function sourceContent(source: RetrievedChunk, includeFigures = false): string {
   const content = cleanPromptValue(source.chunkContent, true).slice(
     0,
     MAX_EVIDENCE_CHARS_PER_CHUNK,
   );
-  return startsMidSentence(content)
+  return startsMidSentence(content, includeFigures)
     ? `${MID_SENTENCE_MARK} ${content}`
     : content;
 }
 
-function sourceBlock(source: RetrievedChunk, rank: number): string {
+function sourceBlock(
+  source: RetrievedChunk,
+  rank: number,
+  includeFigures = false,
+): string {
   const isPdf =
     source.mimeType == null ||
     source.mimeType.toLocaleLowerCase('es') === 'application/pdf';
@@ -155,7 +165,7 @@ function sourceBlock(source: RetrievedChunk, rank: number): string {
     `Artículo: ${cleanPromptValue(source.articleReference)}`,
     `Numeral o literal: ${cleanPromptValue(source.numeralReference)}`,
     'Contenido:',
-    sourceContent(source),
+    sourceContent(source, includeFigures),
     `FIN FUENTE [${rank}]`,
   ].join('\n');
 }
@@ -402,11 +412,16 @@ export function buildEvidenceUserPrompt(
           `Grupos de fuentes: ${current.length} vigente(s) y ${historical.length} antecedente(s) histórico(s). Usa las vigentes como regla actual y los antecedentes solo como referencia histórica rotulada.`,
         ]
       : [];
+  const medicalLeave =
+    isMedicalLeaveQuestion(question) &&
+    !salaryQuestionProfile(question).isSalaryQuestion;
   const midSentence = sources.some((source) =>
-    sourceContent(source).startsWith(MID_SENTENCE_MARK),
+    sourceContent(source, medicalLeave).startsWith(MID_SENTENCE_MARK),
   )
     ? [
-        `Si el contenido de una fuente empieza con «${MID_SENTENCE_MARK}», su primera oración está cortada: le faltan palabras anteriores, que pueden incluir una negación («No se…»). No la presentes como una regla afirmativa salvo que otra parte de las fuentes lo confirme.`,
+        medicalLeave
+          ? `Si el contenido de una fuente empieza con «${MID_SENTENCE_MARK}», su primera oración podría estar cortada: podrían faltar palabras anteriores, como una negación («No se…»). No completes ni atribuyas cifras sin contexto, y no presentes esa oración como una regla afirmativa independiente salvo que otra parte de las fuentes confirme su alcance.`
+          : `Si el contenido de una fuente empieza con «${MID_SENTENCE_MARK}», su primera oración está cortada: le faltan palabras anteriores, que pueden incluir una negación («No se…»). No la presentes como una regla afirmativa salvo que otra parte de las fuentes lo confirme.`,
       ]
     : [];
   return [
@@ -414,7 +429,9 @@ export function buildEvidenceUserPrompt(
     'INICIO DE FUENTES',
     ...separation,
     ...midSentence,
-    sources.map((source, index) => sourceBlock(source, index + 1)).join('\n\n'),
+    sources
+      .map((source, index) => sourceBlock(source, index + 1, medicalLeave))
+      .join('\n\n'),
     'FIN DE FUENTES',
     '',
     buildContextualUserPrompt(question, context),

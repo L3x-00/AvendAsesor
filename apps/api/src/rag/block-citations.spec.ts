@@ -49,6 +49,48 @@ const closing =
   'El destaque puede ser solicitado por docentes nombrados, y su duración mínima es de 30 días. [1]';
 
 describe('placeBlockCitations', () => {
+  it('no usa un número del título o los metadatos para respaldar una cifra de la lista', () => {
+    const source = chunk({
+      chunkContent: 'El plazo de solicitud está establecido en la norma.',
+      documentTitle: 'Norma 30',
+      issuanceYear: 30,
+      resolutionNumber: '30',
+    });
+    const answer = [
+      'Plazo para presentar la solicitud:',
+      '- El plazo de solicitud es de 30 días. [1]',
+    ].join('\n');
+    expect(placeBlockCitations(answer, [source])).toBe(answer);
+  });
+
+  it('conserva la reubicación existente si la cifra aparece en el fragmento', () => {
+    const source = chunk({
+      chunkContent: 'El plazo de solicitud es de 30 días.',
+    });
+    const answer = [
+      'Plazo para presentar la solicitud:',
+      '- El plazo de solicitud es de 30 días. [1]',
+    ].join('\n');
+    expect(placeBlockCitations(answer, [source])).toBe(
+      [
+        'Plazo para presentar la solicitud. [1]',
+        '- El plazo de solicitud es de 30 días.',
+      ].join('\n'),
+    );
+  });
+
+  it('mantiene la cita original si un identificador legal solo figura en metadatos', () => {
+    const source = chunk({
+      chunkContent: 'El nombramiento cumple los requisitos de la norma.',
+      articleReference: 'Artículo 28',
+    });
+    const answer = [
+      'Requisitos para el nombramiento:',
+      '- El nombramiento sigue el artículo 28. [1]',
+    ].join('\n');
+    expect(placeBlockCitations(answer, [source])).toBe(answer);
+  });
+
   it('sube a la introducción la cita que el modelo dejó tras la última viñeta', () => {
     const answer = [
       intro,
