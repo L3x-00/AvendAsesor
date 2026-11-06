@@ -100,7 +100,7 @@ describe('ChatService: retención de licencia médica', () => {
   it('no transmite ni persiste como respuesta una mezcla rechazada de CITT y receta', async () => {
     const { service, answerGateway, historyGateway } = setup();
     answerGateway.generate.mockReturnValue(
-      (async function* () {
+      (function* () {
         yield 'Debes presentar CITT y receta médica [1].';
       })(),
     );
@@ -117,7 +117,7 @@ describe('ChatService: retención de licencia médica', () => {
     const { service, answerGateway, historyGateway } = setup();
     const abort = new AbortController();
     answerGateway.generate.mockImplementation(() =>
-      (async function* () {
+      (function* () {
         yield 'El descanso se acredita con CITT [1].';
         abort.abort();
         yield ' Texto posterior que no debe emitirse.';
@@ -146,7 +146,7 @@ describe('ChatService: retención de licencia médica', () => {
       topRelevanceScore: 0.8,
     });
     answerGateway.generate.mockReturnValue(
-      (async function* () {
+      (function* () {
         yield 'La licencia por incapacidad temporal se acredita con CITT. [2]';
       })(),
     );
