@@ -25,11 +25,11 @@ const ESCALAFON_SIGNAL = /\b(?:escalafon(?:ario)?|informe\s+escalafonario)\b/u;
 const TARDINESS_SIGNAL =
   /\b(?:tardanz(?:a|as)|lleg(?:ar|ue|o)\s+tarde|retras(?:o|os))\b/u;
 const DISCIPLINARY_PROCESS_SIGNAL =
-  /\b(?:procedimiento\s+disciplinario|proceso\s+administrativo\s+disciplinario|\bpad\b)\b/u;
+  /\b(?:procedimiento\s+(?:administrativo\s+)?disciplinario|proceso\s+(?:administrativo\s+)?disciplinario|pad)\b/u;
 const DISCIPLINARY_SUBJECT_SIGNAL =
-  /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?)\b/u;
+  /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?|destitu(?:i|y)\p{L}*|destitucion)\b/u;
 const DISCIPLINARY_CONTEXT_SIGNAL =
-  /\b(?:docent(?:e|es)?|derecho|notificaci[oó]n|procedimiento)\b/u;
+  /\b(?:docent(?:e|es)?|profesor(?:a|es|as)?|derecho|notificaci[oó]n|procedimiento)\b/u;
 const WORKDAY_SIGNAL =
   /\b(?:jornada|horas?|carga\s+horaria|horas?\s+de\s+clase|pedagogic[ao]s?|complementarias?)\b/u;
 const SCHOOL_LEVEL_SIGNAL =

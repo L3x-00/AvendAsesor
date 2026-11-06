@@ -1,7 +1,7 @@
 import { normalizeSpanishText } from './text-normalization';
 
 const MEDICAL_LEAVE =
-  /\b(?:descanso\s+medic|incapacidad\s+temporal|enferm(?:o|a|edad))\b/u;
+  /\b(?:descanso\s+medic[oa]|incapacidad\s+temporal|enferm(?:o|a|e|edad|ar|ado|ada))\b/u;
 const VACATIONS_BY_STATUS = /\bvacaciones?\b/u;
 const EMPLOYMENT_STATUS = /\b(?:nombrad|contratad)/u;
 const WORKDAY_BY_LEVEL = /\b(?:jornada|horas?|carga\s+horaria)\b/u;
@@ -30,6 +30,60 @@ export function hasUnsupportedAdministrativeInference(
 ): boolean {
   const asked = normalizeSpanishText(question);
   const normalized = normalizeSpanishText(answer);
+
+  if (MEDICAL_LEAVE.test(asked)) {
+    // Una receta expedida por quien emite el CITT confunde el certificado
+    // médico con la alternativa CITT. También se retiene una constancia de
+    // hospitalización presentada como obligatoria cuando la norma la prevé
+    // como facultativa.
+    if (
+      /\breceta\s+medica\b.{0,100}\b(?:expide|emite)\s+(?:el\s+)?citt\b/u.test(
+        normalized,
+      )
+    )
+      return true;
+    if (/\bcitt\b/u.test(normalized) && /\breceta\b/u.test(normalized)) {
+      const recipeClauses = normalized
+        .split(/[.!?\n]/u)
+        .filter((clause) => /\breceta\b/u.test(clause));
+      if (
+        recipeClauses.some(
+          (clause) =>
+            !/\b(?:certificado\s+medico|cm)\b/u.test(clause) ||
+            /\b(?:ambos|independientemente|siempre|toda\s+solicitud)\b/u.test(
+              clause,
+            ),
+        )
+      )
+        return true;
+    }
+    if (
+      /\bcitt\b.{0,40}\by\s+(?:la\s+)?receta\b|\b(?:siempre|toda\s+solicitud)\b.{0,70}\breceta\b|\breceta\b.{0,70}\b(?:siempre|toda\s+solicitud)\b/u.test(
+        normalized,
+      )
+    )
+      return true;
+    if (
+      /\bcitt\b/u.test(normalized) &&
+      /\breceta\b/u.test(normalized) &&
+      !/\bcitt\b.{0,100}\bo\b.{0,60}\b(?:certificado\s+medico|cm)\b|\b(?:certificado\s+medico|cm)\b.{0,100}\bo\b.{0,60}\bcitt\b/u.test(
+        normalized,
+      )
+    )
+      return true;
+    if (
+      /\b(?:debes?|deberas?|obligatorio|necesario)\b.{0,80}\b(?:adjuntar|presentar)\b.{0,60}\bconstancia\s+de\s+hospitalizacion\b/u.test(
+        normalized,
+      )
+    )
+      return true;
+    if (
+      /\bconstancia\s+de\s+hospitalizacion\b.{0,60}\b(?:obligatori[oa]|necesari[oa]|exigid[oa])\b/u.test(
+        normalized,
+      )
+    )
+      return true;
+  }
 
   if (
     MEDICAL_LEAVE.test(asked) &&

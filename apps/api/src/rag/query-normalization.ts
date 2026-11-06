@@ -178,6 +178,8 @@ const PROTECTED_EXACT_TERMS = new Set(
     'legislativo',
     'memorándum',
     'ministerial',
+    'proceso',
+    'procesos',
     'resolución',
     'resignación',
     'secretaría',

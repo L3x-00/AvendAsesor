@@ -1297,7 +1297,7 @@ export class ChatService {
       Boolean(input.conversationId) && announcesNewTopicWithSubject(question);
     const storedContext =
       prefetchedContext ??
-      (input.conversationId && !explicitTopicChange
+      (input.conversationId
         ? await this.historyGateway.getConversationContext({
             characterLimit: MAX_CHAT_CONTEXT_CHARS,
             conversationId: input.conversationId,
@@ -1314,9 +1314,10 @@ export class ChatService {
       storedContext && !manuallyChangedModule,
     );
     let startedNewConversation = !continuesConversation;
-    let conversationContext: ChatContextMessage[] = continuesConversation
-      ? (storedContext?.messages ?? [])
-      : [];
+    let conversationContext: ChatContextMessage[] =
+      continuesConversation && !explicitTopicChange
+        ? (storedContext?.messages ?? [])
+        : [];
     let selectedModuleId = continuesConversation
       ? (storedContext?.selectedModuleId ?? null)
       : input.selectedModuleId;
@@ -1620,7 +1621,7 @@ export class ChatService {
     // aritmética comprobable. También en un caso personal se responde con esa
     // extracción, sin dejar que el modelo mezcle una tabla de contratados.
     const deterministicFirstScaleSalary =
-      personalSalary &&
+      salaryProfileForTurn.isSalaryQuestion &&
       salaryProfileForTurn.condition === 'nombrado' &&
       salaryProfileForTurn.role === 'docente' &&
       salaryProfileForTurn.scale === '1' &&
@@ -1643,20 +1644,15 @@ export class ChatService {
           )
         : [];
 
-    if (retrieval.kind === 'topic_change') {
+    if (
+      retrieval.kind === 'topic_change' &&
+      !continuesConversation &&
+      !selectedModuleId
+    ) {
       conversationId = null;
       conversationContext = [];
       startedNewConversation = true;
       selectedModuleId = retrieval.resolvedModule.id;
-    } else if (
-      retrieval.kind === 'ambiguous' &&
-      selectedModuleId &&
-      !acceptedQuestion
-    ) {
-      conversationId = null;
-      conversationContext = [];
-      selectedModuleId = null;
-      startedNewConversation = true;
     } else if (
       retrieval.kind === 'evidence' &&
       !selectedModuleId &&
@@ -1672,6 +1668,25 @@ export class ChatService {
       // otro proceso.
       selectedModuleId = retrieval.resolvedModule.id;
     }
+
+    const outOfConversationScope = Boolean(
+      selectedModuleId &&
+      (((retrieval.kind === 'ambiguous' ||
+        retrieval.kind === 'evidence' ||
+        retrieval.kind === 'topic_change') &&
+        retrieval.sources.some(
+          (source) =>
+            !source.moduleIds.some((id) => id === selectedModuleId) &&
+            !source.moduleAssociations?.some(
+              (association) =>
+                source.moduleIds.includes(association.rootModuleId) &&
+                (association.rootModuleId === selectedModuleId ||
+                  association.submoduleId === selectedModuleId),
+            ),
+        )) ||
+        (retrieval.kind === 'topic_change' &&
+          retrieval.resolvedModule.id !== selectedModuleId)),
+    );
 
     const turn = await this.historyGateway.beginTurn({
       conversationId,
@@ -1708,6 +1723,23 @@ export class ChatService {
     };
 
     if (input.abortSignal?.aborted) return;
+
+    // El contrato de persistencia limita las fuentes de una conversación al
+    // módulo con que fue creada. No se abre otro chat automáticamente ni se
+    // incorporan fuentes fuera de ese ámbito al cambiar de tema.
+    if (outOfConversationScope) {
+      yield* this.completeWithoutEvidence({
+        conversationId: turn.conversationId,
+        faqMemory,
+        message:
+          'Esta conversación está limitada al módulo seleccionado y no encontré allí evidencia para esta consulta. Para revisar otro módulo, selecciónalo en un chat nuevo.',
+        retrievalScope,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      return;
+    }
 
     // CR-08 (punto 4): «dame el enlace», «¿en qué página…?», «¿en qué minuto…?».
     // Se responde de forma determinista —sin invocar al proveedor— con la
@@ -1961,8 +1993,9 @@ export class ChatService {
         yield* this.completeWithoutEvidence({
           conversationId: turn.conversationId,
           faqMemory,
-          message:
-            'No tengo un monto que pueda atribuir con seguridad a ese cargo o sector. Para no darte una cifra equivocada, prefiero no inventarla.',
+          message: isPayrollReviewQuestion(salaryQuestion)
+            ? 'No puedo confirmar con los fragmentos recuperados los pasos y condiciones para reclamar esa diferencia. No sería seguro darte un procedimiento sin sustento suficiente.'
+            : 'No tengo un monto que pueda atribuir con seguridad a ese cargo o sector. Para no darte una cifra equivocada, prefiero no inventarla.',
           modules: broadSalaryModules,
           retrievalScope,
           topRelevanceScore: retrieval.topRelevanceScore,

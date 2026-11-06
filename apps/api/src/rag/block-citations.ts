@@ -123,16 +123,9 @@ function sourceHasNumber(source: RetrievedChunk, number: string): boolean {
     `(?<!\\d)${number.replace(/[.,]/gu, '[.,]')}(?!\\d)`,
     'u',
   );
-  return [
-    source.chunkContent,
-    source.articleReference,
-    source.numeralReference,
-    source.resolutionNumber,
-    source.issuanceYear?.toString(),
-    source.documentTitle,
-  ].some(
-    (value) => value !== null && value !== undefined && pattern.test(value),
-  );
+  // Un número en el título o metadatos puede identificar la norma o su año,
+  // pero no acredita que esa cifra sea un plazo o importe del fragmento.
+  return pattern.test(source.chunkContent);
 }
 
 /** Lo que una fuente debe respaldar para quedar como cita del bloque. */

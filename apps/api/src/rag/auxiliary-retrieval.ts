@@ -19,7 +19,8 @@ const MEDICAL_LEAVE_SIGNAL =
 const APPOINTMENT_SIGNAL = /\b(?:nombramiento|nombrarme)\b/u;
 const REASSIGNMENT_SIGNAL = /\b(?:reasignaci[oó]n|reasignar)\b/u;
 const VACATION_SIGNAL = /\bvacaciones?|vacacional(?:es)?\b/u;
-const EXCHANGE_SIGNAL = /\bpermuta(?:r)?\b/u;
+const EXCHANGE_SIGNAL =
+  /\bpermuta(?:r)?\b|\b(?:intercambiar|intercambio|cambiar)\s+(?:mi|la|una|su)\s+plaza\b/u;
 
 function textOf(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,

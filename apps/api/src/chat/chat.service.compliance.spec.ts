@@ -580,6 +580,11 @@ describe('ChatService — lineamientos del cliente', () => {
     });
 
     it('un cambio de tema anunciado empieza sin arrastrar el tema anterior', async () => {
+      historyGateway.getConversationContext.mockResolvedValue({
+        conversationId: CONVERSATION_ID,
+        messages: [{ content: 'Sueldo anterior', role: 'user' }],
+        selectedModuleId: null,
+      });
       ragService.retrieve.mockResolvedValue({
         kind: 'no_evidence',
         topRelevanceScore: null,
@@ -590,7 +595,7 @@ describe('ChatService — lineamientos del cliente', () => {
         question: 'Otra consulta: ¿cuántos días de vacaciones tengo?',
       });
 
-      expect(historyGateway.getConversationContext).not.toHaveBeenCalled();
+      expect(historyGateway.getConversationContext).toHaveBeenCalled();
       expect(ragService.retrieve).toHaveBeenCalledWith(
         'Otra consulta: ¿cuántos días de vacaciones tengo?',
         null,
@@ -598,7 +603,7 @@ describe('ChatService — lineamientos del cliente', () => {
         { forceContext: false },
       );
       expect(historyGateway.beginTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ conversationId: null }),
+        expect.objectContaining({ conversationId: CONVERSATION_ID }),
       );
     });
 

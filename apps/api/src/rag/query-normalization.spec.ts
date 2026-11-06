@@ -4,6 +4,11 @@ import {
 } from './query-normalization';
 
 describe('normalizeDomainQuery', () => {
+  it('no confunde un proceso disciplinario con un profesor', () => {
+    const question =
+      'mi director me inicio un proceso disciplinario, cuanto tiempo tengo para defenderme';
+    expect(recoverDomainQuery(question).clarification).toBeNull();
+  });
   it.each([
     [
       '¿Qué dice la RM 123-2026?',

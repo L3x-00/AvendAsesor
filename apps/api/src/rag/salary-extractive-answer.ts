@@ -658,53 +658,6 @@ function padronRuralAnswer(
   };
 }
 
-function asksPayrollReview(question: string): boolean {
-  return isPayrollReviewQuestion(question);
-}
-
-function payrollReviewAnswer(
-  sources: readonly RetrievedChunk[],
-  question: string,
-): ExtractiveSalaryAnswer | null {
-  if (!asksPayrollReview(question)) return null;
-  const deductions = sources.find((candidate) => {
-    const text = normalizeSpanishText(candidate.chunkContent);
-    return (
-      /\b(?:deduccion|descuento)\b/u.test(text) && /\bplanilla\b/u.test(text)
-    );
-  });
-  const responsibility = sources.find((candidate) => {
-    const text = normalizeSpanishText(candidate.chunkContent);
-    return (
-      /\boficina\s+de\s+personal\b/u.test(text) &&
-      /\bacto(?:s)?\s+administrativ/u.test(text) &&
-      /\b(?:pago|descuento)\b/u.test(text)
-    );
-  });
-  const used = [deductions, responsibility].filter(
-    (source): source is RetrievedChunk => Boolean(source),
-  );
-  if (!used.length) return null;
-  const deductionCitation = deductions ? used.indexOf(deductions) + 1 : null;
-  const responsibilityCitation = responsibility
-    ? used.indexOf(responsibility) + 1
-    : null;
-  const facts = [
-    deductionCitation
-      ? `La fuente regula que las deducciones en planilla se aplican con prelación y límites según el tipo de descuento. [${deductionCitation}]`
-      : null,
-    responsibilityCitation
-      ? `También atribuye a la Oficina de Personal la emisión oportuna de actos administrativos que derivan en pago o descuento. [${responsibilityCitation}]`
-      : null,
-    'Los documentos entregados no establecen un canal, plazo ni recurso personal para presentar un reclamo por una diferencia remunerativa; no puedo inventar ese procedimiento.',
-  ].filter((fact): fact is string => Boolean(fact));
-  return {
-    answer: facts.join(' '),
-    hasVerifiedAmount: false,
-    sources: used,
-  };
-}
-
 function newestFirstScaleReference(
   sources: readonly RetrievedChunk[],
 ): RetrievedChunk | null {
@@ -1211,12 +1164,13 @@ export function buildExtractiveSalaryAnswer(
   scope: RetrievalScope,
 ): ExtractiveSalaryAnswer | null {
   const profile = salaryQuestionProfile(question);
+  // Un fragmento aislado puede omitir una excepción o ámbito previo. Hasta
+  // verificar la relación completa, no convertirlo en orientación de reclamo.
+  if (isPayrollReviewQuestion(question)) return null;
   const ruralAllocation = ruralAllocationAnswer(sources, question);
   if (ruralAllocation) return ruralAllocation;
   const padron = padronRuralAnswer(sources, question);
   if (padron) return padron;
-  const payroll = payrollReviewAnswer(sources, question);
-  if (payroll) return payroll;
   const ascenso = ascensoPlanillaAnswer(sources, question);
   if (ascenso) return ascenso;
   // Una asignación específica, el efecto administrativo de un ascenso o la
@@ -1226,15 +1180,27 @@ export function buildExtractiveSalaryAnswer(
   if (profile.asksSpecialAllocation || isAscensoQuestion(question)) {
     return null;
   }
-  const comparison = namedContractComparisonAnswer(sources, question);
+  const eligibleSources = sources.filter(
+    (source) =>
+      (scope !== 'current' || source.documentSituation === 'current') &&
+      (profile.year === null || source.issuanceYear === profile.year),
+  );
+  const comparison = namedContractComparisonAnswer(eligibleSources, question);
   if (comparison) return comparison;
   if (
     profile.condition === 'nombrado' &&
     profile.scale === '1' &&
     profile.jornadaHours !== null
   ) {
-    return firstScaleRimAnswer(sources, question);
+    return firstScaleRimAnswer(eligibleSources, question);
   }
+  // Sin una regla extractiva que vincule positivamente escala, jornada y
+  // régimen en la misma evidencia, no reutilizar una tabla de contratados.
+  if (
+    profile.condition === 'nombrado' &&
+    (profile.role === 'docente' || profile.role === null)
+  )
+    return null;
   const explicitSectors = salarySectors(question);
   const requestedSectors =
     explicitSectors.length > 0 ? explicitSectors : [...PANORAMA_SECTORS];
