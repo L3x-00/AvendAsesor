@@ -84,6 +84,7 @@ import {
 import { placeBlockCitations } from '../rag/block-citations';
 import {
   LIST_ITEM_LINE,
+  assessClaimSupport,
   claimNumbersAppearInSources,
   sourceSupportsClaim,
 } from '../rag/claim-support';
@@ -379,6 +380,7 @@ function paragraphClaims(paragraph: string): QualityClaim[] {
 export function evaluateAnswerCitationQualityDetails(
   answer: string,
   sources: RetrievedChunk[],
+  options: { reviewUnverified?: boolean } = {},
 ): AnswerCitationQualityEvaluation {
   if (!sources.length) {
     return { excerpts: {}, signals: ['support_insufficient'] };
@@ -459,15 +461,66 @@ export function evaluateAnswerCitationQualityDetails(
       .filter((source): source is RetrievedChunk => Boolean(source));
     if (
       citedSources.length !== citationIndexes.length ||
-      !citedSources.some((source) => sourceSupportsClaim(claim, source)) ||
-      !claimNumbersAppearInSources(claim, citedSources)
+      !citedSources.some(
+        (source) =>
+          sourceSupportsClaim(claim, source) &&
+          claimNumbersAppearInSources(claim, [source]),
+      )
     ) {
       signals.add('citation_insufficient');
       excerpts.citation_insufficient ??= normalizedReviewExcerpt(claim);
     }
   }
 
+  if (options.reviewUnverified && hasUnverifiedCitedClaim(answer, sources)) {
+    signals.add('support_partial');
+    excerpts.support_partial ??= normalizedReviewExcerpt(answer);
+  }
   return { excerpts, signals: [...signals] };
+}
+
+export function hasUnverifiedCitedClaim(
+  answer: string,
+  sources: RetrievedChunk[],
+): boolean {
+  return answer
+    .split(/\n{2,}/gu)
+    .flatMap(paragraphClaims)
+    .some(({ claim, blockCitations }) => {
+      const ranks = citedIndexes(claim);
+      const evidence = (ranks.length ? ranks : blockCitations)
+        .map((rank) => sources[rank - 1])
+        .filter((source): source is RetrievedChunk => Boolean(source));
+      return (
+        evidence.length > 0 &&
+        !evidence.some(
+          (source) => assessClaimSupport(claim, source) === 'supported',
+        )
+      );
+    });
+}
+
+/** Only explicit textual contradictions are a rejection, not an unknown paraphrase. */
+export function hasContradictedCitedClaim(
+  answer: string,
+  sources: RetrievedChunk[],
+): boolean {
+  return answer
+    .split(/\n{2,}/gu)
+    .flatMap(paragraphClaims)
+    .some(({ claim, blockCitations }) => {
+      const ranks = citedIndexes(claim);
+      const evidence = (ranks.length ? ranks : blockCitations)
+        .map((rank) => sources[rank - 1])
+        .filter((source): source is RetrievedChunk => Boolean(source));
+      const assessments = evidence.map((source) =>
+        assessClaimSupport(claim, source),
+      );
+      return (
+        !assessments.includes('supported') &&
+        assessments.includes('contradicted')
+      );
+    });
 }
 
 /**
@@ -2121,7 +2174,8 @@ export class ChatService {
     const salaryProfile = salaryQuestionProfile(salaryQuestion);
     const deferStreaming =
       salaryProfile.isSalaryQuestion ||
-      needsAdministrativeAnswerSafety(effectiveQuestion);
+      needsAdministrativeAnswerSafety(effectiveQuestion) ||
+      retrieval.sources.length > 0;
 
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
@@ -2284,7 +2338,10 @@ export class ChatService {
     const truncated = cutByLength || finishReason === 'length';
     if (truncated) finalAnswer = `${finalAnswer}${truncationNote}`;
 
-    if (hasUnsupportedAdministrativeInference(effectiveQuestion, finalAnswer)) {
+    if (
+      hasContradictedCitedClaim(finalAnswer, retrieval.sources) ||
+      hasUnsupportedAdministrativeInference(effectiveQuestion, finalAnswer)
+    ) {
       yield* this.completeWithoutEvidence({
         conversationId: turn.conversationId,
         faqMemory,
@@ -2314,7 +2371,8 @@ export class ChatService {
     const specialAllocationExempt =
       salaryProfile.isSalaryQuestion && salaryProfile.asksSpecialAllocation;
     if (
-      deferStreaming &&
+      (salaryProfile.isSalaryQuestion ||
+        needsAdministrativeAnswerSafety(effectiveQuestion)) &&
       !specialAllocationExempt &&
       (salaryRowFinding || salaryFinding)
     ) {
@@ -2384,6 +2442,7 @@ export class ChatService {
         ? placedAnswer.slice(0, lastCompleteSentence + 1)
         : placedAnswer,
       retrieval.sources,
+      { reviewUnverified: true },
     );
     const qualityExcerpts: Partial<Record<CitationQualitySignal, string>> = {
       ...citationQuality.excerpts,

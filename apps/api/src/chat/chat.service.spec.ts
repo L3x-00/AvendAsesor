@@ -2290,7 +2290,7 @@ describe('ChatService', () => {
     });
   });
 
-  it('coloca la cita de una lista en su introducción y sustituye el texto ya transmitido', async () => {
+  it('coloca la cita de una lista antes de emitir el texto retenido', async () => {
     const cronograma = {
       ...source,
       chunkContent:
@@ -2326,23 +2326,22 @@ describe('ChatService', () => {
       'conversation',
       'sources',
       'token',
-      'answer',
       'done',
     ]);
-    expect(events.find((event) => event.type === 'answer')).toEqual({
+    expect(events.find((event) => event.type === 'token')).toEqual({
       data: { text: placed },
-      type: 'answer',
+      type: 'token',
     });
     const completionCalls = historyGateway.completeTurn.mock.calls as Array<
       [Parameters<ChatHistoryGateway['completeTurn']>[0]]
     >;
     expect(completionCalls[0]?.[0]).toMatchObject({
       answer: placed,
-      qualitySignals: [],
+      qualitySignals: ['support_partial'],
     });
   });
 
-  it('envía la respuesta sustituta antes del aviso de corte y guarda ambos', async () => {
+  it('envía texto retenido y aviso de corte en el mismo mensaje que guarda', async () => {
     const cronograma = {
       ...source,
       chunkContent:
@@ -2373,8 +2372,6 @@ describe('ChatService', () => {
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
       'sources',
-      'token',
-      'answer',
       'token',
       'done',
     ]);
@@ -2997,7 +2994,7 @@ describe('ChatService', () => {
       expect.objectContaining({
         detectedModuleId: rootModuleId,
         detectedSubmoduleId: submoduleId,
-        qualitySignals: ['low_confidence'],
+        qualitySignals: ['support_partial', 'low_confidence'],
       }),
     );
   });
