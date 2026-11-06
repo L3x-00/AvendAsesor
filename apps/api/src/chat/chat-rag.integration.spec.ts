@@ -484,6 +484,30 @@ describe('ChatService + RagService integration', () => {
     ]);
   });
 
+  it('rejects a polarity inversion before emitting or persisting the generated claim', async () => {
+    answers.answer =
+      'La licencia por salud no se solicita ante la institución educativa. [1]';
+    const events = await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+    });
+    expect(events.map((event) => event.type)).not.toContain('token');
+    expect(events.map((event) => event.type)).not.toContain('sources');
+    expect(events.map((event) => event.type)).toContain('no_evidence');
+    expect(history.completions[0]?.answer).not.toContain('no se solicita');
+    expect(history.completions[0]?.sources).toEqual([]);
+  });
+
+  it('preserves an unverified paraphrase but records it for review', async () => {
+    answers.answer =
+      'Para solicitar la licencia por salud, acude a tu institución educativa. [1]';
+    const events = await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+    });
+    expect(events.map((event) => event.type)).toContain('token');
+    expect(history.completions[0]?.answer).toBe(answers.answer);
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
+  });
+
   describe('explicación de jornada y continuidad', () => {
     beforeEach(() => {
       for (const [index, hours] of [30, 40].entries()) {
@@ -765,7 +789,8 @@ describe('ChatService + RagService integration', () => {
         history.completions[0]?.qualityExcerpts?.support_partial,
       ).toContain('2 666,80');
     } else {
-      expect(history.completions[0]?.qualitySignals).not.toContain(
+      // A valid paraphrase remains visible; textual entailment is unverified.
+      expect(history.completions[0]?.qualitySignals).toContain(
         'support_partial',
       );
       const conversation = events.find(
@@ -786,7 +811,7 @@ describe('ChatService + RagService integration', () => {
         history.completions.every(
           (completion) =>
             completion.replyRole === 'assistant' &&
-            !completion.qualitySignals?.includes('support_partial'),
+            (completion.sources?.length ?? 0) > 0,
         ),
       ).toBe(true);
     }
@@ -1129,9 +1154,7 @@ describe('ChatService + RagService integration', () => {
       question: 'Muéstrame en una tabla los plazos de licencia por motivo.',
     });
 
-    expect(history.completions[0]?.qualitySignals).not.toContain(
-      'support_partial',
-    );
+    expect(history.completions[0]?.qualitySignals).toContain('support_partial');
   });
 
   it('señala para revisión la tabla con una fila sin cita', async () => {

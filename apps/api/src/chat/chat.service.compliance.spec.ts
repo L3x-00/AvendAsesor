@@ -466,7 +466,7 @@ describe('ChatService — lineamientos del cliente', () => {
 
     expect(completion()?.answer.endsWith(RAG_TRUNCATION_NOTE)).toBe(true);
     expect(events.at(-2)).toEqual({
-      data: { text: `\n\n${RAG_TRUNCATION_NOTE}` },
+      data: { text: completion()?.answer },
       type: 'token',
     });
   });
