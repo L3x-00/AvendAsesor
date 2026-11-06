@@ -57,6 +57,7 @@ import type {
   VersionChunk,
 } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
+import { firstScaleRimEvidence } from './rim-evidence';
 import {
   isDirectRemunerationEvidence,
   isRuralAllocationQuestion,
@@ -1068,6 +1069,7 @@ function chunkFromDeliveredVersion(
     articleReference: row.articleReference,
     chunkContent: row.chunkContent,
     chunkId: row.chunkId,
+    chunkIndex: row.chunkIndex,
     lexicalScore: 0,
     numeralReference: row.numeralReference,
     pageEnd: row.pageEnd,
@@ -1135,12 +1137,103 @@ export class RagService {
     priorUserQuestions: string[] = [],
     options: RetrieveOptions = {},
   ): Promise<RetrievalResult> {
-    const result = await this.retrieveEvidence(
+    let result = await this.retrieveEvidence(
       question,
       selectedModuleId,
       priorUserQuestions,
       options,
     );
+    if (result.kind === 'evidence' || result.kind === 'topic_change') {
+      const salaryQuestion = withInheritedSalaryFactors(
+        question,
+        inheritedFactorQuestions(
+          question,
+          options.salaryContextQuestions ?? priorUserQuestions,
+          Boolean(options.forceContext),
+        ),
+      );
+      const profile = salaryQuestionProfile(salaryQuestion);
+      if (
+        profile.isSalaryQuestion &&
+        profile.role === 'docente' &&
+        (profile.scale === '1' ||
+          /\bnombrad[oa]s?\b.*\bcontratad[oa]s?\b|\bcontratad[oa]s?\b.*\bnombrad[oa]s?\b/iu.test(
+            salaryQuestion,
+          ))
+      ) {
+        const anchors = result.sources.filter(
+          (source) =>
+            /\bprimera\s+escala\s+magisterial\b/iu.test(source.chunkContent) &&
+            (profile.year === null || source.issuanceYear === profile.year),
+        );
+        if (anchors.length && this.gateway.initialChunksOfVersions) {
+          try {
+            const versions = [
+              ...new Set(
+                anchors
+                  .sort((a, b) => (b.issuanceYear ?? 0) - (a.issuanceYear ?? 0))
+                  .map((source) => source.documentVersionId),
+              ),
+            ].slice(0, 1);
+            const rows = await this.gateway.initialChunksOfVersions({
+              limitPerVersion: 4,
+              versionIds: versions,
+            });
+            const additions = rows.flatMap((row) => {
+              const anchor = anchors.find(
+                (source) => source.documentVersionId === row.documentVersionId,
+              );
+              const source =
+                anchor &&
+                sanitizeRetrievedEvidence(
+                  chunkFromDeliveredVersion(anchor, row),
+                );
+              return source ? [source] : [];
+            });
+            const scope = detectRetrievalScope(salaryQuestion);
+            const evidence = firstScaleRimEvidence(
+              withoutExplicitlyRepealedSalarySources(
+                [...result.sources, ...additions],
+                salaryQuestion,
+              ).filter(
+                (source) =>
+                  profile.year === null || source.issuanceYear === profile.year,
+              ),
+            );
+            // Compare factors against the complete proven provision. Earlier
+            // considering clauses in its stored chunk may discuss other regimes.
+            const eligible =
+              evidence &&
+              sourcesEligibleForQuestion(
+                withoutExplicitlyRepealedSalarySources(
+                  [
+                    {
+                      ...evidence.sources[0],
+                      chunkContent: evidence.statement,
+                    },
+                  ],
+                  salaryQuestion,
+                ),
+                salaryQuestion,
+                scope,
+              ).length > 0;
+            const ordered = new Map(
+              result.sources.map((source) => [source.chunkId, source]),
+            );
+            for (const source of eligible ? evidence.sources : []) {
+              if (
+                ordered.has(source.chunkId) ||
+                ordered.size < RAG_MAX_DELIVERED_SOURCES
+              )
+                ordered.set(source.chunkId, source);
+            }
+            result = { ...result, sources: [...ordered.values()] };
+          } catch {
+            // Incomplete evidence remains incomplete; never invent a join.
+          }
+        }
+      }
+    }
     if (
       (result.kind !== 'evidence' && result.kind !== 'topic_change') ||
       !asksForDates(question)

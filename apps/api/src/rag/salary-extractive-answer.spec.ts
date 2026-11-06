@@ -1157,7 +1157,8 @@ describe('buildExtractiveSalaryAnswer', () => {
     expect(result?.answer).toContain('S/ 116,69');
     expect(result?.answer).toContain('S/ 3 500,70');
     expect(result?.answer).toContain('no determina por sí sola');
-    expect(result?.sources).toEqual([named, hourly, contract]);
+    expect(result?.answer).not.toContain('[1][1]');
+    expect(result?.sources).toEqual([hourly, contract]);
   });
 
   it('reconoce una fila contractual de 30 bajo el encabezado Jornada laboral', () => {
@@ -1220,6 +1221,7 @@ describe('buildExtractiveSalaryAnswer', () => {
       'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. Fijar el monto de la RIM por hora de trabajo semanal-mensual correspondiente a la Primera Escala Magisterial de la Carrera Pública Magisterial a la que se refiere la Ley N.°',
       {
         chunkId: 'rim-articulo-1',
+        chunkIndex: 2,
         documentVersionId: 'rim-partido',
         pageStart: 1,
         pageEnd: 1,
@@ -1229,6 +1231,7 @@ describe('buildExtractiveSalaryAnswer', () => {
       '29944, en la suma de S/ 116,69. Artículo 2.- El profesor contratado percibe una remuneración mensual. Jornada laboral 30 horas: S/ 3 500,70.',
       {
         chunkId: 'rim-continuacion',
+        chunkIndex: 3,
         documentVersionId: 'rim-partido',
         pageStart: 2,
         pageEnd: 2,
