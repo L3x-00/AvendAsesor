@@ -10,6 +10,8 @@ export interface RetrievedModuleAssociation {
 }
 
 export interface RetrievedChunk {
+  /** Stored ordinal, present only when read from ordered version chunks. */
+  chunkIndex?: number;
   articleReference: string | null;
   chunkContent: string;
   chunkId: string;

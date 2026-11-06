@@ -14,6 +14,7 @@ import type {
 } from './chat-history.gateway';
 import { ChatService, type ChatStreamEvent } from './chat.service';
 import { buildConversationalReply } from './intent/conversational-replies';
+import rimFixture from '../rag/fixtures/rim-277-2025.json';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -209,6 +210,25 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
 
   add(sourceToAdd: RetrievedChunk): void {
     this.sources.push(sourceToAdd);
+  }
+
+  initialChunksOfVersions(input: {
+    versionIds: string[];
+    limitPerVersion: number;
+  }) {
+    return Promise.resolve(
+      input.versionIds.flatMap((versionId) =>
+        this.sources
+          .filter(
+            (item) =>
+              item.documentVersionId === versionId &&
+              item.chunkIndex !== undefined,
+          )
+          .sort((a, b) => a.chunkIndex! - b.chunkIndex!)
+          .slice(0, input.limitPerVersion)
+          .map((item) => ({ ...item, chunkIndex: item.chunkIndex! })),
+      ),
+    );
   }
 
   search(input: {
@@ -443,12 +463,13 @@ describe('ChatService + RagService integration', () => {
   let history: InMemoryChatHistoryGateway;
   let answers: RecordingAnswerGateway;
   let service: ChatService;
+  let rag: RagService;
 
   beforeEach(() => {
     retrieval = new InMemoryRetrievalGateway();
     history = new InMemoryChatHistoryGateway();
     answers = new RecordingAnswerGateway();
-    const rag = new RagService(embeddings(), retrieval, {
+    rag = new RagService(embeddings(), retrieval, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
     } as never);
     service = new ChatService(
@@ -458,6 +479,167 @@ describe('ChatService + RagService integration', () => {
       { get: jest.fn().mockReturnValue(20) } as never,
       { prepare: jest.fn().mockReturnValue(null) } as never,
     );
+  });
+
+  function addRimCapture(): void {
+    for (const chunk of rimFixture.chunks)
+      retrieval.add({
+        ...remunerationPage3,
+        chunkContent: chunk.chunk_content,
+        chunkId: chunk.id,
+        chunkIndex: chunk.chunk_index,
+        documentId: rimFixture.documentId,
+        documentVersionId: rimFixture.documentVersionId,
+        documentTitle: rimFixture.documentTitle,
+        documentType: 'DECRETO_SUPREMO',
+        resolutionNumber: '277-2025-EF',
+        issuanceYear: 2025,
+        articleReference: null,
+        pageStart: chunk.page_start,
+        pageEnd: chunk.page_end,
+        semanticScore: 0.99,
+      });
+  }
+
+  it('persists the captured RIM calculation with the operative article and amount citations', async () => {
+    addRimCapture();
+    const events = await collect(service, {
+      question:
+        'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+      selectedModuleId: REMUNERATIONS_MODULE_ID,
+    });
+    const completion = history.completions.at(-1);
+    expect(completion?.replyRole).toBe('assistant');
+    expect(completion?.answer).toContain('S/ 3 500,70');
+    expect(completion?.sources.map((item) => item.chunkId)).toEqual([
+      rimFixture.chunks[1].id,
+      rimFixture.chunks[2].id,
+    ]);
+    expect(events.find((event) => event.type === 'token')?.data.text).toBe(
+      completion?.answer,
+    );
+    expect(
+      events.find((event) => event.type === 'sources')?.data.sources,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pageStart: 1, rank: 1 }),
+        expect.objectContaining({ pageStart: 2, rank: 2 }),
+      ]),
+    );
+    expect(answers.inputs).toHaveLength(0);
+  });
+
+  it('does not reintroduce incompatible initial context after salary selection', async () => {
+    addRimCapture();
+    retrieval.add({
+      ...remunerationPage3,
+      chunkId: 'incompatible-40',
+      chunkIndex: 1,
+      documentVersionId: rimFixture.documentVersionId,
+      documentId: rimFixture.documentId,
+      documentTitle: rimFixture.documentTitle,
+      issuanceYear: 2025,
+      chunkContent:
+        'La remuneración mensual del profesor contratado con jornada de 40 horas es S/ 4 500,00.',
+      semanticScore: 0.99,
+    });
+    const result = await rag.retrieve(
+      'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+      REMUNERATIONS_MODULE_ID,
+      [],
+      { personalSalary: true },
+    );
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'no_evidence')
+      expect(result.sources.map((item) => item.chunkId)).not.toContain(
+        'incompatible-40',
+      );
+  });
+
+  it('keeps verified RIM evidence through three turns of inherited factors and stops expanding on a topic change', async () => {
+    addRimCapture();
+    const initial = jest.spyOn(retrieval, 'initialChunksOfVersions');
+    await collect(service, {
+      question: 'soy profesor nombrado de primera escala, cuanto me toca ganar',
+      selectedModuleId: REMUNERATIONS_MODULE_ID,
+    });
+    const conversationId = history.completions.at(-1)!.conversationId;
+    await collect(service, { question: '30 horas', conversationId });
+    expect(history.completions.at(-1)?.answer).toContain('S/ 3 500,70');
+    await collect(service, { question: '40 horas', conversationId });
+    expect(history.completions.at(-1)?.answer).toContain('S/ 4 667,60');
+    const calls = initial.mock.calls.length;
+    await collect(service, {
+      question: '¿Cómo solicito una licencia por salud?',
+      conversationId,
+    });
+    expect(initial).toHaveBeenCalledTimes(calls);
+  });
+
+  it('expands the explicitly requested year instead of the newest referenced version', async () => {
+    const earlier = {
+      ...remunerationPage3,
+      documentVersionId: 'rim-2023',
+      chunkId: 'rim-2023',
+      chunkIndex: 0,
+      issuanceYear: 2023,
+      chunkContent:
+        'Artículo 1.- Monto de la Remuneración Íntegra Mensual de la Primera Escala Magisterial. La RIM por hora de trabajo semanal-mensual es S/ 100,00.',
+    };
+    const later = {
+      ...earlier,
+      chunkId: 'rim-2025',
+      documentVersionId: 'rim-2025',
+      issuanceYear: 2025,
+    };
+    retrieval.add(earlier);
+    retrieval.add(later);
+    jest
+      .spyOn(
+        rag as unknown as { retrieveEvidence: () => Promise<unknown> },
+        'retrieveEvidence',
+      )
+      .mockResolvedValue({
+        kind: 'evidence',
+        resolvedModule: null,
+        sources: [later, earlier],
+        topRelevanceScore: 0.99,
+      });
+    const initial = jest.spyOn(retrieval, 'initialChunksOfVersions');
+    await rag.retrieve(
+      'cuanto gana un profesor nombrado de primera escala con 30 horas en 2023',
+      REMUNERATIONS_MODULE_ID,
+    );
+    expect(initial).toHaveBeenCalledWith({
+      limitPerVersion: 4,
+      versionIds: ['rim-2023'],
+    });
+  });
+
+  it('does not persist or stream the E05 allocation as an hourly RIM', async () => {
+    for (const [index, text] of [
+      'Artículo 1.- Se fija la Remuneración Íntegra Mensual (RIM) por hora de trabajo semanal-mensual de la primera escala magisterial de la Carrera Pública Magisterial de la Ley N.° 29944.',
+      'La asignación excepcional de traslado se fija en la suma de S/ 900,00. Artículo 2.- Otras disposiciones.',
+    ].entries())
+      retrieval.add({
+        ...remunerationPage3,
+        chunkId: `bad-rim-${index}`,
+        documentVersionId: 'bad-rim-version',
+        documentTitle: 'Decreto Supremo N.° 277-2025-EF',
+        issuanceYear: 2025,
+        chunkIndex: index,
+        chunkContent: text,
+        semanticScore: 0.99,
+      });
+    const events = await collect(service, {
+      question:
+        'soy profesor nombrado de primera escala con 30 horas, cuanto me toca ganar ahora',
+      selectedModuleId: REMUNERATIONS_MODULE_ID,
+    });
+    expect(history.completions.at(-1)?.replyRole).toBe('no_evidence');
+    expect(history.completions.at(-1)?.sources).toEqual([]);
+    expect(events.some((event) => event.type === 'token')).toBe(false);
+    expect(answers.inputs).toHaveLength(0);
   });
 
   it('resolves a free query to one module and persists its exact source citation', async () => {
