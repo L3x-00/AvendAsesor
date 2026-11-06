@@ -1110,6 +1110,36 @@ export class ChatService {
     question: string;
     selectedModuleId: string | null;
   }): AsyncIterable<ChatStreamEvent> {
+    if (input.abortSignal?.aborted) return;
+    const iterator = this.streamTurn(input)[Symbol.asyncIterator]();
+    try {
+      while (!input.abortSignal?.aborted) {
+        const item = await iterator.next();
+        if (item.done || input.abortSignal?.aborted) return;
+        yield item.value;
+      }
+    } catch (error) {
+      if (!input.abortSignal?.aborted) throw error;
+    } finally {
+      await iterator.return?.();
+    }
+  }
+
+  private async *streamTurn(input: {
+    abortSignal?: AbortSignal;
+    authorization: AuthorizationContext;
+    conversationId: string | null;
+    question: string;
+    selectedModuleId: string | null;
+  }): AsyncIterable<ChatStreamEvent> {
+    const completeTurn = async (
+      completion: Parameters<ChatHistoryGateway['completeTurn']>[0],
+    ) => {
+      input.abortSignal?.throwIfAborted();
+      const completed = await this.historyGateway.completeTurn(completion);
+      input.abortSignal?.throwIfAborted();
+      return completed;
+    };
     // Carriles no-RAG (Hito 3, Fases 2 y 10): los turnos sociales
     // (saludo/agradecimiento/acuse/despedida/anuncio/capacidad) se responden con
     // calidez y los ajenos al ámbito se declinan con cortesía reorientando —
@@ -1143,6 +1173,7 @@ export class ChatService {
       );
       if (!selectedCorpus || selectedCorpus.documented) {
         yield* this.askForOrthographicClarification({
+          abortSignal: input.abortSignal,
           clarification: recovery.clarification,
           conversationId: input.conversationId,
           question: input.question,
@@ -1337,6 +1368,7 @@ export class ChatService {
       isTopiclessQuestion(effectiveQuestion)
     ) {
       yield* this.askForTopic({
+        abortSignal: input.abortSignal,
         faqMemory,
         question: input.question,
         userId: input.authorization.userId,
@@ -1419,7 +1451,7 @@ export class ChatService {
         },
       };
       if (input.abortSignal?.aborted) return;
-      const completed = await this.historyGateway.completeTurn({
+      const completed = await completeTurn({
         answer: explanation,
         conversationId: turn.conversationId,
         faqMemory,
@@ -1474,6 +1506,7 @@ export class ChatService {
         type: 'conversation',
       };
       yield* this.completeWithoutEvidence({
+        abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
         message: moduleWithoutDocumentsMessage(
@@ -1528,6 +1561,7 @@ export class ChatService {
       )
     ) {
       yield* this.askForTopic({
+        abortSignal: input.abortSignal,
         conversationId,
         faqMemory,
         question: input.question,
@@ -1782,6 +1816,7 @@ export class ChatService {
     // incorporan fuentes fuera de ese ámbito al cambiar de tema.
     if (outOfConversationScope) {
       yield* this.completeWithoutEvidence({
+        abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
         message:
@@ -1821,7 +1856,7 @@ export class ChatService {
         });
         if (message) {
           if (input.abortSignal?.aborted) return;
-          const completed = await this.historyGateway.completeTurn({
+          const completed = await completeTurn({
             answer: message,
             conversationId: turn.conversationId,
             faqMemory,
@@ -1900,6 +1935,7 @@ export class ChatService {
         message = buildConversationalReply('unrelated_no_evidence');
       }
       yield* this.completeWithoutEvidence({
+        abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
         message,
@@ -1933,7 +1969,7 @@ export class ChatService {
           contextualClarification?.message ??
           ambiguityMessage(effectiveQuestion, retrieval.modules);
         if (input.abortSignal?.aborted) return;
-        const completed = await this.historyGateway.completeTurn({
+        const completed = await completeTurn({
           answer: message,
           conversationId: turn.conversationId,
           faqMemory,
@@ -1980,7 +2016,7 @@ export class ChatService {
         );
       if (clarification) {
         if (input.abortSignal?.aborted) return;
-        const completed = await this.historyGateway.completeTurn({
+        const completed = await completeTurn({
           answer: clarification.message,
           conversationId: turn.conversationId,
           faqMemory,
@@ -2044,6 +2080,7 @@ export class ChatService {
       if (input.abortSignal?.aborted) return;
       if (!extractiveSalary) {
         yield* this.completeWithoutEvidence({
+          abortSignal: input.abortSignal,
           conversationId: turn.conversationId,
           faqMemory,
           message: isPayrollReviewQuestion(salaryQuestion)
@@ -2058,7 +2095,7 @@ export class ChatService {
         return;
       }
       const finalAnswer = extractiveSalary.answer;
-      const completed = await this.historyGateway.completeTurn({
+      const completed = await completeTurn({
         answer: finalAnswer,
         conversationId: turn.conversationId,
         faqMemory,
@@ -2098,7 +2135,7 @@ export class ChatService {
     );
     if (noChangesMessage) {
       if (input.abortSignal?.aborted) return;
-      const completed = await this.historyGateway.completeTurn({
+      const completed = await completeTurn({
         answer: noChangesMessage,
         conversationId: turn.conversationId,
         faqMemory,
@@ -2142,11 +2179,10 @@ export class ChatService {
     // («[1][2]») sin cortar una cita a medias: retiene el corchete abierto
     // hasta que cierra.
     const citator = new CitationGroupNormalizer(retrieval.sources.length);
-    // Hasta ver una cita [n] válida no se muestra nada. Así ninguna respuesta
-    // que termine en `no_evidence` filtra temporalmente hechos, fuentes o texto
-    // sin sustento a la web ni a otros clientes SSE.
+    // The citation gate only recognizes references; it is not legal validation.
+    // Every grounded answer stays buffered through all existing checks.
     let leadIn = '';
-    let streaming = false;
+    let citationSeen = false;
     let declined = false;
     let answer = '';
     let cutByLength = false;
@@ -2172,10 +2208,6 @@ export class ChatService {
     // única forma de impedir que una cifra inventada llegue a la pantalla
     // cuando ninguna fuente trae un importe que la respalde.
     const salaryProfile = salaryQuestionProfile(salaryQuestion);
-    const deferStreaming =
-      salaryProfile.isSalaryQuestion ||
-      needsAdministrativeAnswerSafety(effectiveQuestion) ||
-      retrieval.sources.length > 0;
 
     // Solo cuenta una cita a una fuente entregada: un año entre corchetes
     // ([2012]) o una fuente inventada no sustentan la respuesta.
@@ -2195,7 +2227,7 @@ export class ChatService {
       if (input.abortSignal?.aborted) return;
 
       const visible = citator.push(marker.push(token));
-      if (!streaming) {
+      if (!citationSeen) {
         leadIn += visible;
         if (marker.partialSupport && !cites(leadIn)) {
           declined = true;
@@ -2209,23 +2241,14 @@ export class ChatService {
           }
           continue;
         }
-        streaming = true;
-        if (!deferStreaming) {
-          yield { data: { sources: citations.sources }, type: 'sources' };
-        }
-        const piece = takePiece(leadIn);
+        citationSeen = true;
+        takePiece(leadIn);
         leadIn = '';
-        if (!deferStreaming && piece) {
-          yield { data: { text: piece }, type: 'token' };
-        }
         if (cutByLength) break;
         continue;
       }
       if (!visible) continue;
-      const piece = takePiece(visible);
-      if (!deferStreaming && piece) {
-        yield { data: { text: piece }, type: 'token' };
-      }
+      takePiece(visible);
       if (cutByLength) break;
     }
 
@@ -2233,12 +2256,12 @@ export class ChatService {
 
     const ending = marker.finish();
     const tail = `${citator.push(ending.tail)}${citator.flush()}`;
-    const unstreamed = streaming ? '' : `${leadIn}${tail}`;
+    const unstreamed = citationSeen ? '' : `${leadIn}${tail}`;
     // Fail-closed (punto 4): una respuesta que no cita ninguna fuente no puede
     // demostrar de dónde sale —suele ser una negativa («Lo siento, las fuentes
     // no mencionan…») o la marca mal escrita— y se cierra como «sin
-    // evidencia». Si ya se mostró texto, el evento «no_evidence» lo reemplaza.
-    const whole = `${answer}${streaming ? tail : unstreamed}`;
+    // evidencia». Ningún texto factual se ha emitido todavía.
+    const whole = `${answer}${citationSeen ? tail : unstreamed}`;
     if (
       ending.noSupport ||
       declined ||
@@ -2259,7 +2282,7 @@ export class ChatService {
         const message =
           salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
             ?.message ?? salaryEvidenceClarificationMessage();
-        const completed = await this.historyGateway.completeTurn({
+        const completed = await completeTurn({
           answer: message,
           conversationId: turn.conversationId,
           faqMemory,
@@ -2287,6 +2310,7 @@ export class ChatService {
         return;
       }
       yield* this.completeWithoutEvidence({
+        abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
         retrievalScope,
@@ -2296,18 +2320,8 @@ export class ChatService {
       });
       return;
     }
-    const pending = streaming ? tail : unstreamed;
-    if (deferStreaming) {
-      // El texto retenido se valida completo antes de emitirlo.
-      answer = whole;
-    } else if (pending && !cutByLength) {
-      if (!streaming) {
-        streaming = true;
-        yield { data: { sources: citations.sources }, type: 'sources' };
-      }
-      const piece = takePiece(pending);
-      if (piece) yield { data: { text: piece }, type: 'token' };
-    }
+    // Retain every grounded generation, including the normalized final tail.
+    answer = whole;
 
     const normalizedAnswer = answer.trim();
     if (!normalizedAnswer) {
@@ -2343,6 +2357,7 @@ export class ChatService {
       hasUnsupportedAdministrativeInference(effectiveQuestion, finalAnswer)
     ) {
       yield* this.completeWithoutEvidence({
+        abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
         message:
@@ -2387,7 +2402,7 @@ export class ChatService {
           ? 'Los documentos disponibles tratan la remuneración del cargo consultado, pero no incluyen el monto. Para no darte una cifra equivocada, prefiero no inventarla. ¿Quieres que te explique qué regla sí consta?'
           : (salaryClarificationFor(effectiveQuestion, retrieval.sources, true)
               ?.message ?? salaryEvidenceClarificationMessage());
-      const completed = await this.historyGateway.completeTurn({
+      const completed = await completeTurn({
         answer: message,
         conversationId: turn.conversationId,
         faqMemory,
@@ -2417,30 +2432,21 @@ export class ChatService {
       };
       return;
     }
-    if (deferStreaming) {
-      yield { data: { sources: citations.sources }, type: 'sources' };
-      yield { data: { text: finalAnswer }, type: 'token' };
-    } else {
-      // El texto ya se transmitió tal como lo escribió el modelo: si las citas
-      // cambiaron de lugar, la interfaz sustituye el mensaje por el definitivo.
-      if (placedAnswer !== normalizedAnswer) {
-        yield { data: { text: placedAnswer }, type: 'answer' };
-      }
-      if (truncated) yield { data: { text: truncationNote }, type: 'token' };
-    }
-
     // La calidad se evalúa sobre la respuesta, sin el aviso de corte (que no
     // lleva citas y marcaría toda respuesta cortada para revisión).
+    const reviewAnswer = truncated
+      ? finalAnswer.slice(0, -truncationNote.length)
+      : finalAnswer;
     const lastCompleteSentence = Math.max(
-      placedAnswer.lastIndexOf('.'),
-      placedAnswer.lastIndexOf('!'),
-      placedAnswer.lastIndexOf('?'),
-      placedAnswer.lastIndexOf(']'),
+      reviewAnswer.lastIndexOf('.'),
+      reviewAnswer.lastIndexOf('!'),
+      reviewAnswer.lastIndexOf('?'),
+      reviewAnswer.lastIndexOf(']'),
     );
     const citationQuality = evaluateAnswerCitationQualityDetails(
       truncated && lastCompleteSentence > 0
-        ? placedAnswer.slice(0, lastCompleteSentence + 1)
-        : placedAnswer,
+        ? reviewAnswer.slice(0, lastCompleteSentence + 1)
+        : reviewAnswer,
       retrieval.sources,
       { reviewUnverified: true },
     );
@@ -2477,7 +2483,7 @@ export class ChatService {
       qualitySignals.add('low_confidence');
     }
 
-    const completed = await this.historyGateway.completeTurn({
+    const completed = await completeTurn({
       answer: finalAnswer,
       conversationId: turn.conversationId,
       faqMemory,
@@ -2493,6 +2499,12 @@ export class ChatService {
       userId: input.authorization.userId,
       userMessageId: turn.userMessageId,
     });
+    // Checks and persistence finish before exposing factual content.
+    input.abortSignal?.throwIfAborted();
+    yield { data: { sources: citations.sources }, type: 'sources' };
+    if (input.abortSignal?.aborted) return;
+    yield { data: { text: finalAnswer }, type: 'token' };
+    if (input.abortSignal?.aborted) return;
     yield {
       data: {
         conversationId: turn.conversationId,
@@ -2704,6 +2716,7 @@ export class ChatService {
 
   /** Cierra el turno como «sin evidencia»: mensaje claro, sin fuentes. */
   private async *completeWithoutEvidence(input: {
+    abortSignal?: AbortSignal;
     conversationId: string;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
     message?: string;
@@ -2715,6 +2728,7 @@ export class ChatService {
   }): AsyncIterable<ChatStreamEvent> {
     const base = input.message ?? noEvidenceMessage(input.retrievalScope);
     const message = base;
+    input.abortSignal?.throwIfAborted();
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: input.conversationId,
@@ -2730,6 +2744,7 @@ export class ChatService {
       userId: input.userId,
       userMessageId: input.userMessageId,
     });
+    input.abortSignal?.throwIfAborted();
     yield { data: { message }, type: 'no_evidence' };
     yield {
       data: {
@@ -2827,12 +2842,14 @@ export class ChatService {
    * para que la respuesta del usuario ("de reasignación") conserve la pregunta.
    */
   private async *askForTopic(input: {
+    abortSignal?: AbortSignal;
     conversationId?: string | null;
     faqMemory: ReturnType<FaqMemoryService['prepare']>;
     question: string;
     userId: string;
   }): AsyncIterable<ChatStreamEvent> {
     const modules = ((await this.activeTopics()) ?? []).slice(0, 8);
+    input.abortSignal?.throwIfAborted();
     const turn = await this.historyGateway.beginTurn({
       conversationId: input.conversationId ?? null,
       question: input.question,
@@ -2851,6 +2868,7 @@ export class ChatService {
     const message = modules.length
       ? `${RAG_TOPIC_CLARIFICATION_MESSAGE} También puedes elegir uno de estos temas.`
       : RAG_TOPIC_CLARIFICATION_MESSAGE;
+    input.abortSignal?.throwIfAborted();
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: turn.conversationId,
@@ -2899,6 +2917,7 @@ export class ChatService {
    * en consulta si la acepta con «sí».
    */
   private async *askForOrthographicClarification(input: {
+    abortSignal?: AbortSignal;
     clarification: {
       originalWord: string;
       suggestions: readonly string[];
@@ -2908,6 +2927,7 @@ export class ChatService {
     question: string;
     userId: string;
   }): AsyncIterable<ChatStreamEvent> {
+    input.abortSignal?.throwIfAborted();
     const turn = await this.historyGateway.beginTurn({
       conversationId: input.conversationId,
       question: input.question,
@@ -2945,6 +2965,7 @@ export class ChatService {
           `La palabra «${input.clarification.originalWord}» puede referirse a ${proposal}.`,
           'Para no adivinar entre esas opciones, ¿podrías escribir esa palabra de otra forma?',
         ].join('\n');
+    input.abortSignal?.throwIfAborted();
     const completed = await this.historyGateway.completeTurn({
       answer: message,
       conversationId: turn.conversationId,
