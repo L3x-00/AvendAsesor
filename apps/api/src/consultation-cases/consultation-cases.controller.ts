@@ -23,6 +23,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { MULTIPART_FIELD_LIMITS } from '../multipart-field-limits';
 import { MAX_CONSULTATION_ATTACHMENT_BYTES } from './attachment-inspection.service';
 import { ConsultationAttachmentMulterExceptionFilter } from './consultation-attachment-multer.filter';
 import { ConsultationCasesService } from './consultation-cases.service';
@@ -56,7 +57,12 @@ export class TeacherConsultationCasesController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_CONSULTATION_ATTACHMENT_BYTES, files: 1 },
+      limits: {
+        ...MULTIPART_FIELD_LIMITS,
+        fileSize: MAX_CONSULTATION_ATTACHMENT_BYTES,
+        files: 1,
+        fields: 4,
+      },
     }),
   )
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -79,7 +85,12 @@ export class TeacherConsultationCasesController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_CONSULTATION_ATTACHMENT_BYTES, files: 1 },
+      limits: {
+        ...MULTIPART_FIELD_LIMITS,
+        fileSize: MAX_CONSULTATION_ATTACHMENT_BYTES,
+        files: 1,
+        fields: 3,
+      },
     }),
   )
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

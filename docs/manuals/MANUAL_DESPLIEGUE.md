@@ -82,7 +82,7 @@ el proyecto por su **ref**, no por su nombre.
 | Build | script `build` de `apps/web` → `next build` | `apps/web/package.json` |
 | Instalación | monorepo npm workspaces con `package-lock.json` en la raíz | `package.json` raíz |
 | Comandos personalizados de install/build en el panel | Por confirmar (PO) | No versionado |
-| Versión de Node en Vercel | Por confirmar (PO). El repositorio exige `>=24.14.0 <25` (`engines`) y `.nvmrc` fija `24.14.0` | `package.json`, `.nvmrc` |
+| Versión de Node en Vercel | Por confirmar (PO). El repositorio exige `>=24.22.2 <25` (`engines`) y `.nvmrc` fija `24.22.2` | `package.json`, `.nvmrc` |
 
 Particularidades de `apps/web/next.config.ts`:
 
@@ -178,12 +178,15 @@ publicado (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). Si se repite:
 | Start Command | `npm run start:prod --workspace=api` (ejecuta `node dist/main`) |
 | Health Check Path | `/health/ready` |
 | URL | https://avend-asesor-api.onrender.com |
-| Versión de Node | Por confirmar (PO). El repositorio exige `>=24.14.0 <25` |
+| Versión de Node | Por confirmar (PO). El repositorio exige `>=24.22.2 <25` |
 
 Notas:
 
 - Los comandos corren en la raíz del repositorio y seleccionan el workspace con
   `--workspace=api`.
+- Render da precedencia a `NODE_VERSION` sobre `.nvmrc`. Si el servicio define
+  esa variable, debe apuntar a una versión compatible antes del despliegue.
+  [Selección de Node.js en Render](https://render.com/docs/node-version)
 - `--include=dev` es necesario porque `nest build` usa `@nestjs/cli`, que es
   devDependency. Con `NODE_ENV=production`, `npm ci` omitiría las
   devDependencies.

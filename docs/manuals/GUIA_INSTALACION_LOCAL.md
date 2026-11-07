@@ -38,7 +38,7 @@ npm run dev:web                     # terminal 2 → http://localhost:3000
 
 | Herramienta | Versión | Dónde se define | Para qué |
 | --- | --- | --- | --- |
-| Node.js | `24.14.0` (rango permitido `>=24.14.0 <25`) | `.nvmrc`, `engines` en `package.json` | Ejecutar API, web, pruebas y scripts |
+| Node.js | `24.22.2` (rango permitido `>=24.22.2 <25`) | `.nvmrc`, `engines` en `package.json` | Ejecutar API, web, pruebas y scripts |
 | npm | `>=11.16.0 <12` | `engines` en `package.json` | Gestor de paquetes (npm workspaces) |
 | Git | cualquiera reciente | — | Obtener el código |
 | Docker Desktop | cualquiera reciente (en Windows, con backend WSL 2) | — | Contenedores de Supabase local |
@@ -53,7 +53,7 @@ Notas:
 - No existe `.npmrc` con `engine-strict`. Con otra versión de Node, npm solo muestra
   avisos `EBADENGINE` y no se detiene, pero la versión soportada es la de `.nvmrc`. La
   integración continua usa Node 24 (`.github/workflows/ci.yml`).
-- Con nvm-windows: `nvm install 24.14.0` y luego `nvm use 24.14.0`.
+- Con nvm-windows: `nvm install 24.22.2` y luego `nvm use 24.22.2`.
 - Para usar el chat o indexar documentos en local se necesita una clave de OpenRouter
   u OpenAI (sección 5.2). Sin clave, el resto del sistema funciona.
 
@@ -531,7 +531,7 @@ cd apps/api && ACCEPTANCE_ENV_FILE=.env.acceptance.local npm run acceptance:hito
 | PowerShell bloquea un `.ps1` de `infrastructure/local` | Política de ejecución | `powershell -NoProfile -ExecutionPolicy Bypass -File .\infrastructure\local\<script>.ps1` (afecta solo a ese proceso) |
 | `docker exec ... psql -f /tmp/...` no encuentra el archivo en Git Bash | Git Bash convierte la ruta a formato Windows | Anteponga `MSYS_NO_PATHCONV=1` |
 | `npm run test:debug --workspace=api` falla | El script apunta a `node_modules/.bin/jest` dentro de `apps/api`, y npm workspaces instala en la raíz | Desde `apps/api`: `node --inspect-brk ../../node_modules/jest/bin/jest.js --runInBand` |
-| Avisos `EBADENGINE` durante `npm ci` | Versión de Node o npm fuera de `engines` | `nvm use 24.14.0` |
+| Avisos `EBADENGINE` durante `npm ci` | Versión de Node o npm fuera de `engines` | `nvm use 24.22.2` |
 | Errores al instalar o probar con pnpm | El repositorio es de npm workspaces | Use `npm ci` y `npm run ...` |
 | Muchos archivos cambian tras `npm run format --workspace=api` | Con `core.autocrlf=true` (habitual en Git para Windows; el repositorio no tiene `.gitattributes`) los archivos se descargan con CRLF y Prettier los reescribe con LF | Formatee solo los archivos que tocó (`npx prettier --write <archivo>`) o use `npm run lint:fix`; el lint de la API acepta ambos finales de línea (`endOfLine: "auto"`) |
 

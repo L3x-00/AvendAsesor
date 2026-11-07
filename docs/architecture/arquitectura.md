@@ -88,7 +88,7 @@ flowchart LR
 | `.github/workflows/ci.yml` | CI: lint, tipos, pruebas con cobertura, E2E, build y verificación de artefactos |
 
 Es un monorepo con **npm workspaces** (`package.json` raíz). Exige Node
-`>=24.14.0 <25` y npm `>=11.16.0 <12`; `.nvmrc` fija `24.14.0`.
+`>=24.22.2 <25` y npm `>=11.16.0 <12`; `.nvmrc` fija `24.22.2`.
 
 ---
 

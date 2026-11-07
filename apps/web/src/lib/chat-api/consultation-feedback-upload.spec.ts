@@ -75,14 +75,17 @@ describe("consultation feedback upload boundaries", () => {
     ).rejects.toMatchObject({ kind: "too_large" });
   });
 
-  it("rejects an oversized streaming body without trusting Content-Length", async () => {
+  it("cancels an oversized streaming body before the client finishes sending", async () => {
+    const cancel = vi.fn();
+    let closeBody: () => void = () => undefined;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(
           new Uint8Array(MAX_CONSULTATION_MULTIPART_BYTES + 1),
         );
-        controller.close();
+        closeBody = () => controller.close();
       },
+      cancel,
     });
     const request = new UndiciRequest("https://avend.example/feedback", {
       body,
@@ -94,11 +97,16 @@ describe("consultation feedback upload boundaries", () => {
       typeof UndiciRequest
     >[1]) as unknown as Request;
 
-    await expect(
-      readConsultationFeedbackFormData(request),
-    ).rejects.toMatchObject({
-      kind: "too_large",
-    });
+    // Let a broken reader finish and fail the assertion rather than hang the suite.
+    const fallback = setTimeout(closeBody, 1_000);
+    try {
+      await expect(
+        readConsultationFeedbackFormData(request),
+      ).rejects.toMatchObject({ kind: "too_large" });
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      clearTimeout(fallback);
+    }
   });
 
   it("rejects unsupported or oversized files and treats an empty picker as absent", () => {

@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ServiceUnavailableException } from '@nestjs/common';
+import { request as httpRequest, type Server } from 'node:http';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -23,6 +25,7 @@ import { UserAdministrationService } from './../src/user-administration/user-adm
 import type { AdministrativeUserPage } from './../src/user-administration/user-administration.gateway';
 import { AdministrationService } from './../src/administration/administration.service';
 import { HealthService } from './../src/health/health.service';
+import { MAX_CONSULTATION_ATTACHMENT_BYTES } from './../src/consultation-cases/attachment-inspection.service';
 
 describe('API endpoints (e2e)', () => {
   let app: INestApplication<App>;
@@ -717,6 +720,152 @@ describe('API endpoints (e2e)', () => {
       .expect(400);
 
     expect(documentsService.create).not.toHaveBeenCalled();
+  });
+
+  it('/admin/documents rejects excessive multipart fields, multiple files and truncated bodies', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    const upload = () =>
+      request(app.getHttpServer())
+        .post('/admin/documents')
+        .set('Authorization', 'Bearer admin-token');
+
+    let excess = upload();
+    for (let index = 0; index < 22; index += 1) {
+      excess = excess.field(`extra${index}`, 'dato');
+    }
+    await excess.expect(400).expect(/Too many fields/);
+
+    await upload()
+      .field('metadata[100000]', 'dato')
+      .field('metadata[x]', 'dato')
+      .expect(400)
+      .expect(/The uploaded file is invalid/);
+
+    await upload()
+      .attach('file', Buffer.from('%PDF-1.7'), 'first.pdf')
+      .attach('file', Buffer.from('%PDF-1.7'), 'second.pdf')
+      .expect(400);
+
+    await upload()
+      .set('Content-Type', 'multipart/form-data; boundary=upload')
+      .send('--upload\r\nContent-Disposition: form-data; name="title"\r\n\r\n')
+      .expect(400);
+
+    expect(documentsService.create).not.toHaveBeenCalled();
+  });
+
+  it('/consultation-cases rejects oversized files after authorization', async () => {
+    const upload = (size: number) =>
+      request(app.getHttpServer())
+        .post('/consultation-cases/suggestions')
+        .attach('file', Buffer.alloc(size), 'adjunto.png');
+
+    await upload(16).expect(401);
+    resolveContext.mockResolvedValue({
+      email: 'teacher@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
+      role: 'docente',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    await upload(MAX_CONSULTATION_ATTACHMENT_BYTES + 1)
+      .set('Authorization', 'Bearer teacher-token')
+      .expect(413);
+
+    await request(app.getHttpServer())
+      .post('/consultation-cases/suggestions')
+      .set('Authorization', 'Bearer teacher-token')
+      .field('comment[100000]', 'dato')
+      .field('comment[x]', 'dato')
+      .expect(400)
+      .expect(/El archivo adjunto no es válido/);
+  });
+
+  it('/admin/users/import maps an unexpected multipart file field to a client error', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'superadmin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
+      role: 'superadmin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    await request(app.getHttpServer())
+      .post('/admin/users/import')
+      .set('Authorization', 'Bearer superadmin-token')
+      .attach('unexpected', Buffer.from('content'), 'users.xlsx')
+      .expect(400);
+  });
+
+  it('discards a disconnected multipart upload and continues serving requests', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'admin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      modulesAccess: true,
+      role: 'admin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    await app.listen(0, '127.0.0.1');
+    const server = app.getHttpServer() as Server;
+    const client = httpRequest(
+      new URL('/admin/documents', await app.getUrl()),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'multipart/form-data; boundary=upload',
+        },
+      },
+    );
+    client.on('error', () => undefined);
+
+    await new Promise<void>((resolve) => {
+      server.prependOnceListener('request', (incoming) => {
+        incoming.once('data', () => client.destroy());
+        incoming.once('close', resolve);
+      });
+      client.write(
+        '--upload\r\nContent-Disposition: form-data; name="file"; filename="partial.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.7',
+      );
+    });
+
+    expect(resolveContext).toHaveBeenCalledWith('admin-token');
+    expect(documentsService.create).not.toHaveBeenCalled();
+    await request(server).get('/health').expect(200);
+  });
+
+  it('rejects malformed compressed JSON and keeps serving subsequent requests', async () => {
+    await app.listen(0, '127.0.0.1');
+    const base = await app.getUrl();
+    const sendCompressed = (encoding: string, body: Buffer) =>
+      fetch(new URL('/chat/stream', base), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': encoding,
+        },
+        body: new Uint8Array(body),
+      });
+    const malformedGzip = Buffer.concat([
+      gzipSync('{}'),
+      Buffer.from('invalid gzip trailer'),
+    ]);
+    const brotli = brotliCompressSync(
+      '{"question":"¿Cómo presento una solicitud?"}',
+    );
+
+    expect((await sendCompressed('gzip', malformedGzip)).status).toBe(400);
+    expect((await sendCompressed('br', brotli.subarray(0, 2))).status).toBe(
+      400,
+    );
+    expect((await sendCompressed('br', brotli)).status).toBe(401);
+    expect(chatService.stream).not.toHaveBeenCalled();
+    await request(app.getHttpServer()).get('/health').expect(200);
   });
 
   it('/admin/documents protects version, link, status, download and deletion routes', async () => {
