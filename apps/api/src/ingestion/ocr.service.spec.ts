@@ -54,6 +54,32 @@ describe('OcrService', () => {
     expect(mockTerminate).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects a pending page if the underlying worker fails and exits', async () => {
+    mockRecognize.mockImplementation(() => {
+      nativeWorker.emit('error', new Error('worker failed'));
+      nativeWorker.threadId = -1;
+      nativeWorker.emit('exit', 1);
+      return new Promise(() => undefined);
+    });
+    await expect(
+      service.withWorker((recognize) => recognize(Buffer.from('image'))),
+    ).rejects.toThrow('OCR_WORKER_EXITED');
+    expect(nativeWorker.listenerCount('error')).toBe(0);
+  });
+
+  it('does not swallow errors before the library exposes a worker handle', async () => {
+    mockCreateWorker.mockImplementationOnce(
+      (_lang: string, _mode: number, options: { errorHandler(): void }) => {
+        options.errorHandler();
+        return new Promise(() => undefined);
+      },
+    );
+    await expect(service.withWorker(jest.fn())).rejects.toThrow(
+      'OCR_WORKER_INITIALIZATION_FAILED',
+    );
+    expect(mockTerminate).not.toHaveBeenCalled();
+  });
+
   it('terminates pending recognition on abort and removes its listeners', async () => {
     const cancellation = new AbortController();
     const remove = jest.spyOn(cancellation.signal, 'removeEventListener');

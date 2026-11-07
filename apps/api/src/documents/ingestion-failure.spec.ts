@@ -3,6 +3,11 @@ import { ingestionFailureCause } from './ingestion-failure';
 describe('ingestionFailureCause', () => {
   it.each([
     ['LEASE_EXPIRED', 'The ingestion worker lease expired.', 'timeout'],
+    [
+      'INGESTION_PDF_INCOMPLETE',
+      'OCR_PAGE_BUDGET_EXCEEDED: 45/40',
+      'incomplete_extraction',
+    ],
     ['INGESTION_FAILED', 'INGESTION_TIMEOUT', 'timeout'],
     ['UNREADABLE_PDF', 'The PDF could not be read.', 'unreadable_file'],
     ['INGESTION_FAILED', 'INGESTION_EMPTY_TEXT', 'no_text'],

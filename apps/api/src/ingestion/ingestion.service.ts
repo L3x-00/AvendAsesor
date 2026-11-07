@@ -18,7 +18,10 @@ import type {
 import { EMBEDDINGS_GATEWAY } from './ingestion.tokens';
 import { MineruMarkdownService } from './mineru-markdown.service';
 import { OcrService } from './ocr.service';
-import { PdfExtractionService } from './pdf-extraction.service';
+import {
+  IncompletePdfExtractionError,
+  PdfExtractionService,
+} from './pdf-extraction.service';
 
 /** Tope de páginas sometidas a OCR local por trabajo (acota rasterizado + CPU). */
 const MAX_OCR_PAGES = 40;
@@ -112,11 +115,12 @@ export class IngestionService {
       const message =
         error instanceof Error ? error.message : 'Unexpected ingestion failure';
       try {
+        const incomplete = error instanceof IncompletePdfExtractionError;
         await this.gateway.fail(
           job,
-          'INGESTION_FAILED',
+          incomplete ? 'INGESTION_PDF_INCOMPLETE' : 'INGESTION_FAILED',
           message.slice(0, 1000),
-          true,
+          incomplete ? error.retryable : true,
         );
       } catch {
         this.logger.error(
@@ -198,31 +202,19 @@ export class IngestionService {
    */
   private async extractMineruSidecar(
     job: ClaimedIngestionJob,
+    file: Buffer,
     signal: AbortSignal,
   ): Promise<ExtractedPage[] | null> {
     if (this.config.get<boolean>('RAG_MINERU_SIDECAR_ENABLED') === false) {
       return null;
     }
     if (!this.gateway.downloadOptionalObject) return null;
+    let sidecar: Buffer | null;
     try {
-      const sidecar = await this.gateway.downloadOptionalObject(
+      sidecar = await this.gateway.downloadOptionalObject(
         job.storageBucket,
         `${job.storagePath}${MINERU_SIDECAR_SUFFIX}`,
       );
-      signal.throwIfAborted();
-      if (!sidecar?.length || sidecar.length > MAX_MINERU_SIDECAR_BYTES) {
-        return null;
-      }
-      const pages = this.mineru.extract(
-        sidecar.toString('utf8'),
-        job.pageCount,
-      );
-      if (!pages) {
-        this.logger.warn(
-          `MinerU sidecar inválido para el job ${job.jobId}; se usa la extracción PDF.`,
-        );
-      }
-      return pages;
     } catch (error) {
       if (signal.aborted) throw error;
       this.logger.warn(
@@ -230,6 +222,19 @@ export class IngestionService {
       );
       return null;
     }
+    signal.throwIfAborted();
+    if (!sidecar?.length || sidecar.length > MAX_MINERU_SIDECAR_BYTES)
+      return null;
+    // Verify against the PDF itself. A resource limit on the original must
+    // stop the job, even when an optional sidecar was supplied.
+    const total = await this.pdf.countPages(file);
+    signal.throwIfAborted();
+    const pages = this.mineru.extract(sidecar.toString('utf8'), total);
+    if (!pages)
+      this.logger.warn(
+        `MinerU sidecar inválido para el job ${job.jobId}; se usa la extracción PDF.`,
+      );
+    return pages;
   }
 
   private async extractPages(
@@ -263,7 +268,7 @@ export class IngestionService {
     // modelos ni memoria para ellos). Si un operador ya convirtió el PDF, el
     // Markdown sidecar aporta tablas y estructura por página; si falta o es
     // inválido, se conserva exactamente la extracción PDF anterior.
-    const mineruPages = await this.extractMineruSidecar(job, signal);
+    const mineruPages = await this.extractMineruSidecar(job, file, signal);
     if (mineruPages) return mineruPages;
 
     // PDF: extracción por página + OCR local de páginas casi vacías, con guardas
@@ -277,37 +282,69 @@ export class IngestionService {
     if (pages.length > MAX_PDF_PAGES) {
       throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
     }
-    const sparsePages = pages
+    let extractedChars = pages.reduce(
+      (length, page) => length + page.text.length,
+      0,
+    );
+    if (extractedChars > MAX_EXTRACTED_CHARS)
+      throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
+    const sparse = pages
       .filter((page) => page.text.replace(/\s/g, '').length < 50)
       .map((page) => page.pageNumber);
-    const sparse = sparsePages.slice(0, MAX_OCR_PAGES);
-    if (sparse.length < sparsePages.length) {
-      this.logger.warn(
-        `OCR local acotado a ${MAX_OCR_PAGES} de ${sparsePages.length} páginas para el job ${job.jobId}.`,
+    if (sparse.length > MAX_OCR_PAGES) {
+      throw new IncompletePdfExtractionError(
+        `OCR_PAGE_BUDGET_EXCEEDED: ${sparse.length}/${MAX_OCR_PAGES}`,
       );
     }
     if (sparse.length) {
       const pageByNumber = new Map(
         pages.map((page) => [page.pageNumber, page]),
       );
-      await this.ocr.withWorker(async (recognize) => {
-        for (
-          let offset = 0;
-          offset < sparse.length;
-          offset += OCR_RENDER_BATCH
-        ) {
-          signal.throwIfAborted();
-          const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
-          const images = await this.pdf.render(file, batch);
-          signal.throwIfAborted();
-          for (const pageNumber of batch) {
-            const image = images.get(pageNumber);
-            const page = pageByNumber.get(pageNumber);
-            if (image && page) page.text = await recognize(image);
-            images.delete(pageNumber);
+      try {
+        await this.ocr.withWorker(async (recognize) => {
+          for (
+            let offset = 0;
+            offset < sparse.length;
+            offset += OCR_RENDER_BATCH
+          ) {
+            signal.throwIfAborted();
+            const batch = sparse.slice(offset, offset + OCR_RENDER_BATCH);
+            const images = await this.pdf.render(file, batch);
+            signal.throwIfAborted();
+            for (const pageNumber of batch) {
+              const image = images.get(pageNumber);
+              if (!image?.length)
+                throw new IncompletePdfExtractionError(
+                  `OCR_PAGE_NOT_RENDERED: ${pageNumber}`,
+                  true,
+                );
+              signal.throwIfAborted();
+              const text = (await recognize(image)).trim();
+              signal.throwIfAborted();
+              if (!/[\p{L}\p{N}]/u.test(text))
+                throw new IncompletePdfExtractionError(
+                  `OCR_PAGE_WITHOUT_TEXT: ${pageNumber}`,
+                  true,
+                );
+              const page = pageByNumber.get(pageNumber)!;
+              extractedChars += text.length - page.text.length;
+              if (extractedChars > MAX_EXTRACTED_CHARS)
+                throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
+              page.text = text;
+              images.delete(pageNumber);
+            }
           }
-        }
-      }, signal);
+        }, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        if (
+          error instanceof IncompletePdfExtractionError ||
+          (error instanceof Error &&
+            error.message === 'INGESTION_DOCUMENT_TOO_LARGE')
+        )
+          throw error;
+        throw new IncompletePdfExtractionError('OCR_PROCESS_FAILED', true);
+      }
     }
     return pages;
   }

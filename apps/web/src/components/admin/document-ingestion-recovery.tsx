@@ -3,13 +3,19 @@ import { retryDocumentIngestionAction } from "@/app/admin/actions";
 import { AdminActionForm } from "@/components/admin/admin-action-form";
 import type { ManagedDocumentVersion } from "@/lib/admin-api/types";
 
-type FailureCause = NonNullable<ManagedDocumentVersion["ingestionFailureCause"]>;
+type FailureCause = NonNullable<
+  ManagedDocumentVersion["ingestionFailureCause"]
+>;
 
 /** Qué pasó, en lenguaje llano, y si conviene reintentar o subir otro archivo. */
 const CAUSES: Record<FailureCause, { text: string; uploadFirst: boolean }> = {
   ai_service: {
     text: "El servicio que prepara el documento para las consultas no respondió. Suele ser algo temporal.",
     uploadFirst: false,
+  },
+  incomplete_extraction: {
+    text: "La versión necesita revisión porque quedaron páginas sin texto verificable. Revisa el PDF y, si es un escaneo, sube una versión con texto seleccionable.",
+    uploadFirst: true,
   },
   no_text: {
     text: "No se encontró texto legible en el archivo: puede estar vacío, protegido o ser una imagen de muy baja calidad.",
@@ -93,10 +99,15 @@ export function DocumentIngestionRecovery({
         className="rounded-lg border border-red-300 bg-red-50 p-4 text-base text-red-900"
         role="note"
       >
-        <p className="font-bold">No se pudo procesar este documento</p>
+        <p className="font-bold">
+          {cause === "incomplete_extraction"
+            ? "Extracción incompleta"
+            : "No se pudo procesar este documento"}
+        </p>
         <p className="mt-1">{content.text}</p>
         <p className="mt-1">
-          Mientras siga en Error, el asistente no lo usa para responder.
+          Mientras esta versión siga en Error, el asistente no la usa para
+          responder.
         </p>
       </div>
       <h3 className="text-base font-bold">Qué puedes hacer</h3>

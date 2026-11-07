@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Logger } from '@nestjs/common';
+import { MAX_EXTRACTED_CHARS } from './document-format';
 import { IngestionService, MAX_JOB_DURATION_MS } from './ingestion.service';
 import type {
   ClaimedIngestionJob,
@@ -46,7 +47,7 @@ function createGateway(): jest.Mocked<IngestionGateway> {
 describe('IngestionService', () => {
   let gateway: jest.Mocked<IngestionGateway>;
   let embeddings: { embed: jest.Mock };
-  let pdf: { extract: jest.Mock; render: jest.Mock };
+  let pdf: { countPages: jest.Mock; extract: jest.Mock; render: jest.Mock };
   let docx: { extract: jest.Mock };
   let ocr: { withWorker: jest.Mock };
   let chunking: { chunk: jest.Mock };
@@ -57,7 +58,11 @@ describe('IngestionService', () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     gateway = createGateway();
     embeddings = { embed: jest.fn() };
-    pdf = { extract: jest.fn(), render: jest.fn() };
+    pdf = {
+      countPages: jest.fn().mockResolvedValue(1),
+      extract: jest.fn(),
+      render: jest.fn(),
+    };
     docx = { extract: jest.fn() };
     ocr = { withWorker: jest.fn() };
     chunking = { chunk: jest.fn() };
@@ -291,7 +296,7 @@ describe('IngestionService', () => {
     ]);
   });
 
-  it('keeps a sparse page unchanged when local rendering does not return it', async () => {
+  it('reports incomplete extraction when local rendering omits a requested page', async () => {
     gateway.claimNext.mockResolvedValue(job);
     gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '  ' }]);
@@ -303,11 +308,19 @@ describe('IngestionService', () => {
     chunking.chunk.mockReturnValue([chunk]);
     embeddings.embed.mockResolvedValue([vector()]);
 
-    await expect(service.processNext()).resolves.toBe(true);
+    await expect(service.processNext()).resolves.toBe(false);
     expect(recognize).not.toHaveBeenCalled();
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_PDF_INCOMPLETE',
+      'OCR_PAGE_NOT_RENDERED: 1',
+      true,
+    );
+    expect(gateway.clearChunks).not.toHaveBeenCalled();
+    expect(gateway.complete).not.toHaveBeenCalled();
   });
 
-  it('bounds OCR pages and renders them in small batches (memory guard)', async () => {
+  it('does not start OCR or publish an all-scanned PDF above the OCR budget', async () => {
     gateway.claimNext.mockResolvedValue(job);
     gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
     pdf.extract.mockResolvedValue(
@@ -316,10 +329,38 @@ describe('IngestionService', () => {
         text: '  ',
       })),
     );
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_PDF_INCOMPLETE',
+      'OCR_PAGE_BUDGET_EXCEEDED: 45/40',
+      false,
+    );
+    expect(ocr.withWorker).not.toHaveBeenCalled();
+    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(gateway.clearChunks).not.toHaveBeenCalled();
+    expect(gateway.insertChunks).not.toHaveBeenCalled();
+    expect(gateway.complete).not.toHaveBeenCalled();
+  });
+
+  it('processes every sparse page in a mixed 45-page PDF in small batches, including page 45', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    pdf.extract.mockResolvedValue(
+      Array.from({ length: 45 }, (_, index) => ({
+        pageNumber: index + 1,
+        text:
+          index < 5
+            ? 'Texto seleccionable suficiente para superar el umbral de OCR local.'
+            : '',
+      })),
+    );
     pdf.render.mockImplementation((_buffer: Buffer, batch: number[]) =>
       Promise.resolve(new Map(batch.map((n) => [n, Buffer.from(`img-${n}`)]))),
     );
-    const recognize = jest.fn().mockResolvedValue('ocr');
+    const recognize = jest.fn((image: Buffer) =>
+      Promise.resolve(`Texto OCR de ${image.toString()}`),
+    );
     ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
       run(recognize),
     );
@@ -332,8 +373,108 @@ describe('IngestionService', () => {
     expect(ocr.withWorker).toHaveBeenCalledTimes(1);
     expect(pdf.render).toHaveBeenCalledTimes(8);
     expect(recognize).toHaveBeenCalledTimes(40);
+    expect(chunking.chunk).toHaveBeenCalledWith(
+      expect.arrayContaining([{ pageNumber: 45, text: 'Texto OCR de img-45' }]),
+    );
+    expect(gateway.complete).toHaveBeenCalledWith(job, 45);
     for (const call of pdf.render.mock.calls as Array<[Buffer, number[]]>) {
       expect(call[1].length).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it.each(['blank', 'process_error'])(
+    'rejects a failed middle page (%s) and retries the whole version under a new lease',
+    async (failure) => {
+      const retry = {
+        ...job,
+        attemptCount: job.attemptCount + 1,
+        leaseToken: 'second-lease',
+      };
+      gateway.claimNext.mockResolvedValueOnce(job).mockResolvedValueOnce(retry);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      pdf.extract.mockImplementation(() =>
+        Promise.resolve(
+          [1, 2, 3].map((pageNumber) => ({ pageNumber, text: '' })),
+        ),
+      );
+      pdf.render.mockImplementation(() =>
+        Promise.resolve(
+          new Map([1, 2, 3].map((page) => [page, Buffer.from(`img-${page}`)])),
+        ),
+      );
+      const recognize = jest
+        .fn()
+        .mockResolvedValueOnce('Página 1')
+        .mockImplementationOnce(() =>
+          failure === 'blank'
+            ? Promise.resolve('  \n')
+            : Promise.reject(new Error('worker failure')),
+        )
+        .mockResolvedValue('Texto legible');
+      ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
+        run(recognize),
+      );
+      chunking.chunk.mockReturnValue([chunk]);
+      embeddings.embed.mockResolvedValue([vector()]);
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.fail).toHaveBeenCalledWith(
+        job,
+        'INGESTION_PDF_INCOMPLETE',
+        failure === 'blank' ? 'OCR_PAGE_WITHOUT_TEXT: 2' : 'OCR_PROCESS_FAILED',
+        true,
+      );
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+      expect(recognize).toHaveBeenCalledTimes(2);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(service.processNext()).resolves.toBe(true);
+      expect(recognize).toHaveBeenCalledTimes(5);
+      expect(gateway.clearChunks.mock.calls).toEqual([[retry]]);
+      expect(gateway.insertChunks).toHaveBeenCalledTimes(1);
+      expect(gateway.complete.mock.calls).toEqual([[retry, 3]]);
+    },
+  );
+
+  it('ignores OCR arriving after the deadline and does not admit a new job before draining', async () => {
+    jest.useFakeTimers();
+    try {
+      gateway.claimNext.mockResolvedValue(job);
+      gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+      pdf.extract.mockResolvedValue([{ pageNumber: 1, text: '' }]);
+      pdf.render.mockResolvedValue(new Map([[1, Buffer.from('img')]]));
+      let finish: (value: string) => void = () => undefined;
+      let workerSignal: AbortSignal | undefined;
+      const recognize = jest.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      ocr.withWorker.mockImplementation(
+        (run: (r: jest.Mock) => unknown, signal: AbortSignal) => {
+          workerSignal = signal;
+          return run(recognize);
+        },
+      );
+      const processing = service.processNext();
+      await jest.advanceTimersByTimeAsync(MAX_JOB_DURATION_MS);
+      await expect(processing).resolves.toBe(false);
+      expect(gateway.fail).toHaveBeenCalledWith(
+        job,
+        'INGESTION_FAILED',
+        'INGESTION_TIMEOUT',
+        true,
+      );
+      expect(workerSignal?.aborted).toBe(true);
+      await expect(service.processNext()).resolves.toBe(false);
+      expect(gateway.claimNext).toHaveBeenCalledTimes(1);
+      finish('Texto que llegó tarde');
+      await jest.advanceTimersByTimeAsync(0);
+      expect(chunking.chunk).not.toHaveBeenCalled();
+      expect(gateway.clearChunks).not.toHaveBeenCalled();
+      expect(gateway.complete).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
     }
   });
 
@@ -359,6 +500,33 @@ describe('IngestionService', () => {
       'INGESTION_DOCUMENT_TOO_LARGE',
       true,
     );
+  });
+
+  it('stops when OCR exceeds the text budget before recognizing further pages', async () => {
+    gateway.claimNext.mockResolvedValue(job);
+    gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    pdf.extract.mockResolvedValue(
+      [1, 2].map((pageNumber) => ({ pageNumber, text: '' })),
+    );
+    pdf.render.mockResolvedValue(
+      new Map([1, 2].map((page) => [page, Buffer.from(`img-${page}`)])),
+    );
+    const recognize = jest
+      .fn()
+      .mockResolvedValue('a'.repeat(MAX_EXTRACTED_CHARS + 1));
+    ocr.withWorker.mockImplementation((run: (r: jest.Mock) => unknown) =>
+      run(recognize),
+    );
+    await expect(service.processNext()).resolves.toBe(false);
+    expect(recognize).toHaveBeenCalledTimes(1);
+    expect(gateway.fail).toHaveBeenCalledWith(
+      job,
+      'INGESTION_FAILED',
+      'INGESTION_DOCUMENT_TOO_LARGE',
+      true,
+    );
+    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(gateway.complete).not.toHaveBeenCalled();
   });
 
   it('records empty parsed content as a retryable failure', async () => {

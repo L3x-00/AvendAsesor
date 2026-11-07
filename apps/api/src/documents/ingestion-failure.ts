@@ -9,6 +9,7 @@
  */
 export type DocumentIngestionFailureCause =
   | 'ai_service'
+  | 'incomplete_extraction'
   | 'no_text'
   | 'timeout'
   | 'too_large'
@@ -21,6 +22,7 @@ export function ingestionFailureCause(
   message: string | null,
 ): DocumentIngestionFailureCause {
   if (code === 'LEASE_EXPIRED') return 'timeout';
+  if (code === 'INGESTION_PDF_INCOMPLETE') return 'incomplete_extraction';
   // Marcado al cargar: el PDF no se pudo abrir (dañado o con contraseña).
   if (code === 'UNREADABLE_PDF') return 'unreadable_file';
   const detail = message ?? '';

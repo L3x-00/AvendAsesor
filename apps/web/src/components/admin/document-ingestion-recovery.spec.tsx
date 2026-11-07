@@ -16,6 +16,20 @@ function optionTitles(): string[] {
 }
 
 describe("DocumentIngestionRecovery", () => {
+  it("identifies an incomplete version and asks for review before retrying", () => {
+    render(
+      <DocumentIngestionRecovery
+        canRetry
+        cause="incomplete_extraction"
+        documentId={documentId}
+      />,
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(/Extracción incompleta/);
+    expect(screen.getByRole("note")).toHaveTextContent(
+      /esta versión siga en Error/,
+    );
+    expect(optionTitles()[0]).toBe("Subir una versión corregida");
+  });
   it("explains a timeout and recommends processing again first", () => {
     render(
       <DocumentIngestionRecovery

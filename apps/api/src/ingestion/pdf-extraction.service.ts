@@ -1,20 +1,56 @@
 import { Injectable } from '@nestjs/common';
+import { MAX_PDF_PAGES } from '../documents/pdf-inspection.service';
 import { createPdfParser } from '../documents/pdf-parser';
 import type { ExtractedPage } from './chunking.service';
 
 /** Ancho de rasterizado para OCR; tiene prioridad sobre la escala. */
 export const OCR_RENDER_WIDTH_PX = 1240;
 
+export class IncompletePdfExtractionError extends Error {
+  constructor(
+    detail: string,
+    readonly retryable = false,
+  ) {
+    super(detail);
+  }
+}
+
+function verifiedPageCount(total: number): number {
+  if (!Number.isInteger(total) || total < 1) {
+    throw new IncompletePdfExtractionError('PDF_PAGE_COUNT_UNVERIFIED');
+  }
+  if (total > MAX_PDF_PAGES) throw new Error('INGESTION_DOCUMENT_TOO_LARGE');
+  return total;
+}
+
 @Injectable()
 export class PdfExtractionService {
+  async countPages(buffer: Buffer): Promise<number> {
+    const parser = createPdfParser({ data: buffer });
+    try {
+      return verifiedPageCount((await parser.getInfo()).total);
+    } finally {
+      await parser.destroy();
+    }
+  }
+
   async extract(buffer: Buffer): Promise<ExtractedPage[]> {
     const parser = createPdfParser({ data: buffer });
     try {
+      const total = verifiedPageCount((await parser.getInfo()).total);
       const result = await parser.getText();
-      return result.pages.map((page) => ({
+      const pages = result.pages.map((page) => ({
         pageNumber: page.num,
         text: page.text.trim(),
       }));
+      if (
+        result.total !== total ||
+        pages.length !== total ||
+        pages.some((page, index) => page.pageNumber !== index + 1)
+      ) {
+        throw new IncompletePdfExtractionError('PDF_PAGE_COVERAGE_INCOMPLETE');
+      }
+      return pages;
     } finally {
       await parser.destroy();
     }
