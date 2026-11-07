@@ -1,12 +1,14 @@
 const mockDestroy = jest.fn();
 const mockGetScreenshot = jest.fn();
 const mockGetText = jest.fn();
+const mockGetInfo = jest.fn();
 
 jest.mock('pdf-parse', () => ({
   PDFParse: jest.fn().mockImplementation(() => ({
     destroy: mockDestroy,
     getScreenshot: mockGetScreenshot,
     getText: mockGetText,
+    getInfo: mockGetInfo,
   })),
 }));
 
@@ -18,10 +20,12 @@ describe('PdfExtractionService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDestroy.mockResolvedValue(undefined);
+    mockGetInfo.mockResolvedValue({ total: 2 });
   });
 
   it('extracts text per page and always disposes parser resources', async () => {
     mockGetText.mockResolvedValue({
+      total: 2,
       pages: [
         { num: 1, text: ' Primera página ' },
         { num: 2, text: 'Segunda página' },
@@ -32,6 +36,46 @@ describe('PdfExtractionService', () => {
       { pageNumber: 1, text: 'Primera página' },
       { pageNumber: 2, text: 'Segunda página' },
     ]);
+    expect(mockDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [1, 3],
+    [1, 1],
+    [2, 1],
+    [1, 2],
+  ])(
+    'rejects missing, duplicate or unordered physical pages (%i, %i)',
+    async (first, second) => {
+      const total = first === 1 && second === 2 ? 3 : 2;
+      mockGetInfo.mockResolvedValue({ total });
+      mockGetText.mockResolvedValue({
+        total,
+        pages: [first, second].map((num) => ({
+          num,
+          text: 'Texto disponible',
+        })),
+      });
+      await expect(service.extract(Buffer.from('%PDF'))).rejects.toThrow(
+        'PDF_PAGE_COVERAGE_INCOMPLETE',
+      );
+      expect(mockDestroy).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('uses the file page count to verify sidecars without extracting text', async () => {
+    mockGetInfo.mockResolvedValue({ total: 45 });
+    await expect(service.countPages(Buffer.from('%PDF'))).resolves.toBe(45);
+    expect(mockGetText).not.toHaveBeenCalled();
+    expect(mockDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a file over the physical page limit before reading text', async () => {
+    mockGetInfo.mockResolvedValue({ total: 301 });
+    await expect(service.extract(Buffer.from('%PDF'))).rejects.toThrow(
+      'INGESTION_DOCUMENT_TOO_LARGE',
+    );
+    expect(mockGetText).not.toHaveBeenCalled();
     expect(mockDestroy).toHaveBeenCalledTimes(1);
   });
 

@@ -122,6 +122,7 @@ export const managedDocumentVersionSchema = z.object({
   ingestionFailureCause: z
     .enum([
       "ai_service",
+      "incomplete_extraction",
       "no_text",
       "timeout",
       "too_large",

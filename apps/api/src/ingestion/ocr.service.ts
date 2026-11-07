@@ -20,14 +20,25 @@ export class OcrService {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const library = require('tesseract.js') as typeof import('tesseract.js');
     const { createWorker } = library;
+    let workerReady = false;
     const worker = await createWorker('spa', 1, {
       gzip: spanishData.gzip,
       langPath: spanishData.langPath,
+      errorHandler: () => {
+        // Tesseract rejects recognition before calling this handler. During
+        // startup, some errors do not reject createWorker and expose no handle
+        // for disposal. Preserve process/lease recovery for that case.
+        if (!workerReady) throw new Error('OCR_WORKER_INITIALIZATION_FAILED');
+      },
     });
+    workerReady = true;
     // tesseract.js 7 exposes its Node Worker at runtime (its declarations omit
     // it). Its terminate() discards Worker.terminate()'s promise, so awaiting
     // that wrapper alone can overlap the next job with a still-live WASM heap.
     const nativeWorker = (worker as typeof worker & { worker: Worker }).worker;
+    // A native error also emits exit. Observe it without taking down the API.
+    const onWorkerError = () => undefined;
+    nativeWorker.on('error', onWorkerError);
     const exited =
       nativeWorker.threadId === -1
         ? Promise.resolve()
@@ -53,33 +64,40 @@ export class OcrService {
       signal?.throwIfAborted();
       const result = await run(async (image) => {
         signal?.throwIfAborted();
-        if (!signal) return (await worker.recognize(image)).data.text.trim();
         let abortRecognition: () => void = () => undefined;
         const cancelled = new Promise<never>((_, reject) => {
           abortRecognition = () =>
             reject(
-              signal.reason instanceof Error
+              signal?.reason instanceof Error
                 ? signal.reason
                 : new Error('OCR_ABORTED'),
             );
-          signal.addEventListener('abort', abortRecognition, { once: true });
+          signal?.addEventListener('abort', abortRecognition, { once: true });
         });
         try {
           const recognized = await Promise.race([
             worker.recognize(image),
             cancelled,
+            exited.then(() => {
+              signal?.throwIfAborted();
+              throw new Error('OCR_WORKER_EXITED');
+            }),
           ]);
-          signal.throwIfAborted();
+          signal?.throwIfAborted();
           return recognized.data.text.trim();
         } finally {
-          signal.removeEventListener('abort', abortRecognition);
+          signal?.removeEventListener('abort', abortRecognition);
         }
       });
       signal?.throwIfAborted();
       return result;
     } finally {
       signal?.removeEventListener('abort', onAbort);
-      await terminate();
+      try {
+        await terminate();
+      } finally {
+        nativeWorker.removeListener('error', onWorkerError);
+      }
     }
   }
 }

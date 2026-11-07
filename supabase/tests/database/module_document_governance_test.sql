@@ -1,6 +1,6 @@
 begin;
 
-select plan(69);
+select plan(72);
 
 select has_type('public', 'document_approval_status', 'Technical approval has a constrained type');
 select has_type('public', 'document_archive_reason', 'Archive reasons have a constrained type');
@@ -580,6 +580,39 @@ select results_eq(
   $$,
   $$ values ('35000000-0000-0000-0000-000000000301'::uuid) $$,
   'Retrieval cites the approved old version and never the pending new version'
+);
+-- Simulate the lease of the replacement in this isolated transaction. Its
+-- fixture chunks exercise the publication gate even if rows remain from an
+-- older attempt.
+update public.document_ingestion_jobs
+set status = 'processing', lease_token = '35000000-0000-0000-0000-000000000999',
+    leased_at = now(), lease_expires_at = now() + interval '5 minutes'
+where document_version_id = '35000000-0000-0000-0000-000000000302';
+
+select lives_ok(
+  $$ select public.fail_document_ingestion_job(
+    (select id from public.document_ingestion_jobs where document_version_id = '35000000-0000-0000-0000-000000000302'),
+    '35000000-0000-0000-0000-000000000999',
+    'INGESTION_PDF_INCOMPLETE', 'OCR_PAGE_BUDGET_EXCEEDED: 45/40', false
+  ) $$,
+  'Incomplete OCR fails the leased replacement without automatic retry'
+);
+select is(
+  (select ingestion_status::text from public.document_versions where id = '35000000-0000-0000-0000-000000000302'),
+  'failed',
+  'The replacement requiring review is never marked indexed'
+);
+select results_eq(
+  $$
+    select document_version_id
+    from public.search_document_chunks_by_situation(
+      array_fill(0.01::real, array[1536])::extensions.vector,
+      'contenido QA vigente', '35000000-0000-0000-0000-000000000101', 0.70, 10, 'current'
+    )
+    where document_id = '35000000-0000-0000-0000-000000000201'
+  $$,
+  $$ values ('35000000-0000-0000-0000-000000000301'::uuid) $$,
+  'Failure of the replacement preserves the approved version and excludes partial rows from RAG'
 );
 select throws_ok(
   $$
