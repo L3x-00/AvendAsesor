@@ -36,6 +36,10 @@ import { exactDocumentReferencesIn } from '../rag/legal-reference';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
+  reviewedAdministrativeAnswer,
+  reviewedAdministrativeContext,
+} from '../rag/reviewed-administrative-evidence';
+import {
   isAscensoRemunerationQuestion,
   isPayrollReviewQuestion,
   isRuralAllocationQuestion,
@@ -1746,7 +1750,7 @@ export class ChatService {
       salaryProfileForTurn.condition === 'nombrado' &&
       salaryProfileForTurn.role === 'docente' &&
       salaryProfileForTurn.scale === '1' &&
-      salaryProfileForTurn.jornadaHours !== null;
+      (salaryProfileForTurn.jornadaHours !== null || !personalSalary);
     const deterministicRemunerationTopic =
       isAscensoRemunerationQuestion(salaryQuestion) ||
       isRuralPadronQuestion(salaryQuestion) ||
@@ -1921,23 +1925,38 @@ export class ChatService {
       }
     }
 
+    const hasReviewedAdministrativeContext =
+      !medicalApplicability &&
+      !legalCrossModule &&
+      retrievalScope === 'current' &&
+      !exactDocumentReferencesIn(effectiveQuestion).length &&
+      (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') &&
+      reviewedAdministrativeContext(effectiveQuestion, retrieval.sources) !==
+        null;
     if (
-      medicalApplicability &&
-      (retrieval.kind !== 'no_evidence' ||
-        (!retrieval.missingExactReferences?.length &&
-          !retrieval.incompleteExactReferences?.length))
+      hasReviewedAdministrativeContext ||
+      (medicalApplicability &&
+        (retrieval.kind !== 'no_evidence' ||
+          (!retrieval.missingExactReferences?.length &&
+            !retrieval.incompleteExactReferences?.length)))
     ) {
       const reviewed =
         retrieval.kind !== 'no_evidence'
-          ? verifiedMedicalLeaveAnswer(medicalApplicability, retrieval.sources)
+          ? medicalApplicability
+            ? verifiedMedicalLeaveAnswer(
+                medicalApplicability,
+                retrieval.sources,
+              )
+            : reviewedAdministrativeAnswer(effectiveQuestion, retrieval.sources)
           : null;
       if (!reviewed) {
         yield* this.completeWithoutEvidence({
           abortSignal: input.abortSignal,
           conversationId: turn.conversationId,
           faqMemory,
-          message:
-            medicalApplicability.intent === 'unsupported'
+          message: hasReviewedAdministrativeContext
+            ? 'No pude verificar las disposiciones completas para responder este trámite.'
+            : medicalApplicability?.intent === 'unsupported'
               ? 'No puedo confirmar ese supuesto con las disposiciones disponibles sobre descanso médico.'
               : 'No encontré disposiciones completas para confirmar ese trámite en el régimen consultado.',
           retrievalScope,

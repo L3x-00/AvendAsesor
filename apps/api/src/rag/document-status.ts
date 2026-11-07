@@ -4,8 +4,11 @@ import { normalizeSpanishText } from './text-normalization';
 const STATUS_QUESTION_PATTERNS = [
   /\b(?:vigente|derogad[oa]s?|reemplazad[oa]s?|modificad[oa]s?|actualizad[oa]s?)\b/u,
   /\bvigencia\s+(?:de\s+)?(?:la\s+)?(?:norma|normativa|documento|regla|resolucion|ley|decreto)\b/u,
-  /\b(?:cambios?|modificaciones?)\b/u,
+  /\bmodificaciones?\b/u,
 ];
+
+const PERSONAL_TRANSFER =
+  /\b(?:pedir|solicitar)\s+(?:mi|su|el|un)\s+cambio\b/gu;
 
 const EXPLICIT_CHANGE_PATTERN =
   /\b(?:modific\w*|derog\w*|reemplaz\w*|actualiz\w*|sustitu\w*|complement\w*|deja\w*\s+sin\s+efecto)\b/iu;
@@ -17,7 +20,10 @@ const EXPLICIT_CHANGE_PATTERN =
  */
 export function asksForDocumentStatus(question: string): boolean {
   const normalized = normalizeSpanishText(question);
-  return STATUS_QUESTION_PATTERNS.some((pattern) => pattern.test(normalized));
+  return (
+    STATUS_QUESTION_PATTERNS.some((pattern) => pattern.test(normalized)) ||
+    /\bcambios?\b/u.test(normalized.replace(PERSONAL_TRANSFER, ' '))
+  );
 }
 
 /**

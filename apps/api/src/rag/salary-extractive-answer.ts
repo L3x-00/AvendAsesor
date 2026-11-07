@@ -714,8 +714,7 @@ function firstScaleRimAnswer(
   if (
     profile.condition !== 'nombrado' ||
     profile.role !== 'docente' ||
-    profile.scale !== '1' ||
-    profile.jornadaHours === null
+    profile.scale !== '1'
   ) {
     return null;
   }
@@ -723,14 +722,20 @@ function firstScaleRimAnswer(
   if (!evidence) return null;
   const hourlyCents = centsIn(evidence.amount);
   if (hourlyCents === null) return null;
-  const total = hourlyCents * profile.jornadaHours;
-  if (!Number.isSafeInteger(total)) return null;
   const sourcesForAnswer = evidence.sources;
   const citations = sourcesForAnswer
     .map((_, index) => `[${index + 1}]`)
     .join('');
+  const hourly = `La RIM por hora de la primera escala magisterial es ${formatSoles(hourlyCents)}.`;
+  const hours = profile.jornadaHours;
+  const total = hours === null ? null : hourlyCents * hours;
+  if (total !== null && !Number.isSafeInteger(total)) return null;
+  const detail =
+    total === null
+      ? ''
+      : ` Para la jornada indicada de ${hours} horas, el cálculo es ${formatSoles(total)} (${formatSoles(hourlyCents)} × ${hours}).`;
   return {
-    answer: `La RIM por hora de la primera escala magisterial es ${formatSoles(hourlyCents)}. Para la jornada indicada de ${profile.jornadaHours} horas, el cálculo es ${formatSoles(total)} (${formatSoles(hourlyCents)} × ${profile.jornadaHours}). ${citations}`,
+    answer: `${hourly}${detail} ${citations}`,
     hasVerifiedAmount: true,
     sources: sourcesForAnswer,
   };
@@ -1068,11 +1073,7 @@ export function buildExtractiveSalaryAnswer(
   );
   const comparison = namedContractComparisonAnswer(eligibleSources, question);
   if (comparison) return comparison;
-  if (
-    profile.condition === 'nombrado' &&
-    profile.scale === '1' &&
-    profile.jornadaHours !== null
-  ) {
+  if (profile.condition === 'nombrado' && profile.scale === '1') {
     return firstScaleRimAnswer(eligibleSources, question);
   }
   // Sin una regla extractiva que vincule positivamente escala, jornada y
