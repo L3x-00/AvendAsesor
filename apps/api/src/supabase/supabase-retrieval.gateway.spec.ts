@@ -44,6 +44,87 @@ const row = {
 } as const;
 
 describe('SupabaseRetrievalGatewayAdapter', () => {
+  describe('reviewed version context', () => {
+    it('fails closed without a configured client', async () => {
+      await expect(
+        new SupabaseRetrievalGatewayAdapter(null).contextChunksOfVersion({
+          versionId: 'v',
+          chunkIds: ['c'],
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+    it.each([false, true])(
+      'restricts a bounded read to the admitted version and explicit identifiers (empty=%s)',
+      async (empty) => {
+        const stored = {
+          id: 'c',
+          document_version_id: 'v',
+          chunk_index: 33,
+          chunk_content: 'original',
+          page_start: 31,
+          page_end: 31,
+          section_title: null,
+          article_reference: null,
+          numeral_reference: null,
+        };
+        const query = {
+          select: jest.fn(),
+          eq: jest.fn(),
+          in: jest.fn(),
+          order: jest
+            .fn()
+            .mockResolvedValue({ data: empty ? [] : [stored], error: null }),
+        };
+        query.select.mockReturnValue(query);
+        query.eq.mockReturnValue(query);
+        query.in.mockReturnValue(query);
+        const from = jest.fn().mockReturnValue(query);
+        const gateway = new SupabaseRetrievalGatewayAdapter({
+          from,
+        } as unknown as SupabaseServerClient);
+        const found = await gateway.contextChunksOfVersion({
+          versionId: 'v',
+          chunkIds: ['c', 'c', '2', '3', '4', '5', '6'],
+        });
+        expect(from).toHaveBeenCalledWith('document_chunks');
+        expect(query.eq).toHaveBeenCalledWith('document_version_id', 'v');
+        expect(query.in).toHaveBeenCalledWith('id', ['c', '2', '3', '4', '5']);
+        expect(found).toEqual(
+          empty
+            ? []
+            : [
+                expect.objectContaining({
+                  chunkId: 'c',
+                  documentVersionId: 'v',
+                  chunkIndex: 33,
+                  chunkContent: 'original',
+                  pageStart: 31,
+                  pageEnd: 31,
+                }),
+              ],
+        );
+      },
+    );
+    it('does not silently authorize an unavailable read', async () => {
+      const query = {
+        select: jest.fn(),
+        eq: jest.fn(),
+        in: jest.fn(),
+        order: jest
+          .fn()
+          .mockResolvedValue({ data: null, error: { message: 'unavailable' } }),
+      };
+      query.select.mockReturnValue(query);
+      query.eq.mockReturnValue(query);
+      query.in.mockReturnValue(query);
+      const gateway = new SupabaseRetrievalGatewayAdapter({
+        from: jest.fn().mockReturnValue(query),
+      } as unknown as SupabaseServerClient);
+      await expect(
+        gateway.contextChunksOfVersion({ versionId: 'v', chunkIds: ['c'] }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
   it('fails closed when no server client is configured', async () => {
     await expect(
       new SupabaseRetrievalGatewayAdapter(null).search(input),

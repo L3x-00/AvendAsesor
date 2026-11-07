@@ -1,6 +1,7 @@
 import type { AuthorizationContext } from '../authorization';
 import { ChatService, type ChatStreamEvent } from './chat.service';
 import type { TopicIntentId } from '../rag/topic-intent';
+import medicalFixture from '../rag/fixtures/medical-leave.json';
 
 /**
  * Regresión de las siete consultas del Chat General. La persona no elige
@@ -88,7 +89,10 @@ function evidenceSource(input: {
 }
 
 const answers: Record<
-  Exclude<TopicIntentId, 'career-progression' | 'rationalization'>,
+  Exclude<
+    TopicIntentId,
+    'career-progression' | 'rationalization' | 'medical-leave'
+  >,
   ReturnType<typeof evidenceSource>
 > = {
   reassignment: evidenceSource({
@@ -98,15 +102,6 @@ const answers: Record<
     documentTitle: 'Norma técnica de la reasignación y permuta docente',
     moduleId: 'con',
     moduleName: 'Contratación y desplazamientos',
-    page: 16,
-  }),
-  'medical-leave': evidenceSource({
-    chunkContent:
-      'La licencia por incapacidad temporal se otorga conforme al periodo de descanso médico indicado en el CITT.',
-    chunkId: 'medical',
-    documentTitle: 'Norma Técnica de licencias, permisos y vacaciones',
-    moduleId: 'sit',
-    moduleName: 'Situaciones Administrativas',
     page: 16,
   }),
   'rural-allocation': evidenceSource({
@@ -139,6 +134,20 @@ const answers: Record<
     page: 30,
   }),
 };
+
+const reviewedMedicalSources = medicalFixture[0].chunks.map((chunk) => ({
+  ...evidenceSource({
+    chunkContent: chunk.chunk_content,
+    chunkId: chunk.id,
+    documentTitle: 'Norma Técnica de licencias, permisos y vacaciones',
+    moduleId: 'sit',
+    moduleName: 'Situaciones Administrativas',
+    page: chunk.page_start,
+  }),
+  documentVersionId: medicalFixture[0].version,
+  chunkIndex: chunk.chunk_index,
+  pageEnd: chunk.page_end,
+}));
 
 function setup() {
   const historyGateway = {
@@ -186,7 +195,10 @@ function setup() {
           return Promise.resolve({
             kind: 'evidence',
             resolvedModule: { id: 'auto', name: 'Tema detectado' },
-            sources: [answers[intent]],
+            sources:
+              intent === 'medical-leave'
+                ? reviewedMedicalSources
+                : [answers[intent]],
             topRelevanceScore: 0.8,
           });
         },
@@ -325,6 +337,12 @@ describe('ChatService — siete consultas del chat general', () => {
       expect(sources).toBeDefined();
       if (token && 'text' in token) {
         expect(token.data.text).toMatch(/\[\d+\]/u);
+        if (question === questions.medical) {
+          expect(token.data.text).toContain(
+            'Si el descanso corresponde a profesores',
+          );
+          expect(token.data.text).toContain('CITT');
+        }
       }
       if (sources && 'sources' in sources) {
         expect(sources.data.sources.length).toBeGreaterThan(0);

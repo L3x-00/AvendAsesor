@@ -17,9 +17,23 @@ describe('administrativeEvidenceQueries', () => {
         'Soy profesor nombrado y estoy enfermo, cuantos dias puedo faltar con descanso medico',
       ),
     ).toContain(
-      'licencia por incapacidad temporal descanso médico CITT certificado médico profesor',
+      'licencia por incapacidad temporal descanso médico CITT certificado médico',
     );
   });
+
+  it.each([
+    'me dieron descanso medico por una semana, como presento mi licencia al colegio',
+    'soy auxiliar contratado y me enferme, puedo pedir descanso medico',
+    'no soy auxiliar, soy profesor, ¿cómo pido descanso médico?',
+    'soy auxiliar y pregunto si un profesor hospitalizado presenta receta durante el descanso médico',
+  ])(
+    'does not assign a profession through the medical expansion: %s',
+    (question) => {
+      expect(administrativeEvidenceQueries(question)).toEqual([
+        'licencia por incapacidad temporal descanso médico CITT certificado médico',
+      ]);
+    },
+  );
 
   it.each([
     [
@@ -68,6 +82,27 @@ describe('administrativeEvidenceQueries', () => {
 });
 
 describe('isDirectAdministrativeEvidence', () => {
+  it('preserves the requested vacation procedure when medical leave is an antecedent', () => {
+    const question =
+      'Soy profesora nombrada. ¿Qué documentos presento para solicitar vacaciones después de mi descanso médico?';
+    expect(administrativeEvidenceQueries(question)).toEqual([
+      'vacaciones profesores nombrados contratados Carrera Pública Magisterial',
+    ]);
+    expect(
+      isDirectAdministrativeEvidence(
+        question,
+        source('Vacaciones de la Carrera Pública Magisterial'),
+      ),
+    ).toBe(true);
+    expect(
+      isDirectAdministrativeEvidence(
+        question,
+        source(
+          'Licencia por incapacidad temporal. El CITT sustenta el descanso médico.',
+        ),
+      ),
+    ).toBe(false);
+  });
   it('prefiere la licencia por incapacidad temporal frente a la licencia por asistencia médica', () => {
     const question =
       'Estoy enfermo, ¿cuántos días puedo faltar con descanso médico?';

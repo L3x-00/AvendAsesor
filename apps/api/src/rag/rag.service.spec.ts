@@ -7,6 +7,7 @@ import {
   resolveDetectedSubmodule,
 } from './rag.service';
 import type { RetrievalGateway } from './retrieval.gateway';
+import medicalFixture from './fixtures/medical-leave.json';
 
 describe('inheritedFactorQuestions', () => {
   const salary = '¿Cuánto gana un docente de 30 horas?';
@@ -263,6 +264,45 @@ describe('RagService', () => {
     service = new RagService(embeddings, gateway, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
     } as never);
+  });
+
+  it('keeps P15 auxiliary sources when mixed teacher sources rank higher', async () => {
+    const question =
+      'soy auxiliar contratado y me enferme, puedo pedir descanso medico';
+    const captures = medicalFixture.flatMap((doc, i) =>
+      doc.chunks.map((chunk) => ({
+        ...source,
+        chunkId: chunk.id,
+        chunkContent: chunk.chunk_content,
+        chunkIndex: chunk.chunk_index,
+        documentVersionId: doc.version,
+        documentId: `medical-${i}`,
+        semanticScore: i ? 0.8 : 0.99,
+        documentTitle: i
+          ? 'Norma de auxiliares de educación'
+          : 'Licencias de profesores',
+        pageStart: chunk.page_start,
+        pageEnd: chunk.page_end,
+      })),
+    );
+    // Deliberately give the wrong regime every opportunity to win ranking.
+    gateway.search.mockResolvedValue(captures.reverse());
+    const result = await service.retrieve(question, null);
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') throw new Error('Expected evidence');
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(new Set(result.sources.map((s) => s.documentVersionId))).toEqual(
+      new Set([medicalFixture[1].version]),
+    );
+    expect(
+      result.sources.every((s) =>
+        captures.some(
+          (original) =>
+            original.chunkId === s.chunkId &&
+            original.chunkContent === s.chunkContent,
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('no entrega una sección exclusiva de permuta al consultar reasignación familiar', async () => {

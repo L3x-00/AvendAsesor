@@ -105,6 +105,37 @@ function toRetrievedChunk(row: SituationAwareRetrievalRow): RetrievedChunk {
 export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
 
+  async contextChunksOfVersion(input: {
+    versionId: string;
+    chunkIds: string[];
+  }): Promise<VersionChunk[]> {
+    if (!this.client)
+      throw new ServiceUnavailableException(
+        'Document context is not configured.',
+      );
+    const { data, error } = await this.client
+      .from('document_chunks')
+      .select(
+        'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+      )
+      .eq('document_version_id', input.versionId)
+      .in('id', [...new Set(input.chunkIds)].slice(0, 5))
+      .order('chunk_index', { ascending: true });
+    if (error)
+      throw new ServiceUnavailableException('Document context is unavailable.');
+    return (data ?? []).map((row) => ({
+      articleReference: row.article_reference,
+      chunkContent: row.chunk_content,
+      chunkId: row.id,
+      chunkIndex: row.chunk_index,
+      documentVersionId: row.document_version_id,
+      numeralReference: row.numeral_reference,
+      pageEnd: row.page_end,
+      pageStart: row.page_start,
+      sectionTitle: row.section_title,
+    }));
+  }
+
   async search(
     input: Parameters<RetrievalGateway['search']>[0],
   ): Promise<RetrievedChunk[]> {

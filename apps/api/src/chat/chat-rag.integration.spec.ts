@@ -15,6 +15,7 @@ import type {
 import { ChatService, type ChatStreamEvent } from './chat.service';
 import { buildConversationalReply } from './intent/conversational-replies';
 import rimFixture from '../rag/fixtures/rim-277-2025.json';
+import medicalFixture from '../rag/fixtures/medical-leave.json';
 
 const authorization: AuthorizationContext = {
   email: 'docente@example.com',
@@ -212,6 +213,19 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
     this.sources.push(sourceToAdd);
   }
 
+  contextChunksOfVersion(input: { versionId: string; chunkIds: string[] }) {
+    return Promise.resolve(
+      this.sources
+        .filter(
+          (item) =>
+            item.documentVersionId === input.versionId &&
+            input.chunkIds.includes(item.chunkId) &&
+            item.chunkIndex !== undefined,
+        )
+        .map((item) => ({ ...item, chunkIndex: item.chunkIndex! })),
+    );
+  }
+
   initialChunksOfVersions(input: {
     versionIds: string[];
     limitPerVersion: number;
@@ -246,6 +260,14 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
     );
 
     if (input.selectedModuleId) return Promise.resolve(ranked);
+    if (
+      query.includes('citt') &&
+      this.sources.some(
+        (item) => item.documentVersionId === medicalFixture[0].version,
+      )
+    ) {
+      return Promise.resolve(ranked);
+    }
     if (query.includes('remuneraci')) {
       return Promise.resolve(
         ranked.filter((item) =>
@@ -479,6 +501,110 @@ describe('ChatService + RagService integration', () => {
       { get: jest.fn().mockReturnValue(20) } as never,
       { prepare: jest.fn().mockReturnValue(null) } as never,
     );
+  });
+
+  const P3 =
+    'me dieron descanso medico por una semana, como presento mi licencia al colegio';
+  const P15 =
+    'soy auxiliar contratado y me enferme, puedo pedir descanso medico';
+
+  function addMedicalCaptures(): void {
+    medicalFixture.forEach((document, index) => {
+      for (const chunk of document.chunks)
+        retrieval.add({
+          ...licenseV1,
+          chunkId: chunk.id,
+          chunkIndex: chunk.chunk_index,
+          chunkContent: chunk.chunk_content,
+          documentVersionId: document.version,
+          documentId: `medical-${index}`,
+          documentTitle: index
+            ? 'Norma de auxiliares de educación'
+            : 'Norma de licencias de profesores',
+          moduleIds: [index ? AUXILIARIES_MODULE_ID : LICENSES_MODULE_ID],
+          moduleNames: [
+            index ? 'Auxiliar de educación' : 'Situaciones Administrativas',
+          ],
+          pageStart: chunk.page_start,
+          pageEnd: chunk.page_end,
+          semanticScore: index ? 0.8 : 0.99,
+        });
+    });
+  }
+
+  it.each([
+    [P3, LICENSES_MODULE_ID, 0, 'Si el descanso corresponde a profesores'],
+    [P15, null, 1, 'primeros veinte (20) días en el año'],
+  ] as const)(
+    'persists cited, scope-specific orientation for %s',
+    async (question, selectedModuleId, index, expected) => {
+      addMedicalCaptures();
+      answers.answer = 'Ambos certificados son obligatorios. [1]';
+      const events = await collect(service, { question, selectedModuleId });
+      const completed = history.completions.at(-1)!;
+      expect(completed.replyRole).toBe('assistant');
+      expect(completed.answer).toContain(expected);
+      expect(completed.answer).toContain('Documentos alternativos');
+      expect(completed.answer).not.toContain(answers.answer);
+      expect(events.map((event) => event.type)).toEqual([
+        'conversation',
+        'sources',
+        'token',
+        'done',
+      ]);
+      const cited = events.find((event) => event.type === 'sources')!.data
+        .sources;
+      expect(new Set(cited.map((source) => source.documentVersionId))).toEqual(
+        new Set([medicalFixture[index].version]),
+      );
+      expect(completed.sources).toHaveLength(cited.length);
+      expect(answers.inputs).toHaveLength(0);
+    },
+  );
+
+  it('changes regime after consecutive medical turns without mixing evidence', async () => {
+    addMedicalCaptures();
+    await collect(service, { question: P15 });
+    const conversationId = history.completions.at(-1)!.conversationId;
+    await collect(service, { question: '¿Y los documentos?', conversationId });
+    expect(history.completions.at(-1)?.answer).toContain(
+      'primeros veinte (20) días en el año',
+    );
+    await collect(service, { question: '¿Y ese plazo?', conversationId });
+    expect(history.completions.at(-1)?.answer).toContain('zona de frontera');
+    await collect(service, {
+      question: 'No soy auxiliar, soy profesor',
+      conversationId,
+    });
+    const corrected = history.completions.at(-1)!;
+    expect(corrected.replyRole).toBe('assistant');
+    expect(corrected.answer).toContain('profesores nombrados y contratados');
+    expect(corrected.answer).not.toContain('zona de frontera');
+    await collect(service, {
+      question: 'Soy profesor, pero pregunto por una auxiliar',
+      conversationId,
+    });
+    expect(history.completions.at(-1)?.answer).toContain('zona de frontera');
+  });
+
+  it('does not emit medical citations or tokens when persistence fails', async () => {
+    addMedicalCaptures();
+    jest
+      .spyOn(history, 'completeTurn')
+      .mockRejectedValueOnce(new Error('store down'));
+    const seen: ChatStreamEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of service.stream({
+          authorization,
+          question: P15,
+          selectedModuleId: null,
+          conversationId: null,
+        }))
+          seen.push(event);
+      })(),
+    ).rejects.toThrow('store down');
+    expect(seen.map((event) => event.type)).toEqual(['conversation']);
   });
 
   function addRimCapture(): void {

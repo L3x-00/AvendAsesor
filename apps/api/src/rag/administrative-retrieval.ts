@@ -1,4 +1,5 @@
 import type { RetrievedChunk } from './retrieval.gateway';
+import { medicalRequestConcernsAnotherTopic } from './medical-leave-applicability';
 import { normalizeSpanishText } from './text-normalization';
 
 /**
@@ -43,8 +44,9 @@ function evidenceText(
 
 function hasMedicalLeaveSignal(text: string): boolean {
   return (
-    MEDICAL_LEAVE_SIGNAL.test(text) ||
-    (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))
+    (MEDICAL_LEAVE_SIGNAL.test(text) ||
+      (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))) &&
+    !medicalRequestConcernsAnotherTopic(text)
   );
 }
 
@@ -55,10 +57,11 @@ export function isMedicalLeaveQuestion(question: string): boolean {
   // incapacidad, licencia o CITT). «Mi hijo está enfermo, ¿puedo faltar?» es
   // una consulta de ausencia y no convierte el turno en una incapacidad propia.
   return (
-    /\b(?:descanso\s+medic(?:o|a)|incapacidad\s+temporal|citt|licencia\s+por\s+enfermedad|reposo\s+medic(?:o|a))\b/u.test(
+    (/\b(?:descanso\s+medic(?:o|a)|incapacidad\s+temporal|citt|licencia\s+por\s+enfermedad|reposo\s+medic(?:o|a))\b/u.test(
       text,
     ) ||
-    (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))
+      (PRESCRIBED_REST_SIGNAL.test(text) && !VACATION_SIGNAL.test(text))) &&
+    !medicalRequestConcernsAnotherTopic(text)
   );
 }
 
@@ -80,8 +83,11 @@ export function administrativeEvidenceQueries(question: string): string[] {
   const queries: string[] = [];
 
   if (hasMedicalLeaveSignal(text)) {
+    // The medical signal establishes the topic, not the affected person's role.
+    // In particular P15 and questions about third parties must not gain a
+    // teacher-only search expansion. Existing role-specific queries stay separate.
     queries.push(
-      'licencia por incapacidad temporal descanso médico CITT certificado médico profesor',
+      'licencia por incapacidad temporal descanso médico CITT certificado médico',
     );
   }
 
