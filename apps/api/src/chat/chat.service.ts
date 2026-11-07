@@ -28,7 +28,11 @@ import { recoverDomainQuery } from '../rag/query-normalization';
 import {
   hasUnsupportedAdministrativeInference,
   needsAdministrativeAnswerSafety,
+  verifiedMedicalLeaveAnswer,
 } from '../rag/administrative-answer-safety';
+import { isMedicalLeaveQuestion } from '../rag/administrative-retrieval';
+import { resolveMedicalLeaveApplicability } from '../rag/medical-leave-applicability';
+import { exactDocumentReferencesIn } from '../rag/legal-reference';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import {
@@ -141,7 +145,11 @@ import {
   sourceLocationRequestIn,
 } from './intent/source-location';
 import { normalizeSpanishText } from '../rag/text-normalization';
-import { detectTopicIntent, type TopicIntent } from '../rag/topic-intent';
+import {
+  detectTopicIntent,
+  medicalLeaveTopicIntent,
+  type TopicIntent,
+} from '../rag/topic-intent';
 
 /** Mensajes que se cargan al retomar una conversación (máximo de get_chat_conversation). */
 export const CHAT_CONVERSATION_MESSAGE_LIMIT = 100;
@@ -1421,7 +1429,7 @@ export class ChatService {
     // La intención de proceso no manda sobre una pregunta de cifra: la
     // respuesta salarial ya combina la norma con la tabla y sus condiciones.
     // La asignación por ruralidad es la excepción porque el pago es el tema.
-    const topicIntent =
+    let topicIntent =
       detectedIntent &&
       !(
         salaryQuestionProfile(effectiveQuestion).isSalaryQuestion &&
@@ -1547,6 +1555,30 @@ export class ChatService {
       (isLegalQuestion(effectiveQuestion) ||
         priorUserQuestions.some((prior) => isLegalQuestion(prior))),
     );
+    const currentTopic = generalChat
+      ? detectedIntent
+      : detectTopicIntent(effectiveQuestion);
+    const medicalApplicability =
+      !acceptedQuestion &&
+      !legalCrossModule &&
+      (!currentTopic || currentTopic.id === 'medical-leave') &&
+      !salaryQuestionProfile(effectiveQuestion).isSalaryQuestion &&
+      detectRetrievalScope(effectiveQuestion) === 'current' &&
+      !exactDocumentReferencesIn(effectiveQuestion).length &&
+      !sourceLocationRequestIn(effectiveQuestion, {
+        inConversation: continuesConversation,
+      })
+        ? resolveMedicalLeaveApplicability(
+            [...priorUserQuestions, effectiveQuestion],
+            (userQuestion) =>
+              isMedicalLeaveQuestion(userQuestion) &&
+              detectRetrievalScope(userQuestion) === 'current' &&
+              !exactDocumentReferencesIn(userQuestion).length &&
+              !salaryQuestionProfile(userQuestion).isSalaryQuestion,
+          )
+        : null;
+    if (generalChat && medicalApplicability)
+      topicIntent = medicalLeaveTopicIntent(medicalApplicability);
     // Una pregunta sin tema tampoco se responde como seguimiento: si ni la
     // consulta actual ni las anteriores nombran un proceso, hay tantas
     // interpretaciones como temas y corresponde pedir precisión. Cubre el
@@ -1629,13 +1661,14 @@ export class ChatService {
     const salaryRetrievalRequest =
       salaryQuestionProfile(effectiveQuestion).isSalaryQuestion ||
       inheritedSalaryQuestions.length > 0;
-    const retrievalTopicContext = standaloneIntent
-      ? []
-      : salaryRetrievalRequest
-        ? priorUserQuestions
-        : priorUserQuestions.filter(
-            (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
-          );
+    const retrievalTopicContext =
+      standaloneIntent || medicalApplicability
+        ? []
+        : salaryRetrievalRequest
+          ? priorUserQuestions
+          : priorUserQuestions.filter(
+              (prior) => !salaryQuestionProfile(prior).isSalaryQuestion,
+            );
     // La respuesta anterior solo entra en la búsqueda cuando la propuesta tiene
     // un deíctico que resolver («estos cargos»).
     const acceptedAnswerContext =
@@ -1664,6 +1697,7 @@ export class ChatService {
       retrievalContext,
       {
         forceContext,
+        ...(medicalApplicability ? { medicalApplicability } : {}),
         ...(legalModule
           ? {
               legalModule: true,
@@ -1885,6 +1919,76 @@ export class ChatService {
           return;
         }
       }
+    }
+
+    if (
+      medicalApplicability &&
+      (retrieval.kind !== 'no_evidence' ||
+        (!retrieval.missingExactReferences?.length &&
+          !retrieval.incompleteExactReferences?.length))
+    ) {
+      const reviewed =
+        retrieval.kind !== 'no_evidence'
+          ? verifiedMedicalLeaveAnswer(medicalApplicability, retrieval.sources)
+          : null;
+      if (!reviewed) {
+        yield* this.completeWithoutEvidence({
+          abortSignal: input.abortSignal,
+          conversationId: turn.conversationId,
+          faqMemory,
+          message:
+            medicalApplicability.intent === 'unsupported'
+              ? 'No puedo confirmar ese supuesto con las disposiciones disponibles sobre descanso médico.'
+              : 'No encontré disposiciones completas para confirmar ese trámite en el régimen consultado.',
+          retrievalScope,
+          topRelevanceScore: retrieval.topRelevanceScore,
+          userId: input.authorization.userId,
+          userMessageId: turn.userMessageId,
+        });
+        return;
+      }
+      const citations = toCitationBundle(
+        reviewed.sources,
+        selectedModuleId,
+        relatedModule,
+        relatedSubmodule,
+      );
+      const quality = evaluateAnswerCitationQualityDetails(
+        reviewed.answer,
+        reviewed.sources,
+      );
+      if (input.abortSignal?.aborted) return;
+      const completed = await completeTurn({
+        answer: reviewed.answer,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId: relatedModule?.id ?? null,
+        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        qualitySignals: quality.signals,
+        qualityExcerpts: quality.excerpts,
+        replyRole: 'assistant',
+        retrievalScope,
+        sources: citations.inputs,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      if (input.abortSignal?.aborted) return;
+      yield { type: 'sources', data: { sources: citations.sources } };
+      if (input.abortSignal?.aborted) return;
+      yield { type: 'token', data: { text: reviewed.answer } };
+      if (input.abortSignal?.aborted) return;
+      yield {
+        type: 'done',
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          provider: 'rule',
+        },
+      };
+      return;
     }
 
     if (retrieval.kind === 'no_evidence') {

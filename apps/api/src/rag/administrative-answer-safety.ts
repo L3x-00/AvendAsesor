@@ -1,4 +1,19 @@
 import { normalizeSpanishText } from './text-normalization';
+import type { MedicalLeaveApplicability } from './medical-leave-applicability';
+import {
+  renderMedicalLeaveAnswer,
+  validatedMedicalLeaveEvidence,
+} from './medical-leave-evidence';
+import type { RetrievedChunk } from './retrieval.gateway';
+
+/** Render only complete, scope-compatible provisions whose spans were verified. */
+export function verifiedMedicalLeaveAnswer(
+  applicability: MedicalLeaveApplicability,
+  sources: readonly RetrievedChunk[],
+) {
+  const evidence = validatedMedicalLeaveEvidence(applicability, sources);
+  return renderMedicalLeaveAnswer(applicability, evidence);
+}
 
 const MEDICAL_LEAVE =
   /\b(?:descanso\s+medic[oa]|incapacidad\s+temporal|enferm(?:o|a|e|edad|ar|ado|ada))\b/u;

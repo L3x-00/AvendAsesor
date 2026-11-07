@@ -56,6 +56,11 @@ export interface VersionChunk {
 }
 
 export interface RetrievalGateway {
+  /** Reviewed context of a version already admitted in the same turn. */
+  contextChunksOfVersion?(input: {
+    versionId: string;
+    chunkIds: string[];
+  }): Promise<VersionChunk[]>;
   search(input: {
     embedding: number[];
     matchCount: number;

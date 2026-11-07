@@ -26,6 +26,7 @@ import {
   isRuralAllocationQuestion,
 } from './remuneration-retrieval';
 import { normalizeSpanishText } from './text-normalization';
+import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 
 /**
  * Intención temática principal de una consulta en el chat general. No decide el
@@ -94,6 +95,15 @@ const INTENTS: Record<TopicIntentId, TopicIntent> = {
     moduleName: 'Cargos y plazas',
   },
 };
+
+export function medicalLeaveTopicIntent(
+  applicability: MedicalLeaveApplicability,
+): TopicIntent {
+  const intent = INTENTS['medical-leave'];
+  return applicability.regime === 'auxiliar'
+    ? { ...intent, moduleName: 'Auxiliar de educación' }
+    : intent;
+}
 
 /**
  * Consultas cuya intención principal es el efecto económico, no el

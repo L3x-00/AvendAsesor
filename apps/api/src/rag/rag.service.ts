@@ -100,6 +100,11 @@ import {
 } from './rationalization-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
 import { temporaryPlacementQueries } from './temporary-placement-retrieval';
+import type { MedicalLeaveApplicability } from './medical-leave-applicability';
+import {
+  medicalLeaveContextRequests,
+  validatedMedicalLeaveEvidence,
+} from './medical-leave-evidence';
 
 export interface ResolvedModule {
   id: string;
@@ -1087,6 +1092,7 @@ function needsDocumentIdentityAnchor(source: RetrievedChunk): boolean {
 }
 
 interface RetrieveOptions {
+  medicalApplicability?: MedicalLeaveApplicability | null;
   forceContext?: boolean;
   /**
    * Consultas que pueden aportar factores salariales. Se separa del contexto
@@ -1143,6 +1149,7 @@ export class RagService {
       priorUserQuestions,
       options,
     );
+    if (options.medicalApplicability) return result;
     if (result.kind === 'evidence' || result.kind === 'topic_change') {
       const salaryQuestion = withInheritedSalaryFactors(
         question,
@@ -1579,6 +1586,14 @@ export class RagService {
     const retrievalScope = detectRetrievalScope(
       inheritedReferences.length ? contextual : question,
     );
+    const medical =
+      retrievalScope === 'current' &&
+      !exactReferences.length &&
+      !options.legalCrossModule
+        ? options.medicalApplicability
+        : null;
+    if (medical?.intent === 'unsupported')
+      return { kind: 'no_evidence', topRelevanceScore: null };
     const globalQuery = globalUsesContext ? contextual : question;
     // Si la pregunta tiene tema propio y no remite al turno anterior, la
     // búsqueda del módulo también usa la pregunta sola. Así un tema nuevo no
@@ -1692,19 +1707,23 @@ export class RagService {
       // usan los documentos. Las expansiones solo se habilitan por señales
       // inequívocas de la pregunta, se ejecutan en el mismo alcance y módulo,
       // no añaden hechos y no relajan el umbral de admisión de evidencia.
-      const canonicalQueries = [
-        ...remunerationEvidenceQueries(salaryQuestion),
-        ...administrativeEvidenceQueries(question),
-        ...evaluationEvidenceQueries(question),
-        ...auxiliaryEvidenceQueries(question),
-        ...reassignmentEvidenceQueries(question),
-        ...temporaryPlacementQueries(question),
-        ...rationalizationEvidenceQueries(question),
-        ...legalEvidenceQueries(
-          question,
-          Boolean(options.legalModule || options.legalCrossModule),
-        ),
-      ].filter((value, index, values) => values.indexOf(value) === index);
+      const canonicalQueries = medical
+        ? [
+            `licencia por incapacidad temporal descanso médico CITT certificado médico${medical.regime === 'auxiliar' ? ' auxiliar de educación' : medical.regime === 'docente' ? ' profesor' : ''}`,
+          ]
+        : [
+            ...remunerationEvidenceQueries(salaryQuestion),
+            ...administrativeEvidenceQueries(question),
+            ...evaluationEvidenceQueries(question),
+            ...auxiliaryEvidenceQueries(question),
+            ...reassignmentEvidenceQueries(question),
+            ...temporaryPlacementQueries(question),
+            ...rationalizationEvidenceQueries(question),
+            ...legalEvidenceQueries(
+              question,
+              Boolean(options.legalModule || options.legalCrossModule),
+            ),
+          ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embeddings.embed(
           canonicalQueries,
@@ -1751,11 +1770,15 @@ export class RagService {
         const canonicalSources = selectedModuleId
           ? canonicalSelectedSources
           : canonicalGlobalSources;
-        const identityAnchors = await this.identityAnchorsFor(canonicalSources);
-        const ruralContext = await this.ruralRemunerationContextFor(
-          canonicalSources,
-          salaryQuestion,
-        );
+        const identityAnchors = medical
+          ? []
+          : await this.identityAnchorsFor(canonicalSources);
+        const ruralContext = medical
+          ? []
+          : await this.ruralRemunerationContextFor(
+              canonicalSources,
+              salaryQuestion,
+            );
         if (selectedModuleId) {
           rawSelectedSources = [
             ...rawSelectedSources,
@@ -1773,6 +1796,61 @@ export class RagService {
           ];
         }
       }
+    }
+    if (medical) {
+      // Keep the same retrieval eligibility and selected module; neither title
+      // words nor score can authorize a different documentary regime.
+      const candidates = (
+        selectedModuleId ? rawSelectedSources : rawGlobalSources
+      )
+        .map(sanitizeRetrievedEvidence)
+        .filter((source): source is RetrievedChunk => Boolean(source))
+        .filter(
+          (source) =>
+            source.semanticScore >= searchBase.matchThreshold &&
+            (!selectedModuleId ||
+              sourceIncludesContext(source, selectedModuleId)),
+        );
+      const fetch = this.gateway.contextChunksOfVersion?.bind(this.gateway);
+      if (!fetch) return { kind: 'no_evidence', topRelevanceScore: null };
+      const context = (
+        await Promise.all(
+          medicalLeaveContextRequests(candidates, medical).map(
+            async (request) => {
+              const anchor = candidates.find(
+                (source) =>
+                  source.documentVersionId === request.versionId &&
+                  source.documentSituation === 'current',
+              )!;
+              try {
+                const rows = await fetch(request);
+                return rows
+                  .filter(
+                    (row) =>
+                      row.documentVersionId === request.versionId &&
+                      request.chunkIds.includes(row.chunkId),
+                  )
+                  .map((row) => chunkFromDeliveredVersion(anchor, row));
+              } catch {
+                return [];
+              }
+            },
+          ),
+        )
+      ).flat();
+      const sources = validatedMedicalLeaveEvidence(medical, context).flatMap(
+        (item) => item.context,
+      );
+      return sources.length
+        ? {
+            kind: 'evidence',
+            resolvedModule: selectedModuleId
+              ? resolveSelectedRootModule(sources, selectedModuleId)
+              : null,
+            sources,
+            topRelevanceScore: topScore(sources),
+          }
+        : { kind: 'no_evidence', topRelevanceScore: null };
     }
     // La ruta conserva las asociaciones de todos los documentos pertinentes.
     // La deduplicación interdocumental ocurre solo al armar las fuentes que se

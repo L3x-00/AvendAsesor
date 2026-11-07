@@ -83,12 +83,16 @@ function setup() {
   return { service, answerGateway, historyGateway, ragService };
 }
 
-async function collect(service: ChatService, signal?: AbortSignal) {
+async function collect(
+  service: ChatService,
+  signal?: AbortSignal,
+  question = 'Según la Resolución Viceministerial N.° 081-2026-MINEDU, me dieron descanso médico. ¿Cómo presento mi licencia?',
+) {
   const events: ChatStreamEvent[] = [];
   for await (const event of service.stream({
     authorization,
     conversationId: null,
-    question: 'Me dieron descanso médico. ¿Cómo presento mi licencia?',
+    question,
     selectedModuleId: null,
     abortSignal: signal,
   }))
@@ -96,7 +100,7 @@ async function collect(service: ChatService, signal?: AbortSignal) {
   return events;
 }
 
-describe('ChatService: retención de licencia médica', () => {
+describe('ChatService: retención generativa para una licencia con referencia normativa expresa', () => {
   it('no transmite ni persiste como respuesta una mezcla rechazada de CITT y receta', async () => {
     const { service, answerGateway, historyGateway } = setup();
     answerGateway.generate.mockReturnValue(
@@ -193,4 +197,22 @@ describe('ChatService: retención de licencia médica', () => {
       }),
     );
   });
+});
+
+it('rechaza fragmentos sin procedencia verificada en la ruta de licencias actuales', async () => {
+  const { service, answerGateway, historyGateway } = setup();
+  const events = await collect(
+    service,
+    undefined,
+    'Me dieron descanso médico. ¿Cómo presento mi licencia?',
+  );
+  expect(answerGateway.generate).not.toHaveBeenCalled();
+  expect(events.map((event) => event.type)).toEqual([
+    'conversation',
+    'no_evidence',
+    'done',
+  ]);
+  expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+    expect.objectContaining({ replyRole: 'no_evidence', sources: [] }),
+  );
 });
