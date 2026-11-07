@@ -9,6 +9,10 @@ import type { Response } from 'express';
 
 @Catch(MulterError)
 export class MulterExceptionFilter implements ExceptionFilter {
+  constructor(
+    private readonly fileSizeMessage = 'Documents cannot exceed 50 MiB.',
+  ) {}
+
   catch(exception: MulterError, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const isFileSizeError = exception.code === 'LIMIT_FILE_SIZE';
@@ -19,7 +23,7 @@ export class MulterExceptionFilter implements ExceptionFilter {
     response.json({
       error: isFileSizeError ? 'Payload Too Large' : 'Bad Request',
       message: isFileSizeError
-        ? 'Documents cannot exceed 50 MiB.'
+        ? this.fileSizeMessage
         : 'The uploaded file is invalid.',
       statusCode: isFileSizeError
         ? HttpStatus.PAYLOAD_TOO_LARGE

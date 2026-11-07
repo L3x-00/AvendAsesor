@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Post,
   UploadedFile,
+  UseFilters,
   UseInterceptors,
   Param,
   ParseUUIDPipe,
@@ -23,6 +24,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { MulterExceptionFilter } from '../documents/multer-exception.filter';
 import { CreateAdministrativeUserDto } from './dto/create-administrative-user.dto';
 import { ListAdministrativeUsersQueryDto } from './dto/list-administrative-users-query.dto';
 import { ListOperationalAuditEventsQueryDto } from './dto/list-operational-audit-events-query.dto';
@@ -76,9 +78,10 @@ export class UserAdministrationController {
   }
 
   @Post('import')
+  @UseFilters(new MulterExceptionFilter('User imports cannot exceed 2 MiB.'))
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: USER_IMPORT_MAX_BYTES, files: 1 },
+      limits: { fileSize: USER_IMPORT_MAX_BYTES, files: 1, fields: 0 },
     }),
   )
   @Throttle({ default: { limit: 3, ttl: 60_000 } })

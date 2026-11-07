@@ -10,41 +10,16 @@ export class ConsultationFeedbackUploadError extends Error {
   }
 }
 
-async function consumeBoundedBody(request: Request): Promise<boolean> {
-  if (!request.body) return true;
-
-  const reader = request.body.getReader();
-  let byteLength = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-
-      byteLength += value.byteLength;
-      if (byteLength > MAX_CONSULTATION_MULTIPART_BYTES) {
-        await reader.cancel();
-        return false;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  return true;
-}
-
 /**
- * Bounds a multipart body before Next parses it, including requests without a
+ * Bounds a multipart body while the runtime parses it, including requests without a
  * Content-Length header. This protects the BFF itself; the API additionally
  * validates the binary signature before it reaches private storage.
  */
 export async function readConsultationFeedbackFormData(
   request: Request,
 ): Promise<FormData> {
-  const contentType = request.headers.get("content-type")?.toLowerCase();
-  if (!contentType?.startsWith("multipart/form-data;")) {
+  const contentType = request.headers.get("content-type");
+  if (!contentType?.toLowerCase().startsWith("multipart/form-data;")) {
     throw new ConsultationFeedbackUploadError("invalid");
   }
   const declaredLength = request.headers.get("content-length");
@@ -57,19 +32,26 @@ export async function readConsultationFeedbackFormData(
     throw new ConsultationFeedbackUploadError("too_large");
   }
 
-  // Clone before consuming so Next/undici can parse the exact multipart
-  // payload after this branch has enforced the byte limit. Cancelling the
-  // clone below releases the tee when a chunk crosses that limit.
-  const parsableRequest = request.clone();
-  const isBounded = await consumeBoundedBody(request);
-  if (!isBounded) {
-    await parsableRequest.body?.cancel().catch(() => undefined);
-    throw new ConsultationFeedbackUploadError("too_large");
-  }
-
   try {
-    return await parsableRequest.formData();
-  } catch {
+    let byteLength = 0;
+    // One reader enforces the cap as the multipart parser consumes the body.
+    // An oversized chunk aborts the upstream stream without waiting for EOF.
+    const body = request.body?.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          byteLength += chunk.byteLength;
+          if (byteLength > MAX_CONSULTATION_MULTIPART_BYTES) {
+            throw new ConsultationFeedbackUploadError("too_large");
+          }
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+    return await new Response(body, {
+      headers: { "content-type": contentType },
+    }).formData();
+  } catch (error) {
+    if (error instanceof ConsultationFeedbackUploadError) throw error;
     throw new ConsultationFeedbackUploadError("invalid");
   }
 }

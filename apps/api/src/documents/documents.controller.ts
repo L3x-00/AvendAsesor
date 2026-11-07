@@ -26,6 +26,7 @@ import {
   RolesGuard,
   type AuthorizationContext,
 } from '../authorization';
+import { MULTIPART_FIELD_LIMITS } from '../multipart-field-limits';
 import { AddDocumentVersionDto } from './dto/add-document-version.dto';
 import { CreateDocumentUploadDto } from './dto/create-document-upload.dto';
 import { DocumentDownloadUrlDto } from './dto/document-download-url.dto';
@@ -49,7 +50,7 @@ import { MAX_PDF_BYTES } from './pdf-inspection.service';
 
 @Controller('admin/documents')
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard, FeaturesGuard)
-@UseFilters(MulterExceptionFilter)
+@UseFilters(new MulterExceptionFilter())
 @Throttle({ default: { limit: 30, ttl: 60_000 } })
 @RequireRoles('admin', 'superadmin')
 @RequireFeatures('modules')
@@ -60,7 +61,13 @@ export class DocumentsController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_PDF_BYTES, files: 1 },
+      // Bound multipart parsing before DTO validation runs.
+      limits: {
+        ...MULTIPART_FIELD_LIMITS,
+        fileSize: MAX_PDF_BYTES,
+        files: 1,
+        fields: 21,
+      },
     }),
   )
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -113,7 +120,12 @@ export class DocumentsController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_PDF_BYTES, files: 1 },
+      limits: {
+        ...MULTIPART_FIELD_LIMITS,
+        fileSize: MAX_PDF_BYTES,
+        files: 1,
+        fields: 2,
+      },
     }),
   )
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

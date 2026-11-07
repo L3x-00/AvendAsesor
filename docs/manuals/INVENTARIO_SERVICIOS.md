@@ -44,7 +44,7 @@ GitHub (merge a main) ──► despliegue automático en Vercel y en Render
 - Checks que aparecen en los PR: `validate` (Actions), `Vercel` y `Vercel Preview Comments` (integración de Vercel) y `Supabase Preview` (integración de GitHub del proyecto de **staging** `scepelftmjlabepygrri`; hoy se reporta como *skipping*). Render no publica checks: despliega por auto-deploy al recibir commits en `main`.
 - Un merge a `main` despliega el web (Vercel) y el API (Render) al mismo tiempo.
 
-**Configuración**: la CI no usa variables de entorno ni secretos. Versión de Node del repositorio: `.nvmrc` (`24.14.0`) y `engines` de `package.json` (`>=24.14.0 <25`).
+**Configuración**: la CI no usa variables de entorno ni secretos. Versión de Node del repositorio: `.nvmrc` (`24.22.2`) y `engines` de `package.json` (`>=24.22.2 <25`).
 
 **Si falla**
 

@@ -204,7 +204,7 @@ Build: `npm ci --include=dev && npm run build --workspace=api`. Arranque:
 | `RAG_MATCH_THRESHOLD` | `0.5` o sin definir (el valor por defecto ya es `0.5`). |
 | `RAG_MATCH_COUNT`, `RAG_INGESTION_LEASE_SECONDS`, `CHAT_HISTORY_LIMIT` | **Por confirmar (PO)**. Si no están definidas, se usan los valores por defecto. |
 | `FAQ_MEMORY_FINGERPRINT_SECRET` | **Por confirmar (PO)**. Sin ella, la memoria FAQ está desactivada. |
-| Versión de Node | `package.json` raíz: `engines.node` `>=24.14.0 <25`. Si Render la toma de ahí o de una variable propia: **Por confirmar (PO)**. |
+| Versión de Node | `package.json` raíz: `engines.node` `>=24.22.2 <25`. Si Render la toma de ahí o de una variable propia: **Por confirmar (PO)**. |
 
 ### 5.2 Vercel — `avend-asesor-web`
 
