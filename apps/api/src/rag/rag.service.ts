@@ -58,6 +58,7 @@ import type {
 } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 import { firstScaleRimEvidence } from './rim-evidence';
+import { reviewedAdministrativeContext } from './reviewed-administrative-evidence';
 import {
   isDirectRemunerationEvidence,
   isRuralAllocationQuestion,
@@ -500,11 +501,7 @@ function withSalaryRuleContext(
 ): RetrievedChunk[] {
   if (!question) return delivered;
   const profile = salaryQuestionProfile(question);
-  if (
-    profile.condition !== 'nombrado' ||
-    profile.scale !== '1' ||
-    profile.jornadaHours === null
-  ) {
+  if (profile.condition !== 'nombrado' || profile.scale !== '1') {
     return delivered;
   }
   const articles = candidates.filter((source) =>
@@ -907,26 +904,39 @@ export function inheritedFactorQuestions(
   forceContext: boolean,
 ): string[] {
   if (!priorUserQuestions.length) return [];
+  const profile = salaryQuestionProfile(question);
+  const normalized = normalizeSpanishText(question);
   // Una pregunta de ascenso o progresión de carrera tiene su propio tema y no
   // hereda jornada, vínculo ni escala de una consulta salarial anterior: el
   // dato de la escala aquí identifica el proceso, no una cifra. Si la pregunta
   // pide una cifra, sí conserva los factores que la persona ya declaró.
-  if (
-    isCareerProgressionQuestion(question) &&
-    !salaryQuestionProfile(question).isSalaryQuestion
-  ) {
+  if (isCareerProgressionQuestion(question) && !profile.isSalaryQuestion) {
     return [];
   }
-  if (
-    !salaryQuestionProfile(question).isSalaryQuestion &&
-    SELF_CONTAINED_NON_SALARY.test(normalizeSpanishText(question))
-  ) {
+  if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return [];
   }
   // Forzar contexto por una aclaración no debe convertir una nueva pregunta
   // salarial con cargo propio en una continuación de la anterior.
+  const resumedQuestion =
+    /^(?:¿\s*)?(?:volviendo|regresando|retomando|volvamos|regresemos)\s+(?:al?\s+)?(?:(?:el|la)\s+)?(?:sueldo|salario|remuneracion)\b[,\s:]*(.+)$/u.exec(
+      normalized,
+    )?.[1];
+  const resumesSalary =
+    profile.isSalaryQuestion &&
+    profile.role === null &&
+    Boolean(
+      resumedQuestion &&
+      continuesSalaryThread(
+        resumedQuestion.replace(
+          /\b(?:un[oa]?|el|la)\s+(?:nombrad[oa]|contratad[oa])\b/u,
+          ' ',
+        ),
+      ),
+    );
   if (
-    (!forceContext || salaryQuestionProfile(question).isSalaryQuestion) &&
+    !resumesSalary &&
+    (!forceContext || profile.isSalaryQuestion) &&
     !continuesSalaryThread(question)
   )
     return [];
@@ -938,6 +948,13 @@ export function inheritedFactorQuestions(
   // conversación cambió de tema y esos factores ya no describen a la persona.
   const inherited: string[] = [];
   for (let index = turns.length - 1; index >= 0; index -= 1) {
+    if (
+      resumesSalary &&
+      inherited.length === 0 &&
+      !continuesSalaryThread(turns[index]) &&
+      !salaryQuestionProfile(turns[index]).isSalaryQuestion
+    )
+      continue;
     inherited.unshift(turns[index]);
     const turnProfile = salaryQuestionProfile(turns[index]);
     if (turnProfile.isSalaryQuestion) {
@@ -980,6 +997,15 @@ function continuesSalaryThread(turn: string): boolean {
   const declaresFactor =
     profile.jornadaHours !== null || profile.scale !== null;
   const normalized = normalizeSpanishText(turn);
+  // An elliptical switch of employment regime names a salary factor, not a
+  // recruitment process. Require the whole phrase to be a factor reference.
+  if (
+    profile.condition !== null &&
+    /^(?:¿\s*)?(?:y|o|pero|tambien)\s+(?:(?:un[oa]?|el|la)\s+)?(?:nombrad[oa]|contratad[oa])(?:\s+(?:de\s+(?:la\s+)?)?(?:(?:primera|segunda|tercera|cuarta|quinta|sexta|septima|octava)\s+escala(?:\s+magisterial)?|escala(?:\s+magisterial)?\s+[1-8]))?\s*\??$/u.test(
+      normalized,
+    )
+  )
+    return true;
   if (
     profile.isSalaryQuestion &&
     profile.role === null &&
@@ -1150,6 +1176,37 @@ export class RagService {
       options,
     );
     if (options.medicalApplicability) return result;
+    if (
+      (result.kind === 'evidence' || result.kind === 'topic_change') &&
+      !options.legalCrossModule &&
+      detectRetrievalScope(question) === 'current' &&
+      !exactDocumentReferencesIn(question).length
+    ) {
+      const context = reviewedAdministrativeContext(question, result.sources);
+      if (context && this.gateway.contextChunksOfVersion) {
+        const { anchor, versionId, chunkIds } = context;
+        try {
+          const rows = await this.gateway.contextChunksOfVersion({
+            versionId,
+            chunkIds,
+          });
+          const sources = new Map(
+            result.sources.map((source) => [source.chunkId, source]),
+          );
+          for (const row of rows) {
+            if (
+              row.documentVersionId === versionId &&
+              chunkIds.includes(row.chunkId)
+            ) {
+              sources.set(row.chunkId, chunkFromDeliveredVersion(anchor, row));
+            }
+          }
+          result = { ...result, sources: [...sources.values()] };
+        } catch {
+          // Validation decides whether the required documentary context is complete.
+        }
+      }
+    }
     if (result.kind === 'evidence' || result.kind === 'topic_change') {
       const salaryQuestion = withInheritedSalaryFactors(
         question,
@@ -1594,11 +1651,16 @@ export class RagService {
         : null;
     if (medical?.intent === 'unsupported')
       return { kind: 'no_evidence', topRelevanceScore: null };
-    const globalQuery = globalUsesContext ? contextual : question;
+    const globalQuery =
+      inheritedFactors.length && !documentReferences.length
+        ? salaryQuestion
+        : globalUsesContext
+          ? contextual
+          : question;
     // Si la pregunta tiene tema propio y no remite al turno anterior, la
     // búsqueda del módulo también usa la pregunta sola. Así un tema nuevo no
     // recibe evidencia del tema anterior solo porque el módulo esté fijado.
-    const selectedQuery = globalUsesContext ? contextual : question;
+    const selectedQuery = globalQuery;
     const queries =
       // Exact retrieval only consumes the global vector; its module view is
       // derived from those same candidates, without a second vector search.

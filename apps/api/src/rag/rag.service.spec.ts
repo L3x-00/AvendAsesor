@@ -12,6 +12,60 @@ import medicalFixture from './fixtures/medical-leave.json';
 describe('inheritedFactorQuestions', () => {
   const salary = '¿Cuánto gana un docente de 30 horas?';
 
+  it('preserves the salary subject when the next turn only replaces the employment regime and scale', () => {
+    const contracted = 'cuanto gana un profesor contratado';
+    expect(
+      inheritedFactorQuestions(
+        'y uno nombrado de primera escala',
+        [contracted],
+        false,
+      ),
+    ).toEqual([contracted]);
+    expect(
+      inheritedFactorQuestions(
+        '¿Cómo postula un nombrado de primera escala?',
+        [contracted],
+        false,
+      ),
+    ).toEqual([]);
+  });
+
+  it('resumes the last salary thread only on an explicit return to salary', () => {
+    const history = [
+      'cuanto gana un profesor contratado',
+      'y uno nombrado de primera escala',
+      'cuando pueden destituir a un docente',
+    ];
+    expect(
+      inheritedFactorQuestions(
+        'volviendo al sueldo, cuanto gana un nombrado con 30 horas',
+        history,
+        false,
+      ),
+    ).toEqual(history.slice(0, 2));
+    expect(
+      inheritedFactorQuestions(
+        'cuanto gana un nombrado con 30 horas',
+        history,
+        false,
+      ),
+    ).toEqual([]);
+    expect(
+      inheritedFactorQuestions(
+        'volviendo al sueldo, cuanto gana un auxiliar',
+        history,
+        false,
+      ),
+    ).toEqual([]);
+    expect(
+      inheritedFactorQuestions(
+        'volviendo al sueldo, cuanto gana un ingeniero nombrado con 30 horas',
+        history,
+        false,
+      ),
+    ).toEqual([]);
+  });
+
   it('hereda desde la consulta salarial hasta la respuesta a la aclaración', () => {
     expect(
       inheritedFactorQuestions('Nombrado', [salary, 'Sector público'], true),
@@ -2217,6 +2271,18 @@ describe('resolveDetectedSubmodule', () => {
 });
 
 describe('detectRetrievalScope', () => {
+  it('distinguishes a request to transfer from a question about regulatory changes', () => {
+    expect(
+      detectRetrievalScope(
+        'Soy nombrado en Huancayo y mi esposa vive en Lima. ¿Puedo pedir mi cambio?',
+        2026,
+      ),
+    ).toBe('current');
+    expect(detectRetrievalScope('¿Qué cambios trae la norma?', 2026)).toBe(
+      'historical',
+    );
+  });
+
   it.each([
     ['¿Qué norma se aplica actualmente?', 'current'],
     ['Compara la norma vigente con la versión anterior.', 'historical'],

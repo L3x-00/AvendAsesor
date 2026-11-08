@@ -1,0 +1,295 @@
+{
+  "family-reassignment": {
+    "versionId": "27f30da1-51b2-4cf5-8dac-3db0e9933d71",
+    "documentId": "d15665af-f676-4d18-8ff2-ef7bd0709218",
+    "required": [
+      {
+        "chunkId": "74d2d635-8a3d-45c6-a936-f946cd78acf4",
+        "chunkIndex": 20,
+        "pageStart": 13,
+        "pageEnd": 13,
+        "sha256": "2e2208117de9204077946e878dd582dcec6756660d86a2269c18ba9d4bddcae1"
+      },
+      {
+        "chunkId": "b24d3cd8-a646-43a7-9401-e2b986ba9f7d",
+        "chunkIndex": 40,
+        "pageStart": 25,
+        "pageEnd": 25,
+        "sha256": "a0076670d650fb74386061fbd3a183f64b1af6b5123a3b810512df6a5e31d533"
+      },
+      {
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "chunkIndex": 41,
+        "pageStart": 25,
+        "pageEnd": 26,
+        "sha256": "196c8ffb057a23e94670c675d7b5deaa41ef4e22fa8e978451ae83ca24ef9f99"
+      },
+      {
+        "chunkId": "86043d5f-b97f-440d-8fe1-291b1d6342d2",
+        "chunkIndex": 42,
+        "pageStart": 26,
+        "pageEnd": 26,
+        "sha256": "59b3988f1b0672959d3e3068b52ee4ca9a26cd9fd46032be02c5e70106ef8fc9"
+      },
+      {
+        "chunkId": "985bd47d-7f0f-4d30-8d17-d647accd98a5",
+        "chunkIndex": 25,
+        "pageStart": 16,
+        "pageEnd": 16,
+        "sha256": "87d8f2a9d066ec1a6dbc6d89abcb77c381cc829e8e25d7aacc2438c376c7357a"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Ámbito y período",
+        "chunkId": "74d2d635-8a3d-45c6-a936-f946cd78acf4",
+        "start": 570,
+        "end": 938
+      },
+      {
+        "heading": "Presentación en la entidad de destino",
+        "chunkId": "b24d3cd8-a646-43a7-9401-e2b986ba9f7d",
+        "start": 1562,
+        "end": 1729
+      },
+      {
+        "heading": "Solicitud e informe escalafonario según la etapa",
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "start": 148,
+        "end": 342
+      },
+      {
+        "heading": "Acreditación del vínculo, domicilio y título cuando corresponda",
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "start": 627,
+        "end": 1147
+      },
+      {
+        "heading": "Tiempo de servicio para unidad familiar",
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "start": 1353,
+        "end": 1494
+      },
+      {
+        "heading": "Evaluación, antigüedad del informe y declaración jurada",
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "start": 1494,
+        "end": 1940
+      },
+      {
+        "heading": "Documento para acreditar el vínculo con el cónyuge",
+        "chunkId": "d3f74957-ae71-4ed1-a07b-fa4f52169e9c",
+        "start": 2077,
+        "end": 2120,
+        "branch": "spouse"
+      },
+      {
+        "heading": "Declaración del familiar o su representante",
+        "chunkId": "86043d5f-b97f-440d-8fe1-291b1d6342d2",
+        "start": 974,
+        "end": 1319
+      },
+      {
+        "heading": "Impedimentos para la reasignación",
+        "chunkId": "985bd47d-7f0f-4d30-8d17-d647accd98a5",
+        "start": 824,
+        "end": 2510
+      }
+    ]
+  },
+  "temporary-placement": {
+    "versionId": "9e925f26-603c-4c07-ac00-cdd2dd114b0b",
+    "documentId": "41a4d255-2ad1-40fa-b0f1-a489dd19c37e",
+    "required": [
+      {
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "chunkIndex": 0,
+        "pageStart": 1,
+        "pageEnd": 2,
+        "sha256": "adc5460698ef8dfed3cfa274df8f8537edd0101354211b05aa78750ec0a2fc44"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Qué es el destaque y cuánto dura",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 75,
+        "end": 378
+      },
+      {
+        "heading": "Causales",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 450,
+        "end": 523
+      },
+      {
+        "heading": "Necesidad institucional",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 812,
+        "end": 1230,
+        "branch": "institutional"
+      },
+      {
+        "heading": "Unidad familiar",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 1289,
+        "end": 1454,
+        "branch": "family"
+      },
+      {
+        "heading": "Salud",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 1502,
+        "end": 1718,
+        "branch": "health"
+      },
+      {
+        "heading": "Trámite y plazo por unidad familiar o salud",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 1789,
+        "end": 2197,
+        "branch": "family-or-health"
+      },
+      {
+        "heading": "Dónde presentar los documentos",
+        "chunkId": "e0ca6756-dcf1-40e2-8d9e-916dd3e0aef0",
+        "start": 2767,
+        "end": 2930
+      }
+    ]
+  },
+  "initial-auxiliary-studies": {
+    "versionId": "6dc6b2e3-efbd-43af-9b47-16510167f8b3",
+    "documentId": "8baa6239-4b0b-4199-9011-0928c007b637",
+    "required": [
+      {
+        "chunkId": "3c850582-2dc9-4cad-bea4-dbb77b83917e",
+        "chunkIndex": 1,
+        "pageStart": 1,
+        "pageEnd": 2,
+        "sha256": "c007fadfdefbdd1b5616465568a402c2a52f6639a5431bf4dd9cc50ff78e7337"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Educación Básica Regular, nivel Inicial",
+        "chunkId": "3c850582-2dc9-4cad-bea4-dbb77b83917e",
+        "start": 567,
+        "end": 1736,
+        "branch": "regular"
+      },
+      {
+        "heading": "Educación Básica Especial, niveles Inicial y Primaria",
+        "chunkId": "3c850582-2dc9-4cad-bea4-dbb77b83917e",
+        "start": 1940,
+        "end": 2112,
+        "branch": "special"
+      }
+    ]
+  },
+  "auxiliary-exchange": {
+    "versionId": "a1d40694-d26c-4a0c-82ed-56dee20d31de",
+    "documentId": "aa59ac89-220e-4766-99b0-772421461947",
+    "required": [
+      {
+        "chunkId": "7bee6920-4561-4c0c-ac54-7bb6d07546bc",
+        "chunkIndex": 24,
+        "pageStart": 23,
+        "pageEnd": 24,
+        "sha256": "24ab34bcf0ca56c48c066102174c50e28010bacae970637eaca3c1c56e52e82e"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Intercambio entre auxiliares",
+        "chunkId": "7bee6920-4561-4c0c-ac54-7bb6d07546bc",
+        "start": 628,
+        "end": 886
+      },
+      {
+        "heading": "Requisitos e impedimentos",
+        "chunkId": "7bee6920-4561-4c0c-ac54-7bb6d07546bc",
+        "start": 904,
+        "end": 1664
+      },
+      {
+        "heading": "Período del proceso, fecha límite y trámite",
+        "chunkId": "7bee6920-4561-4c0c-ac54-7bb6d07546bc",
+        "start": 1685,
+        "end": 2445
+      },
+      {
+        "heading": "Vigencia y desistimiento",
+        "chunkId": "7bee6920-4561-4c0c-ac54-7bb6d07546bc",
+        "start": 2470,
+        "end": 2783
+      }
+    ]
+  },
+  "teacher-dismissal": {
+    "versionId": "a06a52c1-b164-4ad8-87d8-e3137782242b",
+    "documentId": "576a5842-36ca-4a8e-8c83-be3db2139b64",
+    "required": [
+      {
+        "chunkId": "7d78fdff-b046-4e7a-b28b-b2f67a24ffdb",
+        "chunkIndex": 48,
+        "pageStart": 31,
+        "pageEnd": 32,
+        "sha256": "ef876f7f50f5212fea1b48a401371da8f23ea393887d1799529f0800bfef890b"
+      },
+      {
+        "chunkId": "03239ade-8349-4765-b359-b51acbdfb37d",
+        "chunkIndex": 60,
+        "pageStart": 40,
+        "pageEnd": 41,
+        "sha256": "4a918ea57687f5fec6644613387adb2db5a06ae8c7d9ded4ec80f7b8765a6191"
+      },
+      {
+        "chunkId": "d580a2cb-2e22-4168-af29-f4bff41a5c60",
+        "chunkIndex": 53,
+        "pageStart": 35,
+        "pageEnd": 36,
+        "sha256": "b089b3ffb736ab4ee46a81e684c0f526a2f6f68ae4f5343eda53c1bbeecc1a1a"
+      },
+      {
+        "chunkId": "e9ac5914-0f13-41f5-82ad-f2273a5b180f",
+        "chunkIndex": 40,
+        "pageStart": 26,
+        "pageEnd": 26,
+        "sha256": "4fd76d7bcf93a35d2552a3bede9e8a4fdb56084655ece215ae1d321637ef8984"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Cuándo corresponde tramitar un PAD",
+        "chunkId": "e9ac5914-0f13-41f5-82ad-f2273a5b180f",
+        "start": 487,
+        "end": 744
+      },
+      {
+        "heading": "Evaluación de la gravedad en el PAD",
+        "chunkId": "7d78fdff-b046-4e7a-b28b-b2f67a24ffdb",
+        "start": 2724,
+        "end": 3244
+      },
+      {
+        "heading": "Ejemplo de causal disciplinaria cuando se acreditan los hechos",
+        "chunkId": "03239ade-8349-4765-b359-b51acbdfb37d",
+        "start": 615,
+        "end": 941
+      },
+      {
+        "heading": "Condenas penales y destitución automática sin PAD",
+        "chunkId": "d580a2cb-2e22-4168-af29-f4bff41a5c60",
+        "start": 225,
+        "end": 927
+      },
+      {
+        "heading": "Condena suspendida fuera de los supuestos anteriores",
+        "chunkId": "d580a2cb-2e22-4168-af29-f4bff41a5c60",
+        "start": 933,
+        "end": 1768
+      }
+    ]
+  }
+}

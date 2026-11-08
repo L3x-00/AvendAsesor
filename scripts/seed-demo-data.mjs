@@ -815,7 +815,8 @@ async function seedUsers(client, runtime) {
 
   const bootstrapProfile = await getProfile(client, superadministratorId);
   if (!bootstrapProfile) failure('El trigger de perfiles no creó la superadministradora local.');
-  const profilePatches = [{ userId: superadministratorId, profile: {
+  // Administrative RPCs below require an active superadministrator on a fresh seed.
+  applyProfilePatches(runtime, [{ userId: superadministratorId, profile: {
     accessExpiresAt: null,
     accessStartAt: isoDaysFromNow(-365, 8),
     accountStatus: 'active',
@@ -829,8 +830,9 @@ async function seedUsers(client, runtime) {
     statusChangedBy: null,
     statusReason: null,
     updatedBy: superadministratorId,
-  } }];
+  } }]);
 
+  const profilePatches = [];
   for (const [index, user] of users.entries()) {
     if (user.key === 'superadmin') continue;
     const userId = idsByKey.get(user.key);
