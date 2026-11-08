@@ -55,6 +55,30 @@ export function isAuxiliaryRequirementsQuestion(question: string): boolean {
   );
 }
 
+/** Conserva el proceso en pedidos elípticos de documentos del expediente. */
+export function isAuxiliaryHiringDocumentsFollowUp(
+  question: string,
+  prior: string | undefined,
+): boolean {
+  if (!prior) return false;
+  const previous = normalizeSpanishText(prior);
+  return (
+    /^(?:¿\s*)?(?:(?:y|ademas)\s+)?(?:que|cuales son los)\s+documentos(?:\s+(?:(?:debo|debe|debemos|deben|hay que)\s+presentar|se (?:presentan|exigen|adjuntan)|presento|presentamos|adjunto|necesito|necesitan))?\s*[?.!]*$/u.test(
+      normalizeSpanishText(question),
+    ) &&
+    AUXILIARY_EDUCATION_SIGNAL.test(previous) &&
+    /\b(?:postul\p{L}*|contratacion|trabajar como|ingresar como)\b/u.test(
+      previous,
+    ) &&
+    isAuxiliaryRequirementsQuestion(prior) &&
+    !APPOINTMENT_SIGNAL.test(previous) &&
+    !MEDICAL_LEAVE_SIGNAL.test(previous) &&
+    !REASSIGNMENT_SIGNAL.test(previous) &&
+    !EXCHANGE_SIGNAL.test(previous) &&
+    !VACATION_SIGNAL.test(previous)
+  );
+}
+
 export function auxiliaryEvidenceQueries(question: string): string[] {
   const text = normalizeSpanishText(question);
   if (!AUXILIARY_SIGNAL.test(text)) return [];

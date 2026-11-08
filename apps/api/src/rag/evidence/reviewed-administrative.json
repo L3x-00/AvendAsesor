@@ -291,5 +291,130 @@
         "end": 1768
       }
     ]
+  },
+  "teacher-renewal": {
+    "versionId": "3ade67d0-c038-46f2-8898-b88e2ecf6f1e",
+    "documentId": "dc6c32ab-c2cb-41a0-9587-1945c03e91eb",
+    "required": [
+      {
+        "chunkId": "016a7b40-e257-461a-b9cb-60e4e2eac4d7",
+        "chunkIndex": 0,
+        "pageStart": 1,
+        "pageEnd": 1,
+        "sha256": "111a3a9fe0f16fb4ad2facd68ab358988f075b369f540480197bbf0a8c4b4b12"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Cuándo se realiza la evaluación",
+        "chunkId": "016a7b40-e257-461a-b9cb-60e4e2eac4d7",
+        "start": 104,
+        "end": 333
+      },
+      {
+        "heading": "Condiciones que verifica la UGEL",
+        "chunkId": "016a7b40-e257-461a-b9cb-60e4e2eac4d7",
+        "start": 736,
+        "end": 1873
+      },
+      {
+        "heading": "Desistimiento antes de la evaluación",
+        "chunkId": "016a7b40-e257-461a-b9cb-60e4e2eac4d7",
+        "start": 1934,
+        "end": 2480
+      }
+    ]
+  },
+  "teacher-renewal-evaluation": {
+    "versionId": "2ca3c706-fd13-4364-82d4-9c136e13f28f",
+    "documentId": "0606cd0d-9399-4598-b28a-39248a8726f5",
+    "required": [
+      {
+        "chunkId": "d40be22f-cdf5-4ebf-abc7-23d539255e6c",
+        "chunkIndex": 0,
+        "pageStart": 1,
+        "pageEnd": 1,
+        "sha256": "73b4e73199e288803be4719f3de90fe28f8b73cea22a61849e0cc7aa8d53ddc5"
+      },
+      {
+        "chunkId": "66d78527-033b-4c77-9764-9a9ef6b82441",
+        "chunkIndex": 1,
+        "pageStart": 1,
+        "pageEnd": 1,
+        "sha256": "eb2c0b29b7facf85db385c03ca85ea6324a3c4dc5368a21f158ad16b46e64243"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Anexo 16 · primer factor de la ficha de Educación Básica",
+        "chunkId": "d40be22f-cdf5-4ebf-abc7-23d539255e6c",
+        "start": 1035,
+        "end": 1150
+      },
+      {
+        "heading": "Anexo 16 · segundo factor",
+        "chunkId": "d40be22f-cdf5-4ebf-abc7-23d539255e6c",
+        "start": 2292,
+        "end": 2369
+      },
+      {
+        "heading": "Anexo 16 · tercer factor",
+        "chunkId": "66d78527-033b-4c77-9764-9a9ef6b82441",
+        "start": 912,
+        "end": 1011
+      },
+      {
+        "heading": "Anexo 16 · cuarto factor",
+        "chunkId": "66d78527-033b-4c77-9764-9a9ef6b82441",
+        "start": 2022,
+        "end": 2164
+      }
+    ]
+  },
+  "auxiliary-hiring-documents": {
+    "versionId": "68d32f29-66b0-48d4-b5b7-6698012d6d01",
+    "documentId": "6084057e-8686-4072-b26c-a8352f1dfe08",
+    "required": [
+      {
+        "chunkId": "190f42dc-60c7-4ea1-baa8-103999c74ebc",
+        "chunkIndex": 28,
+        "pageStart": 20,
+        "pageEnd": 20,
+        "sha256": "4f6c25634101727b79bf4e0e8322ea5b9ca2ed4af774da325c19bd62c292d9ac"
+      },
+      {
+        "chunkId": "6b488ab9-adfc-410e-915e-f5d866d237bc",
+        "chunkIndex": 29,
+        "pageStart": 21,
+        "pageEnd": 21,
+        "sha256": "d61a3d07e874b2a69f82f33aed2f316528c13de254cb6e0491f126a62ecda110"
+      }
+    ],
+    "spans": [
+      {
+        "heading": "Dónde se presenta el expediente",
+        "chunkId": "190f42dc-60c7-4ea1-baa8-103999c74ebc",
+        "start": 2372,
+        "end": 2537
+      },
+      {
+        "heading": "Documentos de inscripción",
+        "chunkId": "190f42dc-60c7-4ea1-baa8-103999c74ebc",
+        "start": 2537,
+        "end": 2998
+      },
+      {
+        "heading": "Documento que acredite las bonificaciones, si corresponde",
+        "chunkId": "6b488ab9-adfc-410e-915e-f5d866d237bc",
+        "start": 210,
+        "end": 442
+      },
+      {
+        "heading": "Una sola postulación",
+        "chunkId": "6b488ab9-adfc-410e-915e-f5d866d237bc",
+        "start": 448,
+        "end": 692
+      }
+    ]
   }
 }

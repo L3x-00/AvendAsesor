@@ -81,6 +81,7 @@ import {
   isLegalModuleName,
   isLegalQuestion,
   legalTopic,
+  requestsMagisterialRightsOrDuties,
 } from '../rag/legal-retrieval';
 import type { RetrievalScope, RetrievedChunk } from '../rag/retrieval.gateway';
 import {
@@ -1419,6 +1420,23 @@ export class ChatService {
       ? (storedContext?.selectedModuleId ?? null)
       : input.selectedModuleId;
     let conversationId = continuesConversation ? input.conversationId : null;
+    if (
+      !selectedModuleId &&
+      !conversationId &&
+      requestsMagisterialRightsOrDuties(effectiveQuestion) &&
+      !detectTopicIntent(effectiveQuestion) &&
+      !salaryQuestionProfile(effectiveQuestion).isSalaryQuestion
+    ) {
+      const modules = await this.cachedModules().catch<ActiveChatModule[]>(
+        () => [],
+      );
+      selectedModuleId =
+        modules.find(
+          (module) =>
+            !module.parentModuleId &&
+            normalizeSpanishText(module.name) === 'ley y reglamento',
+        )?.id ?? null;
+    }
     // El chat general se reconoce por la selección del cliente (sin módulo).
     // Cada turno identifica su tema; el módulo que un turno anterior hubiera
     // adoptado no convierte la conversación en un chat de módulo.
@@ -1931,8 +1949,11 @@ export class ChatService {
       retrievalScope === 'current' &&
       !exactDocumentReferencesIn(effectiveQuestion).length &&
       (retrieval.kind === 'evidence' || retrieval.kind === 'topic_change') &&
-      reviewedAdministrativeContext(effectiveQuestion, retrieval.sources) !==
-        null;
+      reviewedAdministrativeContext(
+        effectiveQuestion,
+        retrieval.sources,
+        priorUserQuestions.at(-1),
+      ) !== null;
     if (
       hasReviewedAdministrativeContext ||
       (medicalApplicability &&
@@ -1947,7 +1968,11 @@ export class ChatService {
                 medicalApplicability,
                 retrieval.sources,
               )
-            : reviewedAdministrativeAnswer(effectiveQuestion, retrieval.sources)
+            : reviewedAdministrativeAnswer(
+                effectiveQuestion,
+                retrieval.sources,
+                priorUserQuestions.at(-1),
+              )
           : null;
       if (!reviewed) {
         yield* this.completeWithoutEvidence({

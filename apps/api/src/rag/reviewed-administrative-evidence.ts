@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { isAuxiliaryRequirementsQuestion } from './auxiliary-retrieval';
+import {
+  isAuxiliaryHiringDocumentsFollowUp,
+  isAuxiliaryRequirementsQuestion,
+} from './auxiliary-retrieval';
 import manifests from './evidence/reviewed-administrative.json';
 import {
   isReassignmentQuestion,
@@ -32,7 +35,20 @@ function isReviewedCampaign(question: string): boolean {
     : String(new Date().getUTCFullYear()) === FAQ_CAMPAIGN_YEAR;
 }
 
-function requestFor(question: string): Request | null {
+function isTeacherRenewalOverview(text: string): boolean {
+  const subject = text.replace(
+    /^¿?\s*(?:como (?:se renueva|renuevo|renovar)|(?:cuales son (?:las )?)?condiciones para (?:la )?renovacion de|(?:cuales son (?:los )?)?requisitos para renovar)\s+/u,
+    '',
+  );
+  return (
+    subject !== text &&
+    /^(?:(?:el|mi|un)\s+)?contrato\s+(?:de\s+(?:(?:un[ao]?|el|la)\s+)?)?(?:docentes?|profesor(?:a|es|as)?)(?:\s+(?:para|en)\s+(?:el\s+)?20\d{2})?\s*[?.!]*$/u.test(
+      subject,
+    )
+  );
+}
+
+function requestFor(question: string, prior?: string): Request | null {
   const text = normalizeSpanishText(question);
   const auxiliary = /\bauxiliar(?:es)?\b/u.test(text);
   if (
@@ -44,6 +60,26 @@ function requestFor(question: string): Request | null {
     )
   )
     return null;
+
+  const previous = normalizeSpanishText(prior ?? '');
+  if (isReviewedCampaign(`${text} ${previous}`)) {
+    if (isAuxiliaryHiringDocumentsFollowUp(question, prior)) {
+      return { intent: 'auxiliary-hiring-documents', branches: [] };
+    }
+    if (
+      isTeacherRenewalOverview(previous) &&
+      /\brenovacion\b/u.test(text) &&
+      /\bdesempeno\b/u.test(text) &&
+      /\b(?:que se evalua|factores|criterios|aspectos)\b/u.test(text) &&
+      !/\b(?:etp|tecnico productiva|cetpro|pronoei|crebe|encargatura|puntaje|reclamo|plazo|si|sin)\b/u.test(
+        text,
+      )
+    )
+      return { intent: 'teacher-renewal-evaluation', branches: [] };
+  }
+  if (isReviewedCampaign(text) && isTeacherRenewalOverview(text)) {
+    return { intent: 'teacher-renewal', branches: [] };
+  }
 
   if (
     /\bauxiliar(?:es)?\s+(?:de\s+(?:educacion|inicial)|en\s+inicial)\b/u.test(
@@ -140,8 +176,12 @@ function requestFor(question: string): Request | null {
   return null;
 }
 
-function reviewedRequest(question: string, sources: readonly RetrievedChunk[]) {
-  const request = requestFor(question);
+function reviewedRequest(
+  question: string,
+  sources: readonly RetrievedChunk[],
+  prior?: string,
+) {
+  const request = requestFor(question, prior);
   if (!request) return null;
   const manifest = manifests[request.intent];
   const anchor = sources.find(
@@ -156,8 +196,9 @@ function reviewedRequest(question: string, sources: readonly RetrievedChunk[]) {
 export function reviewedAdministrativeContext(
   question: string,
   sources: readonly RetrievedChunk[],
+  prior?: string,
 ) {
-  const selected = reviewedRequest(question, sources);
+  const selected = reviewedRequest(question, sources, prior);
   if (!selected) return null;
   const { anchor, manifest } = selected;
   return {
@@ -171,8 +212,9 @@ export function reviewedAdministrativeContext(
 export function reviewedAdministrativeAnswer(
   question: string,
   sources: readonly RetrievedChunk[],
+  prior?: string,
 ) {
-  const selected = reviewedRequest(question, sources);
+  const selected = reviewedRequest(question, sources, prior);
   if (!selected) return null;
   const { request, manifest } = selected;
   const validated = new Map<string, RetrievedChunk>();

@@ -36,6 +36,83 @@ describe('disposiciones administrativas verificadas', () => {
   beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-11-07')));
   afterEach(() => jest.useRealTimers());
 
+  const teacherRenewal =
+    '¿Cómo se renueva el contrato de un docente para el 2026?';
+
+  it('PI-02 conserva las condiciones especiales de la renovación y cita el pasaje completo', () => {
+    const result = reviewedAdministrativeAnswer(
+      teacherRenewal,
+      sourcesFor('teacher-renewal'),
+    );
+    expect(result?.answer).toMatch(
+      /tres \(3\) meses[\s\S]*EBR Secundaria y EBA Avanzado[\s\S]*Modelo de Servicio EIB/,
+    );
+    expect(result?.sources).toHaveLength(1);
+    expect(
+      reviewedAdministrativeContext(
+        '¿Cómo se renueva el contrato docente si mi plaza es una bolsa de horas?',
+        sourcesFor('teacher-renewal'),
+      ),
+    ).toBeNull();
+    expect(
+      reviewedAdministrativeContext(
+        '¿Cómo se renueva el contrato docente por reemplazo temporal?',
+        sourcesFor('teacher-renewal'),
+      ),
+    ).toBeNull();
+  });
+
+  it('PI-02 cita los cuatro factores de la ficha, sin generalizar aspectos de otra modalidad', () => {
+    const question =
+      '¿Y qué se evalúa en el desempeño laboral para la renovación?';
+    const sources = sourcesFor('teacher-renewal-evaluation');
+    const result = reviewedAdministrativeAnswer(
+      question,
+      sources,
+      teacherRenewal,
+    );
+    expect(result?.answer).toMatch(
+      /Acompañamiento[\s\S]*Adecuación[\s\S]*retroalimentación[\s\S]*Trabajo colaborativo/,
+    );
+    expect(result?.sources).toHaveLength(2);
+    expect(
+      reviewedAdministrativeAnswer(
+        question,
+        sources.slice(0, 1),
+        teacherRenewal,
+      ),
+    ).toBeNull();
+    expect(
+      reviewedAdministrativeContext(
+        question,
+        sources,
+        '¿Cómo renuevo mi contrato docente en ETP?',
+      ),
+    ).toBeNull();
+    expect(
+      reviewedAdministrativeContext(
+        question,
+        sources,
+        '¿Qué requisitos necesita un auxiliar de educación para postular?',
+      ),
+    ).toBeNull();
+  });
+
+  it('PI-03 conserva la condición del carné de extranjería y los anexos del expediente', () => {
+    const question = '¿Y qué documentos deben presentar?';
+    const history =
+      '¿Qué requisitos se exigen para postular a una plaza de auxiliar de educación en el proceso 2026?';
+    const result = reviewedAdministrativeAnswer(
+      question,
+      sourcesFor('auxiliary-hiring-documents'),
+      history,
+    );
+    expect(result?.answer).toMatch(
+      /carné de extranjería cuando se trate de un postulante extranjero[\s\S]*Anexos 6, 7, 8, 9 y 12[\s\S]*huella dactilar/,
+    );
+    expect(result?.sources.map(({ pageStart }) => pageStart)).toEqual([20, 21]);
+  });
+
   it('P1 conserva requisitos, declaración y vínculo conyugal en sus páginas', () => {
     const result = reviewedAdministrativeAnswer(
       'soy nombrado en huancayo y mi esposa vive en lima, puedo pedir mi cambio para estar con ella',

@@ -77,6 +77,7 @@ import {
 } from './evaluation-retrieval';
 import {
   auxiliaryEvidenceQueries,
+  isAuxiliaryHiringDocumentsFollowUp,
   isAuxiliarySourceCompatible,
   isDirectAuxiliaryEvidence,
 } from './auxiliary-retrieval';
@@ -1182,7 +1183,11 @@ export class RagService {
       detectRetrievalScope(question) === 'current' &&
       !exactDocumentReferencesIn(question).length
     ) {
-      const context = reviewedAdministrativeContext(question, result.sources);
+      const context = reviewedAdministrativeContext(
+        question,
+        result.sources,
+        priorUserQuestions.at(-1),
+      );
       if (context && this.gateway.contextChunksOfVersion) {
         const { anchor, versionId, chunkIds } = context;
         try {
@@ -1583,6 +1588,10 @@ export class RagService {
       ? []
       : exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
+    const auxiliaryHiringDocuments =
+      !options.legalCrossModule &&
+      !directReferences.length &&
+      isAuxiliaryHiringDocumentsFollowUp(question, priorUserQuestions.at(-1));
     // Un seguimiento elíptico (o la respuesta a una aclaración, que completa la
     // pregunta pendiente) se busca con las consultas previas en TODAS las
     // búsquedas: con la pregunta escueta, "¿y el plazo?" coincidía con plazos de
@@ -1935,7 +1944,13 @@ export class RagService {
             retrievalScope,
           ).filter(
             (source) =>
-              !isExclusiveExchangeSectionForReassignment(question, source),
+              !isExclusiveExchangeSectionForReassignment(question, source) &&
+              (!auxiliaryHiringDocuments ||
+                sourceAssociations(source).some(
+                  ({ submoduleName }) =>
+                    normalizeSpanishText(submoduleName ?? '') ===
+                    'contratacion de auxiliares de educacion',
+                )),
           ),
         ),
       );

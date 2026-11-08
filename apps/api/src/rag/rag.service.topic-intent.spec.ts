@@ -104,6 +104,68 @@ const rationalizationMention = {
 };
 
 describe('RagService — intención temática del chat general', () => {
+  it('conserva la contratación auxiliar en el seguimiento documental aunque otro submódulo tenga mayor similitud', async () => {
+    const { gateway, service } = setup();
+    const hiring = {
+      ...baseSource,
+      chunkId: 'hiring',
+      documentTitle: 'Requisitos de contratación de auxiliares 2026',
+      chunkContent:
+        'La solicitud y la declaración jurada se presentan con el expediente de postulación a contratación de auxiliares de educación.',
+      moduleIds: ['aux'],
+      moduleNames: ['Auxiliar de educación'],
+      moduleAssociations: [
+        {
+          rootModuleId: 'aux',
+          rootModuleName: 'Auxiliar de educación',
+          submoduleId: 'hiring-submodule',
+          submoduleName: 'Contratación de auxiliares de educación',
+        },
+      ],
+    };
+    const administrative = {
+      ...hiring,
+      chunkId: 'administrative',
+      documentId: 'admin',
+      documentVersionId: 'admin-version',
+      documentTitle: 'Situaciones administrativas de auxiliares',
+      semanticScore: 0.99,
+      moduleAssociations: [
+        {
+          ...hiring.moduleAssociations[0],
+          submoduleId: 'admin-submodule',
+          submoduleName: 'Situaciones administrativas',
+        },
+      ],
+    };
+    gateway.search.mockResolvedValue([administrative, hiring]);
+    const question = '¿Y qué documentos deben presentar?';
+    const history = [
+      '¿Qué requisitos se exigen para postular a una plaza de auxiliar de educación en el proceso 2026?',
+    ];
+
+    await expect(
+      service.retrieve(question, null, history),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'hiring' }],
+    });
+    gateway.search.mockResolvedValue([administrative]);
+    await expect(
+      service.retrieve(question, null, history),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({ kind: 'evidence' });
+    await expect(
+      service.retrieve(question, null, [
+        '¿Qué requisitos necesita un auxiliar de educación para una queja contra la dirección?',
+      ]),
+    ).resolves.toMatchObject({ kind: 'evidence' });
+  });
+
   it('responde la reasignación con la norma del proceso y no con un beneficio rural', async () => {
     const { gateway, service } = setup();
     gateway.search.mockResolvedValue([ruralDecoy, reassignmentSource]);
