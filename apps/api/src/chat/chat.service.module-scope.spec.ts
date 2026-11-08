@@ -35,6 +35,7 @@ const modules = [
   module('rem', 'Remuneraciones', 3),
   module('car', 'Cargos y plazas', 7),
   module('car-cla', 'Clasificador de cargos', 1, 'car'),
+  module('ley', 'Ley y reglamento', 8),
 ];
 
 /**
@@ -138,6 +139,69 @@ function messageOf(events: ChatStreamEvent[]): string {
   }
   return reply.data.message;
 }
+
+describe('ChatService — consulta explícita a la Ley de Reforma Magisterial', () => {
+  const question =
+    '¿Qué derechos laborales reconoce la Ley de Reforma Magisterial a los profesores nombrados?';
+
+  it('asigna Ley y reglamento y conserva la ruta en el seguimiento sin corpus', async () => {
+    const { service, ragService } = setup({ contextSelectedModuleId: 'ley' });
+    const first = await collect(service, question, {
+      conversationId: null,
+      selectedModuleId: null,
+    });
+    const follow = await collect(
+      service,
+      '¿Y qué autoridad impone una sanción de destitución?',
+      { selectedModuleId: null },
+    );
+
+    for (const events of [first, follow]) {
+      expect(events.map(({ type }) => type)).toEqual([
+        'conversation',
+        'no_evidence',
+        'done',
+      ]);
+      expect(events[0]).toMatchObject({
+        data: { moduleId: 'ley', conversationId: CONVERSATION_ID },
+      });
+      expect(messageOf(events)).toContain('Ley y reglamento');
+    }
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+  });
+
+  it('envía una consulta con corpus disponible al flujo legal existente', async () => {
+    const { service, ragService } = setup({
+      availableDocuments: jest
+        .fn()
+        .mockResolvedValue([
+          { id: 'ley-document', moduleIds: ['ley'], title: 'Ley 29944' },
+        ]),
+    });
+    await collect(service, question, {
+      conversationId: null,
+      selectedModuleId: null,
+    });
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      question,
+      'ley',
+      [],
+      expect.objectContaining({ legalCrossModule: true }),
+    );
+  });
+
+  it('mantiene el flujo de remuneraciones cuando la ley solo se menciona en una pregunta de monto', async () => {
+    const { historyGateway, service } = setup();
+    await collect(
+      service,
+      '¿Cuánto gana un profesor nombrado según la Ley 29944?',
+      { conversationId: null, selectedModuleId: null },
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedModuleId: null }),
+    );
+  });
+});
 
 describe('ChatService — módulo Cargos y plazas sin documentos', () => {
   it.each(sevenQuestions)(

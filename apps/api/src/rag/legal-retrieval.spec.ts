@@ -51,6 +51,20 @@ describe('legal-retrieval', () => {
     ).toBe(true);
     expect(isPrimaryLegalSource({ documentTitle: 'Ley N.° 29944' })).toBe(true);
     expect(
+      isPrimaryLegalSource({ documentTitle: 'Reglamento de la Ley N.º 29944' }),
+    ).toBe(true);
+    expect(
+      isPrimaryLegalSource({
+        documentTitle: 'Decreto Supremo N.º 004-2013-ED',
+      }),
+    ).toBe(true);
+    expect(
+      isPrimaryLegalSource({
+        documentTitle:
+          'Ley que modifica la Ley N.º 29944, Ley de Reforma Magisterial',
+      }),
+    ).toBe(false);
+    expect(
       isPrimaryLegalSource({
         documentTitle:
           'Norma Técnica de licencias, permisos y vacaciones de profesores',

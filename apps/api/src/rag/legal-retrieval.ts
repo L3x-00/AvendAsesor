@@ -90,12 +90,24 @@ export function namesOtherLaw(question: string): boolean {
   return numbers.some((number) => number !== '29944');
 }
 
+export function requestsMagisterialRightsOrDuties(question: string): boolean {
+  const text = normalizeSpanishText(question);
+  const topic = legalTopic(question);
+  return (
+    (topic === 'rights' || topic === 'duties') &&
+    !namesOtherLaw(question) &&
+    /\bley\s*(?:n\s*[.º°]*\s*)?29944\b|\bley de reforma magisterial\b|\b004\s*-\s*2013\s*-\s*ed\b/u.test(
+      text,
+    )
+  );
+}
+
 /** Documento que es la propia ley o su reglamento, no una norma que los cita. */
 export function isPrimaryLegalSource(source: {
   documentTitle: string;
 }): boolean {
   const title = normalizeSpanishText(source.documentTitle);
-  return /\bley\s*(?:n\s*[.º°]*\s*)?29944\b|\bley de reforma magisterial\b|\breglamento de la ley\b|\b004-2013-ed\b/u.test(
+  return /^(?:ley\s*(?:n\s*[.º°]*\s*)?29944\b|ley de reforma magisterial\b|reglamento de la ley (?:de reforma magisterial\b|(?:n\s*[.º°]*\s*)?29944\b)|(?:decreto supremo\s*(?:n\s*[.º°]*\s*)?)?004\s*-\s*2013\s*-\s*ed\b)/u.test(
     title,
   );
 }
