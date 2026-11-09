@@ -31,7 +31,7 @@ const MAX_UNBROKEN_CHARS = 200;
 const MAX_HEADING_TOKENS = 60;
 /** Rótulo de un título normativo: «Artículo 14.», «Capítulo II», «Anexo 3». */
 const HEADING_LABEL =
-  /^(?:cap[ií]tulos?|art[ií]culos?|t[ií]tulos?|secci[oó]n(?:es)?|anexos?|disposici[oó]n(?:es)?)(?![\p{L}])\s*[\w.°º-]*\.?\s*/iu;
+  /^(?:sub[ -]?)?(?:cap[ií]tulos?|art[ií]culos?|t[ií]tulos?|secci[oó]n(?:es)?|anexos?|disposici[oó]n(?:es)?)(?![\p{L}])\s*[\w.°º-]*\.?\s*/iu;
 const MAX_HEADING_WORDS = 15;
 /** Disposición breve: «Dejar sin efecto…», «La presente norma entra en vigencia…». */
 const PROVISION_START =
@@ -66,10 +66,46 @@ function isHeading(content: string): boolean {
 }
 const ARTICLE_AT_START =
   /^art[ií]culo\s+[\p{L}\p{N}]+(?:[.-][\p{L}\p{N}]+)*(?:°|º)?(?:\s*[.:\-–—]+)?/iu;
-const NUMERAL_AT_START = /^([1-9]\d*(?:\.\d+)+)\.?(?:\s|$)/u;
+const ARTICLE_LINE =
+  /^(art[ií]culo|art\.)\s+(\d+(?:[.-][\da-z]+)*|[ivxlcdm]+|[úu]nico)(?:\.?[°ºª])?(\s*[.:\-–—]+)?(?:\s+(\p{L})|$)/iu;
+const OPENING_ARTICLE_QUOTE = /^[“"](?=(?:art[ií]culo|art\.)\s)/iu;
+const ARTICLE_MENTION =
+  /^art[ií]culo\s+\d+(?:[.-][\da-z]+)*(?:[°º])?\s+de(?:l)?\b/iu;
+const NUMERAL_AT_START = /^[“"]?([1-9]\d*(?:-[a-z])?(?:\.\d+)+)\.?(?:\s|$)/iu;
+const NUMERAL_LABEL =
+  /^[“"]?[1-9]\d*(?:-[a-zA-Z])?(?:\.\d+)+(?:\.(?:\s|$)|\s+(?:\p{Lu}|\(\*+\)))/u;
+const INSTRUMENT_HEADING =
+  /^(?:ley|decreto (?:supremo|legislativo|de urgencia)|resoluci[óo]n(?: +[\p{L}]+){1,4})\s+(?:n[.°º\s]*)?\d[\p{L}\d-]*$/iu;
 const EXPLICIT_LITERAL_AT_START = /^(?:literal|inciso)\s+([a-z])\)(?:\s|$)/iu;
 const LIST_LITERAL_AT_START = /^([a-z])\)(?:\s|$)/iu;
 const REPLACEMENT_CHARS_AT_EDGES = /^�+|�+$/gu;
+
+function articleLabel(content: string) {
+  const line = content.replace(OPENING_ARTICLE_QUOTE, '');
+  if (ARTICLE_MENTION.test(line)) return undefined;
+  const match = ARTICLE_LINE.exec(line);
+  if (!match) return undefined;
+  const [, name, number, delimiter, titleInitial] = match;
+  const hasBoundary =
+    delimiter || !titleInitial || /^\p{Lu}$/u.test(titleInitial);
+  if (!hasBoundary) return undefined;
+  return { number, canAnchor: !name.endsWith('.') };
+}
+
+function hasEmbeddedLabel(
+  content: string,
+  isLabel: (sentence: string) => boolean,
+): boolean {
+  for (const separator of content.matchAll(
+    /(?<=[.!?;][”"]?)\s+(?=[“"]?(?:art|\d))/giu,
+  )) {
+    if (isLabel(content.slice(separator.index + separator[0].length)))
+      return true;
+  }
+  return false;
+}
+
+const isArticleLabel = (text: string) => articleLabel(text) !== undefined;
 
 interface StructuralLocation {
   articleReference?: string;
@@ -84,9 +120,16 @@ interface StructuralLocation {
  * Solo reconoce ubicación que comienza en la propia unidad. Una mención a un
  * artículo o numeral dentro del texto corrido nunca se convierte en metadato.
  */
-function structuralLocation(content: string): StructuralLocation {
-  const articleReference = content.match(ARTICLE_AT_START)?.[0].trim();
-  const structuralHeading = isHeading(content);
+function structuralLocation(
+  content: string,
+  verifiedArticleLine: boolean,
+): StructuralLocation {
+  const headingText = content.replace(OPENING_ARTICLE_QUOTE, '');
+  if (ARTICLE_MENTION.test(headingText)) return { structuralHeading: false };
+  const structuralHeading = isHeading(headingText);
+  const articleText =
+    structuralHeading || verifiedArticleLine ? headingText : content;
+  const articleReference = articleText.match(ARTICLE_AT_START)?.[0].trim();
   const numeral = content.match(NUMERAL_AT_START)?.[1];
   const literal =
     content.match(EXPLICIT_LITERAL_AT_START)?.[1] ??
@@ -94,7 +137,7 @@ function structuralLocation(content: string): StructuralLocation {
 
   if (articleReference) {
     const articleTitle = structuralHeading
-      ? content
+      ? articleText
           .slice(articleReference.length)
           .replace(/^[\s.:\-–—]+/u, '')
           .trim()
@@ -123,6 +166,7 @@ function structuralLocation(content: string): StructuralLocation {
 
 interface ChunkBlock {
   content: string;
+  boundary?: 'article-line' | 'unverified' | 'unverified-numeral';
   /** Bloque de tabla Markdown: conserva filas y separadores. */
   table: boolean;
 }
@@ -234,14 +278,33 @@ export class ChunkingService {
     const blocks: ChunkBlock[] = [];
     let paragraph: string[] = [];
     let table: string[] = [];
+    let numberedArticle: string | undefined;
+    let containerCaption = false;
+    let unverified = false;
+    let unverifiedNumeral = false;
     const flushParagraph = () => {
       const raw = paragraph.join('\n').trim();
       if (!raw) return;
       for (const piece of raw.split(/(?<=\.)\s{2,}/u)) {
         const content = piece.trim();
-        if (content) blocks.push({ content, table: false });
+        if (!content) continue;
+        const embeddedArticle = hasEmbeddedLabel(content, isArticleLabel);
+        blocks.push({
+          content,
+          table: false,
+          ...(unverified || embeddedArticle
+            ? { boundary: 'unverified' }
+            : unverifiedNumeral
+              ? { boundary: 'unverified-numeral' }
+              : {}),
+        });
+        if (embeddedArticle) {
+          unverified = true;
+          numberedArticle = undefined;
+        }
       }
       paragraph = [];
+      unverifiedNumeral = false;
     };
     const flushTable = () => {
       if (!table.length) return;
@@ -252,7 +315,8 @@ export class ChunkingService {
       table = [];
     };
 
-    for (const line of text.replace(/\r\n?/gu, '\n').split('\n')) {
+    const lines = text.replace(/\r\n?/gu, '\n').split('\n');
+    for (const [index, line] of lines.entries()) {
       if (/^\s*\|.*\|\s*$/u.test(line)) {
         flushParagraph();
         table.push(line);
@@ -262,6 +326,76 @@ export class ChunkingService {
       if (!line.trim()) {
         flushParagraph();
         continue;
+      }
+
+      const content = line.trim();
+      const label = articleLabel(content);
+      const previousLine = paragraph.at(-1)?.trimEnd();
+      const startsParagraph =
+        !previousLine || /[.!?][”"]?$/u.test(previousLine);
+      if (
+        label?.canAnchor &&
+        (startsParagraph || containerCaption) &&
+        !hasEmbeddedLabel(content, isArticleLabel)
+      ) {
+        flushParagraph();
+        const separated = !previousLine && !lines[index + 1]?.trim();
+        blocks.push({
+          content,
+          table: false,
+          ...(!separated || OPENING_ARTICLE_QUOTE.test(content)
+            ? { boundary: 'article-line' }
+            : {}),
+        });
+        numberedArticle = label.number;
+        containerCaption = false;
+        unverified = false;
+        continue;
+      }
+      if (
+        INSTRUMENT_HEADING.test(content) ||
+        INSTRUMENT_HEADING.test(
+          `${content} ${lines[index + 1]?.trim() ?? ''}`,
+        ) ||
+        (/^\(\*+\)\s/u.test(content) && numberedArticle)
+      ) {
+        flushParagraph();
+        blocks.push({ content, table: false, boundary: 'unverified' });
+        numberedArticle = undefined;
+        unverified = true;
+        continue;
+      }
+      if (!ARTICLE_AT_START.test(content) && !label && isHeading(content)) {
+        flushParagraph();
+        blocks.push({ content, table: false });
+        numberedArticle = undefined;
+        containerCaption = true;
+        unverified = false;
+        continue;
+      }
+
+      // Un rótulo dentro de una línea continuada puede ser una mención o un
+      // nuevo artículo. Se conserva el párrafo completo sin heredar ubicación.
+      if (label) {
+        numberedArticle = undefined;
+        unverified = true;
+      }
+      containerCaption &&= !/\p{Ll}/u.test(content);
+
+      const numeral = NUMERAL_AT_START.exec(content)?.[1];
+      if (numberedArticle && numeral && NUMERAL_LABEL.test(content)) {
+        if (startsParagraph) {
+          flushParagraph();
+        } else if (
+          numeral.toLowerCase().startsWith(`${numberedArticle.toLowerCase()}.`)
+        ) {
+          // Sin cierre de oración, OCR puede haber unido dos numerales o
+          // partido un importe. El artículo se conserva, el numeral no.
+          unverifiedNumeral = true;
+        } else {
+          unverified = true;
+          numberedArticle = undefined;
+        }
       }
       paragraph.push(line);
     }
@@ -278,6 +412,14 @@ export class ChunkingService {
     let activeContainerTitle: string | undefined;
     let activeLiteral: string | undefined;
     let activeNumeral: string | undefined;
+    let pageLocalArticle = false;
+    const clearArticle = () => {
+      activeArticleReference = undefined;
+      activeArticleTitle = undefined;
+      activeNumeral = undefined;
+      activeLiteral = undefined;
+      pageLocalArticle = false;
+    };
     // Tokens de las unidades pendientes, separadores incluidos: se lleva
     // incremental (antes se recodificaba todo lo pendiente por cada párrafo).
     let pendingTokens = 0;
@@ -323,17 +465,59 @@ export class ChunkingService {
           ? block.content
           : normalizeParagraph(block.content);
         if (!content) continue;
-        const location = structuralLocation(content);
+        if (block.boundary === 'unverified') {
+          flush({ keepOverlap: false });
+          clearArticle();
+          activeContainerTitle = undefined;
+        }
+        const location =
+          block.boundary === 'unverified'
+            ? { structuralHeading: false }
+            : structuralLocation(content, block.boundary === 'article-line');
+        const articleNumber = activeArticleReference
+          ? articleLabel(activeArticleReference)?.number
+          : undefined;
+        const conflictingNumeral =
+          articleNumber &&
+          location.numeral &&
+          !location.numeral
+            .toLowerCase()
+            .startsWith(`${articleNumber.toLowerCase()}.`);
+        const uncertainNumeral =
+          block.boundary === 'unverified-numeral' ||
+          ((location.numeral || activeNumeral) &&
+            hasEmbeddedLabel(content, (sentence) =>
+              NUMERAL_LABEL.test(sentence),
+            ));
+        if (conflictingNumeral || uncertainNumeral) {
+          if (
+            conflictingNumeral ||
+            units.some((unit) => !unit.structuralHeading)
+          ) {
+            flush({ keepOverlap: false });
+          }
+          activeNumeral = undefined;
+          activeLiteral = undefined;
+          if (conflictingNumeral) {
+            clearArticle();
+            activeContainerTitle = undefined;
+          }
+        }
         const hasFreshBody = units.some(
           (pending) => !pending.overlap && !pending.structuralHeading,
         );
         const startsLiteral = location.literal != null;
+        const changesArticle =
+          location.articleReference &&
+          activeArticleReference &&
+          location.articleReference !== activeArticleReference;
         if (
-          hasFreshBody &&
-          (location.articleReference != null ||
-            location.containerSectionTitle != null ||
-            location.numeral != null ||
-            startsLiteral)
+          changesArticle ||
+          (hasFreshBody &&
+            (location.articleReference != null ||
+              location.containerSectionTitle != null ||
+              location.numeral != null ||
+              startsLiteral))
         ) {
           // Un fragmento visible nunca mezcla dos ubicaciones estructurales.
           flush({ keepOverlap: false });
@@ -341,22 +525,19 @@ export class ChunkingService {
 
         if (location.containerSectionTitle) {
           activeContainerTitle = location.containerSectionTitle;
-          activeArticleReference = undefined;
-          activeArticleTitle = undefined;
-          activeNumeral = undefined;
-          activeLiteral = undefined;
+          clearArticle();
         }
         if (location.articleReference) {
+          clearArticle();
+          pageLocalArticle = block.boundary === 'article-line';
           activeArticleReference = location.articleReference;
           activeArticleTitle = location.sectionTitle;
-          activeNumeral = undefined;
-          activeLiteral = undefined;
         }
-        if (location.numeral) {
+        if (location.numeral && !uncertainNumeral) {
           activeNumeral = location.numeral;
           activeLiteral = undefined;
         }
-        if (location.literal) {
+        if (location.literal && !uncertainNumeral) {
           activeLiteral = location.literal.toLocaleLowerCase('es');
         }
 
@@ -375,7 +556,11 @@ export class ChunkingService {
           overlap: false,
           pageEnd: page.pageNumber,
           pageStart: page.pageNumber,
-          sectionTitle: activeArticleTitle ?? activeContainerTitle,
+          // El título puede continuar en otra línea. Solo el número se
+          // verifica con la línea aislada, no el título completo.
+          sectionTitle: pageLocalArticle
+            ? undefined
+            : (activeArticleTitle ?? activeContainerTitle),
           tokenCount: tokens.length,
         };
         if (tokens.length > MAX_TOKENS) {
@@ -399,6 +584,10 @@ export class ChunkingService {
           }
         }
         push(unit);
+      }
+      if (pageLocalArticle) {
+        flush({ keepOverlap: false });
+        clearArticle();
       }
     }
     flush();
