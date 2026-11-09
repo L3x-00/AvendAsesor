@@ -444,6 +444,316 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     });
   });
 
+  it('conserva artículos y numerales de un PDF con saltos simples de línea', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 10,
+        text: [
+          'El texto anterior termina aquí.',
+          'Artículo 41. Derechos',
+          'Los profesores tienen derecho a la estabilidad',
+          'con sujeción a las condiciones establecidas en la ley.',
+        ].join('\n'),
+      },
+      {
+        pageNumber: 12,
+        text: [
+          'Nota de la edición oficial.',
+          '“Artículo 49. Destitución',
+          '49.5. La destitución es impuesta por el titular',
+          'de la UGEL, DRE o MINEDU, según corresponda.',
+          '49.6. Procede la destitución de oficio en los supuestos previstos.',
+          '',
+          'El texto menciona como referencia el',
+          'Artículo 41. Derechos de los profesores',
+          'y continúa con la disposición.',
+          '(*) Nota editorial sobre la publicación.',
+        ].join('\n'),
+      },
+      {
+        pageNumber: 42,
+        text: [
+          'Nota del Reglamento publicada el 10 de julio de 2015.',
+          'Artículo 83.- Destitución',
+          '83.1. La destitución termina la carrera magisterial.',
+          '83.2. La sanción se oficializa por resolución,',
+          'previo proceso administrativo disciplinario.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(
+      chunks.find((chunk) => chunk.chunkContent.includes('estabilidad')),
+    ).toMatchObject({ articleReference: 'Artículo 41.', pageStart: 10 });
+    expect(
+      chunks.find((chunk) => chunk.chunkContent.includes('según corresponda')),
+    ).toMatchObject({
+      articleReference: 'Artículo 49.',
+      numeralReference: '49.5',
+      pageStart: 12,
+    });
+    expect(
+      chunks.find((chunk) => chunk.chunkContent.includes('de oficio')),
+    ).toMatchObject({
+      articleReference: 'Artículo 49.',
+      numeralReference: '49.6',
+      pageStart: 12,
+    });
+    expect(
+      chunks.find((chunk) => chunk.chunkContent.includes('previo proceso')),
+    ).toMatchObject({
+      articleReference: 'Artículo 83.-',
+      numeralReference: '83.2',
+      pageStart: 42,
+    });
+    expect(
+      chunks.filter((chunk) => chunk.articleReference === 'Artículo 41.'),
+    ).toHaveLength(1);
+    const note = chunks.find((chunk) =>
+      chunk.chunkContent.includes('Nota editorial'),
+    );
+    expect(note).toBeDefined();
+    expect(note?.articleReference).toBeUndefined();
+    expect(note?.numeralReference).toBeUndefined();
+    const crossReference = chunks.find((chunk) =>
+      chunk.chunkContent.includes('El texto menciona como referencia el'),
+    );
+    expect(crossReference?.chunkContent).toContain('Artículo 41. Derechos');
+    expect(crossReference?.articleReference).toBeUndefined();
+  });
+
+  it.each(['SUB CAPÍTULO II', 'Subcapítulo III', 'SECCIÓN IV'])(
+    'separa los artículos que rodean %s aunque el epígrafe abarque varias líneas',
+    (section) => {
+      const chunks = service.chunk([
+        {
+          pageNumber: 24,
+          text: [
+            'Artículo 9.- Formación',
+            '9.2. Se evalúan las metas de acreditación.',
+            section,
+            'DE LA FORMACIÓN Y',
+            'LOS REQUISITOS DOCENTES',
+            '“Artículo 10. Finalidad de la formación',
+            'inicial de los docentes',
+            'La formación inicial prepara para la docencia.',
+          ].join('\n'),
+        },
+      ]);
+
+      const oldRule = chunks.find((chunk) =>
+        chunk.chunkContent.includes('metas de acreditación'),
+      );
+      const nextRule = chunks.find((chunk) =>
+        chunk.chunkContent.includes('prepara para la docencia'),
+      );
+      expect(oldRule).toMatchObject({
+        articleReference: 'Artículo 9.-',
+        numeralReference: '9.2',
+      });
+      expect(oldRule?.chunkContent).not.toContain('Artículo 10');
+      expect(nextRule).toMatchObject({
+        articleReference: 'Artículo 10.',
+        pageStart: 24,
+      });
+      expect(nextRule?.numeralReference).toBeUndefined();
+      expect(chunks.map((chunk) => chunk.chunkContent).join(' ')).toContain(
+        'LOS REQUISITOS DOCENTES',
+      );
+    },
+  );
+
+  it.each(['. Artículo 5.-', '; Artículo 5.-', '; Art. 5.-'])(
+    'omite la ubicación ambigua en un párrafo aplanado con separador %j',
+    (separator) => {
+      const mixed = `Artículo 4. La solicitud lleva firma${separator} La autoridad valida la firma.`;
+      const [chunk] = service.chunk([{ pageNumber: 9, text: mixed }]);
+
+      expect(chunk).toMatchObject({
+        chunkContent: mixed,
+        pageStart: 9,
+        pageEnd: 9,
+      });
+      expect(chunk.articleReference).toBeUndefined();
+      expect(chunk.numeralReference).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['Artículo 8.º Obligaciones', 'Artículo 8.º'],
+    ['Artículo VIII. Obligaciones', 'Artículo VIII.'],
+    ['“Artículo 8.- obligaciones', 'Artículo 8.-'],
+    ['Art. 8. Obligaciones', undefined],
+  ])('cierra la ubicación previa ante el rótulo %j', (label, reference) => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 9,
+        text: `Artículo 7. Beneficios\n7.2. Se reconoce la asignación.\n${label}\nEl titular responde por la ejecución.`,
+      },
+    ]);
+    const next = chunks.find((chunk) =>
+      chunk.chunkContent.includes('responde por la ejecución'),
+    );
+    expect(next?.chunkContent).toContain(label);
+    expect(next?.articleReference).toBe(reference);
+    expect(next?.numeralReference).toBeUndefined();
+  });
+
+  it.each([
+    'Decreto Supremo Nº 019-2025-MINEDU',
+    'DECRETO SUPREMO 004-2013-ED',
+    'DECRETO SUPREMO\nN° 004-2013-ED',
+  ])('cierra el artículo previo al comenzar el instrumento %j', (header) => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: 'Artículo 7. Beneficios\n\n7.2. Se reconoce la asignación.',
+      },
+      {
+        pageNumber: 2,
+        text: `${header}\nEL PRESIDENTE DE LA REPÚBLICA\nCONSIDERANDO:\nQue corresponde aprobar el reglamento.`,
+      },
+    ]);
+
+    expect(chunks[0]).toMatchObject({
+      articleReference: 'Artículo 7.',
+      numeralReference: '7.2',
+      pageEnd: 1,
+    });
+    const decree = chunks.find((chunk) =>
+      chunk.chunkContent.includes('aprobar el reglamento'),
+    );
+    expect(decree).toMatchObject({ pageStart: 2, pageEnd: 2 });
+    expect(decree?.articleReference).toBeUndefined();
+    expect(decree?.numeralReference).toBeUndefined();
+  });
+
+  it('no convierte una cita al inicio de un párrafo en la referencia del fragmento', () => {
+    const text =
+      'Artículo 25 de la Ley del Servicio Civil se menciona como referencia.';
+    const [chunk] = service.chunk([{ pageNumber: 6, text }]);
+
+    expect(chunk.chunkContent).toBe(text);
+    expect(chunk.articleReference).toBeUndefined();
+  });
+
+  it.each([' por\n', '. '])(
+    'omite el numeral ambiguo ante un separador %j',
+    (join) => {
+      const chunks = service.chunk([
+        {
+          pageNumber: 8,
+          text: `Artículo 7. Beneficios\n7.2. El profesor tiene derecho a la licencia${join}7.3. La prohibición se aplica en todo caso.`,
+        },
+      ]);
+      const chunk = chunks.find((item) =>
+        item.chunkContent.includes('El profesor tiene derecho a la licencia'),
+      );
+
+      expect(chunk).toMatchObject({
+        articleReference: 'Artículo 7.',
+        pageStart: 8,
+      });
+      expect(chunk?.chunkContent).toContain('7.3. La prohibición se aplica');
+      expect(chunk?.numeralReference).toBeUndefined();
+    },
+  );
+
+  it('conserva el contenido sin combinar un artículo con un numeral de otra serie', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 3,
+        text: 'Artículo 7. Beneficios\n\n7.2. Se reconoce la asignación.\n\n8.2. La excepción se aplica en otro ámbito.',
+      },
+    ]);
+
+    const exception = chunks.find((chunk) =>
+      chunk.chunkContent.includes('otro ámbito'),
+    );
+    expect(exception).toMatchObject({ pageStart: 3 });
+    expect(exception?.articleReference).toBeUndefined();
+    expect(exception?.numeralReference).toBe('8.2');
+  });
+
+  it('no traslada el artículo inferido a otro capítulo o a una página sin anclaje', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 19,
+        text: [
+          'Artículo 79. Alcance',
+          '79.1. Se conserva el ámbito.',
+          'Artículo 79-A. Modalidades',
+          'El desarrollo se organiza en cuatro modalidades.',
+          'CAPÍTULO X',
+          'TÉRMINO DE LA CARRERA',
+          '79.5. Cláusula de otra sección.',
+          'Artículo 80. Sanciones',
+          'La ley prescribe las sanciones.',
+        ].join('\n'),
+      },
+      {
+        pageNumber: 20,
+        text: 'DECRETO SUPREMO 004-2013-ED\nConsiderandos del reglamento.',
+      },
+    ]);
+
+    const otherSection = chunks.find((chunk) =>
+      chunk.chunkContent.includes('Cláusula de otra sección'),
+    );
+    expect(otherSection).toBeDefined();
+    expect(otherSection?.articleReference).toBeUndefined();
+    expect(otherSection?.numeralReference).toBeUndefined();
+    expect(
+      chunks.find((chunk) => chunk.chunkContent.includes('cuatro modalidades')),
+    ).toMatchObject({ articleReference: 'Artículo 79-A.' });
+    expect(chunks.find((chunk) => chunk.pageStart === 20)).toMatchObject({
+      pageEnd: 20,
+      articleReference: undefined,
+    });
+  });
+
+  it('no mezcla numerales consecutivos aunque no tengan punto después del número', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 10,
+        text: [
+          '“Artículo 42. Reconocimiento',
+          '42.1 El Ministerio de Educación reconoce los méritos.',
+          '42.2 Los reconocimientos se otorgan mediante resolución.',
+        ].join('\n'),
+      },
+    ]);
+
+    expect(chunks.map((chunk) => chunk.numeralReference)).toEqual([
+      '42.1',
+      '42.2',
+    ]);
+    expect(chunks[0].chunkContent).not.toContain(
+      'Los reconocimientos se otorgan',
+    );
+    expect(chunks[1].chunkContent).not.toContain('reconoce los méritos');
+  });
+
+  it('mantiene un importe decimal en la oración donde se define el límite', () => {
+    const chunks = service.chunk([
+      {
+        pageNumber: 12,
+        text: [
+          'Preámbulo breve.',
+          'Artículo 49. Límites de la asignación',
+          'El tope anual equivale a',
+          '49.5 UIT y se aplica al personal nombrado.',
+        ].join('\n'),
+      },
+    ]);
+
+    const limit = chunks.find((chunk) =>
+      chunk.chunkContent.includes('El tope anual equivale a 49.5 UIT'),
+    );
+    expect(limit).toMatchObject({ articleReference: 'Artículo 49.' });
+    expect(limit?.numeralReference).toBeUndefined();
+  });
+
   it('never leaves broken multi-token characters at window edges', () => {
     const form = Array.from(
       { length: 400 },
