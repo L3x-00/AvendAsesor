@@ -1,9 +1,16 @@
 import { HealthService } from './health.service';
 import { ServiceUnavailableException } from '@nestjs/common';
+import type { RagReadinessService } from '../rag-admin/rag-readiness.service';
+
+function ragReadiness(ready: boolean): RagReadinessService {
+  return {
+    getReadiness: jest.fn().mockResolvedValue({ ready }),
+  } as unknown as RagReadinessService;
+}
 
 describe('HealthService', () => {
-  it('returns the stable API health payload', () => {
-    const service = new HealthService({ isReady: jest.fn() });
+  it('keeps liveness independent from external RAG dependencies', () => {
+    const service = new HealthService(ragReadiness(false));
 
     expect(service.getStatus()).toEqual({
       service: 'avend-asesor-api',
@@ -11,21 +18,20 @@ describe('HealthService', () => {
     });
   });
 
-  it('reports ready only when the required dependency is ready', async () => {
-    const isReady = jest.fn().mockResolvedValue(true);
-    const service = new HealthService({ isReady });
+  it('reports ready only when functional RAG is ready', async () => {
+    const service = new HealthService(ragReadiness(true));
 
     await expect(service.getReadiness()).resolves.toEqual({
       service: 'avend-asesor-api',
       status: 'ready',
     });
-    expect(isReady).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed when a required dependency is unavailable', async () => {
-    const service = new HealthService({
-      isReady: jest.fn().mockResolvedValue(false),
-    });
+  it.each([
+    ['Supabase is unavailable', false],
+    ['RAG is not functionally ready', false],
+  ])('fails closed when %s', async (_label, ragReady) => {
+    const service = new HealthService(ragReadiness(ragReady));
 
     await expect(service.getReadiness()).rejects.toBeInstanceOf(
       ServiceUnavailableException,

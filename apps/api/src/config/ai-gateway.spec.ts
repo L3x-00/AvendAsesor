@@ -2,13 +2,20 @@ const mockOpenAi = jest.fn();
 
 jest.mock('openai', () => ({ __esModule: true, default: mockOpenAi }));
 
-import { INTERACTIVE_AI_LIMITS, createAiGatewayClient } from './ai-gateway';
+import {
+  INTERACTIVE_AI_LIMITS,
+  READINESS_AI_LIMITS,
+  createAiGatewayClient,
+} from './ai-gateway';
 
 function config(values: Record<string, string>) {
   return { get: jest.fn((key: string) => values[key]) } as never;
 }
 
 describe('createAiGatewayClient', () => {
+  it('uses a short, non-retrying limit for readiness probes', () => {
+    expect(READINESS_AI_LIMITS).toEqual({ maxRetries: 0, timeout: 5_000 });
+  });
   beforeEach(() => jest.clearAllMocks());
 
   it('applies the interactive limits on the OpenRouter branch used in production', () => {
