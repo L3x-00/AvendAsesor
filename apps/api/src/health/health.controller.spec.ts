@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from './health.controller';
 import { HealthService } from './health.service';
-import { SUPABASE_HEALTH_GATEWAY } from '../supabase/supabase.constants';
+import { RagReadinessService } from '../rag-admin/rag-readiness.service';
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -12,8 +12,10 @@ describe('HealthController', () => {
       providers: [
         HealthService,
         {
-          provide: SUPABASE_HEALTH_GATEWAY,
-          useValue: { isReady: jest.fn().mockResolvedValue(true) },
+          provide: RagReadinessService,
+          useValue: {
+            getReadiness: jest.fn().mockResolvedValue({ ready: true }),
+          },
         },
       ],
     }).compile();

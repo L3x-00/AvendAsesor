@@ -1,10 +1,5 @@
-import {
-  Inject,
-  Injectable,
-  ServiceUnavailableException,
-} from '@nestjs/common';
-import { SUPABASE_HEALTH_GATEWAY } from '../supabase/supabase.constants';
-import type { SupabaseHealthGateway } from '../supabase/supabase-health.gateway';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { RagReadinessService } from '../rag-admin/rag-readiness.service';
 
 export interface HealthStatus {
   service: 'avend-asesor-api';
@@ -18,10 +13,7 @@ export interface HealthReadinessStatus {
 
 @Injectable()
 export class HealthService {
-  constructor(
-    @Inject(SUPABASE_HEALTH_GATEWAY)
-    private readonly supabaseHealthGateway: SupabaseHealthGateway,
-  ) {}
+  constructor(private readonly ragReadinessService: RagReadinessService) {}
 
   getStatus(): HealthStatus {
     return {
@@ -31,7 +23,8 @@ export class HealthService {
   }
 
   async getReadiness(): Promise<HealthReadinessStatus> {
-    if (!(await this.supabaseHealthGateway.isReady())) {
+    const ragReadiness = await this.ragReadinessService.getReadiness();
+    if (!ragReadiness.ready) {
       throw new ServiceUnavailableException(
         'Service dependencies are unavailable.',
       );

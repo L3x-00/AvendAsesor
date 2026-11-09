@@ -5,7 +5,10 @@ import {
   type OnApplicationBootstrap,
 } from '@nestjs/common';
 import { SUPABASE_RETRIEVAL_CONTRACT_GATEWAY } from '../supabase/supabase.constants';
-import type { RetrievalContractGateway } from '../supabase/supabase-retrieval-contract.gateway';
+import type {
+  RetrievalContractGateway,
+  RetrievalContractStatus,
+} from '../supabase/supabase-retrieval-contract.gateway';
 import {
   EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
   RETRIEVAL_RPC_NAME,
@@ -22,6 +25,7 @@ import {
 @Injectable()
 export class RetrievalContractProbe implements OnApplicationBootstrap {
   private readonly logger = new Logger(RetrievalContractProbe.name);
+  private latestStatus: RetrievalContractStatus | null = null;
 
   constructor(
     @Inject(SUPABASE_RETRIEVAL_CONTRACT_GATEWAY)
@@ -29,7 +33,7 @@ export class RetrievalContractProbe implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    const status = await this.gateway.probe();
+    const status = await this.check();
 
     if (status.ok) {
       this.logger.log(
@@ -58,5 +62,17 @@ export class RetrievalContractProbe implements OnApplicationBootstrap {
       `Could not verify the retrieval RPC contract at startup (transient?). ` +
         `Detail: ${status.message}`,
     );
+  }
+
+  /** Último resultado observado, para diagnóstico sin volver a tocar Supabase. */
+  getLastStatus(): RetrievalContractStatus | null {
+    return this.latestStatus;
+  }
+
+  /** Ejecuta y conserva una comprobación funcional para readiness y arranque. */
+  async check(): Promise<RetrievalContractStatus> {
+    const status = await this.gateway.probe();
+    this.latestStatus = status;
+    return status;
   }
 }

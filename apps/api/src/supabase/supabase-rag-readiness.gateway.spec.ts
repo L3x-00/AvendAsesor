@@ -4,19 +4,29 @@ import type { SupabaseServerClient } from './supabase.server-client';
 function clientReturning(
   countByStatus: Partial<Record<string, number>>,
   errorStatus?: string,
-): SupabaseServerClient {
+): { client: SupabaseServerClient; abortSignal: jest.Mock } {
+  const abortSignal = jest.fn((signal: AbortSignal) => {
+    void signal;
+  });
   return {
-    from: () => ({
-      select: () => ({
-        eq: (_column: string, status: string) =>
-          Promise.resolve(
-            errorStatus === status
-              ? { count: null, error: { message: 'boom' } }
-              : { count: countByStatus[status] ?? 0, error: null },
-          ),
+    abortSignal,
+    client: {
+      from: () => ({
+        select: () => ({
+          eq: (_column: string, status: string) => ({
+            abortSignal: (signal: AbortSignal) => {
+              abortSignal(signal);
+              return Promise.resolve(
+                errorStatus === status
+                  ? { count: null, error: { message: 'boom' } }
+                  : { count: countByStatus[status] ?? 0, error: null },
+              );
+            },
+          }),
+        }),
       }),
-    }),
-  } as unknown as SupabaseServerClient;
+    } as unknown as SupabaseServerClient,
+  };
 }
 
 describe('SupabaseRagReadinessGatewayAdapter', () => {
@@ -26,9 +36,13 @@ describe('SupabaseRagReadinessGatewayAdapter', () => {
   });
 
   it('aggregates version counts by ingestion status with a total', async () => {
-    const gateway = new SupabaseRagReadinessGatewayAdapter(
-      clientReturning({ pending: 2, processing: 1, indexed: 40, failed: 3 }),
-    );
+    const { abortSignal, client } = clientReturning({
+      pending: 2,
+      processing: 1,
+      indexed: 40,
+      failed: 3,
+    });
+    const gateway = new SupabaseRagReadinessGatewayAdapter(client);
     await expect(gateway.getIngestionCounts()).resolves.toEqual({
       pending: 2,
       processing: 1,
@@ -36,11 +50,13 @@ describe('SupabaseRagReadinessGatewayAdapter', () => {
       failed: 3,
       total: 46,
     });
+    expect(abortSignal).toHaveBeenCalledTimes(4);
+    expect(abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 
   it('fails closed with ServiceUnavailable when a count query errors', async () => {
     const gateway = new SupabaseRagReadinessGatewayAdapter(
-      clientReturning({}, 'failed'),
+      clientReturning({}, 'failed').client,
     );
     await expect(gateway.getIngestionCounts()).rejects.toThrow(
       'The RAG readiness store is temporarily unavailable.',

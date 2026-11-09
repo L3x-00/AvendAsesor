@@ -27,6 +27,9 @@ const INGESTION_STATUSES = [
   'failed',
 ] as const;
 
+/** Los conteos administrativos nunca deben bloquear la preparación del RAG. */
+const READINESS_STORE_TIMEOUT_MS = 5_000;
+
 export class SupabaseRagReadinessGatewayAdapter implements RagReadinessGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
 
@@ -42,7 +45,8 @@ export class SupabaseRagReadinessGatewayAdapter implements RagReadinessGateway {
         const { count, error } = await client
           .from('document_versions')
           .select('id', { count: 'exact', head: true })
-          .eq('ingestion_status', status);
+          .eq('ingestion_status', status)
+          .abortSignal(AbortSignal.timeout(READINESS_STORE_TIMEOUT_MS));
         if (error) {
           throw new ServiceUnavailableException(
             'The RAG readiness store is temporarily unavailable.',

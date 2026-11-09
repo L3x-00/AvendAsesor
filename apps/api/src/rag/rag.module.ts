@@ -14,6 +14,6 @@ import { RAG_ANSWER_GATEWAY } from './rag.tokens';
     RetrievalContractProbe,
     { provide: RAG_ANSWER_GATEWAY, useExisting: OpenAiAnswerGateway },
   ],
-  exports: [RagService, RAG_ANSWER_GATEWAY],
+  exports: [RagService, RetrievalContractProbe, RAG_ANSWER_GATEWAY],
 })
 export class RagModule {}

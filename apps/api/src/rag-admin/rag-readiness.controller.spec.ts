@@ -15,6 +15,10 @@ describe('RagReadinessController', () => {
       answerModel: 'gpt-4o-mini',
       matchThreshold: 0.5,
       counts: { pending: 0, processing: 0, indexed: 5, failed: 0, total: 5 },
+      supabaseReady: true,
+      retrievalContractReady: true,
+      embeddingsReady: true,
+      ingestionReady: true,
       ready: true,
     };
     const service = {

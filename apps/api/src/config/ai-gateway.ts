@@ -31,6 +31,16 @@ export const INTERACTIVE_AI_LIMITS: AiGatewayRequestLimits = {
 };
 
 /**
+ * La sonda de preparación solo comprueba que el proveedor pueda producir un
+ * vector. No genera una respuesta y no debe retener un health check durante el
+ * plazo interactivo completo ni reintentar una dependencia ya degradada.
+ */
+export const READINESS_AI_LIMITS: AiGatewayRequestLimits = {
+  maxRetries: 0,
+  timeout: 5_000,
+};
+
+/**
  * Construye el cliente compatible con la API de OpenAI que actúa como gateway
  * único de IA. Prioriza OpenRouter cuando existe `OPENROUTER_API_KEY`; si no,
  * usa OpenAI directo con `OPENAI_API_KEY`. Falla de forma cerrada cuando no hay

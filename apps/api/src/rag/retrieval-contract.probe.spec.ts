@@ -50,6 +50,7 @@ describe('RetrievalContractProbe', () => {
     await probe.onApplicationBootstrap();
     expect(log).toHaveBeenCalledTimes(1);
     expect(error).not.toHaveBeenCalled();
+    expect(probe.getLastStatus()).toEqual({ ok: true });
   });
 
   it('warns without error when Supabase is unconfigured', async () => {
@@ -72,5 +73,24 @@ describe('RetrievalContractProbe', () => {
     await probe.onApplicationBootstrap();
     expect(warn).toHaveBeenCalledTimes(1);
     expect(error).not.toHaveBeenCalled();
+  });
+
+  it('records the latest failed contract result for readiness consumers', async () => {
+    const { probe } = probeWith({
+      ok: false,
+      reason: 'missing',
+      message: 'not found',
+    });
+
+    await expect(probe.check()).resolves.toEqual({
+      ok: false,
+      reason: 'missing',
+      message: 'not found',
+    });
+    expect(probe.getLastStatus()).toEqual({
+      ok: false,
+      reason: 'missing',
+      message: 'not found',
+    });
   });
 });
