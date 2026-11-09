@@ -58,10 +58,12 @@ export interface VersionChunk {
 export interface RetrievalGateway {
   /** Reviewed context of a version already admitted in the same turn. */
   contextChunksOfVersion?(input: {
+    abortSignal?: AbortSignal;
     versionId: string;
     chunkIds: string[];
   }): Promise<VersionChunk[]>;
   search(input: {
+    abortSignal?: AbortSignal;
     embedding: number[];
     matchCount: number;
     matchThreshold: number;
@@ -74,6 +76,7 @@ export interface RetrievalGateway {
    * no está disponible en un doble antiguo, el servicio debe fallar cerrado.
    */
   searchExactReferences?(input: {
+    abortSignal?: AbortSignal;
     embedding: number[];
     matchCount: number;
     query: string;
@@ -87,6 +90,7 @@ export interface RetrievalGateway {
    * documento. Opcional: sin él, la respuesta sigue con la evidencia hallada.
    */
   datedChunksOfVersions?(input: {
+    abortSignal?: AbortSignal;
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]>;
@@ -96,6 +100,7 @@ export interface RetrievalGateway {
    * título genérico o contradictorio; no amplían el corpus ni la búsqueda.
    */
   initialChunksOfVersions?(input: {
+    abortSignal?: AbortSignal;
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]>;

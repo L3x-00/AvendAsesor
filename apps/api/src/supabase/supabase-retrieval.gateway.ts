@@ -41,6 +41,10 @@ interface SituationAwareRetrievalRow {
   version_number: number;
 }
 
+interface AbortableRequest<T> extends PromiseLike<T> {
+  abortSignal(signal: AbortSignal): AbortableRequest<T>;
+}
+
 interface SituationAwareRetrievalClient {
   rpc(
     name: typeof RETRIEVAL_RPC_NAME,
@@ -52,7 +56,7 @@ interface SituationAwareRetrievalClient {
       p_retrieval_scope: 'archived_explicit' | 'current' | 'historical';
       p_selected_module_id: string | null;
     },
-  ): Promise<{
+  ): AbortableRequest<{
     data: SituationAwareRetrievalRow[] | null;
     error: unknown;
   }>;
@@ -68,7 +72,7 @@ interface ExactReferenceRetrievalClient {
       p_reference_keys: string[];
       p_retrieval_scope: 'archived_explicit' | 'current' | 'historical';
     },
-  ): Promise<{
+  ): AbortableRequest<{
     data: SituationAwareRetrievalRow[] | null;
     error: unknown;
   }>;
@@ -106,14 +110,16 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
   constructor(private readonly client: SupabaseServerClient | null) {}
 
   async contextChunksOfVersion(input: {
+    abortSignal?: AbortSignal;
     versionId: string;
     chunkIds: string[];
   }): Promise<VersionChunk[]> {
+    input.abortSignal?.throwIfAborted();
     if (!this.client)
       throw new ServiceUnavailableException(
         'Document context is not configured.',
       );
-    const { data, error } = await this.client
+    const request = this.client
       .from('document_chunks')
       .select(
         'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
@@ -121,6 +127,9 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       .eq('document_version_id', input.versionId)
       .in('id', [...new Set(input.chunkIds)].slice(0, 5))
       .order('chunk_index', { ascending: true });
+    const { data, error } = await (input.abortSignal
+      ? request.abortSignal(input.abortSignal)
+      : request);
     if (error)
       throw new ServiceUnavailableException('Document context is unavailable.');
     return (data ?? []).map((row) => ({
@@ -139,6 +148,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
   async search(
     input: Parameters<RetrievalGateway['search']>[0],
   ): Promise<RetrievedChunk[]> {
+    input.abortSignal?.throwIfAborted();
     if (!this.client) {
       throw new ServiceUnavailableException(
         'Document retrieval is not configured.',
@@ -148,7 +158,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     // owner. This narrow local contract keeps this adapter type-safe meanwhile.
     const retrievalClient = this
       .client as unknown as SituationAwareRetrievalClient;
-    const { data, error } = await retrievalClient.rpc(RETRIEVAL_RPC_NAME, {
+    const request = retrievalClient.rpc(RETRIEVAL_RPC_NAME, {
       p_match_count: input.matchCount,
       p_match_threshold: input.matchThreshold,
       p_query_embedding: input.embedding,
@@ -156,6 +166,9 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       p_retrieval_scope: input.retrievalScope,
       p_selected_module_id: input.selectedModuleId,
     });
+    const { data, error } = await (input.abortSignal
+      ? request.abortSignal(input.abortSignal)
+      : request);
     if (error) {
       throw new ServiceUnavailableException(
         'Document retrieval is temporarily unavailable.',
@@ -169,6 +182,7 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
       NonNullable<RetrievalGateway['searchExactReferences']>
     >[0],
   ): Promise<RetrievedChunk[]> {
+    input.abortSignal?.throwIfAborted();
     if (!this.client) {
       throw new ServiceUnavailableException(
         'Document retrieval is not configured.',
@@ -176,16 +190,16 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     }
     const retrievalClient = this
       .client as unknown as ExactReferenceRetrievalClient;
-    const { data, error } = await retrievalClient.rpc(
-      EXACT_REFERENCE_RETRIEVAL_RPC_NAME,
-      {
-        p_match_count: input.matchCount,
-        p_query_embedding: input.embedding,
-        p_query_text: input.query,
-        p_reference_keys: input.referenceKeys,
-        p_retrieval_scope: input.retrievalScope,
-      },
-    );
+    const request = retrievalClient.rpc(EXACT_REFERENCE_RETRIEVAL_RPC_NAME, {
+      p_match_count: input.matchCount,
+      p_query_embedding: input.embedding,
+      p_query_text: input.query,
+      p_reference_keys: input.referenceKeys,
+      p_retrieval_scope: input.retrievalScope,
+    });
+    const { data, error } = await (input.abortSignal
+      ? request.abortSignal(input.abortSignal)
+      : request);
     if (error) {
       throw new ServiceUnavailableException(
         'Exact document retrieval is temporarily unavailable.',
@@ -200,9 +214,11 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
    * mismo turno, que ya comprobó que son evidencia aprobada y vigente.
    */
   async datedChunksOfVersions(input: {
+    abortSignal?: AbortSignal;
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]> {
+    input.abortSignal?.throwIfAborted();
     const client = this.client;
     if (!client) {
       throw new ServiceUnavailableException(
@@ -211,15 +227,26 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     }
     const results = await Promise.all(
       [...new Set(input.versionIds)].map((versionId) =>
-        client
-          .from('document_chunks')
-          .select(
-            'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
-          )
-          .eq('document_version_id', versionId)
-          .filter('chunk_content', 'imatch', DATE_SQL_PATTERN)
-          .order('chunk_index', { ascending: true })
-          .limit(input.limitPerVersion),
+        input.abortSignal
+          ? client
+              .from('document_chunks')
+              .select(
+                'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+              )
+              .eq('document_version_id', versionId)
+              .filter('chunk_content', 'imatch', DATE_SQL_PATTERN)
+              .order('chunk_index', { ascending: true })
+              .limit(input.limitPerVersion)
+              .abortSignal(input.abortSignal)
+          : client
+              .from('document_chunks')
+              .select(
+                'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+              )
+              .eq('document_version_id', versionId)
+              .filter('chunk_content', 'imatch', DATE_SQL_PATTERN)
+              .order('chunk_index', { ascending: true })
+              .limit(input.limitPerVersion),
       ),
     );
     if (results.some((result) => result.error)) {
@@ -248,9 +275,11 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
    * no presentar en una cita el título equivocado de una carga histórica.
    */
   async initialChunksOfVersions(input: {
+    abortSignal?: AbortSignal;
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]> {
+    input.abortSignal?.throwIfAborted();
     const client = this.client;
     if (!client) {
       throw new ServiceUnavailableException(
@@ -259,14 +288,24 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
     }
     const results = await Promise.all(
       [...new Set(input.versionIds)].map((versionId) =>
-        client
-          .from('document_chunks')
-          .select(
-            'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
-          )
-          .eq('document_version_id', versionId)
-          .order('chunk_index', { ascending: true })
-          .limit(input.limitPerVersion),
+        input.abortSignal
+          ? client
+              .from('document_chunks')
+              .select(
+                'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+              )
+              .eq('document_version_id', versionId)
+              .order('chunk_index', { ascending: true })
+              .limit(input.limitPerVersion)
+              .abortSignal(input.abortSignal)
+          : client
+              .from('document_chunks')
+              .select(
+                'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+              )
+              .eq('document_version_id', versionId)
+              .order('chunk_index', { ascending: true })
+              .limit(input.limitPerVersion),
       ),
     );
     if (results.some((result) => result.error)) {

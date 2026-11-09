@@ -1119,6 +1119,8 @@ function needsDocumentIdentityAnchor(source: RetrievedChunk): boolean {
 }
 
 interface RetrieveOptions {
+  /** Cancelación de esta consulta, propiedad exclusiva del request HTTP. */
+  abortSignal?: AbortSignal;
   medicalApplicability?: MedicalLeaveApplicability | null;
   forceContext?: boolean;
   /**
@@ -1158,6 +1160,16 @@ export class RagService {
     private readonly config: ConfigService,
   ) {}
 
+  private embed(
+    inputs: string[],
+    abortSignal?: AbortSignal,
+  ): Promise<number[][]> {
+    abortSignal?.throwIfAborted();
+    return abortSignal
+      ? this.embeddings.embed(inputs, INTERACTIVE_AI_LIMITS, abortSignal)
+      : this.embeddings.embed(inputs, INTERACTIVE_AI_LIMITS);
+  }
+
   /**
    * Evidencia del turno. Una pregunta por fechas («¿cuándo se dan los
    * destaques?») se completa además con el cronograma del tema: una tabla de
@@ -1170,12 +1182,14 @@ export class RagService {
     priorUserQuestions: string[] = [],
     options: RetrieveOptions = {},
   ): Promise<RetrievalResult> {
+    options.abortSignal?.throwIfAborted();
     let result = await this.retrieveEvidence(
       question,
       selectedModuleId,
       priorUserQuestions,
       options,
     );
+    options.abortSignal?.throwIfAborted();
     if (options.medicalApplicability) return result;
     if (
       (result.kind === 'evidence' || result.kind === 'topic_change') &&
@@ -1192,9 +1206,11 @@ export class RagService {
         const { anchor, versionId, chunkIds } = context;
         try {
           const rows = await this.gateway.contextChunksOfVersion({
+            abortSignal: options.abortSignal,
             versionId,
             chunkIds,
           });
+          options.abortSignal?.throwIfAborted();
           const sources = new Map(
             result.sources.map((source) => [source.chunkId, source]),
           );
@@ -1207,7 +1223,8 @@ export class RagService {
             }
           }
           result = { ...result, sources: [...sources.values()] };
-        } catch {
+        } catch (error) {
+          if (options.abortSignal?.aborted) throw error;
           // Validation decides whether the required documentary context is complete.
         }
       }
@@ -1245,9 +1262,11 @@ export class RagService {
               ),
             ].slice(0, 1);
             const rows = await this.gateway.initialChunksOfVersions({
+              abortSignal: options.abortSignal,
               limitPerVersion: 4,
               versionIds: versions,
             });
+            options.abortSignal?.throwIfAborted();
             const additions = rows.flatMap((row) => {
               const anchor = anchors.find(
                 (source) => source.documentVersionId === row.documentVersionId,
@@ -1297,7 +1316,8 @@ export class RagService {
                 ordered.set(source.chunkId, source);
             }
             result = { ...result, sources: [...ordered.values()] };
-          } catch {
+          } catch (error) {
+            if (options.abortSignal?.aborted) throw error;
             // Incomplete evidence remains incomplete; never invent a join.
           }
         }
@@ -1313,7 +1333,9 @@ export class RagService {
       question,
       result.sources,
       result.resolvedModule?.id ?? selectedModuleId,
+      options.abortSignal,
     );
+    options.abortSignal?.throwIfAborted();
     return sources === result.sources ? result : { ...result, sources };
   }
 
@@ -1327,6 +1349,7 @@ export class RagService {
     question: string,
     delivered: RetrievedChunk[],
     moduleId: string | null,
+    abortSignal?: AbortSignal,
   ): Promise<RetrievedChunk[]> {
     const room = Math.min(
       RAG_MAX_SCHEDULE_ADDITIONS,
@@ -1336,12 +1359,23 @@ export class RagService {
     const terms = scheduleTopicTerms(question);
     try {
       const additions =
-        (await this.scheduleFromDeliveredDocuments(delivered, terms)) ??
-        (await this.scheduleFromModule(question, delivered, terms, moduleId));
+        (await this.scheduleFromDeliveredDocuments(
+          delivered,
+          terms,
+          abortSignal,
+        )) ??
+        (await this.scheduleFromModule(
+          question,
+          delivered,
+          terms,
+          moduleId,
+          abortSignal,
+        ));
       return additions.length
         ? withScheduleEvidence(delivered, additions.slice(0, room))
         : delivered;
     } catch (error: unknown) {
+      if (abortSignal?.aborted) throw error;
       this.logger.warn(
         `No se pudo completar el cronograma de una consulta por fechas: ${
           error instanceof Error ? error.message : 'error desconocido'
@@ -1359,6 +1393,7 @@ export class RagService {
    */
   private async identityAnchorsFor(
     sources: RetrievedChunk[],
+    abortSignal?: AbortSignal,
   ): Promise<RetrievedChunk[]> {
     if (!this.gateway.initialChunksOfVersions) return [];
     const anchors = new Map<string, RetrievedChunk>();
@@ -1373,14 +1408,17 @@ export class RagService {
     if (!anchors.size) return [];
     try {
       const rows = await this.gateway.initialChunksOfVersions({
+        abortSignal,
         limitPerVersion: 4,
         versionIds: [...anchors.keys()],
       });
+      abortSignal?.throwIfAborted();
       return rows.flatMap((row) => {
         const anchor = anchors.get(row.documentVersionId);
         return anchor ? [chunkFromDeliveredVersion(anchor, row)] : [];
       });
     } catch (error: unknown) {
+      if (abortSignal?.aborted) throw error;
       this.logger.warn(
         `No se pudo verificar la identidad documental recuperada: ${
           error instanceof Error ? error.message : 'error desconocido'
@@ -1400,6 +1438,7 @@ export class RagService {
   private async ruralRemunerationContextFor(
     sources: RetrievedChunk[],
     question: string,
+    abortSignal?: AbortSignal,
   ): Promise<RetrievedChunk[]> {
     if (
       !this.gateway.initialChunksOfVersions ||
@@ -1421,14 +1460,17 @@ export class RagService {
     if (!anchors.size) return [];
     try {
       const rows = await this.gateway.initialChunksOfVersions({
+        abortSignal,
         limitPerVersion: 4,
         versionIds: [...anchors.keys()],
       });
+      abortSignal?.throwIfAborted();
       return rows.flatMap((row) => {
         const anchor = anchors.get(row.documentVersionId);
         return anchor ? [chunkFromDeliveredVersion(anchor, row)] : [];
       });
     } catch (error: unknown) {
+      if (abortSignal?.aborted) throw error;
       this.logger.warn(
         `No se pudo completar el contexto rural recuperado: ${
           error instanceof Error ? error.message : 'error desconocido'
@@ -1441,6 +1483,7 @@ export class RagService {
   /** Fragmentos con fechas de los documentos dados, ya saneados. */
   private async datedCandidates(
     sources: RetrievedChunk[],
+    abortSignal?: AbortSignal,
   ): Promise<DatedCandidate[]> {
     if (!this.gateway.datedChunksOfVersions) return [];
     const anchors = new Map<string, RetrievedChunk>();
@@ -1451,9 +1494,11 @@ export class RagService {
     }
     const versionOrder = [...anchors.keys()];
     const rows = await this.gateway.datedChunksOfVersions({
+      abortSignal,
       limitPerVersion: RAG_SCHEDULE_CHUNKS_PER_VERSION,
       versionIds: versionOrder,
     });
+    abortSignal?.throwIfAborted();
     return rows.flatMap((row) => {
       const anchor = anchors.get(row.documentVersionId);
       const chunk = anchor
@@ -1483,9 +1528,10 @@ export class RagService {
   private async scheduleFromDeliveredDocuments(
     delivered: RetrievedChunk[],
     terms: string[],
+    abortSignal?: AbortSignal,
   ): Promise<RetrievedChunk[] | null> {
     const deliveredChunks = new Set(delivered.map((source) => source.chunkId));
-    const candidates = await this.datedCandidates(delivered);
+    const candidates = await this.datedCandidates(delivered, abortSignal);
     const deliveredTables = candidates.filter(
       (candidate) =>
         candidate.table && deliveredChunks.has(candidate.chunk.chunkId),
@@ -1533,6 +1579,7 @@ export class RagService {
     delivered: RetrievedChunk[],
     terms: string[],
     moduleId: string | null,
+    abortSignal?: AbortSignal,
   ): Promise<RetrievedChunk[]> {
     if (!moduleId || !terms.length) return [];
     const retrievalScope = detectRetrievalScope(question);
@@ -1541,15 +1588,14 @@ export class RagService {
         new Date().getUTCFullYear(),
     );
     const query = scheduleQuery(terms, year);
-    const [embedding] = await this.embeddings.embed(
-      [query],
-      INTERACTIVE_AI_LIMITS,
-    );
+    const [embedding] = await this.embed([query], abortSignal);
+    abortSignal?.throwIfAborted();
     if (embedding?.length !== 1536) return [];
     const deliveredChunks = new Set(delivered.map((source) => source.chunkId));
     const found = sourcesEligibleForQuestion(
       (
         (await this.gateway.search({
+          abortSignal,
           embedding,
           matchCount: 10,
           matchThreshold: RAG_SCHEDULE_SEMANTIC_FLOOR,
@@ -1569,7 +1615,8 @@ export class RagService {
         isScheduleEvidence(source.chunkContent, terms, 'all'),
     );
     if (!found) return [];
-    const candidates = await this.datedCandidates([found]);
+    abortSignal?.throwIfAborted();
+    const candidates = await this.datedCandidates([found], abortSignal);
     const seed = candidates.find(
       (candidate) => candidate.chunk.chunkId === found.chunkId,
     );
@@ -1584,6 +1631,7 @@ export class RagService {
     priorUserQuestions: string[],
     options: RetrieveOptions,
   ): Promise<RetrievalResult> {
+    options.abortSignal?.throwIfAborted();
     const directReferences = options.legalCrossModule
       ? []
       : exactDocumentReferencesIn(question);
@@ -1678,10 +1726,8 @@ export class RagService {
       selectedQuery !== globalQuery
         ? [globalQuery, selectedQuery]
         : [globalQuery];
-    const embeddings = await this.embeddings.embed(
-      queries,
-      INTERACTIVE_AI_LIMITS,
-    );
+    const embeddings = await this.embed(queries, options.abortSignal);
+    options.abortSignal?.throwIfAborted();
     const globalEmbedding = embeddings[0];
     const selectedEmbedding = embeddings.at(-1);
 
@@ -1719,6 +1765,7 @@ export class RagService {
       }
       const exactCandidates = (
         await this.gateway.searchExactReferences({
+          abortSignal: options.abortSignal,
           embedding: globalEmbedding,
           matchCount: searchBase.matchCount,
           query: globalQuery,
@@ -1741,6 +1788,7 @@ export class RagService {
             sourceMatchesExactDocumentReference(source, reference),
           ),
       );
+      options.abortSignal?.throwIfAborted();
       if (missingExactReferences.length) {
         return {
           kind: 'no_evidence',
@@ -1756,6 +1804,7 @@ export class RagService {
         : [];
     } else {
       const globalSearch = this.gateway.search({
+        abortSignal: options.abortSignal,
         ...searchBase,
         embedding: globalEmbedding,
         query: globalQuery,
@@ -1763,6 +1812,7 @@ export class RagService {
       });
       const selectedSearch = selectedModuleId
         ? this.gateway.search({
+            abortSignal: options.abortSignal,
             ...searchBase,
             embedding: selectedEmbedding,
             query: selectedQuery,
@@ -1773,6 +1823,7 @@ export class RagService {
         globalSearch,
         selectedSearch,
       ]);
+      options.abortSignal?.throwIfAborted();
 
       // Las consultas cotidianas pueden omitir la terminología jurídica que
       // usan los documentos. Las expansiones solo se habilitan por señales
@@ -1796,10 +1847,11 @@ export class RagService {
             ),
           ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
-        const canonicalEmbeddings = await this.embeddings.embed(
+        const canonicalEmbeddings = await this.embed(
           canonicalQueries,
-          INTERACTIVE_AI_LIMITS,
+          options.abortSignal,
         );
+        options.abortSignal?.throwIfAborted();
         const canonicalResults = await Promise.all(
           canonicalQueries.map((canonicalQuery, index) => {
             const embedding = canonicalEmbeddings[index];
@@ -1816,6 +1868,7 @@ export class RagService {
             // directa la pregunta seleccionada.
             return Promise.all([
               this.gateway.search({
+                abortSignal: options.abortSignal,
                 ...searchBase,
                 embedding,
                 query: canonicalQuery,
@@ -1823,6 +1876,7 @@ export class RagService {
               }),
               selectedModuleId
                 ? this.gateway.search({
+                    abortSignal: options.abortSignal,
                     ...searchBase,
                     embedding,
                     query: canonicalQuery,
@@ -1835,6 +1889,7 @@ export class RagService {
         const canonicalGlobalSources = canonicalResults.flatMap(
           (result) => result.global,
         );
+        options.abortSignal?.throwIfAborted();
         const canonicalSelectedSources = canonicalResults.flatMap(
           (result) => result.selected,
         );
@@ -1843,12 +1898,16 @@ export class RagService {
           : canonicalGlobalSources;
         const identityAnchors = medical
           ? []
-          : await this.identityAnchorsFor(canonicalSources);
+          : await this.identityAnchorsFor(
+              canonicalSources,
+              options.abortSignal,
+            );
         const ruralContext = medical
           ? []
           : await this.ruralRemunerationContextFor(
               canonicalSources,
               salaryQuestion,
+              options.abortSignal,
             );
         if (selectedModuleId) {
           rawSelectedSources = [
@@ -1894,7 +1953,11 @@ export class RagService {
                   source.documentSituation === 'current',
               )!;
               try {
-                const rows = await fetch(request);
+                const rows = await fetch({
+                  ...request,
+                  abortSignal: options.abortSignal,
+                });
+                options.abortSignal?.throwIfAborted();
                 return rows
                   .filter(
                     (row) =>
@@ -1902,13 +1965,15 @@ export class RagService {
                       request.chunkIds.includes(row.chunkId),
                   )
                   .map((row) => chunkFromDeliveredVersion(anchor, row));
-              } catch {
+              } catch (error) {
+                if (options.abortSignal?.aborted) throw error;
                 return [];
               }
             },
           ),
         )
       ).flat();
+      options.abortSignal?.throwIfAborted();
       const sources = validatedMedicalLeaveEvidence(medical, context).flatMap(
         (item) => item.context,
       );
@@ -2012,13 +2077,15 @@ export class RagService {
     ) {
       const salaryQuery =
         'remuneración íntegra mensual RIM docente escala magisterial nivel inicial primaria secundaria EBR EBE EBA ETP';
-      const [salaryEmbedding] = await this.embeddings.embed(
+      const [salaryEmbedding] = await this.embed(
         [salaryQuery],
-        INTERACTIVE_AI_LIMITS,
+        options.abortSignal,
       );
+      options.abortSignal?.throwIfAborted();
       if (salaryEmbedding?.length === 1536) {
         const salarySources = (
           (await this.gateway.search({
+            abortSignal: options.abortSignal,
             ...searchBase,
             embedding: salaryEmbedding,
             query: salaryQuery,
@@ -2027,6 +2094,7 @@ export class RagService {
         ).filter(
           (candidate) => candidate.semanticScore >= searchBase.matchThreshold,
         );
+        options.abortSignal?.throwIfAborted();
         globalRoutingSources = routingSources([
           ...rawGlobalSources,
           ...salarySources,
@@ -2056,10 +2124,11 @@ export class RagService {
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);
       if (canonicalRescueQueries.length) {
-        const rescueEmbeddings = await this.embeddings.embed(
+        const rescueEmbeddings = await this.embed(
           canonicalRescueQueries,
-          INTERACTIVE_AI_LIMITS,
+          options.abortSignal,
         );
+        options.abortSignal?.throwIfAborted();
         const rescueSources = await Promise.all(
           canonicalRescueQueries.map((query, index) => {
             const embedding = rescueEmbeddings[index];
@@ -2067,6 +2136,7 @@ export class RagService {
               return Promise.resolve<RetrievedChunk[]>([]);
             }
             return this.gateway.search({
+              abortSignal: options.abortSignal,
               ...searchBase,
               embedding,
               matchThreshold: 0,
@@ -2075,6 +2145,7 @@ export class RagService {
             });
           }),
         );
+        options.abortSignal?.throwIfAborted();
         globalRoutingSources = routingSources(
           rescueSources
             .flat()
@@ -2097,6 +2168,7 @@ export class RagService {
       ) =>
         this.gateway
           .search({
+            abortSignal: options.abortSignal,
             ...searchBase,
             embedding,
             matchThreshold: 0,
