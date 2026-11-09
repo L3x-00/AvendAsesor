@@ -3029,6 +3029,30 @@ describe('ChatService', () => {
     });
   });
 
+  it('A09 forwards the request-specific cancellation signal into RAG retrieval', async () => {
+    const controller = new AbortController();
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'Respuesta fundada. [1]';
+      },
+    });
+
+    await collect(service, { abortSignal: controller.signal });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      expect.any(String),
+      null,
+      expect.any(Array),
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+  });
+
   it('does not persist a partial assistant reply after a disconnect', async () => {
     const controller = new AbortController();
     ragService.retrieve.mockResolvedValue({

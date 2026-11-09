@@ -503,6 +503,54 @@ describe('ChatService + RagService integration', () => {
     );
   });
 
+  it('A09 stops the real ChatService and RagService chain while embeddings are in flight', async () => {
+    const cancellation = new AbortController();
+    let embeddingStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      embeddingStarted = resolve;
+    });
+    const slowEmbeddings: EmbeddingsGateway = {
+      embed: (_queries, _limits, signal) =>
+        new Promise<number[][]>((_resolve, reject) => {
+          embeddingStarted();
+          signal?.addEventListener(
+            'abort',
+            () => reject(new Error('A09 aborted')),
+            {
+              once: true,
+            },
+          );
+        }),
+    };
+    rag = new RagService(slowEmbeddings, retrieval, {
+      get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
+    } as never);
+    service = new ChatService(
+      answers,
+      history,
+      rag,
+      { get: jest.fn().mockReturnValue(20) } as never,
+      { prepare: jest.fn().mockReturnValue(null) } as never,
+    );
+
+    const iterator = service
+      .stream({
+        abortSignal: cancellation.signal,
+        authorization,
+        conversationId: null,
+        question: '¿Cómo solicito una licencia por salud?',
+        selectedModuleId: null,
+      })
+      [Symbol.asyncIterator]();
+    const next = iterator.next();
+    await started;
+    cancellation.abort();
+
+    await expect(next).resolves.toMatchObject({ done: true });
+    expect(history.completions).toEqual([]);
+    expect(answers.inputs).toEqual([]);
+  });
+
   const P3 =
     'me dieron descanso medico por una semana, como presento mi licencia al colegio';
   const P15 =

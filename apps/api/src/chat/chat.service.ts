@@ -1718,6 +1718,7 @@ export class ChatService {
       selectedModuleId,
       retrievalContext,
       {
+        abortSignal: input.abortSignal,
         forceContext,
         ...(medicalApplicability ? { medicalApplicability } : {}),
         ...(legalModule

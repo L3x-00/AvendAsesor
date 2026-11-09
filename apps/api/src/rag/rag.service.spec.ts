@@ -6,7 +6,7 @@ import {
   RagService,
   resolveDetectedSubmodule,
 } from './rag.service';
-import type { RetrievalGateway } from './retrieval.gateway';
+import type { RetrievedChunk, RetrievalGateway } from './retrieval.gateway';
 import medicalFixture from './fixtures/medical-leave.json';
 
 describe('inheritedFactorQuestions', () => {
@@ -318,6 +318,91 @@ describe('RagService', () => {
     service = new RagService(embeddings, gateway, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
     } as never);
+  });
+
+  it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
+    const cancellation = new AbortController();
+    embeddings.embed.mockImplementation(
+      (_queries: string[], _limits: unknown, signal?: AbortSignal) =>
+        new Promise<number[][]>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new Error('A09 aborted')),
+            {
+              once: true,
+            },
+          );
+        }),
+    );
+
+    const retrieval = service.retrieve(
+      '¿Cómo solicito una licencia?',
+      null,
+      [],
+      {
+        abortSignal: cancellation.signal,
+      },
+    );
+    await Promise.resolve();
+    expect(embeddings.embed).toHaveBeenCalledWith(
+      ['¿Cómo solicito una licencia?'],
+      expect.anything(),
+      cancellation.signal,
+    );
+
+    cancellation.abort();
+    await expect(retrieval).rejects.toThrow('A09 aborted');
+    expect(gateway.search).not.toHaveBeenCalled();
+  });
+
+  it('A09 aborts document retrieval and does not start canonical recovery', async () => {
+    const cancellation = new AbortController();
+    gateway.search.mockImplementation(
+      ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise<RetrievedChunk[]>((_resolve, reject) => {
+          abortSignal?.addEventListener(
+            'abort',
+            () => reject(new Error('A09 aborted')),
+            {
+              once: true,
+            },
+          );
+        }),
+    );
+
+    const retrieval = service.retrieve(
+      '¿Cómo solicito una licencia?',
+      null,
+      [],
+      {
+        abortSignal: cancellation.signal,
+      },
+    );
+    await Promise.resolve();
+    expect(gateway.search).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: cancellation.signal }),
+    );
+
+    cancellation.abort();
+    await expect(retrieval).rejects.toThrow('A09 aborted');
+    expect(embeddings.embed).toHaveBeenCalledTimes(1);
+  });
+
+  it('A09 stops between retrieval stages before launching a canonical embedding', async () => {
+    const cancellation = new AbortController();
+    gateway.search.mockImplementation(() => {
+      cancellation.abort();
+      return Promise.resolve([]);
+    });
+
+    await expect(
+      service.retrieve('¿Cómo solicito una licencia?', null, [], {
+        abortSignal: cancellation.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(embeddings.embed).toHaveBeenCalledTimes(1);
+    expect(gateway.search).toHaveBeenCalledTimes(1);
   });
 
   it('keeps P15 auxiliary sources when mixed teacher sources rank higher', async () => {

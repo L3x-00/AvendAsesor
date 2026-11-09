@@ -169,6 +169,38 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
     );
   });
 
+  it('A09 attaches only the request abort signal to the protected RPC', async () => {
+    const cancellation = new AbortController();
+    const request = Object.assign(
+      Promise.resolve({ data: [row], error: null }),
+      { abortSignal: jest.fn() },
+    );
+    request.abortSignal.mockReturnValue(request);
+    const rpc = jest.fn().mockReturnValue(request);
+    const gateway = new SupabaseRetrievalGatewayAdapter({
+      rpc,
+    } as unknown as SupabaseServerClient);
+
+    await gateway.search({ ...input, abortSignal: cancellation.signal });
+
+    expect(request.abortSignal).toHaveBeenCalledWith(cancellation.signal);
+    expect(request.abortSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('A09 does not start a protected RPC for an already cancelled request', async () => {
+    const cancellation = new AbortController();
+    cancellation.abort();
+    const rpc = jest.fn();
+    const gateway = new SupabaseRetrievalGatewayAdapter({
+      rpc,
+    } as unknown as SupabaseServerClient);
+
+    await expect(
+      gateway.search({ ...input, abortSignal: cancellation.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('uses the exact-reference RPC without a semantic substitute', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: [row], error: null });
     const gateway = new SupabaseRetrievalGatewayAdapter({
