@@ -1,3 +1,32 @@
+/* Directorio + panel lateral de accesos. */
+
+.layout {
+  align-items: start;
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 80rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+.directory {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 1rem;
+  container-type: inline-size;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+.sidePanel {
+  min-width: 0;
+}
+
 .manager {
   display: flex;
   flex-direction: column;
@@ -7,65 +36,70 @@
 .notice {
   margin: 0;
   padding: 0.85rem 1rem;
-  border: 1px solid var(--avend-border);
-  border-left: 4px solid var(--avend-accent);
-  border-radius: 0.5rem;
-  background: var(--avend-surface-muted);
+  border: 1px solid color-mix(in srgb, var(--avend-accent) 22%, var(--avend-border));
+  border-radius: 0.75rem;
+  background: var(--avend-soft-blue);
   font-size: 1rem;
   color: var(--avend-text);
 }
 
 .tabs {
+  border-bottom: 1px solid var(--avend-border);
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 1.25rem;
 }
 
 .tab {
-  display: inline-flex;
-  min-height: 2.75rem;
   align-items: center;
-  justify-content: center;
-  padding: 0 1rem;
-  border: 1px solid var(--avend-border);
-  border-radius: 999px;
-  background: var(--avend-surface);
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--avend-text-muted);
+  display: inline-flex;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--avend-text);
-  cursor: pointer;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.125rem;
   text-decoration: none;
 }
 
 .tab:hover {
-  background: var(--avend-surface-muted);
+  color: var(--avend-accent-strong);
 }
 
 .tab:focus-visible {
+  border-radius: 0.25rem;
   outline: 3px solid var(--avend-focus);
   outline-offset: 2px;
 }
 
-.tabActive {
-  border-color: var(--avend-navy);
-  background: var(--avend-navy);
-  color: var(--avend-surface);
-}
+.tabActive,
 .tabActive:hover {
-  background: var(--avend-navy);
-  color: var(--avend-surface);
+  background: none;
+  border-bottom-color: var(--avend-accent);
+  color: var(--avend-accent-strong);
 }
+
+.tabIcon {
+  fill: none;
+  flex: none;
+  height: 1.25rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.25rem;
+}
+
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
+  display: grid;
+  gap: 0.75rem;
 }
 
 .searchForm {
-  display: flex;
-  flex: 1 1 28rem;
-  flex-direction: column;
+  display: grid;
   gap: 0.35rem;
 }
 
@@ -81,13 +115,33 @@
   gap: 0.5rem;
 }
 
-.search {
+.searchField {
   flex: 1 1 16rem;
-  min-width: min(18rem, 100%);
-  min-height: 2.75rem;
-  padding: 0 0.75rem;
+  min-width: 0;
+  position: relative;
+}
+
+.searchIcon {
+  fill: none;
+  height: 1.15rem;
+  left: 0.9rem;
+  pointer-events: none;
+  position: absolute;
+  stroke: var(--avend-text-muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.15rem;
+}
+
+.search {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: 0 0.75rem 0 2.6rem;
   border: 1px solid var(--avend-border);
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   background: var(--avend-surface);
   font-size: 1rem;
   color: var(--avend-text);
@@ -101,11 +155,11 @@
 .searchButton,
 .clearSearch {
   display: inline-flex;
-  min-height: 2.75rem;
+  min-height: 2.875rem;
   align-items: center;
   justify-content: center;
-  padding: 0 1rem;
-  border-radius: 0.5rem;
+  padding: 0 1.25rem;
+  border-radius: 0.625rem;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -150,9 +204,9 @@
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  padding: 0 0.9rem;
+  padding: 0 1rem;
   border: 1px solid var(--avend-border);
-  border-radius: 0.5rem;
+  border-radius: 999px;
   background: var(--avend-surface);
   font-size: 1rem;
   font-weight: 600;
@@ -162,7 +216,8 @@
 }
 
 .statusButton:hover {
-  background: var(--avend-surface-muted);
+  border-color: var(--avend-accent);
+  color: var(--avend-accent-strong);
 }
 
 .statusButton:focus-visible {
@@ -171,9 +226,14 @@
 }
 
 .statusButtonActive {
-  border-color: var(--avend-accent);
-  background: var(--avend-soft-blue);
-  color: var(--avend-accent-strong);
+  border-color: var(--avend-accent-strong);
+  background: var(--avend-accent-strong);
+  color: var(--avend-surface);
+}
+
+.statusButtonActive:hover {
+  border-color: var(--avend-navy);
+  color: var(--avend-surface);
 }
 
 .resultSummary {
@@ -196,9 +256,8 @@
 .tableShell {
   overflow-x: auto;
   border: 1px solid var(--avend-border);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
   background: var(--avend-surface);
-  box-shadow: 0 12px 32px rgb(13 27 61 / 7%);
 }
 
 .userTable {
@@ -226,11 +285,11 @@
 }
 
 .userTable th:first-child {
-  border-top-left-radius: calc(1rem - 1px);
+  border-top-left-radius: calc(0.75rem - 1px);
 }
 
 .userTable th:last-child {
-  border-top-right-radius: calc(1rem - 1px);
+  border-top-right-radius: calc(0.75rem - 1px);
 }
 
 .userTable td {
@@ -266,7 +325,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--avend-accent) 35%, white);
-  border-radius: 0.8rem;
+  border-radius: 999px;
   background: var(--avend-soft-blue);
   color: var(--avend-accent-strong);
   font-size: 0.9rem;
@@ -366,7 +425,7 @@
 
 .dateLine {
   display: grid;
-  grid-template-columns: 3rem minmax(7.5rem, 1fr);
+  grid-template-columns: 3rem minmax(0, 1fr);
   gap: 0.4rem;
   color: var(--avend-text-muted);
   font-size: 1rem;
@@ -554,22 +613,24 @@
 
 @media (max-width: 52rem) {
   .searchControls,
-  .search,
+  .searchField,
   .searchButton,
   .clearSearch {
     width: 100%;
   }
+}
 
+/* La tabla se vuelve ficha por usuario cuando su columna no da para 6
+   columnas (móvil y también la tarjeta del directorio junto al panel). */
+@container (max-width: 72rem) {
   .tableShell {
     overflow-x: visible;
     border: 0;
     background: transparent;
-    box-shadow: none;
   }
 
   .userTable,
   .userTable tbody,
-  .userTable tr,
   .userTable td {
     display: block;
     width: 100%;
@@ -588,47 +649,81 @@
 
   .tableRow {
     display: grid;
-    gap: 0;
+    gap: 0.5rem 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 0.85rem;
-    padding: 0.25rem 0.85rem 0.75rem;
+    padding: 0.9rem 1rem;
     border: 1px solid var(--avend-border);
     border-radius: 0.9rem;
     background: var(--avend-surface);
-    box-shadow: 0 8px 24px rgb(13 27 61 / 6%);
+  }
+
+  .tableRow:last-child {
+    margin-bottom: 0;
   }
 
   .userTable td {
-    display: grid;
-    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
-    gap: 0.75rem;
-    padding: 0.7rem 0;
-    border-bottom: 1px solid var(--avend-border);
+    border: 0;
+    display: block;
+    padding: 0;
   }
 
   .userTable td::before {
-    color: var(--avend-text);
-    content: attr(data-label);
-    font-size: 1rem;
-    font-weight: 700;
-  }
-
-  .userTable td:first-child {
-    display: block;
-  }
-
-  .userTable td:first-child::before {
     display: none;
   }
 
-  .userTable td:last-child {
-    border-bottom: 0;
+  .userTable td:nth-child(1) {
+    grid-area: 1 / 1 / 2 / 3;
   }
 
-  .userIdentity {
+  .userTable td:nth-child(2) {
+    grid-area: 2 / 1;
+  }
+
+  .userTable td:nth-child(3) {
+    grid-area: 2 / 2;
+  }
+
+  .userTable td:nth-child(4) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    grid-area: 3 / 1 / 4 / 3;
+  }
+
+  .userTable td:nth-child(5) {
+    grid-area: 4 / 1;
+    padding-top: 0.25rem;
+  }
+
+  .userTable td:nth-child(5)::before {
+    color: var(--avend-text-muted);
+    content: "Último acceso: " / "";
+    display: inline;
+    font-weight: 600;
+  }
+
+  .userTable td:nth-child(6) {
+    align-self: end;
+    grid-area: 4 / 2;
+    justify-self: end;
+  }
+
+  .dateLine {
+    display: inline-flex;
+    gap: 0.35rem;
+  }
+
+  .userTable td:nth-child(4) .dateLine + .dateLine {
+    margin-top: 0;
+  }
+
+  .lastAccess {
+    display: inline;
     min-width: 0;
   }
 
-  .rowActions {
+  .userIdentity {
     min-width: 0;
   }
 }
