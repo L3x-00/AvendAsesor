@@ -82,7 +82,7 @@ describe("ModulePermissionsManager", () => {
     expect(screen.queryByText("Super Dos")).toBeNull();
   });
 
-  it("separa el acceso al área en un control visible, sin triángulos que desplieguen", () => {
+  it("separa el acceso al área en un control visible", () => {
     const { container } = render(
       <ModulePermissionsManager modules={modules} permissions={permissions} />,
     );
@@ -96,23 +96,76 @@ describe("ModulePermissionsManager", () => {
     expect(withAccess).toHaveAttribute("value", "true");
     expect(withoutAccess).toHaveAttribute("value", "false");
     expect(screen.getByText("Habilitado")).toBeVisible();
-    // Nada queda plegado: ni <details> ni <summary>.
+    // El control de acceso no se repliega: solo los módulos se despliegan.
     expect(container.querySelector("details")).toBeNull();
     expect(container.querySelector("summary")).toBeNull();
   });
 
-  it("marca y desmarca todos los módulos de una vez", () => {
+  it("pliega los submódulos por defecto y los despliega al pulsar el módulo", () => {
+    const { container } = render(
+      <ModulePermissionsManager modules={modules} permissions={permissions} />,
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: "Submódulos de Remuneraciones",
+    });
+    const panel = container.querySelector<HTMLElement>(
+      `#${toggle.getAttribute("aria-controls") ?? ""}`,
+    );
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute("data-open", "false");
+    expect(panel).toHaveAttribute("inert");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).toHaveAttribute("data-open", "true");
+    expect(panel).not.toHaveAttribute("inert");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panel).toHaveAttribute("data-open", "false");
+  });
+
+  it("las casillas plegadas siguen dentro del formulario y se envían", () => {
+    const { container } = render(
+      <ModulePermissionsManager modules={modules} permissions={permissions} />,
+    );
+
+    const form = [...container.querySelectorAll("form")].find((candidate) =>
+      candidate.querySelector('input[name="moduleId"]'),
+    );
+    expect(form).not.toBeNull();
+    if (!form) return;
+
+    // Aunque el panel esté cerrado, los módulos y submódulos concedidos viajan
+    // con el formulario: se ocultan con `inert`, nunca con `hidden` ni
+    // `disabled`.
+    const submitted = [
+      ...form.querySelectorAll<HTMLInputElement>('input[name="moduleId"]'),
+    ].map((input) => input.value);
+    expect(submitted).toEqual([
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+    ]);
+    expect(
+      screen.getByRole("checkbox", { name: "Remuneraciones" }),
+    ).not.toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /Escala/ })).not.toBeDisabled();
+  });
+
+  it("ya no ofrece marcar o desmarcar todos los módulos", () => {
     render(
       <ModulePermissionsManager modules={modules} permissions={permissions} />,
     );
 
-    const checkboxes = () =>
-      screen.getAllByRole("checkbox") as HTMLInputElement[];
-
-    fireEvent.click(screen.getByRole("button", { name: "Marcar todos" }));
-    expect(checkboxes().every((checkbox) => checkbox.checked)).toBe(true);
-
-    fireEvent.click(screen.getByRole("button", { name: "Desmarcar todos" }));
-    expect(checkboxes().every((checkbox) => !checkbox.checked)).toBe(true);
+    expect(screen.queryByRole("button", { name: "Marcar todos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Desmarcar todos" })).toBeNull();
+    // Un módulo sin submódulos no ofrece desglose, solo su casilla.
+    expect(screen.queryByRole("button", { name: "Licencias" })).toBeNull();
   });
 });

@@ -1,7 +1,8 @@
 /*
  * Acceso a Módulos e Historial de documentos. Cada administrador se separa en
- * dos bloques visibles (acceso al área y módulos permitidos); nada queda
- * plegado tras un triángulo y todo lo que se puede tocar está a la vista.
+ * dos bloques visibles (acceso al área y módulos permitidos). Los módulos se
+ * pliegan por defecto y despliegan sus submódulos al pulsarlos, para no
+ * alargar la página con todo el árbol de permisos.
  */
 
 .section {
@@ -256,40 +257,10 @@
   outline-offset: 2px;
 }
 
-.quickToggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.6rem;
-}
-
-.quickToggle {
-  min-height: 2.5rem;
-  padding: 0 0.85rem;
-  border: 1px dashed var(--avend-control-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--avend-accent-strong);
-  font: inherit;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.quickToggle:hover {
-  border-style: solid;
-  border-color: var(--avend-accent-strong);
-  background: var(--avend-soft-blue);
-}
-
-.quickToggle:focus-visible {
-  outline: 3px solid var(--avend-focus);
-  outline-offset: 2px;
-}
-
 .moduleFieldset {
-  display: grid;
   align-content: start;
+  align-items: start;
+  display: grid;
   gap: 0.65rem;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   margin: 0;
@@ -309,22 +280,103 @@
   align-items: center;
   gap: 0.5rem;
   min-height: 2.75rem;
-  font-size: 1rem;
-  font-weight: 600;
+}
+
+/* La casilla conserva un objetivo táctil de 44px aunque sea un cuadro pequeño. */
+.moduleCheck {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  cursor: pointer;
 }
 
 .moduleRoot input,
 .moduleChild input {
   width: 1.1rem;
   height: 1.1rem;
+  flex: none;
   accent-color: var(--avend-accent-strong);
+}
+
+.moduleToggle {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: none;
+  color: var(--avend-text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.moduleToggle:hover {
+  color: var(--avend-accent-strong);
+}
+
+.moduleToggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.moduleName {
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.moduleRoot label.moduleName {
+  cursor: pointer;
+}
+
+.moduleChevron {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  transition: transform 200ms ease-out;
+}
+
+.moduleToggle[aria-expanded="true"] .moduleChevron {
+  transform: rotate(180deg);
+}
+
+/* Desglose suave: la fila de la rejilla pasa de 0fr a 1fr. */
+.modulePanel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms ease-out;
+}
+
+.modulePanel[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.modulePanelInner {
+  overflow: hidden;
 }
 
 .moduleChildren {
   display: grid;
   gap: 0.1rem;
   margin: 0 0 0.35rem 0.4rem;
-  padding-left: 0.65rem;
+  padding: 0.25rem 0 0 0.65rem;
   border-left: 2px solid var(--avend-border);
 }
 
@@ -357,7 +409,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .segmentText {
+  .segmentText,
+  .moduleChevron,
+  .modulePanel {
     transition: none;
   }
 }
