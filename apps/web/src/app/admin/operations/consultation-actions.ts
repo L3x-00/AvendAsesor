@@ -98,6 +98,11 @@ export async function updateConsultationCaseAction(
       );
     }
     const { client } = await createAuthorizedConsultationReportsApiContext();
+    if (status && !expectedStatus) {
+      throw new FormValidationError(
+        "Actualiza la página antes de cambiar el estado: falta el estado que viste del caso.",
+      );
+    }
     await client.updateCase(caseId, {
       ...(changeRouting
         ? {
@@ -106,7 +111,9 @@ export async function updateConsultationCaseAction(
             detectedSubmoduleId: detectedSubmoduleId ?? null,
           }
         : {}),
-      ...(expectedStatus ? { expectedStatus } : {}),
+      // Solo un cambio de estado necesita la condición: una nota o una
+      // corrección de ruta no deben perderse por una decisión ajena.
+      ...(status && expectedStatus ? { expectedStatus } : {}),
       ...(note ? { note } : {}),
       ...(status ? { status } : {}),
     });
@@ -242,7 +249,7 @@ export async function resolveUnansweredGroupAction(
       message: details.length
         ? `${result.updated} consultas ${verb}. ${details.join(". ")}.`
         : `${result.updated} consultas ${verb}. El historial de cada caso conserva la nota.`,
-      status: result.failed > 0 && result.updated === 0 ? "error" : "success",
+      status: result.updated === 0 ? "error" : "success",
     };
   } catch (error) {
     return actionFailure(error);

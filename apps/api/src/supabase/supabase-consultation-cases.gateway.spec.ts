@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -457,5 +458,32 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
     await expect(
       gateway.getDashboard({ period: 'today', reviewerId: actorId }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('maps a concurrent-decision conflict so the closure counts it as skipped', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        details: '',
+        hint: '',
+        message: 'The consultation case changed since it was read',
+      },
+    });
+    const { client } = clientWith(rpc);
+    const gateway = new SupabaseConsultationCasesGatewayAdapter(client);
+
+    await expect(
+      gateway.updateCase({
+        caseId,
+        changeRouting: false,
+        detectedModuleId: null,
+        detectedSubmoduleId: null,
+        expectedStatus: 'pending',
+        note: null,
+        reviewerId: actorId,
+        status: 'resolved',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
