@@ -505,11 +505,6 @@ export function UsersManager({
 
   return (
     <div className={styles.manager}>
-      <p className={styles.notice} role="note">
-        <strong>Vista de superadministrador.</strong> Puedes consultar todos los
-        usuarios y gestionar sus accesos y vigencias; cada cambio queda
-        auditado.
-      </p>
 
       <UserActions
         apiBaseUrl={apiBaseUrl}

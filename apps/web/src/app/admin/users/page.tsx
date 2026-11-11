@@ -49,7 +49,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
   return (
     <AdminPage
-      description="Gestiona usuarios, administradores y accesos. Cada cambio de rol o estado exige un motivo y queda auditado; la autoridad es del servidor."
+      description="Gestiona usuarios, administradores y accesos."
       title="Usuarios y accesos"
     >
       <UsersManager

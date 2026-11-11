@@ -1,5 +1,7 @@
 import { detectTopicIntent } from './topic-intent';
 import { reassignmentRole } from './reassignment-retrieval';
+import { hasTopicTerm } from './domain-lexicon';
+import { normalizeSpanishText } from './text-normalization';
 
 /**
  * El chat general identifica la intención principal de cada consulta sin que la
@@ -131,5 +133,27 @@ describe('detectTopicIntent', () => {
     expect(
       detectTopicIntent('mi colega asciende de la primera a la segunda escala'),
     ).toMatchObject({ id: 'career-progression' });
+  });
+
+  it('reconoce la expulsión del cargo como tema propio, no como seguimiento', () => {
+    // Antes del arreglo, «cuándo es expulsado un docente» no nombraba ningún
+    // tema del léxico y el turno heredaba la consulta salarial anterior.
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿Cuándo es expulsado un docente?')),
+    ).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿Y si despedir a un docente?')),
+    ).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿Qué pasa si me expulsan?')),
+    ).toBe(true);
+    expect(hasTopicTerm(normalizeSpanishText('me expulsaron ayer'))).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿procede el despido de un docente?')),
+    ).toBe(true);
+    expect(hasTopicTerm(normalizeSpanishText('la fiesta de despedida'))).toBe(
+      false,
+    );
+    expect(hasTopicTerm(normalizeSpanishText('¿Cómo se calcula?'))).toBe(false);
   });
 });

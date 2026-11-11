@@ -1282,6 +1282,209 @@ describe('ChatService', () => {
     );
   });
 
+  it('no arrastra la respuesta salarial cuando el turno siguiente pregunta por una expulsión', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'La remuneración mensual es S/ 2 200,20 para una jornada de 30 horas. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: '¿Cuándo es expulsado un docente?',
+    });
+
+    // La pregunta no es salarial: el RAG la busca por sí sola, sin la consulta
+    // anterior, y el turno no produce la tabla de remuneraciones.
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuándo es expulsado un docente?',
+      null,
+      [],
+      { forceContext: false },
+    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('tampoco hereda la cifra si el turno anterior fue una aclaración salarial', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'Para darte la cifra correcta necesito un solo dato: ¿tu vínculo es contratado o nombrado?',
+          role: 'clarification',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: '¿Cuándo es expulsado un docente?',
+    });
+
+    expect(ragService.retrieve).toHaveBeenCalledWith(
+      '¿Cuándo es expulsado un docente?',
+      null,
+      [],
+      expect.objectContaining({ forceContext: true }),
+    );
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
+  it('no hereda la consulta salarial cuando la pregunta nombra otro tema', () => {
+    const priors = ['¿Cuánto gana un docente?'];
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Cuándo es expulsado un docente?',
+        forceSalaryContext: false,
+        priorUserQuestions: priors,
+      }),
+    ).toEqual([]);
+    // Tampoco cuando el turno anterior fue una aclaración salarial: la pregunta
+    // nueva no es la respuesta que el asistente pidió.
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Cuándo es expulsado un docente?',
+        forceSalaryContext: true,
+        priorUserQuestions: priors,
+      }),
+    ).toEqual([]);
+    // Formas verbales y declarativas del mismo tema, no solo el participio.
+    for (const question of [
+      '¿Qué pasa si me expulsan?',
+      'me expulsaron ayer',
+      '¿procede el despido de un docente?',
+      'me cesaron ayer',
+      'lo destituyeron ayer',
+      'me sancionaron',
+      'me despidieron ayer',
+      'me despidió el director',
+      'me botaron del trabajo',
+    ]) {
+      expect(
+        salaryQuestionsForTurn({
+          acceptedQuestion: null,
+          effectiveQuestion: question,
+          forceSalaryContext: true,
+          priorUserQuestions: priors,
+        }),
+      ).toEqual([]);
+    }
+    // Los seguimientos elípticos sí conservan la cifra: preguntan por el mismo
+    // objeto, aunque nombren un rol o una institución.
+    for (const question of [
+      '¿Cómo se calcula?',
+      '¿Cuál es el monto máximo?',
+      '¿Desde cuándo rige?',
+      '¿Cómo se calcula para un director?',
+      '¿Desde cuándo rige para los docentes?',
+      '¿Quién tiene derecho en el colegio?',
+    ]) {
+      expect(
+        salaryQuestionsForTurn({
+          acceptedQuestion: null,
+          effectiveQuestion: question,
+          forceSalaryContext: true,
+          priorUserQuestions: priors,
+        }),
+      ).toEqual(priors);
+    }
+    // Retomar el monto ya dicho también conserva el hilo de la cifra.
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Desde cuándo rige ese monto?',
+        forceSalaryContext: false,
+        priorUserQuestions: priors,
+      }),
+    ).toEqual(priors);
+    // El encadenamiento explícito también.
+    expect(
+      salaryQuestionsForTurn({
+        acceptedQuestion: null,
+        effectiveQuestion: '¿Y para 40 horas?',
+        forceSalaryContext: false,
+        priorUserQuestions: priors,
+      }),
+    ).toEqual(priors);
+  });
+
+  it('no responde con la tabla salarial aunque la recuperación devuelva esa evidencia', async () => {
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      messages: [
+        { content: '¿Cuánto gana un docente?', role: 'user' },
+        {
+          content:
+            'La remuneración mensual es S/ 2 200,20 para una jornada de 30 horas. [1]',
+          role: 'assistant',
+        },
+      ],
+      selectedModuleId: null,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: {
+        id: source.moduleIds[0],
+        name: 'Situaciones administrativas',
+      },
+      sources: [
+        {
+          ...source,
+          chunkContent: [
+            '| Jornada | Remuneración |',
+            '| --- | --- |',
+            '| 30 horas | S/ 2 200,20 |',
+          ].join('\n'),
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La destitución procede por las causales previstas en la norma. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+      question: '¿Cuándo es expulsado un docente?',
+    });
+
+    // La vía determinista de remuneraciones no se activa: la respuesta se genera
+    // sobre la evidencia recuperada y no repite la tabla del turno anterior.
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    const answer = events
+      .filter(
+        (event): event is Extract<ChatStreamEvent, { type: 'token' }> =>
+          event.type === 'token',
+      )
+      .map((event) => event.data.text)
+      .join('');
+    expect(answer).not.toContain('2 200,20');
+    expect(events.map((event) => event.type)).not.toContain('clarification');
+  });
+
   it('no hereda factores salariales al aceptar una propuesta de otro tema', () => {
     // El mismo corte aplica si el pedido de documentos se escribe directamente.
     expect(

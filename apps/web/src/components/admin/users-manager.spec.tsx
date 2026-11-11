@@ -133,8 +133,8 @@ describe("UsersManager", () => {
     render(<UsersManager apiBaseUrl={API} counts={counts} page={page} query={query} today={TODAY} />);
 
     expect(
-      screen.getByText(/Vista de superadministrador/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/Vista de superadministrador/i),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "María Docente" }),
     ).toBeVisible();
