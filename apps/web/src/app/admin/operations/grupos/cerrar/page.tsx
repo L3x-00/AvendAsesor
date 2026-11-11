@@ -44,10 +44,12 @@ export default async function CloseUnansweredGroupPage({
   const period = parsedPeriod.data;
   const { client } = await createAuthorizedConsultationReportsApiContext();
   // Se vuelve a leer el grupo en el servidor: la URL no aporta IDs de casos.
-  const groups = await client.getUnansweredGroups(period);
-  const group = groups.find(
-    (item) => item.kind === kind && (item.moduleId ?? null) === moduleId,
-  );
+  // Un fallo aquí no debe romper la pantalla: se avisa y se puede reintentar.
+  const groups = await client.getUnansweredGroups(period).catch(() => null);
+  const group =
+    groups?.find(
+      (item) => item.kind === kind && (item.moduleId ?? null) === moduleId,
+    ) ?? null;
   const backHref = `/admin/operations?${new URLSearchParams({ period, vista: "consultar" })}`;
 
   return (
@@ -59,7 +61,12 @@ export default async function CloseUnansweredGroupPage({
         <Link className="avend-text-link" href={backHref}>
           ← Volver a Consultar
         </Link>
-        {!group || group.caseIds.length === 0 ? (
+        {groups === null ? (
+          <p role="alert">
+            No pudimos preparar el resumen de consultas abiertas. Vuelve a
+            intentarlo en unos segundos desde Consultar.
+          </p>
+        ) : !group || group.caseIds.length === 0 ? (
           <p role="status">Este grupo ya no tiene consultas pendientes.</p>
         ) : (
           <section className="space-y-4 rounded-lg border border-avend-border p-4">

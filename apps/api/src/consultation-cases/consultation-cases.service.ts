@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { ChatHistoryGateway } from '../chat/chat-history.gateway';
 import {
@@ -27,12 +28,13 @@ import type {
   ConsultationCaseSummary,
 } from './consultation-cases.gateway';
 import {
-  groupUnansweredCases,
+  createUnansweredGroupsAccumulator,
   type UnansweredGroup,
 } from './unanswered-groups';
 
-/** Casos abiertos que se agrupan por estado: el máximo que admite la RPC. */
-const MAX_GROUPED_CASES = 100;
+/** Máximo de filas por página que admite `list_consultation_cases`. */
+const OPEN_CASES_PAGE_SIZE = 100;
+const OPEN_CASE_STATUSES = ['pending', 'in_review'] as const;
 
 @Injectable()
 export class ConsultationCasesService {
@@ -56,31 +58,107 @@ export class ConsultationCasesService {
     reviewerId: string,
     period: ConsultationPeriod,
   ): Promise<UnansweredGroup[]> {
-    const [open, modules] = await Promise.all([
-      this.openUnansweredCases(reviewerId, period),
-      this.modulesGateway?.listActiveModules() ?? Promise.resolve([]),
-    ]);
-    return groupUnansweredCases(open, modules);
+    const modules = (await this.modulesGateway?.listActiveModules()) ?? [];
+    const groups = createUnansweredGroupsAccumulator(modules);
+    const seen = new Set<string>();
+
+    await this.forEachOpenUnansweredCase(reviewerId, period, (item) => {
+      // La RPC usa un orden estable; aun así, no se duplica un contador si un
+      // caso cambia de estado mientras se recorren las dos listas.
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
+      groups.add(item);
+    });
+
+    return groups.values();
   }
 
-  /** Consultas sin sustento aún abiertas (pendientes o en revisión). */
-  private async openUnansweredCases(
+  /**
+   * Recorre todas las páginas abiertas sin retener el listado completo. El
+   * `totalCount` de la RPC determina si queda una página; una página vacía es
+   * una salida segura frente a cambios concurrentes o respuestas incompletas.
+   */
+  private async forEachOpenUnansweredCase(
     reviewerId: string,
     period: ConsultationPeriod,
-  ): Promise<ConsultationCaseSummary[]> {
-    const query = {
-      issueType: 'support_insufficient' as const,
-      kind: 'automatic_alert' as const,
-      limit: MAX_GROUPED_CASES,
-      offset: 0,
-      period,
-      reviewerId,
-    };
-    const [pending, inReview] = await Promise.all([
-      this.gateway.listCases({ ...query, status: 'pending' }),
-      this.gateway.listCases({ ...query, status: 'in_review' }),
-    ]);
-    return [...pending, ...inReview];
+    visit: (item: ConsultationCaseSummary) => void | boolean,
+  ): Promise<void> {
+    for (const status of OPEN_CASE_STATUSES) {
+      const completed = await this.forEachOpenUnansweredCasePage(
+        reviewerId,
+        period,
+        status,
+        visit,
+      );
+      if (completed) return;
+    }
+  }
+
+  private async forEachOpenUnansweredCasePage(
+    reviewerId: string,
+    period: ConsultationPeriod,
+    status: (typeof OPEN_CASE_STATUSES)[number],
+    visit: (item: ConsultationCaseSummary) => void | boolean,
+  ): Promise<boolean> {
+    let offset = 0;
+    let totalCount: number | null = null;
+    const seenIds = new Set<string>();
+
+    while (totalCount === null || offset < totalCount) {
+      const page = await this.gateway.listCases({
+        issueType: 'support_insufficient',
+        kind: 'automatic_alert',
+        limit: OPEN_CASES_PAGE_SIZE,
+        offset,
+        period,
+        reviewerId,
+        status,
+      });
+      if (page.length === 0) {
+        if (totalCount !== null && offset < totalCount) {
+          throw new ServiceUnavailableException(
+            'No se pudo completar el listado de consultas abiertas.',
+          );
+        }
+        return false;
+      }
+
+      const pageTotalCount = page[0].totalCount;
+      if (
+        !Number.isSafeInteger(pageTotalCount) ||
+        pageTotalCount < offset + page.length ||
+        (totalCount !== null && pageTotalCount !== totalCount) ||
+        page.some((item) => item.totalCount !== pageTotalCount)
+      ) {
+        throw new ServiceUnavailableException(
+          'No se pudo validar el listado completo de consultas abiertas.',
+        );
+      }
+      totalCount = pageTotalCount;
+      for (const item of page) {
+        if (seenIds.has(item.id)) {
+          throw new ServiceUnavailableException(
+            'No se pudo validar el listado completo de consultas abiertas.',
+          );
+        }
+        seenIds.add(item.id);
+        if (visit(item) === false) return true;
+      }
+
+      offset += OPEN_CASES_PAGE_SIZE;
+      if (
+        (page.length < OPEN_CASES_PAGE_SIZE && offset !== pageTotalCount) ||
+        offset >= pageTotalCount
+      ) {
+        if (offset < pageTotalCount) {
+          throw new ServiceUnavailableException(
+            'No se pudo completar el listado de consultas abiertas.',
+          );
+        }
+        return false;
+      }
+    }
+    return false;
   }
 
   async createTeacherReport(input: {
@@ -216,10 +294,17 @@ export class ConsultationCasesService {
     // Se revalida en el servidor: solo se cierran consultas sin sustento que
     // sigan abiertas. Una que otra persona cerró o cambió mientras tanto se
     // omite (no se reabre ni se avisa al docente por error).
-    const open = new Set(
-      (await this.openUnansweredCases(input.reviewerId, input.period)).map(
-        (item) => item.id,
-      ),
+    const requested = new Set(input.caseIds);
+    const open = new Set<string>();
+    await this.forEachOpenUnansweredCase(
+      input.reviewerId,
+      input.period,
+      (item) => {
+        if (requested.has(item.id)) open.add(item.id);
+        // No se recorren páginas o estados adicionales cuando ya se validaron
+        // todos los identificadores accionables que envió el formulario.
+        return open.size < requested.size;
+      },
     );
     let updated = 0;
     let skipped = 0;

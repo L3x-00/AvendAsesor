@@ -42,14 +42,23 @@ function example(question: string): string {
     : `${clean.slice(0, MAX_EXAMPLE_CHARS - 1).trimEnd()}…`;
 }
 
-export function groupUnansweredCases(
-  cases: ConsultationCaseSummary[],
+export interface UnansweredGroupsAccumulator {
+  add(item: ConsultationCaseSummary): void;
+  values(): UnansweredGroup[];
+}
+
+/**
+ * Acumula grupos por página: conserva los totales, pero limita los datos que
+ * habilitan acciones o se muestran como muestra. Así la pantalla administrativa
+ * no necesita retener todas las consultas abiertas para contar correctamente.
+ */
+export function createUnansweredGroupsAccumulator(
   modules: TopicModule[],
-): UnansweredGroup[] {
+): UnansweredGroupsAccumulator {
   const byId = new Map(modules.map((module) => [module.id, module]));
   const groups = new Map<string, UnansweredGroup>();
 
-  for (const item of cases) {
+  function add(item: ConsultationCaseSummary): void {
     const question = item.questionSnapshot ?? '';
     let kind: UnansweredGroup['kind'] = 'unknown';
     let module: TopicModule | null = null;
@@ -106,11 +115,25 @@ export function groupUnansweredCases(
     groups.set(key, group);
   }
 
-  const order = { topic: 0, unknown: 1, catalog: 2 } as const;
-  return [...groups.values()].sort(
-    (left, right) =>
-      order[left.kind] - order[right.kind] ||
-      right.count - left.count ||
-      right.latestAt.localeCompare(left.latestAt),
-  );
+  return {
+    add,
+    values() {
+      const order = { topic: 0, unknown: 1, catalog: 2 } as const;
+      return [...groups.values()].sort(
+        (left, right) =>
+          order[left.kind] - order[right.kind] ||
+          right.count - left.count ||
+          right.latestAt.localeCompare(left.latestAt),
+      );
+    },
+  };
+}
+
+export function groupUnansweredCases(
+  cases: ConsultationCaseSummary[],
+  modules: TopicModule[],
+): UnansweredGroup[] {
+  const accumulator = createUnansweredGroupsAccumulator(modules);
+  for (const item of cases) accumulator.add(item);
+  return accumulator.values();
 }
