@@ -1392,12 +1392,16 @@ describe('ChatService + RagService integration', () => {
     >;
 
     expect(conversation.data).toMatchObject({
-      moduleId: LICENSES_MODULE_ID,
-      startedNewConversation: false,
+      moduleId: null,
+      startedNewConversation: true,
     });
-    expect(conversation.data.conversationId).toBe(priorConversationId);
-    expect(history.completions[1]?.replyRole).toBe('no_evidence');
-    expect(history.completions[1]?.sources).toEqual([]);
+    expect(conversation.data.conversationId).not.toBe(priorConversationId);
+    // La consulta se responde con la documentación del módulo correcto en una
+    // consulta general nueva; ya no se niega la respuesta por el módulo abierto.
+    expect(history.completions[1]?.replyRole).toBe('assistant');
+    expect(history.completions[1]?.sources).toEqual([
+      expect.objectContaining({ moduleId: CONTRACTS_MODULE_ID }),
+    ]);
   });
 
   it('distinguishes Contrato Docente from Auxiliares without mixing their sources', async () => {

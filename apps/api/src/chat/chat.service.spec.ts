@@ -952,7 +952,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('mantiene el chat al aceptar una propuesta fuera del módulo', async () => {
+  it('responde la propuesta aceptada aunque la evidencia esté en otro módulo', async () => {
     const selectedModuleId = source.moduleIds[0];
     const newModuleId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -988,10 +988,14 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
-        question: 'sí',
-        selectedModuleId,
+        conversationId: null,
+        question: 'Explícame los requisitos.',
+        selectedModuleId: null,
       }),
+    );
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ replyRole: 'assistant' }),
     );
   });
 
@@ -1046,7 +1050,14 @@ describe('ChatService', () => {
       selectedModuleId,
     });
 
-    expect(answerGateway.generate).not.toHaveBeenCalled();
+    // El cambio de tema se responde, pero sin el contexto interno del tema
+    // anterior: el módulo anterior no se reutiliza como sustento.
+    expect(answerGateway.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ topicContext: null }),
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: null, selectedModuleId: null }),
+    );
   });
 
   it('no pasa al RAG un año previo si la propuesta aceptada cambia de cargo', async () => {
@@ -3682,7 +3693,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('keeps the conversation and rejects evidence outside its module', async () => {
+  it('responde con la evidencia de otro módulo y ofrece ese módulo', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     const newSubmoduleId = 'ec8b56af-6d0c-4fef-881e-7c00907540dd';
@@ -3723,31 +3734,76 @@ describe('ChatService', () => {
       selectedModuleId: source.moduleIds[0],
     });
 
+    // La consulta abierta en un módulo no limita la respuesta: se abre una
+    // consulta general (sin restricción de fuentes) y se ofrece el módulo donde
+    // vive la evidencia.
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId,
-        selectedModuleId: source.moduleIds[0],
+        conversationId: null,
+        selectedModuleId: null,
       }),
     );
     expect(events[0]).toEqual({
       data: {
         conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
-        moduleId: source.moduleIds[0],
-        startedNewConversation: false,
+        moduleId: null,
+        startedNewConversation: true,
         userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
       },
       type: 'conversation',
     });
-    expect(answerGateway.generate).not.toHaveBeenCalled();
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    const done = events.find((event) => event.type === 'done');
+    expect(done?.data).toEqual(
       expect.objectContaining({
-        replyRole: 'no_evidence',
-        sources: [],
+        modules: [{ id: newModuleId, name: 'Vacaciones' }],
       }),
+    );
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    expect(completionCalls.at(-1)?.[0].answer).toContain(
+      'Encontré esta información en Vacaciones',
     );
   });
 
-  it('no usa una regla especial de otro módulo en el chat actual', async () => {
+  it('no añade la sugerencia cuando la evidencia es del mismo módulo', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const selectedModuleId = source.moduleIds[0];
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [{ content: 'Consulta anterior', role: 'user' }],
+      selectedModuleId,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: selectedModuleId, name: 'Licencias' },
+      sources: [source],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'La licencia se solicita en la UGEL. [1]';
+      },
+    });
+
+    const events = await collect(service, { conversationId, selectedModuleId });
+
+    const done = events.find((event) => event.type === 'done');
+    expect(done?.data).not.toHaveProperty('modules');
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [Parameters<ChatHistoryGateway['completeTurn']>[0]]
+    >;
+    expect(completionCalls.at(-1)?.[0].answer).not.toContain(
+      'Encontré esta información en',
+    );
+    expect(historyGateway.beginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId, selectedModuleId }),
+    );
+  });
+
+  it('responde la consulta de otro módulo en una consulta general nueva', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -3762,12 +3818,18 @@ describe('ChatService', () => {
         {
           ...source,
           chunkContent:
-            'La reasignación por salud requiere el informe médico del establecimiento.',
+            'La reasignación docente se solicita ante la UGEL con el informe correspondiente.',
           moduleIds: [newModuleId],
           moduleNames: ['Reasignación'],
         },
       ],
       topRelevanceScore: 0.92,
+    });
+    answerGateway.generate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield 'La reasignación se solicita ante la UGEL. [1]';
+      },
     });
 
     const events = await collect(service, {
@@ -3778,16 +3840,23 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId,
-        selectedModuleId: source.moduleIds[0],
+        conversationId: null,
+        selectedModuleId: null,
       }),
     );
     expect(events.map((event) => event.type)).toEqual([
       'conversation',
-      'no_evidence',
+      'sources',
+      'token',
       'done',
     ]);
-    expect(answerGateway.generate).not.toHaveBeenCalled();
+    expect(answerGateway.generate).toHaveBeenCalledTimes(1);
+    const done = events.find((event) => event.type === 'done');
+    expect(done?.data).toEqual(
+      expect.objectContaining({
+        modules: [{ id: newModuleId, name: 'Reasignación' }],
+      }),
+    );
   });
 
   it('no emite una fuente ajena oculta en evidencia del módulo seleccionado', async () => {

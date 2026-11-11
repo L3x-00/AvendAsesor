@@ -858,6 +858,27 @@ function consultationTopic(question: string): string | null {
 }
 
 /**
+ * Cierra una respuesta con la sugerencia del módulo donde vive la evidencia.
+ * Así, cuando la consulta se abrió en otro módulo, la persona puede continuar
+ * en el módulo correcto con una respuesta más precisa. Respeta el tope de la
+ * respuesta persistida.
+ */
+function withModuleSuggestionNote(answer: string, moduleName: string): string {
+  const note = `\n\nEncontré esta información en ${moduleName}. Si quieres una respuesta más precisa sobre este tema, abre una consulta en ese módulo.`;
+  // El aviso de corte va al final y no debe perderse al recortar la respuesta.
+  const truncation = `\n\n${RAG_TRUNCATION_NOTE}`;
+  const truncated = answer.endsWith(truncation);
+  const body = truncated ? answer.slice(0, -truncation.length) : answer;
+  const suffix = truncated ? truncation : '';
+  const room = MAX_RAG_ANSWER_CHARS - note.length - suffix.length;
+  const trimmed =
+    body.length <= room
+      ? body
+      : `${body.slice(0, Math.max(0, room - 1)).trimEnd()}…`;
+  return `${trimmed}${note}${suffix}`;
+}
+
+/**
  * Insuficiencia específica de un módulo sin documentación cargada. No pide una
  * aclaración ni propone otros temas: la pregunta puede ser comprensible y aun
  * así no existir fuente. No afirma nada normativo ni reutiliza documentos de
@@ -1832,6 +1853,39 @@ export class ChatService {
           retrieval.resolvedModule.id !== selectedModuleId)),
     );
 
+    // Una consulta abierta en un módulo no encierra a la persona: si la
+    // respuesta está en otro módulo, se responde igual. El turno abre una
+    // consulta general (sin restricción de fuentes, como exige el contrato de
+    // persistencia) y al final se ofrece el módulo donde vive la evidencia para
+    // continuar con precisión.
+    const crossModuleAnswer =
+      outOfConversationScope &&
+      retrieval.kind === 'topic_change' &&
+      retrieval.sources.length > 0;
+    const crossModuleSuggestion = crossModuleAnswer
+      ? retrieval.resolvedModule
+      : null;
+    // Módulos que se ofrecen al pie de la respuesta: los del panorama salarial
+    // o, si la evidencia vino de otro módulo, ese módulo.
+    const suggestionModules = broadSalaryModules.length
+      ? broadSalaryModules
+      : crossModuleSuggestion
+        ? [crossModuleSuggestion]
+        : [];
+    // Solo se añade la frase cuando hay un único módulo sugerido: el panorama
+    // salarial ofrece varios y la frase hablaría de uno solo.
+    const withSuggestion = (answer: string): string =>
+      crossModuleSuggestion && !broadSalaryModules.length
+        ? withModuleSuggestionNote(answer, crossModuleSuggestion.name)
+        : answer;
+
+    if (crossModuleAnswer) {
+      conversationId = null;
+      conversationContext = [];
+      startedNewConversation = true;
+      selectedModuleId = null;
+    }
+
     const turn = await this.historyGateway.beginTurn({
       conversationId,
       // Si la propuesta aceptada abre una conversación nueva (cambio de tema),
@@ -1868,10 +1922,19 @@ export class ChatService {
 
     if (input.abortSignal?.aborted) return;
 
-    // El contrato de persistencia limita las fuentes de una conversación al
-    // módulo con que fue creada. No se abre otro chat automáticamente ni se
-    // incorporan fuentes fuera de ese ámbito al cambiar de tema.
-    if (outOfConversationScope) {
+    // La respuesta puede venir de otro módulo: se conserva y se responde en la
+    // misma pantalla. Abrir el chat en un módulo no debe impedir consultar el
+    // resto de la documentación.
+    //
+    // Solo queda cerrado el estado defensivo en que la recuperación acotada
+    // devuelve fuentes de otro ámbito sin un cambio de tema declarado: no se
+    // emiten fuentes fuera del módulo de la conversación. Una ambigüedad o una
+    // falta de evidencia siguen su ruta normal (precisión o insuficiencia).
+    if (
+      outOfConversationScope &&
+      retrieval.kind === 'evidence' &&
+      !crossModuleAnswer
+    ) {
       yield* this.completeWithoutEvidence({
         abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
@@ -1913,8 +1976,9 @@ export class ChatService {
         });
         if (message) {
           if (input.abortSignal?.aborted) return;
+          const finalMessage = withSuggestion(message);
           const completed = await completeTurn({
-            answer: message,
+            answer: finalMessage,
             conversationId: turn.conversationId,
             faqMemory,
             detectedModuleId: relatedModule?.id ?? null,
@@ -1929,12 +1993,15 @@ export class ChatService {
             userMessageId: turn.userMessageId,
           });
           yield { data: { sources: citations.sources }, type: 'sources' };
-          yield { data: { text: message }, type: 'token' };
+          yield { data: { text: finalMessage }, type: 'token' };
           yield {
             data: {
               conversationId: turn.conversationId,
               inReplyToMessageId: turn.userMessageId,
               messageId: completed.answerMessageId,
+              ...(suggestionModules.length
+                ? { modules: suggestionModules }
+                : {}),
               provider: 'rule',
             },
             type: 'done',
@@ -2003,8 +2070,9 @@ export class ChatService {
         reviewed.sources,
       );
       if (input.abortSignal?.aborted) return;
+      const finalReviewedAnswer = withSuggestion(reviewed.answer);
       const completed = await completeTurn({
-        answer: reviewed.answer,
+        answer: finalReviewedAnswer,
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: relatedModule?.id ?? null,
@@ -2022,7 +2090,7 @@ export class ChatService {
       if (input.abortSignal?.aborted) return;
       yield { type: 'sources', data: { sources: citations.sources } };
       if (input.abortSignal?.aborted) return;
-      yield { type: 'token', data: { text: reviewed.answer } };
+      yield { type: 'token', data: { text: finalReviewedAnswer } };
       if (input.abortSignal?.aborted) return;
       yield {
         type: 'done',
@@ -2030,6 +2098,7 @@ export class ChatService {
           conversationId: turn.conversationId,
           inReplyToMessageId: turn.userMessageId,
           messageId: completed.answerMessageId,
+          ...(suggestionModules.length ? { modules: suggestionModules } : {}),
           provider: 'rule',
         },
       };
@@ -2243,7 +2312,7 @@ export class ChatService {
         });
         return;
       }
-      const finalAnswer = extractiveSalary.answer;
+      const finalAnswer = withSuggestion(extractiveSalary.answer);
       const completed = await completeTurn({
         answer: finalAnswer,
         conversationId: turn.conversationId,
@@ -2266,7 +2335,7 @@ export class ChatService {
           conversationId: turn.conversationId,
           inReplyToMessageId: turn.userMessageId,
           messageId: completed.answerMessageId,
-          ...(broadSalaryModules.length ? { modules: broadSalaryModules } : {}),
+          ...(suggestionModules.length ? { modules: suggestionModules } : {}),
           provider: 'rule',
         },
         type: 'done',
@@ -2284,8 +2353,9 @@ export class ChatService {
     );
     if (noChangesMessage) {
       if (input.abortSignal?.aborted) return;
+      const finalNoChangesMessage = withSuggestion(noChangesMessage);
       const completed = await completeTurn({
-        answer: noChangesMessage,
+        answer: finalNoChangesMessage,
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: relatedModule?.id ?? null,
@@ -2300,12 +2370,13 @@ export class ChatService {
         userMessageId: turn.userMessageId,
       });
       yield { data: { sources: citations.sources }, type: 'sources' };
-      yield { data: { text: noChangesMessage }, type: 'token' };
+      yield { data: { text: finalNoChangesMessage }, type: 'token' };
       yield {
         data: {
           conversationId: turn.conversationId,
           inReplyToMessageId: turn.userMessageId,
           messageId: completed.answerMessageId,
+          ...(suggestionModules.length ? { modules: suggestionModules } : {}),
           provider: 'rule',
         },
         type: 'done',
@@ -2632,6 +2703,7 @@ export class ChatService {
       qualitySignals.add('low_confidence');
     }
 
+    finalAnswer = withSuggestion(finalAnswer);
     const completed = await completeTurn({
       answer: finalAnswer,
       conversationId: turn.conversationId,
@@ -2659,7 +2731,7 @@ export class ChatService {
         conversationId: turn.conversationId,
         inReplyToMessageId: turn.userMessageId,
         messageId: completed.answerMessageId,
-        ...(broadSalaryModules.length ? { modules: broadSalaryModules } : {}),
+        ...(suggestionModules.length ? { modules: suggestionModules } : {}),
         provider: 'openai',
       },
       type: 'done',
