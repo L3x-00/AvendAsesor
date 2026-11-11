@@ -24,6 +24,8 @@ const TOPIC_PATTERNS: readonly RegExp[] = [
   /\b(remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|pagar(?:me|nos)?|pagan|paguen|cobrar|cobro|cuanto (?:gana|ganan|gano|ganaria)|bonificacion(?:es)?|bonos?|cts|pension(?:es)?|jubilacion|jubilar(?:me|se)?|jubilo|cesantia|descuentos?|descontar(?:on|me)?|descuentan|aguinaldo|gratificacion(?:es)?|escolaridad|asignacion(?:es)?|sepelio)\b/u,
   // Régimen disciplinario, conflictos y término del vínculo
   /\b(ces(?:e|a|an|ar|aron|en|o)|renuncia(?:r)?|sancion\p{L}*|amonestacion|suspension|destitu(?:cion(?:es)?|i|y)\p{L}*|expuls(?:a|an|aron|ar|ad[oa]s?|e|en|o|ion(?:es)?)|desped(?:ir|ido|e|en|o)|despid(?:a|an|as|e|en|o|os|io|ieron)|(?:bot|sac|separ)(?:ar|aron|an|o|a)\s+(?:de|del)\s+(?:cargo|puesto|trabajo)|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
+  // Calendario escolar: no son consultas salariales ni de licencias
+  /\b(ano escolar|ano academico|calendario escolar|periodo escolar|inicio del ano escolar|fin del ano escolar|culminacion del ano escolar|inicio de clases|primer dia de clases|fin de clases|semana de gestion|vacaciones escolares|matricula escolar|clausura del ano escolar|clases?)\b/u,
 ];
 
 const ASPECT_PATTERNS: readonly RegExp[] = [

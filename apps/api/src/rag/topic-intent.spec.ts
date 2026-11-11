@@ -151,6 +151,12 @@ describe('detectTopicIntent', () => {
     expect(
       hasTopicTerm(normalizeSpanishText('¿procede el despido de un docente?')),
     ).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿cuándo termina el año escolar?')),
+    ).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿cuándo empiezan las clases?')),
+    ).toBe(true);
     expect(hasTopicTerm(normalizeSpanishText('la fiesta de despedida'))).toBe(
       false,
     );
