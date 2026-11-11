@@ -170,6 +170,7 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
       changeRouting: false,
       detectedModuleId: null,
       detectedSubmoduleId: null,
+      expectedStatus: 'pending',
       note: 'Revisado.',
       reviewerId: actorId,
       status: 'in_review',
@@ -190,7 +191,10 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
     );
     expect(rpc).toHaveBeenCalledWith(
       'update_consultation_case',
-      expect.objectContaining({ p_consultation_case_id: caseId }),
+      expect.objectContaining({
+        p_consultation_case_id: caseId,
+        p_expected_status: 'pending',
+      }),
     );
     expect(rpc).toHaveBeenCalledWith(
       'decide_consultation_case_attachment',

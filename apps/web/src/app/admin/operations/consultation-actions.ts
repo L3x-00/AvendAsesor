@@ -81,6 +81,7 @@ export async function updateConsultationCaseAction(
   try {
     const caseId = requiredText(formData, "caseId", "El caso");
     const status = optionalText(formData, "status");
+    const expectedStatus = optionalText(formData, "expectedStatus");
     const note = optionalText(formData, "note");
     const changeRouting = formData.get("changeRouting") === "true";
     const detectedModuleId = optionalText(formData, "detectedModuleId");
@@ -105,6 +106,7 @@ export async function updateConsultationCaseAction(
             detectedSubmoduleId: detectedSubmoduleId ?? null,
           }
         : {}),
+      ...(expectedStatus ? { expectedStatus } : {}),
       ...(note ? { note } : {}),
       ...(status ? { status } : {}),
     });
@@ -139,9 +141,16 @@ export async function closeConsultationCaseAction(
         "status",
       );
     }
+    const expectedStatus = optionalText(formData, "expectedStatus");
+    if (!expectedStatus) {
+      throw new FormValidationError(
+        "Actualiza la página antes de cerrar: falta el estado que viste del caso.",
+      );
+    }
     const note = optionalText(formData, "note");
     const { client } = await createAuthorizedConsultationReportsApiContext();
     await client.updateCase(caseId, {
+      expectedStatus,
       ...(note ? { note } : {}),
       status,
     });

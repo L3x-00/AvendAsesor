@@ -256,6 +256,7 @@ export class ConsultationCasesService {
     changeRouting?: boolean;
     detectedModuleId?: string | null;
     detectedSubmoduleId?: string | null;
+    expectedStatus?: ConsultationCaseStatus;
     note?: string;
     reviewerId: string;
     status?: ConsultationCaseStatus;
@@ -266,6 +267,13 @@ export class ConsultationCasesService {
         'A case update needs a status, note or route correction.',
       );
     }
+    // Cambiar el estado exige decir cuál se observó: así una decisión tomada
+    // por otra persona entre la lectura y el guardado no se sobrescribe.
+    if (input.status && !input.expectedStatus) {
+      throw new BadRequestException(
+        'A case status change needs the previously observed status.',
+      );
+    }
     return this.gateway.updateCase({
       caseId: input.caseId,
       changeRouting,
@@ -273,6 +281,7 @@ export class ConsultationCasesService {
       detectedSubmoduleId: changeRouting
         ? (input.detectedSubmoduleId ?? null)
         : null,
+      expectedStatus: input.expectedStatus ?? null,
       note: input.note?.trim() || null,
       reviewerId: input.reviewerId,
       status: input.status ?? null,
@@ -295,12 +304,13 @@ export class ConsultationCasesService {
     // sigan abiertas. Una que otra persona cerró o cambió mientras tanto se
     // omite (no se reabre ni se avisa al docente por error).
     const requested = new Set(input.caseIds);
-    const open = new Set<string>();
+    // Estado observado por caso: se usa como condición del cambio (CAS).
+    const open = new Map<string, ConsultationCaseStatus>();
     await this.forEachOpenUnansweredCase(
       input.reviewerId,
       input.period,
       (item) => {
-        if (requested.has(item.id)) open.add(item.id);
+        if (requested.has(item.id)) open.set(item.id, item.status);
         // No se recorren páginas o estados adicionales cuando ya se validaron
         // todos los identificadores accionables que envió el formulario.
         return open.size < requested.size;
@@ -310,13 +320,15 @@ export class ConsultationCasesService {
     let skipped = 0;
     let failed = 0;
     for (const caseId of new Set(input.caseIds)) {
-      if (!open.has(caseId)) {
+      const expectedStatus = open.get(caseId);
+      if (!expectedStatus) {
         skipped += 1;
         continue;
       }
       try {
         await this.updateCase({
           caseId,
+          expectedStatus,
           note: input.note,
           reviewerId: input.reviewerId,
           status: input.status,

@@ -250,6 +250,11 @@ export interface ConsultationCasesGateway {
     changeRouting: boolean;
     detectedModuleId: string | null;
     detectedSubmoduleId: string | null;
+    /**
+     * Estado que el revisor tenía en pantalla. La RPC no aplica el cambio si el
+     * caso ya no está en ese estado (decisión concurrente de otra persona).
+     */
+    expectedStatus: ConsultationCaseStatus | null;
     note: string | null;
     reviewerId: string;
     status: ConsultationCaseStatus | null;

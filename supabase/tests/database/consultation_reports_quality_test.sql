@@ -1,6 +1,6 @@
 begin;
 
-select plan(60);
+select plan(69);
 
 -- Private schema and server-only boundary -----------------------------------
 select has_type('public', 'consultation_case_kind', 'Case kinds are constrained');
@@ -641,6 +641,89 @@ select is(
   ),
   'La fuente y la vigencia fueron verificadas.',
   'The administrator note remains in the append-only history'
+);
+
+-- A12: compare-and-swap del estado observado ---------------------------------
+select is(
+  (select count(*) from pg_proc
+   where proname = 'update_consultation_case'
+     and pronamespace = 'public'::regnamespace),
+  1::bigint,
+  'The case update RPC keeps a single signature after adding the expected status'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.update_consultation_case(uuid,uuid,text,text,boolean,uuid,uuid,text)'::regprocedure,
+    'execute'
+  ),
+  'The server role can still update a case with the expected status'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.update_consultation_case(uuid,uuid,text,text,boolean,uuid,uuid,text)'::regprocedure,
+    'execute'
+  ),
+  'Authenticated clients still cannot update a case directly'
+);
+select throws_ok(
+  $$
+    select public.update_consultation_case(
+      '70000000-0000-4000-8000-000000000001',
+      (select report_case_id from consultas_fixture),
+      null, null, false, null, null, 'borrador'
+    )
+  $$,
+  '22023', 'The consultation case expected status is invalid',
+  'An unknown expected status is rejected'
+);
+select throws_ok(
+  $$
+    select public.update_consultation_case(
+      '70000000-0000-4000-8000-000000000001',
+      (select report_case_id from consultas_fixture),
+      'discarded', null, false, null, null, 'pending'
+    )
+  $$,
+  'P0001', 'The consultation case changed since it was read',
+  'A concurrent decision is not overwritten when the observed status changed'
+);
+select lives_ok(
+  $$
+    select public.update_consultation_case(
+      '70000000-0000-4000-8000-000000000001',
+      (select report_case_id from consultas_fixture),
+      null, 'Se confirmo con el revisor.', false, null, null, 'resolved'
+    )
+  $$,
+  'A matching expected status allows a note on the governed case'
+);
+select lives_ok(
+  $$
+    select public.update_consultation_case(
+      '70000000-0000-4000-8000-000000000001',
+      (select report_case_id from consultas_fixture),
+      'in_review', null, false, null, null, 'resolved'
+    )
+  $$,
+  'A matching expected status still allows reopening the case'
+);
+select is(
+  (select status::text from public.consultation_cases where id = (select report_case_id from consultas_fixture)),
+  'in_review',
+  'The reopened case keeps the new status'
+);
+select throws_ok(
+  $$
+    select public.update_consultation_case(
+      '70000000-0000-4000-8000-000000000001',
+      (select report_case_id from consultas_fixture),
+      'resolved', null, false, null, null, 'resolved'
+    )
+  $$,
+  'P0001', 'The consultation case changed since it was read',
+  'A stale expectation fails after another administrator changed the case'
 );
 
 select * from finish();

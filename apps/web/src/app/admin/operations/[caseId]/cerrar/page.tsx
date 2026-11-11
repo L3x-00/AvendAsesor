@@ -92,6 +92,11 @@ export default async function CloseConsultationCasePage({
             submitLabel="Cerrar consulta"
           >
             <input name="caseId" type="hidden" value={caseId} />
+            <input
+              name="expectedStatus"
+              type="hidden"
+              value={caseData.status}
+            />
             <div className={styles.formGrid}>
               <label htmlFor="close-status">
                 Resultado
