@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef } from "react";
+import { useId, useState } from "react";
 import { FieldError } from "@/components/ui/form-field";
 import type { FieldRules } from "@/lib/ui/field-validation";
 import {
@@ -48,6 +48,96 @@ function LayersIcon() {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.moduleChevron}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/**
+ * Módulo principal con sus submódulos plegados: se despliegan al pulsar el
+ * nombre, de modo que la lista de permisos no obligue a recorrer todo el
+ * árbol. La casilla del módulo principal sigue a la vista para concederlo.
+ */
+function ModuleAccessCard({
+  grantedIds,
+  module,
+  submodules,
+}: {
+  grantedIds: string[];
+  module: PermissionModuleOption;
+  submodules: PermissionModuleOption[];
+}) {
+  const inputId = useId();
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={styles.moduleCard}>
+      <div className={styles.moduleRoot}>
+        <label className={styles.moduleCheck}>
+          <input
+            aria-label={module.name}
+            defaultChecked={grantedIds.includes(module.id)}
+            id={inputId}
+            name="moduleId"
+            type="checkbox"
+            value={module.id}
+          />
+        </label>
+        {submodules.length ? (
+          <button
+            aria-controls={panelId}
+            aria-expanded={open}
+            aria-label={`Submódulos de ${module.name}`}
+            className={styles.moduleToggle}
+            onClick={() => setOpen((current) => !current)}
+            type="button"
+          >
+            <span className={styles.moduleName}>{module.name}</span>
+            <ChevronIcon />
+          </button>
+        ) : (
+          <label className={styles.moduleName} htmlFor={inputId}>
+            {module.name}
+          </label>
+        )}
+      </div>
+      {submodules.length ? (
+        <div
+          className={styles.modulePanel}
+          data-open={open}
+          id={panelId}
+          inert={!open}
+        >
+          <div className={styles.modulePanelInner}>
+            <div className={styles.moduleChildren}>
+              {submodules.map((child) => (
+                <label className={styles.moduleChild} key={child.id}>
+                  <input
+                    defaultChecked={grantedIds.includes(child.id)}
+                    name="moduleId"
+                    type="checkbox"
+                    value={child.id}
+                  />
+                  <span>{child.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export interface PermissionModuleOption {
   id: string;
   name: string;
@@ -56,8 +146,8 @@ export interface PermissionModuleOption {
 
 /**
  * Un administrador, con sus dos controles separados: el acceso al área
- * completa y los módulos permitidos. Nada queda plegado tras un triángulo:
- * todo lo que se puede tocar está a la vista (PO, 2026-10-11).
+ * completa y los módulos permitidos. Los módulos se pliegan por defecto y
+ * despliegan sus submódulos al pulsarlos, para no alargar la página.
  */
 function AdminPermissionCard({
   modules,
@@ -68,7 +158,6 @@ function AdminPermissionCard({
   permission: AdminModulePermission;
   prefix: string;
 }) {
-  const grantsRef = useRef<HTMLFieldSetElement | null>(null);
   const roots = modules.filter((module) => module.parentModuleId === null);
   const childrenOf = (rootId: string) =>
     modules.filter((module) => module.parentModuleId === rootId);
@@ -77,14 +166,6 @@ function AdminPermissionCard({
   ).length;
   const accessTitleId = `${prefix}-${permission.userId}-access-title`;
   const modulesTitleId = `${prefix}-${permission.userId}-modules-title`;
-
-  function setAllModules(checked: boolean) {
-    grantsRef.current
-      ?.querySelectorAll<HTMLInputElement>('input[name="moduleId"]')
-      .forEach((input) => {
-        input.checked = checked;
-      });
-  }
 
   return (
     <li className={styles.card}>
@@ -177,22 +258,6 @@ function AdminPermissionCard({
             Marca un módulo principal para dar acceso a él y a todos sus
             submódulos.
           </p>
-          <div className={styles.quickToggles}>
-            <button
-              className={styles.quickToggle}
-              onClick={() => setAllModules(true)}
-              type="button"
-            >
-              Marcar todos
-            </button>
-            <button
-              className={styles.quickToggle}
-              onClick={() => setAllModules(false)}
-              type="button"
-            >
-              Desmarcar todos
-            </button>
-          </div>
           <AdminActionForm
             action={setAdminModuleGrantsAction}
             className={styles.form}
@@ -201,39 +266,17 @@ function AdminPermissionCard({
             submitLabel="Guardar módulos"
           >
             <input name="userId" type="hidden" value={permission.userId} />
-            <fieldset className={styles.moduleFieldset} ref={grantsRef}>
+            <fieldset className={styles.moduleFieldset}>
               <legend className="avend-visually-hidden">
                 Módulos y submódulos permitidos
               </legend>
               {roots.map((root) => (
-                <div className={styles.moduleCard} key={root.id}>
-                  <label className={styles.moduleRoot}>
-                    <input
-                      defaultChecked={permission.moduleIds.includes(root.id)}
-                      name="moduleId"
-                      type="checkbox"
-                      value={root.id}
-                    />
-                    <span>{root.name}</span>
-                  </label>
-                  {childrenOf(root.id).length ? (
-                    <div className={styles.moduleChildren}>
-                      {childrenOf(root.id).map((child) => (
-                        <label className={styles.moduleChild} key={child.id}>
-                          <input
-                            defaultChecked={permission.moduleIds.includes(
-                              child.id,
-                            )}
-                            name="moduleId"
-                            type="checkbox"
-                            value={child.id}
-                          />
-                          <span>{child.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+                <ModuleAccessCard
+                  grantedIds={permission.moduleIds}
+                  key={root.id}
+                  module={root}
+                  submodules={childrenOf(root.id)}
+                />
               ))}
             </fieldset>
             <label
