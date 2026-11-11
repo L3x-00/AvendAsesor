@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/actions";
 import type { AdminModulePermission } from "@/lib/admin-api/types";
 import { AdminActionForm } from "./admin-action-form";
+import { userInitials } from "./user-format";
 import styles from "./module-permissions-manager.module.css";
 
 const PERMISSION_RULES: FieldRules = {
@@ -18,6 +19,34 @@ const PERMISSION_RULES: FieldRules = {
     { kind: "maxLength", label: "El motivo", max: 500 },
   ],
 };
+
+function LockIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.blockIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <rect height="9" rx="2" width="14" x="5" y="11" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+function LayersIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.blockIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m12 3 8 4.5-8 4.5-8-4.5z" />
+      <path d="m4 12 8 4.5 8-4.5M4 16.5 12 21l8-4.5" />
+    </svg>
+  );
+}
 
 export interface PermissionModuleOption {
   id: string;
@@ -60,7 +89,10 @@ function AdminPermissionCard({
   return (
     <li className={styles.card}>
       <div className={styles.cardHeader}>
-        <div>
+        <span aria-hidden="true" className={styles.avatar}>
+          {userInitials(permission.fullName)}
+        </span>
+        <div className={styles.identity}>
           <h3 className={styles.name}>{permission.fullName}</h3>
           <p className={styles.meta}>
             {grantedCount} de {modules.length} módulos con acceso
@@ -71,6 +103,7 @@ function AdminPermissionCard({
             permission.canAccess ? styles.pillEnabled : styles.pillBlocked
           }
         >
+          <span aria-hidden="true" className={styles.pillDot} />
           {permission.canAccess ? "Habilitado" : "Bloqueado"}
         </span>
       </div>
@@ -78,6 +111,7 @@ function AdminPermissionCard({
       <div className={styles.blocks}>
         <section aria-labelledby={accessTitleId} className={styles.block}>
           <h4 className={styles.blockTitle} id={accessTitleId}>
+            <LockIcon />
             Acceso al área
           </h4>
           <p className={styles.blockHint}>
@@ -136,6 +170,7 @@ function AdminPermissionCard({
 
         <section aria-labelledby={modulesTitleId} className={styles.block}>
           <h4 className={styles.blockTitle} id={modulesTitleId}>
+            <LayersIcon />
             Módulos permitidos
           </h4>
           <p className={styles.blockHint}>
@@ -242,9 +277,11 @@ export function ModulePermissionsManager({
 
   return (
     <section aria-labelledby={`${prefix}-title`} className={styles.section}>
-      <h2 className={styles.title} id={`${prefix}-title`}>
-        Acceso a Módulos e Historial de documentos
-      </h2>
+      <header className={styles.header}>
+        <h2 className={styles.title} id={`${prefix}-title`}>
+          Acceso a Módulos e Historial de documentos
+        </h2>
+      </header>
       <p className={styles.description}>
         Cada administrador tiene dos controles separados: el acceso al área
         completa y los módulos permitidos. Un permiso sobre un módulo principal

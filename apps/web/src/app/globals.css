@@ -2057,8 +2057,7 @@ textarea[aria-invalid="true"]:focus,
   padding-top: 0.75rem;
 }
 
-.avend-admin-dashboard h2,
-.avend-section-title {
+.avend-admin-dashboard h2 {
   color: var(--avend-text);
   font-size: 1.25rem;
   font-weight: 700;
@@ -2066,8 +2065,7 @@ textarea[aria-invalid="true"]:focus,
   margin: 0;
 }
 
-.avend-admin-entry-role,
-.avend-section-description {
+.avend-admin-entry-role {
   color: var(--avend-text-muted);
   font-size: 1rem;
   line-height: 1.6;
@@ -2113,10 +2111,6 @@ textarea[aria-invalid="true"]:focus,
   font-weight: 700;
   line-height: 1;
   margin: 0.875rem 0 0;
-}
-
-.avend-operation-section {
-  margin-top: 2rem;
 }
 
 .avend-operation-list,
@@ -2224,95 +2218,6 @@ textarea[aria-invalid="true"]:focus,
 .avend-superadmin-user strong {
   color: var(--avend-text);
   text-transform: capitalize;
-}
-
-.avend-audit-scroll {
-  margin-top: 1.25rem;
-  overflow-x: auto;
-}
-
-.avend-audit-table {
-  background: var(--avend-surface);
-  border-collapse: collapse;
-  font-size: 0.9375rem;
-  min-width: 42rem;
-  width: 100%;
-}
-
-.avend-audit-table th,
-.avend-audit-table td {
-  border: 1px solid var(--avend-border);
-  padding: 0.75rem;
-  text-align: left;
-  vertical-align: top;
-}
-
-.avend-audit-table th {
-  background: var(--avend-surface-muted);
-  color: var(--avend-text);
-  font-weight: 700;
-}
-
-.avend-audit-table td {
-  color: var(--avend-text-muted);
-}
-
-/* En el celular cada evento es una tarjeta: sin desplazamiento lateral. */
-@media (max-width: 40rem) {
-  .avend-audit-scroll {
-    overflow-x: visible;
-  }
-
-  .avend-audit-table,
-  .avend-audit-table tbody,
-  .avend-audit-table tr,
-  .avend-audit-table td {
-    display: block;
-    min-width: 0;
-    width: 100%;
-  }
-
-  .avend-audit-table {
-    background: transparent;
-    font-size: 1rem;
-  }
-
-  .avend-audit-table thead {
-    clip: rect(0 0 0 0);
-    clip-path: inset(50%);
-    height: 1px;
-    overflow: hidden;
-    position: absolute;
-    white-space: nowrap;
-    width: 1px;
-  }
-
-  .avend-audit-table tr {
-    background: var(--avend-surface);
-    border: 1px solid var(--avend-border);
-    border-radius: 0.75rem;
-    margin-bottom: 0.75rem;
-    padding: 0.5rem 0.75rem;
-  }
-
-  .avend-audit-table td {
-    border: 0;
-    padding: 0.25rem 0;
-  }
-
-  .avend-audit-table td::before {
-    color: var(--avend-text);
-    content: attr(data-label) ": ";
-    /* Texto alternativo vacío: el lector ya anuncia el encabezado de la
-       columna; así no repite «Acción… Acción:». */
-    content: attr(data-label) ": " / "";
-    font-weight: 700;
-  }
-
-  /* En el celular un toque dejaba la tarjeta resaltada en azul. */
-  .avend-admin-content .avend-audit-table tbody tr:hover {
-    background: var(--avend-surface);
-  }
 }
 
 @media (min-width: 48rem) {

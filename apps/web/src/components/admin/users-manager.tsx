@@ -28,6 +28,8 @@ import styles from "./users-manager.module.css";
 interface UsersManagerProps {
   /** Render base URL: the roster upload goes straight to the API. */
   apiBaseUrl: string;
+  /** Panel lateral: accesos a módulos del administrador. */
+  children?: ReactNode;
   counts: AdministrativeUserCounts;
   /** Árbol de módulos para asignar accesos al crear un administrador. */
   modules?: Array<{ id: string; name: string; parentModuleId: string | null }>;
@@ -436,6 +438,50 @@ function userExportHref(query: ParsedUserDirectoryQuery): string {
     : "/api/admin/users/export";
 }
 
+/** Personas: distingue la pestaña de docentes. */
+function UsersGroupIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.tabIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20c.6-3.4 3.3-5.2 6.5-5.2s5.9 1.8 6.5 5.2" />
+      <path d="M16.5 5.2a3.5 3.5 0 0 1 0 6.6M18 14.9c2.1.5 3.4 2.2 3.8 5.1" />
+    </svg>
+  );
+}
+
+/** Escudo: distingue la pestaña de administradores. */
+function AdminsGroupIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.tabIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 3 5 5.8v5.4c0 4.3 2.9 7.6 7 9.3 4.1-1.7 7-5 7-9.3V5.8L12 3Z" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.searchIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </svg>
+  );
+}
+
 /**
  * Server-filtered and paginated administrative user directory. The browser
  * receives only the requested page; the API remains the authority for data,
@@ -443,6 +489,7 @@ function userExportHref(query: ParsedUserDirectoryQuery): string {
  */
 export function UsersManager({
   apiBaseUrl,
+  children,
   counts,
   modules = [],
   page,
@@ -450,6 +497,7 @@ export function UsersManager({
   today,
 }: UsersManagerProps) {
   const searchId = useId();
+  const directoryTitleId = `${searchId}-directory-title`;
   const totalPages = Math.max(1, Math.ceil(page.total / page.limit));
   const firstVisible = page.total === 0 ? 0 : page.offset + 1;
   const lastVisible =
@@ -470,186 +518,205 @@ export function UsersManager({
         today={today}
       />
 
-      <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
-        {GROUPS.map((item) => (
-          <Link
-            aria-current={query.group === item.group ? "page" : undefined}
-            className={
-              query.group === item.group
-                ? `${styles.tab} ${styles.tabActive}`
-                : styles.tab
-            }
-            href={userDirectoryHref({ ...query, group: item.group, page: 1 })}
-            key={item.group}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-
-      <div className={styles.toolbar}>
-        <form action="/admin/users" className={styles.searchForm} method="get">
-          {query.group !== "docente" ? (
-            <input name="group" type="hidden" value={query.group} />
-          ) : null}
-          {query.status !== "all" ? (
-            <input name="status" type="hidden" value={query.status} />
-          ) : null}
-          <label className={styles.searchLabel} htmlFor={`${searchId}-search`}>
-            Buscar usuario
-          </label>
-          <div className={styles.searchControls}>
-            <input
-              className={styles.search}
-              defaultValue={query.search ?? ""}
-              id={`${searchId}-search`}
-              key={`${query.group}:${query.status}:${query.page}:${query.search ?? ""}`}
-              maxLength={160}
-              name="search"
-              placeholder="Buscar por nombre, correo o celular…"
-              type="search"
-            />
-            <button className={styles.searchButton} type="submit">
-              Buscar
-            </button>
-            {query.search ? (
-              <Link
-                className={styles.clearSearch}
-                href={userDirectoryHref({
-                  ...query,
-                  page: 1,
-                  search: undefined,
-                })}
-              >
-                Limpiar
-              </Link>
-            ) : null}
-          </div>
-        </form>
-
-        <div
-          aria-label="Filtrar por estado de acceso"
-          className={styles.statusFilter}
-          role="group"
+      <div className={styles.layout}>
+        <section
+          aria-labelledby={directoryTitleId}
+          className={styles.directory}
         >
-          {STATUS_FILTERS.map((item) => (
-            <Link
-              aria-current={query.status === item.value ? "page" : undefined}
-              className={
-                query.status === item.value
-                  ? `${styles.statusButton} ${styles.statusButtonActive}`
-                  : styles.statusButton
-              }
-              href={userDirectoryHref({
-                ...query,
-                page: 1,
-                status: item.value,
-              })}
-              key={item.value}
-            >
-              {item.label}{" "}
-              <span className={styles.statusCount}>{item.countOf(counts)}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <p aria-live="polite" className={styles.resultSummary}>
-        Mostrando {firstVisible}–{lastVisible} de {page.total} usuarios.
-      </p>
-
-      {page.items.length === 0 ? (
-        <p className={styles.empty}>
-          Ningún usuario coincide con la búsqueda y los filtros seleccionados.
-        </p>
-      ) : (
-        <div className={styles.tableShell}>
-          <table className={styles.userTable} role="table">
-            <caption className="avend-visually-hidden">
-              Usuarios filtrados con su rol, estado, vigencia y acciones
-            </caption>
-            <thead role="rowgroup">
-              <tr role="row">
-                <th role="columnheader" scope="col">Usuario</th>
-                <th role="columnheader" scope="col">Rol</th>
-                <th role="columnheader" scope="col">Estado</th>
-                <th role="columnheader" scope="col">Vigencia</th>
-                <th role="columnheader" scope="col">Último acceso</th>
-                <th role="columnheader" scope="col">Acciones</th>
-              </tr>
-            </thead>
-            <tbody role="rowgroup">
-              {page.items.map((user) => (
-                <tr className={styles.tableRow} key={user.id} role="row">
-                  <td data-label="Usuario" role="cell">
-                    <div className={styles.userIdentity}>
-                      <span aria-hidden="true" className={styles.avatar}>
-                        {userInitials(user.fullName)}
-                      </span>
-                      <div className={styles.userIdentityText}>
-                        <h3 className={styles.rowName}>{user.fullName}</h3>
-                        <p className={styles.rowMeta}>{user.email ?? "Sin correo"}</p>
-                        <p className={styles.rowMeta}>{user.phone ?? "Sin celular"}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td data-label="Rol" role="cell">
-                    <span className={styles.roleBadge}>{formatUserRole(user.role)}</span>
-                  </td>
-                  <td data-label="Estado" role="cell">
-                    <span className={BADGE_CLASS[user.accessState]}>
-                      <span aria-hidden="true" className={styles.statusDot} />
-                      {formatAccessState(user.accessState)}
-                    </span>
-                  </td>
-                  <td data-label="Vigencia" role="cell">
-                    <span className={styles.dateLine}>
-                      <span>Inicio</span>
-                      <strong>{formatDay(user.accessStartAt, "Sin definir")}</strong>
-                    </span>
-                    <span className={styles.dateLine}>
-                      <span>Fin</span>
-                      <strong>{formatDay(user.accessExpiresAt, "Sin vencimiento")}</strong>
-                    </span>
-                  </td>
-                  <td data-label="Último acceso" role="cell">
-                    <span className={styles.lastAccess}>{formatAccess(user.lastAccessAt)}</span>
-                  </td>
-                  <td data-label="Acciones" role="cell">
-                    <UserRowActions today={today} user={user} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {totalPages > 1 ? (
-        <nav aria-label="Paginación de usuarios" className={styles.pagination}>
-          <span className={styles.paginationCurrent}>
-            Página {query.page} de {totalPages}
-          </span>
-          <div className={styles.paginationActions}>
-            {query.page > 1 ? (
+          <h2 className="avend-visually-hidden" id={directoryTitleId}>
+            Directorio de usuarios
+          </h2>
+          <div className={styles.tabs} role="group" aria-label="Tipo de usuario">
+            {GROUPS.map((item) => (
               <Link
-                className={styles.paginationLink}
-                href={userDirectoryHref({ ...query, page: query.page - 1 })}
+                aria-current={query.group === item.group ? "page" : undefined}
+                className={
+                  query.group === item.group
+                    ? `${styles.tab} ${styles.tabActive}`
+                    : styles.tab
+                }
+                href={userDirectoryHref({ ...query, group: item.group, page: 1 })}
+                key={item.group}
               >
-                Anterior
+                {item.group === "docente" ? <UsersGroupIcon /> : <AdminsGroupIcon />}
+                {item.label}
               </Link>
-            ) : null}
-            {query.page < totalPages ? (
-              <Link
-                className={styles.paginationLink}
-                href={userDirectoryHref({ ...query, page: query.page + 1 })}
-              >
-                Siguiente
-              </Link>
-            ) : null}
+            ))}
           </div>
-        </nav>
-      ) : null}
+
+          <div className={styles.toolbar}>
+            <form action="/admin/users" className={styles.searchForm} method="get">
+              {query.group !== "docente" ? (
+                <input name="group" type="hidden" value={query.group} />
+              ) : null}
+              {query.status !== "all" ? (
+                <input name="status" type="hidden" value={query.status} />
+              ) : null}
+              <label
+                className={`${styles.searchLabel} avend-visually-hidden`}
+                htmlFor={`${searchId}-search`}
+              >
+                Buscar usuario
+              </label>
+              <div className={styles.searchControls}>
+                <span className={styles.searchField}>
+                  <SearchIcon />
+                  <input
+                    className={styles.search}
+                    defaultValue={query.search ?? ""}
+                    id={`${searchId}-search`}
+                    key={`${query.group}:${query.status}:${query.page}:${query.search ?? ""}`}
+                    maxLength={160}
+                    name="search"
+                    placeholder="Buscar por nombre, correo o celular…"
+                    type="search"
+                  />
+                </span>
+                <button className={styles.searchButton} type="submit">
+                  Buscar
+                </button>
+                {query.search ? (
+                  <Link
+                    className={styles.clearSearch}
+                    href={userDirectoryHref({
+                      ...query,
+                      page: 1,
+                      search: undefined,
+                    })}
+                  >
+                    Limpiar
+                  </Link>
+                ) : null}
+              </div>
+            </form>
+
+            <div
+              aria-label="Filtrar por estado de acceso"
+              className={styles.statusFilter}
+              role="group"
+            >
+              {STATUS_FILTERS.map((item) => (
+                <Link
+                  aria-current={query.status === item.value ? "page" : undefined}
+                  className={
+                    query.status === item.value
+                      ? `${styles.statusButton} ${styles.statusButtonActive}`
+                      : styles.statusButton
+                  }
+                  href={userDirectoryHref({
+                    ...query,
+                    page: 1,
+                    status: item.value,
+                  })}
+                  key={item.value}
+                >
+                  {item.label}{" "}
+                  <span className={styles.statusCount}>{item.countOf(counts)}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <p aria-live="polite" className={styles.resultSummary}>
+            Mostrando {firstVisible}–{lastVisible} de {page.total} usuarios.
+          </p>
+
+          {page.items.length === 0 ? (
+            <p className={styles.empty}>
+              Ningún usuario coincide con la búsqueda y los filtros seleccionados.
+            </p>
+          ) : (
+            <div className={styles.tableShell}>
+              <table className={styles.userTable} role="table">
+                <caption className="avend-visually-hidden">
+                  Usuarios filtrados con su rol, estado, vigencia y acciones
+                </caption>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col">Usuario</th>
+                    <th role="columnheader" scope="col">Rol</th>
+                    <th role="columnheader" scope="col">Estado</th>
+                    <th role="columnheader" scope="col">Vigencia</th>
+                    <th role="columnheader" scope="col">Último acceso</th>
+                    <th role="columnheader" scope="col">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody role="rowgroup">
+                  {page.items.map((user) => (
+                    <tr className={styles.tableRow} key={user.id} role="row">
+                      <td data-label="Usuario" role="cell">
+                        <div className={styles.userIdentity}>
+                          <span aria-hidden="true" className={styles.avatar}>
+                            {userInitials(user.fullName)}
+                          </span>
+                          <div className={styles.userIdentityText}>
+                            <h3 className={styles.rowName}>{user.fullName}</h3>
+                            <p className={styles.rowMeta}>{user.email ?? "Sin correo"}</p>
+                            <p className={styles.rowMeta}>{user.phone ?? "Sin celular"}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Rol" role="cell">
+                        <span className={styles.roleBadge}>{formatUserRole(user.role)}</span>
+                      </td>
+                      <td data-label="Estado" role="cell">
+                        <span className={BADGE_CLASS[user.accessState]}>
+                          <span aria-hidden="true" className={styles.statusDot} />
+                          {formatAccessState(user.accessState)}
+                        </span>
+                      </td>
+                      <td data-label="Vigencia" role="cell">
+                        <span className={styles.dateLine}>
+                          <span>Inicio</span>
+                          <strong>{formatDay(user.accessStartAt, "Sin definir")}</strong>
+                        </span>
+                        <span className={styles.dateLine}>
+                          <span>Fin</span>
+                          <strong>{formatDay(user.accessExpiresAt, "Sin vencimiento")}</strong>
+                        </span>
+                      </td>
+                      <td data-label="Último acceso" role="cell">
+                        <span className={styles.lastAccess}>{formatAccess(user.lastAccessAt)}</span>
+                      </td>
+                      <td data-label="Acciones" role="cell">
+                        <UserRowActions today={today} user={user} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {totalPages > 1 ? (
+            <nav aria-label="Paginación de usuarios" className={styles.pagination}>
+              <span className={styles.paginationCurrent}>
+                Página {query.page} de {totalPages}
+              </span>
+              <div className={styles.paginationActions}>
+                {query.page > 1 ? (
+                  <Link
+                    className={styles.paginationLink}
+                    href={userDirectoryHref({ ...query, page: query.page - 1 })}
+                  >
+                    Anterior
+                  </Link>
+                ) : null}
+                {query.page < totalPages ? (
+                  <Link
+                    className={styles.paginationLink}
+                    href={userDirectoryHref({ ...query, page: query.page + 1 })}
+                  >
+                    Siguiente
+                  </Link>
+                ) : null}
+              </div>
+            </nav>
+          ) : null}
+        </section>
+
+        {children ? <div className={styles.sidePanel}>{children}</div> : null}
+      </div>
     </div>
   );
 }
