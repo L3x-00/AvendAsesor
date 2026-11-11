@@ -23,7 +23,7 @@ const TOPIC_PATTERNS: readonly RegExp[] = [
   // Remuneraciones y beneficios
   /\b(remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|pagar(?:me|nos)?|pagan|paguen|cobrar|cobro|cuanto (?:gana|ganan|gano|ganaria)|bonificacion(?:es)?|bonos?|cts|pension(?:es)?|jubilacion|jubilar(?:me|se)?|jubilo|cesantia|descuentos?|descontar(?:on|me)?|descuentan|aguinaldo|gratificacion(?:es)?|escolaridad|asignacion(?:es)?|sepelio)\b/u,
   // Régimen disciplinario, conflictos y término del vínculo
-  /\b(cese|renuncia(?:r)?|sancion(?:es)?|sancionar(?:me)?|amonestacion|suspension|destitucion|destituir|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
+  /\b(ces(?:e|a|an|ar|aron|en|o)|renuncia(?:r)?|sancion\p{L}*|amonestacion|suspension|destitu(?:cion(?:es)?|i|y)\p{L}*|expuls(?:a|an|aron|ar|ad[oa]s?|e|en|o|ion(?:es)?)|desped(?:ir|ido|e|en|o)|despid(?:a|an|as|e|en|o|os|io|ieron)|(?:bot|sac|separ)(?:ar|aron|an|o|a)\s+(?:de|del)\s+(?:cargo|puesto|trabajo)|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
 ];
 
 const ASPECT_PATTERNS: readonly RegExp[] = [
@@ -59,7 +59,11 @@ export function hasStrongDomainSignal(normalized: string): boolean {
   return hasTopicTerm(normalized) || matchesAny(ASPECT_PATTERNS, normalized);
 }
 
-/** Señal débil: rol del sector o contexto escolar/institucional. */
+/**
+ * Señal débil: rol, institución o contexto escolar. Identifica el ámbito, no el
+ * tema, pero basta para reconocer que una pregunta con su propio interrogativo
+ * («cuándo termina el año escolar») no continúa la cifra anterior.
+ */
 export function hasWeakDomainSignal(normalized: string): boolean {
   return matchesAny(WEAK_PATTERNS, normalized);
 }

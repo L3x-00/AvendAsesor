@@ -935,6 +935,9 @@ export function inheritedFactorQuestions(
         ),
       ),
     );
+  if (!resumesSalary && asksAboutANewSubject(question)) {
+    return [];
+  }
   if (
     !resumesSalary &&
     (!forceContext || profile.isSalaryQuestion) &&
@@ -989,6 +992,31 @@ const SALARY_FACTOR_TERMS =
  */
 const SELF_CONTAINED_NON_SALARY =
   /\b(?:documentos?|archivos?|anexos?|expediente|requisitos?|plazos?|pasos?|procedimiento)\b/u;
+
+/**
+ * Factores que en una consulta salarial son datos de la cifra y no un tema:
+ * «soy nombrado» responde a la aclaración salarial; «me expulsaron» no.
+ */
+const SALARY_FACTOR_WORDS =
+  /\b(?:cuanto\s+(?:gana|ganan|gano|ganaria)|nombrad[oa]s?|contratad[oa]s?|jornadas?|carga horaria|escala magisterial|escala remunerativa)\b/gu;
+
+/**
+ * El turno nombra otro tema, no un factor de la cifra. Es el corte que también
+ * se aplica al responder una aclaración: «soy nombrado» sigue el hilo salarial,
+ * «me expulsaron ayer» no.
+ *
+ * El criterio es el léxico de temas, no la forma de la pregunta: los
+ * seguimientos elípticos («¿cómo se calcula?», «¿cuál es el monto máximo?»,
+ * «¿desde cuándo rige para los docentes?») también empiezan con un interrogativo
+ * y también nombran roles, así que no sirven como señal de cambio de tema.
+ * Un tema fuera del léxico queda como límite conocido (ver PR).
+ */
+function asksAboutANewSubject(turn: string): boolean {
+  if (salaryQuestionProfile(turn).isSalaryQuestion) return false;
+  const normalized = normalizeSpanishText(turn);
+  if (SELF_CONTAINED_NON_SALARY.test(normalized)) return true;
+  return hasTopicTerm(normalized.replace(SALARY_FACTOR_WORDS, ' '));
+}
 
 function continuesSalaryThread(turn: string): boolean {
   // Solo es un factor de la cifra cuando trae su valor («jornada de 30 horas»,
