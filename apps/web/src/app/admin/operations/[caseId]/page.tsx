@@ -308,6 +308,11 @@ export default async function ConsultationCasePage({
             submitLabel="Guardar cambios"
           >
             <input name="caseId" type="hidden" value={caseId} />
+            <input
+              name="expectedStatus"
+              type="hidden"
+              value={caseData.status}
+            />
 
             <div className={styles.caseManagementGrid}>
               <label htmlFor="case-status-change">

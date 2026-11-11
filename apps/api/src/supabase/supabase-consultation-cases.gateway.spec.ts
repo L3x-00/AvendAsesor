@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -170,6 +171,7 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
       changeRouting: false,
       detectedModuleId: null,
       detectedSubmoduleId: null,
+      expectedStatus: 'pending',
       note: 'Revisado.',
       reviewerId: actorId,
       status: 'in_review',
@@ -190,7 +192,10 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
     );
     expect(rpc).toHaveBeenCalledWith(
       'update_consultation_case',
-      expect.objectContaining({ p_consultation_case_id: caseId }),
+      expect.objectContaining({
+        p_consultation_case_id: caseId,
+        p_expected_status: 'pending',
+      }),
     );
     expect(rpc).toHaveBeenCalledWith(
       'decide_consultation_case_attachment',
@@ -453,5 +458,32 @@ describe('SupabaseConsultationCasesGatewayAdapter', () => {
     await expect(
       gateway.getDashboard({ period: 'today', reviewerId: actorId }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('maps a concurrent-decision conflict so the closure counts it as skipped', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        details: '',
+        hint: '',
+        message: 'The consultation case changed since it was read',
+      },
+    });
+    const { client } = clientWith(rpc);
+    const gateway = new SupabaseConsultationCasesGatewayAdapter(client);
+
+    await expect(
+      gateway.updateCase({
+        caseId,
+        changeRouting: false,
+        detectedModuleId: null,
+        detectedSubmoduleId: null,
+        expectedStatus: 'pending',
+        note: null,
+        reviewerId: actorId,
+        status: 'resolved',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

@@ -81,6 +81,7 @@ export async function updateConsultationCaseAction(
   try {
     const caseId = requiredText(formData, "caseId", "El caso");
     const status = optionalText(formData, "status");
+    const expectedStatus = optionalText(formData, "expectedStatus");
     const note = optionalText(formData, "note");
     const changeRouting = formData.get("changeRouting") === "true";
     const detectedModuleId = optionalText(formData, "detectedModuleId");
@@ -97,6 +98,11 @@ export async function updateConsultationCaseAction(
       );
     }
     const { client } = await createAuthorizedConsultationReportsApiContext();
+    if (status && !expectedStatus) {
+      throw new FormValidationError(
+        "Actualiza la página antes de cambiar el estado: falta el estado que viste del caso.",
+      );
+    }
     await client.updateCase(caseId, {
       ...(changeRouting
         ? {
@@ -105,6 +111,9 @@ export async function updateConsultationCaseAction(
             detectedSubmoduleId: detectedSubmoduleId ?? null,
           }
         : {}),
+      // Solo un cambio de estado necesita la condición: una nota o una
+      // corrección de ruta no deben perderse por una decisión ajena.
+      ...(status && expectedStatus ? { expectedStatus } : {}),
       ...(note ? { note } : {}),
       ...(status ? { status } : {}),
     });
@@ -139,9 +148,16 @@ export async function closeConsultationCaseAction(
         "status",
       );
     }
+    const expectedStatus = optionalText(formData, "expectedStatus");
+    if (!expectedStatus) {
+      throw new FormValidationError(
+        "Actualiza la página antes de cerrar: falta el estado que viste del caso.",
+      );
+    }
     const note = optionalText(formData, "note");
     const { client } = await createAuthorizedConsultationReportsApiContext();
     await client.updateCase(caseId, {
+      expectedStatus,
       ...(note ? { note } : {}),
       status,
     });
@@ -233,7 +249,7 @@ export async function resolveUnansweredGroupAction(
       message: details.length
         ? `${result.updated} consultas ${verb}. ${details.join(". ")}.`
         : `${result.updated} consultas ${verb}. El historial de cada caso conserva la nota.`,
-      status: result.failed > 0 && result.updated === 0 ? "error" : "success",
+      status: result.updated === 0 ? "error" : "success",
     };
   } catch (error) {
     return actionFailure(error);

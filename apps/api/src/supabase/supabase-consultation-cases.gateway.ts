@@ -533,6 +533,7 @@ export class SupabaseConsultationCasesGatewayAdapter implements ConsultationCase
       p_consultation_case_id: input.caseId,
       p_detected_module_id: input.detectedModuleId,
       p_detected_submodule_id: input.detectedSubmoduleId,
+      p_expected_status: input.expectedStatus,
       p_note: input.note,
       p_status: input.status,
     });

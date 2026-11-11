@@ -28,6 +28,15 @@ export class UpdateConsultationCaseDto {
   @IsUUID()
   detectedSubmoduleId?: string | null;
 
+  /**
+   * Estado que el revisor tenía en pantalla al decidir. Obligatorio cuando se
+   * envía `status`: la RPC no aplica el cambio si el caso ya no está en ese
+   * estado, para no sobrescribir una decisión concurrente.
+   */
+  @IsOptional()
+  @IsEnum(statuses)
+  expectedStatus?: ConsultationCaseStatus;
+
   @IsOptional()
   @IsString()
   @MaxLength(2000)

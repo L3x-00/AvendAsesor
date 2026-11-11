@@ -105,7 +105,11 @@ describe('Consultation cases controllers', () => {
     await admin.getCaseDetail(caseId, authorization);
     await admin.updateCase(
       caseId,
-      { note: 'Revisar fuente oficial.', status: 'in_review' },
+      {
+        expectedStatus: 'pending',
+        note: 'Revisar fuente oficial.',
+        status: 'in_review',
+      },
       authorization,
     );
     await admin.linkDocument(caseId, { documentId }, authorization);

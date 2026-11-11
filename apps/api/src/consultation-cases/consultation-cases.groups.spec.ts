@@ -506,6 +506,74 @@ describe('ConsultationCasesService — consultas sin sustento agrupadas', () => 
     );
   });
 
+  it('usa el estado observado de cada caso como condición del cierre', async () => {
+    const cases = gateway();
+    const pending = pagedCases('pending', 2, 'remuneraciones');
+    const inReview = pagedCases('in_review', 1, 'vacaciones');
+    cases.listCases.mockImplementation((input) => {
+      const source = input.status === 'pending' ? pending : inReview;
+      return Promise.resolve(
+        source.slice(input.offset, input.offset + input.limit),
+      );
+    });
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.resolveGroup({
+        caseIds: [pending[0].id, inReview[0].id],
+        note: 'Documento incorporado',
+        period: 'month',
+        reviewerId,
+        status: 'resolved',
+      }),
+    ).resolves.toEqual({ failed: 0, skipped: 0, updated: 2 });
+    expect(cases.updateCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: pending[0].id,
+        expectedStatus: 'pending',
+      }),
+    );
+    expect(cases.updateCase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: inReview[0].id,
+        expectedStatus: 'in_review',
+      }),
+    );
+  });
+
+  it('no sobrescribe una decisión concurrente: la omite y la informa', async () => {
+    const cases = gateway();
+    const pending = pagedCases('pending', 2, 'remuneraciones');
+    cases.listCases.mockImplementation((input) => {
+      const source = input.status === 'pending' ? pending : [];
+      return Promise.resolve(
+        source.slice(input.offset, input.offset + input.limit),
+      );
+    });
+    // Otra persona cerró el primer caso entre la validación y el guardado.
+    cases.updateCase.mockImplementation(({ caseId }) =>
+      caseId === pending[0].id
+        ? Promise.reject(
+            new ConflictException(
+              'The consultation case changed since it was read.',
+            ),
+          )
+        : Promise.resolve(),
+    );
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.resolveGroup({
+        caseIds: [pending[0].id, pending[1].id],
+        note: 'Documento incorporado',
+        period: 'month',
+        reviewerId,
+        status: 'discarded',
+      }),
+    ).resolves.toEqual({ failed: 0, skipped: 1, updated: 1 });
+    expect(cases.updateCase).toHaveBeenCalledTimes(2);
+  });
+
   it('actualiza el contador cuando se cierran casos sin afectar los demás', async () => {
     const cases = gateway();
     let pending = pagedCases('pending', 3, 'remuneraciones');

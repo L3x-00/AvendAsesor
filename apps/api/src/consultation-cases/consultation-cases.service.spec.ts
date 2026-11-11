@@ -149,12 +149,22 @@ describe('ConsultationCasesService', () => {
     expect(() => service.updateCase({ caseId, reviewerId: userId })).toThrow(
       BadRequestException,
     );
+    // Cambiar el estado exige el estado observado: sin él no hay CAS y una
+    // decisión concurrente podría sobrescribirse.
+    expect(() =>
+      service.updateCase({
+        caseId,
+        reviewerId: userId,
+        status: 'in_review',
+      }),
+    ).toThrow(BadRequestException);
 
     await service.updateCase({
       caseId,
       changeRouting: true,
       detectedModuleId: answerMessageId,
       detectedSubmoduleId: null,
+      expectedStatus: 'pending',
       note: '  Ruta corregida.  ',
       reviewerId: userId,
       status: 'in_review',
@@ -180,6 +190,7 @@ describe('ConsultationCasesService', () => {
     expect(gateway.updateCase).toHaveBeenCalledWith(
       expect.objectContaining({
         changeRouting: true,
+        expectedStatus: 'pending',
         note: 'Ruta corregida.',
         status: 'in_review',
       }),
