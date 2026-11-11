@@ -952,9 +952,6 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(window.location.pathname).toBe("/chat");
     expect(window.location.search).toBe(`?module=${secondModule.id}`);
-    expect(
-      screen.getByText("Tema actualizado: Evaluación docente."),
-    ).toBeVisible();
   });
 
   it("sustituye el texto transmitido por la respuesta definitiva y escribe las fechas en lenguaje natural", async () => {

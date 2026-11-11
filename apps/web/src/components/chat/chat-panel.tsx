@@ -849,14 +849,6 @@ export function ChatPanel({
     setConversationScopeModuleId(undefined);
     setMessages([]);
     setError(null);
-    const selectedModule = modules.find(
-      (module) => module.id === parentModuleId,
-    );
-    setStatus(
-      selectedModule
-        ? `Tema actualizado: ${selectedModule.name}.`
-        : "Chat general activado.",
-    );
     window.history.replaceState(
       null,
       "",
