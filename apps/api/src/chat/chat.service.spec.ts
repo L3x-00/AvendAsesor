@@ -1400,6 +1400,20 @@ describe('ChatService', () => {
         }),
       ).toEqual([]);
     }
+    // Un tema fuera del léxico conocido (calendario escolar) tampoco hereda.
+    for (const question of [
+      '¿Cuándo termina el año escolar?',
+      '¿Cuándo empiezan las clases?',
+    ]) {
+      expect(
+        salaryQuestionsForTurn({
+          acceptedQuestion: null,
+          effectiveQuestion: question,
+          forceSalaryContext: true,
+          priorUserQuestions: priors,
+        }),
+      ).toEqual([]);
+    }
     // Los seguimientos elípticos sí conservan la cifra: preguntan por el mismo
     // objeto, aunque nombren un rol o una institución.
     for (const question of [
