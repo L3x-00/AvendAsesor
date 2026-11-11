@@ -33,16 +33,6 @@
   gap: 1.25rem;
 }
 
-.notice {
-  margin: 0;
-  padding: 0.85rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--avend-accent) 22%, var(--avend-border));
-  border-radius: 0.75rem;
-  background: var(--avend-soft-blue);
-  font-size: 1rem;
-  color: var(--avend-text);
-}
-
 .tabs {
   border-bottom: 1px solid var(--avend-border);
   display: flex;
