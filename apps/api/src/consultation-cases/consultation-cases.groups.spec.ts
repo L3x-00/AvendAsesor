@@ -299,14 +299,70 @@ describe('ConsultationCasesService — consultas sin sustento agrupadas', () => 
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it('rechaza totalCount ausente o inconsistente para no mostrar un total falso', async () => {
+  it('rechaza una página vacía antes de completar totalCount', async () => {
+    const cases = gateway();
+    cases.listCases.mockImplementation((input) => {
+      if (input.status === 'in_review') return Promise.resolve([]);
+      if (input.offset === 0)
+        return Promise.resolve(
+          pagedCases('pending', 101, 'remuneraciones').slice(0, 100),
+        );
+      return Promise.resolve([]);
+    });
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.getUnansweredGroups(reviewerId, 'month'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('rechaza totalCount ausente para no mostrar un total incompleto', async () => {
     const cases = gateway();
     cases.listCases.mockImplementation((input) => {
       if (input.status === 'in_review') return Promise.resolve([]);
       return Promise.resolve([
-        summary('a', 'remuneraciones', { totalCount: 1 }),
-        summary('b', 'remuneraciones', { totalCount: 2 }),
+        summary('a', 'remuneraciones', {
+          totalCount: undefined as unknown as number,
+        }),
       ]);
+    });
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.getUnansweredGroups(reviewerId, 'month'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('rechaza filas con totalCount inconsistente dentro de la misma página', async () => {
+    const cases = gateway();
+    cases.listCases.mockImplementation((input) => {
+      if (input.status === 'in_review') return Promise.resolve([]);
+      return Promise.resolve([
+        summary('a', 'remuneraciones', { totalCount: 5 }),
+        summary('b', 'remuneraciones', { totalCount: 4 }),
+      ]);
+    });
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.getUnansweredGroups(reviewerId, 'month'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('rechaza un totalCount que difiere entre páginas del mismo estado', async () => {
+    const cases = gateway();
+    const pending = pagedCases('pending', 250, 'remuneraciones');
+    cases.listCases.mockImplementation((input) => {
+      if (input.status === 'in_review') return Promise.resolve([]);
+      const source = pending.slice(input.offset, input.offset + input.limit);
+      // La segunda página declara un total distinto (concurrencia durante el
+      // recorrido): no se puede afirmar un agregado íntegro.
+      return Promise.resolve(
+        source.map((item) => ({
+          ...item,
+          totalCount: input.offset === 0 ? 200 : 250,
+        })),
+      );
     });
     const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
 
@@ -420,6 +476,33 @@ describe('ConsultationCasesService — consultas sin sustento agrupadas', () => 
     );
     expect(cases.listCases).toHaveBeenCalledWith(
       expect.objectContaining({ offset: 100, status: 'pending' }),
+    );
+  });
+
+  it('deja de recorrer páginas y estados cuando ya validó todos los casos accionables', async () => {
+    const cases = gateway();
+    const pending = pagedCases('pending', 300, 'remuneraciones');
+    cases.listCases.mockImplementation((input) => {
+      const source = input.status === 'pending' ? pending : [];
+      return Promise.resolve(
+        source.slice(input.offset, input.offset + input.limit),
+      );
+    });
+    cases.updateCase.mockResolvedValue(undefined);
+    const service = new ConsultationCasesService(cases, { inspect: jest.fn() });
+
+    await expect(
+      service.resolveGroup({
+        caseIds: [pending[0].id, pending[1].id],
+        note: 'Documento incorporado',
+        period: 'month',
+        reviewerId,
+        status: 'resolved',
+      }),
+    ).resolves.toEqual({ failed: 0, skipped: 0, updated: 2 });
+    expect(cases.listCases).toHaveBeenCalledTimes(1);
+    expect(cases.listCases).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 0, status: 'pending' }),
     );
   });
 
