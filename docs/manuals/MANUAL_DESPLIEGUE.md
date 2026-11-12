@@ -140,7 +140,7 @@ Reglas:
 **Incidente conocido (2026-08-24).** El despliegue automático no llegó a
 construir por una restricción de autor del repositorio en Vercel. Se publicó con
 un despliegue manual autenticado, hecho desde una exportación exacta del commit
-publicado (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). Si se repite:
+publicado. Si se repite:
 
 - Use solo archivos versionados de ese commit, por ejemplo con `git archive <sha>`
   hacia una carpeta limpia. Enlácela al proyecto `avend-asesor-web` y ejecute
@@ -229,7 +229,7 @@ exige reiniciar o redesplegar.
 | `RAG_ANSWER_FALLBACK_MODEL` | No | — | Modelo de respaldo, solo ante error técnico del primario. Si está cargado en producción: Por confirmar (PO) |
 | `RAG_INGESTION_WORKER_ENABLED` | No | `false` | Solo acepta `true` o `false` (otro valor impide arrancar). `true` enciende el worker de ingesta (§8) y exige `OPENROUTER_API_KEY` u `OPENAI_API_KEY` |
 | `RAG_INGESTION_LEASE_SECONDS` | No | `300` | Entre 30 y 900 s. Tiempo de *lease* de un trabajo de ingesta |
-| `RAG_MATCH_THRESHOLD` | No | `0.5` | Similitud mínima (0 a 1). Calibrada con el corpus real; **no** volver a 0.7 (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`) |
+| `RAG_MATCH_THRESHOLD` | No | `0.5` | Similitud mínima (0 a 1). Calibrada con el corpus real; **no** volver a 0.7 |
 | `RAG_MATCH_COUNT` | No | `5` | Entre 1 y 10 fragmentos |
 | `FAQ_MEMORY_FINGERPRINT_SECRET` | No | — | Mínimo 32 caracteres, solo de servidor. Si falta, la memoria FAQ queda desactivada (`apps/api/src/learning/faq-memory.service.ts`) |
 | `CHAT_HISTORY_LIMIT` | No | `20` | Entre 1 y 50 |
@@ -359,7 +359,7 @@ Trampas conocidas al escribir o aplicar migraciones:
   `search_path`. Califique los objetos de extensiones, por ejemplo
   `extensions.vector_cosine_ops`. En la promoción de Hitos 3–4 (agosto de 2026)
   la creación de un índice HNSW falló en producción por esto; la transacción se
-  revirtió sin cambios parciales (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`).
+  revirtió sin cambios parciales.
 - **SQLSTATE 55006** (`cannot ALTER TABLE ... because it has pending trigger
   events`). Aparece cuando un backfill (`update`) sobre una tabla con FK
   `deferrable initially deferred` precede a un `ALTER TABLE`. Escriba
@@ -583,8 +583,7 @@ crea conversaciones. El reporte queda en `apps/api/test/acceptance/out/`
   `processing` → `indexed` o `failed`. Cada trabajo admite hasta 3 intentos
   (`max_attempts`, por defecto 3).
 - Estado en producción al 2026-09-24: worker encendido con OpenRouter
-  (`gpt-4o-mini`, `text-embedding-3-small` de 1536 dimensiones)
-  (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`).
+  (`gpt-4o-mini`, `text-embedding-3-small` de 1536 dimensiones).
 
 ### 8.2 Encender y apagar (interruptor de emergencia)
 
@@ -634,7 +633,7 @@ select public.retry_document_ingestion('<document_version_id>', '<superadmin_use
 - Tiempos y costo: la API debe estar despierta. Cada documento deja de aparecer
   en la búsqueda mientras se reindexa. En la reindexación de los 3 documentos
   de producción (2026-09) cada uno tardó alrededor de un minuto y el costo de
-  embeddings fue de centavos (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`); depende
+  embeddings fue de centavos; depende
   del tamaño del documento.
 - Verificación: la versión vuelve a `indexed` y, en la consulta 1,
   `chunks = distintos`.

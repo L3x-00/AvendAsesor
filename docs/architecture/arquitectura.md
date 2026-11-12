@@ -375,8 +375,7 @@ adjuntos de casos.
    en `indexed`. Ante un error llama a `fail_document_ingestion_job`, que la
    reintenta o la marca `failed`. Para reencolar una versión existe la RPC
    `retry_document_ingestion`. El API no la expone: se ejecuta a mano con
-   `service_role` (ver
-   [`../hito3/RUNBOOK_ACTIVACION_EJE_B.md`](../hito3/RUNBOOK_ACTIVACION_EJE_B.md)).
+   `service_role`.
 10. **Aprobación.** Un administrador marca el estado técnico «Listo»
     (`PATCH /admin/documents/:id/technical-status`). La RPC
     `set_document_technical_status` solo lo permite si la versión está
@@ -559,9 +558,8 @@ La web valida estos eventos con zod (`src/lib/chat-api/types.ts`).
 
 Contexto adicional:
 [`SISTEMA_RAG.md`](SISTEMA_RAG.md),
-[`CONTEXTO_CONVERSACIONAL_Y_CITAS_PRIVADAS.md`](CONTEXTO_CONVERSACIONAL_Y_CITAS_PRIVADAS.md),
-[`MINERU_PDF_TABLAS.md`](MINERU_PDF_TABLAS.md)
-y [`../hito3/VALIDACION_INTEGRAL_HITO3.md`](../hito3/VALIDACION_INTEGRAL_HITO3.md).
+[`CONTEXTO_CONVERSACIONAL_Y_CITAS_PRIVADAS.md`](CONTEXTO_CONVERSACIONAL_Y_CITAS_PRIVADAS.md)
+y [`MINERU_PDF_TABLAS.md`](MINERU_PDF_TABLAS.md).
 
 ---
 
@@ -664,7 +662,7 @@ acota al usuario autenticado, así que otro usuario recibe «no encontrada».
 - **Secretos:** solo en las variables de entorno de Render, Vercel y Supabase.
   `.env.example` contiene solo nombres. `SUPABASE_SERVICE_ROLE_KEY` y las
   claves de IA existen únicamente en el API.
-- **Limitaciones conocidas** (`docs/hito3/VALIDACION_INTEGRAL_HITO3.md`):
+- **Limitaciones conocidas**:
   - el límite de consultas es por IP, y el chat llega al API desde los
     servidores de Vercel;
   - al abrir una fuente no se vuelve a verificar su vigencia actual;
@@ -689,7 +687,7 @@ acota al usuario autenticado, así que otro usuario recibe «no encontrada».
    `test:e2e`, `build` y `verify:build-artifacts`.
 2. Si hay migraciones, se aplican primero en staging y luego en producción,
    con respaldo lógico previo (plan Free sin PITR) y autorización del PO. Ver
-   `docs/hito4/fase5/RELEASE_HITO3_HITO4.md`.
+   [`MANUAL_DESPLIEGUE.md`](../manuals/MANUAL_DESPLIEGUE.md).
 3. **Fusionar a `main` despliega a la vez** el API (auto-deploy de Render) y la
    web (Vercel).
 4. Render:
@@ -767,14 +765,14 @@ plantilla raíz es la más completa: `apps/api/.env.example` no incluye
 | Supabase como plataforma: Auth, Postgres, pgvector y Storage | Datos relacionales y vectores en el mismo motor; RLS nativo | [`STACK_TECNOLOGICO.md`](STACK_TECNOLOGICO.md) |
 | Datos por RPC con `service_role`, sin ORM y deny-by-default | Validación, auditoría y atomicidad en la base; el navegador no toca datos | §4.3, [`MAPA_BASE_DE_DATOS_Y_HARDENING.md`](MAPA_BASE_DE_DATOS_Y_HARDENING.md) |
 | Evidence-only fail-closed | Solo se responde con sustento documental vigente y citado | [`SISTEMA_RAG.md`](SISTEMA_RAG.md) |
-| Clasificador de intención determinista antes del RAG | Conversación natural sin costo de IA y sin riesgo de afirmar normas | [`../hito3/PLAN_DESARROLLO_HITO3_12_FASES.md`](../hito3/PLAN_DESARROLLO_HITO3_12_FASES.md) (fases 1, 2 y 10) |
+| Clasificador de intención determinista antes del RAG | Conversación natural sin costo de IA y sin riesgo de afirmar normas | `apps/api/src/rag/topic-intent.ts` |
 | El módulo es contexto de ruteo, no barrera | El usuario no necesita saber en qué módulo buscar; el sistema lo infiere de la evidencia | Mismo plan, fase 5 |
 | Gateway de IA único compatible con OpenAI; dimensión 1536 fija | Cambiar de proveedor sin tocar el dominio; evita mezclar vectores | [`INTEGRACION_OPENROUTER.md`](INTEGRACION_OPENROUTER.md) |
 | Ingesta asíncrona con cola durable en Postgres y OCR local | La carga no bloquea; reintentos idempotentes; sin otro servicio externo | §5.1 |
 | Memoria FAQ gobernada, nunca fuente | Mejora continua sin autoaprendizaje sobre conversaciones | [`MEJORA_CONTINUA_RAG.md`](MEJORA_CONTINUA_RAG.md) |
 | Umbral 0.5 calibrado con datos reales | Con 0.70 casi toda consulta real caía en «sin evidencia» | `src/rag/rag.constants.ts`, [`CALIBRACION_PRODUCCION_RAG.md`](CALIBRACION_PRODUCCION_RAG.md) |
 
-Los resúmenes de `docs/hito1` y `docs/hito2` mencionan ADR numerados (por
+Los informes históricos de los hitos 1 y 2 mencionan ADR numerados (por
 ejemplo, ADR-0002). Esos registros no forman parte del repositorio; este
 documento y los enlazados resumen las decisiones vigentes. Todo cambio
 estructural nuevo (arquitectura, dependencias, seguridad, infraestructura o
@@ -799,10 +797,4 @@ documento.**
 | [`CALIBRACION_PRODUCCION_RAG.md`](CALIBRACION_PRODUCCION_RAG.md) | Puerta de calibración | Histórico; la calibración se hizo el 2026-09-23 |
 | [`MEJORA_CONTINUA_RAG.md`](MEJORA_CONTINUA_RAG.md) | Memoria FAQ gobernada | Válido en diseño |
 | [`STACK_TECNOLOGICO.md`](STACK_TECNOLOGICO.md) | Criterios de selección del stack | Referencia |
-| [`../hito3/README.md`](../hito3/README.md), [`../hito3/ESPECIFICACION_TECNICA_AJUSTADA.md`](../hito3/ESPECIFICACION_TECNICA_AJUSTADA.md) | Alcance y contrato del núcleo RAG | Referencia |
-| [`../hito3/PLAN_DESARROLLO_HITO3_12_FASES.md`](../hito3/PLAN_DESARROLLO_HITO3_12_FASES.md) | Capa conversacional y los 12 lineamientos del cliente | Vigente |
-| [`../hito3/VALIDACION_INTEGRAL_HITO3.md`](../hito3/VALIDACION_INTEGRAL_HITO3.md) | Matriz de cumplimiento, resultados y limitaciones | Vigente al 2026-09-24 |
-| [`../hito3/RUNBOOK_ACTIVACION_EJE_B.md`](../hito3/RUNBOOK_ACTIVACION_EJE_B.md) | Activación, reindexado, validación y rollback del RAG | Vigente |
-| [`../hito3/INFORME_ESTADO_Y_MEJORA_ASISTENTE.md`](../hito3/INFORME_ESTADO_Y_MEJORA_ASISTENTE.md) | Auditoría del 2026-09-17, cuando el RAG estaba apagado | Histórico |
-| [`../hito4/README.md`](../hito4/README.md) | Historial, operación, auditoría y RBAC | Referencia |
 | [`../manuals/GUIA_INSTALACION_LOCAL.md`](../manuals/GUIA_INSTALACION_LOCAL.md), [`../manuals/VARIABLES_DE_ENTORNO.md`](../manuals/VARIABLES_DE_ENTORNO.md), [`../manuals/MANUAL_DESPLIEGUE.md`](../manuals/MANUAL_DESPLIEGUE.md), [`../manuals/INVENTARIO_SERVICIOS.md`](../manuals/INVENTARIO_SERVICIOS.md) | Instalación, variables, despliegue e inventario de servicios (Hito 5) | Vigente |

@@ -191,10 +191,10 @@ Build: `npm ci --include=dev && npm run build --workspace=api`. Arranque:
 | --- | --- |
 | `SUPABASE_URL` | Configurada (`/health/ready` responde `200`). Apunta al proyecto de producción, `https://blxrdotroysitfyehmqw.supabase.co` (misma URL que usan `scripts/seed-production-demo-data.mjs` y `scripts/backup-production-demo-seed.mjs`). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Configurada. Secreta: solo en Render. |
-| `WEB_ORIGIN` | Origen público exacto de Vercel (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`: CORS permite ese origen). |
+| `WEB_ORIGIN` | Origen público exacto de Vercel (CORS permite ese origen). |
 | `NODE_ENV` | Esperado `production`. Valor real: **Por confirmar (PO)**. Nota: `nest build` necesita `@nestjs/cli`, que es devDependency de `apps/api`, y `npm ci` omite las devDependencies cuando `NODE_ENV=production`; por eso el build usa `--include=dev`. |
 | `PORT` | Render la define para los Web Services. Si se fijó un valor explícito: **Por confirmar (PO)**. |
-| `OPENROUTER_API_KEY` | Configurada: el proveedor activo es OpenRouter (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`). |
+| `OPENROUTER_API_KEY` | Configurada: el proveedor activo es OpenRouter. |
 | `OPENAI_API_KEY` | **Por confirmar (PO)**. Mientras exista `OPENROUTER_API_KEY`, no se usa. |
 | `AI_GATEWAY_BASE_URL` | **Por confirmar (PO)**. Si no está definida, se usa el endpoint de OpenRouter. |
 | `RAG_EMBEDDING_MODEL` | Modelo en uso: text-embedding-3-small (1536 dimensiones). Cadena exacta: **Por confirmar (PO)**; se puede leer en el campo `embeddingModel` de `GET /admin/rag/readiness`. |

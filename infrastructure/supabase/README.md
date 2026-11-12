@@ -22,6 +22,6 @@ Para cualquier ambiente adicional confirmado:
 2. Revisar la migración y ejecutar los advisors de seguridad antes de aplicarla.
 3. Aplicar y probar la migración en desarrollo usando una cuenta de prueba.
 4. Repetir el proceso en el proyecto de staging separado; no reutilizar la base ni las claves de desarrollo.
-5. Registrar evidencia, responsables y resultados en `docs/hito1/CONTROL_DE_AVANCE.md`.
+5. Registrar evidencia, responsables y resultados en la bitácora del proyecto.
 
 La promoción de superadministradores será una acción administrativa controlada después de recibir los correos aprobados. Nunca se automatiza mediante registro público ni se ejecuta sobre un ambiente sin confirmar.
