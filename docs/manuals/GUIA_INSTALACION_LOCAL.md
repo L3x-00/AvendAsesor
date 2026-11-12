@@ -9,7 +9,7 @@ Todo lo descrito aquí se ejecuta contra servicios locales. No se necesitan
 credenciales de staging ni de producción, y no deben usarse. El despliegue
 (Render, Vercel y Supabase remoto) queda fuera del alcance de esta guía.
 
-> Estado verificado el 2026-09-25, rama `docs/hito5-documentacion-tecnica`.
+> Estado verificado el 2026-09-25.
 > Los scripts npm citados existen en `package.json`, `apps/api/package.json` o
 > `apps/web/package.json`; los scripts `.ps1` están en `infrastructure/local/`. Los
 > demás comandos son de Supabase CLI 2.x, Docker o Git.
@@ -504,8 +504,8 @@ cd apps/api && ACCEPTANCE_ENV_FILE=.env.acceptance.local npm run acceptance:hito
 - Si el archivo de entorno apunta a un ambiente remoto, el arnés **lee** los datos de
   ese ambiente con la clave de servicio, aunque no escriba en él. Hacerlo contra
   producción requiere autorización del responsable del proyecto.
-- Contexto y últimos resultados: `docs/hito3/VALIDACION_INTEGRAL_HITO3.md` y
-  `docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md` (sección 5).
+- Contexto: [`MANUAL_DESPLIEGUE.md`](MANUAL_DESPLIEGUE.md) e
+  [`INVENTARIO_SERVICIOS.md`](INVENTARIO_SERVICIOS.md).
 
 ---
 

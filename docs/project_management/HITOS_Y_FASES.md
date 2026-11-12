@@ -2,6 +2,12 @@
 
 ## 1. Modelo de ejecución
 
+> Los informes por fase de los hitos 0 a 4 se retiraron del repositorio una vez
+> cerrados y fusionados. Su detalle vive en el historial de Git (Rutas
+> `docs/hito0`…`docs/hito4` antes de la limpieza de 2026-11-11). Lo que sigue
+> vigente se mantiene en `docs/architecture/`, `docs/manuals/` y
+> `docs/requirements/`.
+
 Duración máxima planificada:
 
 **75 días calendario / 2 meses y medio.**

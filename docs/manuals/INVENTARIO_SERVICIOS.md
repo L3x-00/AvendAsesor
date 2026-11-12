@@ -134,11 +134,11 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
   - OCR de a lo sumo 40 páginas por trabajo, renderizadas en lotes de 5, con un único worker de Tesseract por trabajo (`apps/api/src/ingestion/ingestion.service.ts`, `apps/api/src/ingestion/ocr.service.ts`);
   - tope de 5 000 000 caracteres extraídos y de 48 MiB de XML descomprimido por DOCX (`apps/api/src/ingestion/document-format.ts`);
   - en la carga, un PDF de más de 20 MiB se guarda sin analizar su número de páginas (`MAX_PDF_PARSE_BYTES` en `apps/api/src/documents/pdf-inspection.service.ts`).
-- **Suspensión por inactividad.** La instancia se apaga tras ~15 min sin tráfico entrante (`docs/hito4/fase6/AUDITORIA_FASE4.md`) y tarda ~50 s en volver (`docs/hito3/INFORME_ESTADO_Y_MEJORA_ASISTENTE.md`). Consecuencias:
+- **Suspensión por inactividad.** La instancia se apaga tras ~15 min sin tráfico entrante y tarda ~50 s en volver. Consecuencias:
   - el chat muestra un aviso de activación a los 12 s (`COLD_START_NOTICE_MS` en `apps/web/src/components/chat/chat-panel.tsx`);
   - una carga hecha durante el arranque puede recibir un 503 de Render; el formulario pide reintentar (`apps/web/src/components/admin/document-pdf-upload-form.tsx`);
   - el worker **solo procesa mientras la instancia está despierta**. Si la instancia se suspende a mitad de un trabajo, el lease vence y otra pasada retoma el trabajo. Si ya se agotaron los intentos, queda `failed` con `LEASE_EXPIRED`.
-- En `docs/hito4/fase6/AUDITORIA_FASE4.md` se propone un *pinger* externo gratuito contra `/health`. No hay evidencia de que esté configurado: Por confirmar (PO). Si se adopta, debe agregarse a este inventario.
+- Se propuso un *pinger* externo gratuito contra `/health`. No hay evidencia de que esté configurado: Por confirmar (PO). Si se adopta, debe agregarse a este inventario.
 
 **Si falla**
 
@@ -171,7 +171,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 
 **Límites**
 
-- **Sin PITR ni backup físico.** Por eso, antes de cada migración debe hacerse un respaldo lógico privado y una validación en staging, como en el release de los Hitos 3 y 4 (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). El seed de producción exige además un respaldo previo (`docs/database/DEMO_SEED.md`).
+- **Sin PITR ni backup físico.** Por eso, antes de cada migración debe hacerse un respaldo lógico privado y una validación en staging. El seed de producción exige además un respaldo previo (`docs/database/DEMO_SEED.md`).
 - Las migraciones se aplican **antes** de desplegar el código que las necesita. Nunca se ejecuta `supabase db push` desde un árbol de trabajo.
 - Cuotas del plan Free (tamaño de la base, Storage, transferencia, usuarios activos, pausa por inactividad) y límites de envío de Auth en el proyecto remoto: Por confirmar (PO) en el panel. Los valores de `[auth.rate_limit]` de `supabase/config.toml` rigen **solo en local**.
 
@@ -182,7 +182,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 ### 3.5 Supabase — staging (`scepelftmjlabepygrri`)
 
 - Proyecto «avend-asesor-staging», región `us-east-2`. Plan: Por confirmar (PO); el plan de Supabase se contrata por organización.
-- Uso documentado: validación aislada de migraciones antes de promoverlas a producción (`docs/hito4/fase5/RELEASE_HITO3_HITO4.md`). Tiene conectada la integración de GitHub que publica el check «Supabase Preview» en los PR.
+- Uso documentado: validación aislada de migraciones antes de promoverlas a producción. Tiene conectada la integración de GitHub que publica el check «Supabase Preview» en los PR.
 - No hay evidencia en el repositorio de que Render o las previews de Vercel apunten a staging: Por confirmar (PO).
 - **Cuidado**: el ref que aparece en los checks de los PR es el de **staging**, no el de producción. Antes de aplicar una migración, confirma el proyecto destino por su ref y por sus datos.
 - Si falla, no afecta a los usuarios. Se pierde el ensayo previo de las migraciones.
@@ -200,7 +200,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 - Se usa en:
   - los embeddings de la ingesta y de cada consulta (`apps/api/src/ingestion/openai-embeddings.gateway.ts`, `apps/api/src/rag/rag.service.ts`);
   - la generación de respuestas, con un máximo de 1500 tokens de salida (`MAX_RAG_ANSWER_TOKENS` en `apps/api/src/rag/rag.constants.ts`).
-- En producción: OpenRouter con `gpt-4o-mini` y `text-embedding-3-small` de 1536 dimensiones (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`). Con OpenRouter, los nombres de los modelos llevan el prefijo del proveedor (`openai/...`, ver `.env.example`). Los valores efectivos se consultan con `GET /admin/rag/readiness`.
+- En producción: OpenRouter con `gpt-4o-mini` y `text-embedding-3-small` de 1536 dimensiones. Con OpenRouter, los nombres de los modelos llevan el prefijo del proveedor (`openai/...`, ver `.env.example`). Los valores efectivos se consultan con `GET /admin/rag/readiness`.
 
 **Configuración**: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `AI_GATEWAY_BASE_URL`, `RAG_EMBEDDING_MODEL`, `RAG_ANSWER_MODEL`, `RAG_ANSWER_FALLBACK_MODEL` (en Render, ver §3.3).
 
@@ -213,7 +213,7 @@ Salvo que se indique otro archivo, se validan con zod en `apps/api/src/config/en
 **Si falla**
 
 - **Chat**: se emite el evento de error `CHAT_STREAM_FAILED` y la falla técnica se registra (`apps/api/src/chat/chat.controller.ts`).
-- **Ingesta**: los trabajos se reintentan hasta `max_attempts` y luego quedan `failed`. El error se ve en `document_ingestion_jobs.last_error_code` y `last_error_message`. Para reencolar, usa la RPC `public.retry_document_ingestion` (`docs/hito3/RUNBOOK_ACTIVACION_EJE_B.md`).
+- **Ingesta**: los trabajos se reintentan hasta `max_attempts` y luego quedan `failed`. El error se ve en `document_ingestion_jobs.last_error_code` y `last_error_message`. Para reencolar, usa la RPC `public.retry_document_ingestion`.
 - **Diagnóstico**:
   - `401 User not found` es la respuesta de OpenRouter ante una clave inválida;
   - `Incorrect API key provided` significa que la petición llegó a OpenAI directo y OpenAI rechazó la clave: normalmente falta `OPENROUTER_API_KEY` en Render y el gateway cayó a `OPENAI_API_KEY`.
