@@ -4,6 +4,7 @@ import {
   causalLabelsInQuestion,
   causalsInQuestion,
 } from './process-clarification';
+import type { RetrievedChunk } from './retrieval.gateway';
 import {
   detectTopicIntent,
   type TopicIntent,
@@ -29,6 +30,10 @@ import { normalizeSpanishText } from './text-normalization';
  *  - Solo actúa cuando el turno depende del proceso (una causal, un verbo de
  *    trámite, un aspecto normativo o una referencia a lo anterior). Una pregunta
  *    autónoma («¿cuánto gana un auxiliar?») se busca por sí misma.
+ *  - No hereda de un turno que rechaza el tema («no quiero nada de eso»).
+ *  - Conserva el régimen del proceso: si el hilo es de un auxiliar de
+ *    educación, la consulta heredada no usa la denominación del régimen
+ *    docente.
  *  - Solo aporta vocabulario de búsqueda. No agrega hechos, no elige evidencia
  *    por sí misma, no cambia el umbral de admisión y no autoriza a responder sin
  *    fuentes: la compuerta de citas sigue intacta.
@@ -39,11 +44,18 @@ const SYNTHETIC_CONTEXT = /^(?:Respuesta anterior|Propuesta aceptada):/u;
 
 /** Verbos con los que se pide un trámite sin nombrarlo. */
 const PROCEDURE_VERB =
-  /\b(?:postular|postulo|postule|postularme|postulacion|solicitar|solicito|solicite|tramitar|tramito|present(?:ar|o|aria)(?:l[oa])?|inscribir(?:me)?|renovar|renuevo|renovacion)\b/u;
+  /\b(?:postular|postulo|postule|postularme|postulacion|solicitar|solicito|solicite|tramitar|tramito|present(?:ar|o|aria)(?:l[oa])?|inscribir(?:me)?|inscribo|pedir|pido|pediria|necesit(?:o|aria)|gestionar|gestiono|conseguir|consigo|hacer|hago|renovar|renuevo|renovacion)\b/u;
 
 /** Aspectos normativos o de trámite que completan un proceso ya abierto. */
 const NORMATIVE_ASPECT =
   /\b(?:requisitos?|plazos?|cronograma|procedimiento|tramites?|documentos?|etapas?|formato|formulario|anexo|pasos?)\b/u;
+
+/** La persona descarta el tema: no hay trámite que completar. */
+const REJECTS_TOPIC =
+  /\bnada\s+de\s+eso\b|\bolvidalo\b|\bdejemos\s+(?:eso|esto)\b|\bno\s+(?:quiero|me\s+interesa|necesito)\s+(?:nada\s+)?(?:de\s+)?(?:eso|esto|ese|esa|este|esta)\b/u;
+
+/** Módulo cuyo régimen documental es propio y no se comparte con docentes. */
+const AUXILIARY_MODULE = 'Auxiliar de educación';
 
 /**
  * Denominación con la que el corpus nombra cada proceso. Se usa solo cuando la
@@ -70,11 +82,24 @@ const PROCESS_CANONICAL_QUERIES: Record<TopicIntentId, string> = {
 };
 
 /**
+ * El auxiliar de educación tiene su propio procedimiento en los procesos que
+ * comparte con los docentes. Buscar la denominación docente traería la norma
+ * equivocada, así que su consulta heredada nombra su régimen.
+ */
+const AUXILIARY_PROCESS_QUERIES: Partial<Record<TopicIntentId, string>> = {
+  reassignment:
+    'reasignación de auxiliares de educación requisitos procedimiento solicitud',
+  'medical-leave':
+    'licencia por incapacidad temporal auxiliares de educación descanso médico CITT certificado',
+};
+
+/**
  * El turno necesita el proceso del hilo para tener sentido. Se excluye todo lo
  * que se responde por sí mismo: una cifra, una fecha o un tema nuevo.
  */
 export function isProcessDependentTurn(question: string): boolean {
   const text = normalizeSpanishText(question);
+  if (REJECTS_TOPIC.test(text)) return false;
   return (
     causalsInQuestion(question).length > 0 ||
     PROCEDURE_VERB.test(text) ||
@@ -111,10 +136,13 @@ export function inheritedTopicIntent(
  * emergencia, violencia, unidad familiar e interés personal.
  */
 export function processCanonicalQuery(
-  intentId: TopicIntentId,
+  intent: TopicIntent,
   question: string,
 ): string {
-  const base = PROCESS_CANONICAL_QUERIES[intentId];
+  const base =
+    (intent.moduleName === AUXILIARY_MODULE
+      ? AUXILIARY_PROCESS_QUERIES[intent.id]
+      : undefined) ?? PROCESS_CANONICAL_QUERIES[intent.id];
   const causals = causalLabelsInQuestion(question);
   return causals.length ? `${base} ${causals.join(' ')}` : base;
 }
@@ -123,10 +151,54 @@ export function processCanonicalQuery(
  * Consultas que aporta el proceso heredado del hilo. Vacío cuando la consulta
  * nombra su propio tema: en ese caso manda lo que la persona escribió.
  */
-export function inheritedProcessQueries(
+export function processQueriesForIntent(
+  intent: TopicIntent | null,
   question: string,
-  priorUserQuestions: readonly string[],
 ): string[] {
-  const intent = inheritedTopicIntent(question, priorUserQuestions);
-  return intent ? [processCanonicalQuery(intent.id, question)] : [];
+  return intent ? [processCanonicalQuery(intent, question)] : [];
+}
+
+/**
+ * Señal textual con la que el corpus nombra cada proceso. La herencia aporta el
+ * proceso, no el término: cuando el turno actual es «¿y los requisitos?» la
+ * comprobación directa contra la pregunta no puede admitir ningún fragmento, y
+ * se evalúa el fragmento. Es la misma exigencia —coincidencia real con el
+ * proceso y no una mención ajena— aplicada al lado correcto.
+ */
+const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
+  reassignment: /\breasignacion(?:es)?\b/u,
+  'temporary-placement': /\bdestaques?\b|\bdestacad[oa]s?\b/u,
+  'medical-leave':
+    /\b(?:descanso medic[oa]|incapacidad temporal|citt|licencia por enfermedad)\b/u,
+  'career-progression':
+    /\b(?:ascenso|escala magisterial|concurso de ascenso)\b/u,
+  'rural-allocation':
+    /\b(?:ambito rural|institucion educativa rural|asignacion por trabajo en ambito rural)\b/u,
+  'auxiliary-requirements': /\bauxiliar(?:es)? de educacion\b/u,
+  disciplinary:
+    /\b(?:procedimiento administrativo disciplinario|proceso administrativo disciplinario|descargos)\b/u,
+  rationalization: /\bracionalizacion\b/u,
+};
+
+const AUXILIARY_REGIME = /\bauxiliares?\b/u;
+
+/**
+ * El fragmento trata el proceso heredado. Para un proceso que también rige a
+ * los docentes, el auxiliar exige además que el fragmento sea de su régimen:
+ * heredar el tema no autoriza a entregarle la norma de profesores.
+ */
+export function treatsProcessIntent(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const title = normalizeSpanishText(source.documentTitle);
+  const body = normalizeSpanishText(
+    `${source.sectionTitle ?? ''} ${source.chunkContent}`,
+  );
+  const pattern = PROCESS_EVIDENCE[intent.id];
+  if (!pattern.test(title) && !pattern.test(body)) return false;
+  if (intent.moduleName !== AUXILIARY_MODULE) return true;
+  return AUXILIARY_REGIME.test(`${title} ${body}`);
 }

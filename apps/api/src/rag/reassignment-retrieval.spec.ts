@@ -150,4 +150,27 @@ describe('evidencia directa de reasignación', () => {
       ),
     ).toBe(false);
   });
+
+  it('rechaza el fragmento que solo trata el régimen de auxiliares', () => {
+    // El título es la identidad de la norma: la palabra que decide el régimen
+    // está en el cuerpo, no en el título.
+    expect(
+      isDirectReassignmentEvidence(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+        source(
+          'Los auxiliares presentan su solicitud de reasignación ante la UGEL de destino.',
+        ),
+      ),
+    ).toBe(false);
+    // Un fragmento mixto conserva su alcance: no se descarta por nombrar a los
+    // auxiliares junto con los docentes.
+    expect(
+      isDirectReassignmentEvidence(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+        source(
+          'Requisitos de reasignación para docentes y auxiliares de educación.',
+        ),
+      ),
+    ).toBe(true);
+  });
 });

@@ -47,6 +47,7 @@ const catalogDocuments = [
 const questions = {
   reassignment:
     'soy nombrado en junin pero quiero irme a lima porque mi familia vive alla que hago',
+  temporaryPlacement: 'como puedo destacarme en otro colegio',
   medical:
     'el doctor me dio descanso por 15 dias como justifico eso en mi colegio',
   rural: 'mi colegio esta en zona rural me toca recibir un pago adicional',
@@ -259,9 +260,15 @@ function messageOf(
   return reply.data.message;
 }
 
-describe('ChatService — siete consultas del chat general', () => {
+describe('ChatService — consultas del chat general', () => {
   it.each([
     ['reassignment', questions.reassignment, 'reassignment'],
+    // El destaque se reconoce por su forma verbal, no solo por su sustantivo.
+    [
+      'temporary-placement',
+      questions.temporaryPlacement,
+      'temporary-placement',
+    ],
     ['medical-leave', questions.medical, 'medical-leave'],
     ['rural-allocation', questions.rural, 'rural-allocation'],
     ['career-progression', questions.career, 'career-progression'],
@@ -329,6 +336,7 @@ describe('ChatService — siete consultas del chat general', () => {
 
   it.each([
     [questions.reassignment, 'reasignación'],
+    [questions.temporaryPlacement, 'destaque'],
     [questions.medical, 'incapacidad temporal'],
     [questions.rural, 'asignación por trabajo'],
     [questions.auxiliary, 'auxiliares de educación'],

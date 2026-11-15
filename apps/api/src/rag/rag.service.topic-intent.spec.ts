@@ -154,11 +154,37 @@ describe('RagService — intención temática del chat general', () => {
     await expect(
       service.retrieve(question, null, history),
     ).resolves.toMatchObject({ kind: 'no_evidence' });
+    // Con el proceso heredado, la evidencia debe tratar ese proceso: el
+    // fragmento de contratación ya no responde el seguimiento de una
+    // reasignación de auxiliares.
     await expect(
       service.retrieve(question, null, [
         '¿Cómo pido reasignación como auxiliar de educación?',
       ]),
-    ).resolves.toMatchObject({ kind: 'evidence' });
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+    gateway.search.mockResolvedValue([
+      {
+        ...hiring,
+        chunkId: 'auxiliary-reassignment',
+        documentTitle: 'Norma técnica de reasignación y permuta',
+        chunkContent:
+          'La solicitud de reasignación de los auxiliares de educación se presenta con el expediente ante la UGEL de destino.',
+      },
+    ]);
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'auxiliary-reassignment' }],
+    });
+    gateway.search.mockResolvedValue([administrative]);
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
     await expect(
       service.retrieve(question, null, [
         '¿Qué requisitos necesita un auxiliar de educación para una queja contra la dirección?',

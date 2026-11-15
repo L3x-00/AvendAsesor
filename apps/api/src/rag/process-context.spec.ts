@@ -1,9 +1,18 @@
 import {
-  inheritedProcessQueries,
   inheritedTopicIntent,
   isProcessDependentTurn,
   processCanonicalQuery,
+  processQueriesForIntent,
+  treatsProcessIntent,
 } from './process-context';
+import { detectTopicIntent, type TopicIntent } from './topic-intent';
+
+/** Intención reconocida de una consulta; falla si no la hay. */
+function intent(question: string): TopicIntent {
+  const detected = detectTopicIntent(question);
+  if (!detected) throw new Error(`Sin intención para «${question}»`);
+  return detected;
+}
 
 /**
  * El hilo aporta el proceso cuando la consulta actual no lo nombra. Estas
@@ -129,10 +138,10 @@ describe('contexto de proceso del hilo', () => {
       ).toMatchObject({ id: 'temporary-placement' });
       // La causal del turno nuevo se sigue reflejando en la consulta.
       expect(
-        processCanonicalQuery('temporary-placement', 'que documentos presento'),
-      ).toContain('destaque docente');
-      expect(
-        inheritedProcessQueries('y que documentos presento', history)[0],
+        processQueriesForIntent(
+          inheritedTopicIntent('y que documentos presento', history),
+          'y que documentos presento',
+        )[0],
       ).toContain('destaque docente');
     });
 
@@ -147,7 +156,10 @@ describe('contexto de proceso del hilo', () => {
         id: 'reassignment',
       });
       expect(
-        inheritedProcessQueries('y que requisitos piden', history)[0],
+        processQueriesForIntent(
+          inheritedTopicIntent('y que requisitos piden', history),
+          'y que requisitos piden',
+        )[0],
       ).toContain('reasignación docente');
     });
 
@@ -171,44 +183,134 @@ describe('contexto de proceso del hilo', () => {
 
   describe('processCanonicalQuery', () => {
     it('usa la denominación del corpus para cada proceso', () => {
-      expect(processCanonicalQuery('temporary-placement', 'x')).toContain(
+      expect(processCanonicalQuery(intent('como destacarme'), 'x')).toContain(
         'destaque docente',
       );
-      expect(processCanonicalQuery('reassignment', 'x')).toContain(
-        'reasignación docente',
-      );
-      expect(processCanonicalQuery('rationalization', 'x')).toContain(
-        'racionalización de plazas',
-      );
+      expect(
+        processCanonicalQuery(intent('quiero reasignarme a otra ugel'), 'x'),
+      ).toContain('reasignación docente');
+      expect(
+        processCanonicalQuery(
+          intent(
+            'en mi colegio estan bajando los alumnos y dicen que van a reducir plazas',
+          ),
+          'x',
+        ),
+      ).toContain('racionalización de plazas');
     });
 
     it('completa la consulta con la causal declarada', () => {
       const query = processCanonicalQuery(
-        'temporary-placement',
+        intent('como destacarme'),
         'que hacer para postular por causal de salud',
       );
       expect(query).toContain('destaque docente');
       expect(query).toContain('salud');
     });
+
+    it('conserva el régimen del auxiliar heredado', () => {
+      // El auxiliar de educación tiene su propio procedimiento: buscar la
+      // denominación docente le entregaría la norma equivocada.
+      const auxiliarReassignment = intent(
+        'soy auxiliar y quiero reasignarme a otra ugel',
+      );
+      expect(auxiliarReassignment.moduleName).toBe('Auxiliar de educación');
+      const query = processCanonicalQuery(
+        auxiliarReassignment,
+        'y los requisitos',
+      );
+      expect(query).toContain('auxiliares de educación');
+      expect(query).not.toContain('docente');
+    });
   });
 
-  describe('inheritedProcessQueries', () => {
+  describe('processQueriesForIntent', () => {
     it('solo agrega vocabulario de búsqueda, sin afirmar el trámite', () => {
-      const queries = inheritedProcessQueries(
+      const queries = processQueriesForIntent(
+        inheritedTopicIntent(
+          'que hacer para postular por causal de unidad familiar',
+          ['como destacarme en otro colegio'],
+        ),
         'que hacer para postular por causal de unidad familiar',
-        ['como destacarme en otro colegio'],
       );
       expect(queries).toHaveLength(1);
       expect(queries[0]).toContain('destaque docente');
       expect(queries[0]).toContain('unidad familiar');
     });
 
-    it('no agrega consultas cuando la consulta nombra el proceso', () => {
+    it('no agrega consultas sin proceso heredado', () => {
       expect(
-        inheritedProcessQueries('como destaco a otro colegio', [
-          'quiero reasignarme a otra ugel',
-        ]),
+        processQueriesForIntent(
+          inheritedTopicIntent('como destaco a otro colegio', [
+            'quiero reasignarme a otra ugel',
+          ]),
+          'como destaco a otro colegio',
+        ),
       ).toEqual([]);
+      expect(processQueriesForIntent(null, 'y los requisitos?')).toEqual([]);
+    });
+  });
+
+  describe('treatsProcessIntent', () => {
+    it('evalúa el fragmento cuando el turno no repite el proceso', () => {
+      expect(
+        treatsProcessIntent(intent('como destacarme'), {
+          chunkContent:
+            'El destaque se solicita para desempeñar funciones en otra IE.',
+          documentTitle: 'RSG N.° 326-2017-MINEDU',
+        }),
+      ).toBe(true);
+      expect(
+        treatsProcessIntent(intent('como destacarme'), {
+          chunkContent: 'Los requisitos generales de contratación docente.',
+          documentTitle: 'RSG N.° 326-2017-MINEDU',
+        }),
+      ).toBe(false);
+    });
+
+    it('exige el régimen del auxiliar en los procesos compartidos', () => {
+      const auxiliar = intent('soy auxiliar y quiero reasignarme');
+      const docenteChunk = {
+        chunkContent:
+          'La reasignación del profesor nombrado se solicita ante la UGEL.',
+        documentTitle: 'Norma técnica de reasignación y permuta',
+      };
+      expect(treatsProcessIntent(auxiliar, docenteChunk)).toBe(false);
+      expect(
+        treatsProcessIntent(auxiliar, {
+          chunkContent:
+            'La reasignación de los auxiliares de educación se solicita ante la UGEL.',
+          documentTitle: 'Norma técnica de reasignación y permuta',
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe('turnos que no heredan', () => {
+    it.each([
+      // Rechazo explícito del tema: no hay trámite que completar.
+      'no quiero nada de eso',
+      'no me interesa, dejemos eso',
+      // Pregunta autónoma que ya trae su propio tema.
+      'que documentos piden para la matricula escolar',
+    ])('no hereda el proceso en «%s»', (question) => {
+      expect(
+        inheritedTopicIntent(question, [
+          'como destacarme en otro colegio',
+          'que causales existen en el destaque',
+        ]),
+      ).toBeNull();
+    });
+
+    it.each([
+      'y que necesito',
+      'y a quien le pido',
+      'que tengo que hacer',
+      'y ahora que hago',
+    ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
+      expect(
+        inheritedTopicIntent(question, ['como destacarme en otro colegio']),
+      ).toMatchObject({ id: 'temporary-placement' });
     });
   });
 });

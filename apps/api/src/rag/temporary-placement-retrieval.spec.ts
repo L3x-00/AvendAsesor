@@ -139,6 +139,44 @@ describe('destaque expresado con el verbo o el término del proceso', () => {
     );
   });
 
+  it('no abre el proceso por un uso corriente del verbo en el colegio', () => {
+    // «docente» o «vacante» describen el ámbito, no el traslado: sin indicio
+    // de plaza u otro centro, el turno no pide el destaque.
+    expect(
+      isTemporaryPlacementQuestion(
+        'fui docente destacado, que beneficios tengo',
+      ),
+    ).toBe(false);
+    expect(
+      isTemporaryPlacementQuestion(
+        'soy docente y quiero destacar en mi evaluacion',
+      ),
+    ).toBe(false);
+    expect(
+      isTemporaryPlacementQuestion(
+        'quiero destacar en el examen para obtener una vacante',
+      ),
+    ).toBe(false);
+    expect(
+      isTemporaryPlacementQuestion(
+        'soy docente y quiero destacarme en otra ugel',
+      ),
+    ).toBe(true);
+  });
+
+  it('reconoce que un contratado también puede preguntar por el destaque', () => {
+    // La norma reserva el destaque al personal nombrado: la respuesta correcta
+    // es justamente esa, así que la búsqueda no se descarta por el vínculo.
+    expect(
+      isTemporaryPlacementQuestion(
+        'soy docente contratado y quiero destacarme',
+      ),
+    ).toBe(true);
+    expect(
+      temporaryPlacementQueries('soy docente contratado y quiero destacarme'),
+    ).toHaveLength(1);
+  });
+
   it('reconoce el fragmento que trata el destaque, no la pregunta', () => {
     const destaque = {
       chunkContent:

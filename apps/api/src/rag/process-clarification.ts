@@ -24,9 +24,14 @@ const REASSIGNMENT_DESTINATION =
  * propio. Interrumpirla con la causal dejaría sin respuesta exactamente lo que
  * se preguntó («¿cuál es la norma técnica de la reasignación?»), así que se
  * responde con la norma que el corpus ya identifica.
+ *
+ * La condición es la IDENTIDAD de la norma (qué norma es, cuál la regula, cuál
+ * es su base legal). «Qué requisitos pide la norma para la reasignación» solo
+ * menciona la norma como fuente de un pedido que sigue dependiendo de la
+ * causal, y conserva su aclaración.
  */
 const NORM_IDENTITY_REQUEST =
-  /\bnorma(?:s)?\s+(?:tecnica(?:s)?|que\s+(?:regula|rige)|aplicable(?:s)?|vigente(?:s)?)\b|\b(?:cual(?:es)?\s+(?:es|son)\s+)?(?:la|las)\s+norma(?:s)?\s+(?:de|del|para)\b|\bque\s+norma(?:s)?\s+(?:regula|rige|aplica)\b|\bbase\s+legal\b|\bmarco\s+legal\b|\bque\s+(?:ley|resolucion|documento)\s+(?:regula|rige|aprueba)\b/u;
+  /\bnorma(?:s)?\s+(?:tecnica(?:s)?|que\s+(?:regula|rige)|aplicable(?:s)?|vigente(?:s)?)\b|\bcual(?:es)?\s+(?:es|son)\s+(?:(?:la|las|el)\s+)?(?:norma(?:s)?|ley|resolucion|marco\s+legal|base\s+legal)\b|\bque\s+norma(?:s)?\s+(?:regula|rige|aplica)\b|\bbase\s+legal\b|\bmarco\s+legal\b|\bque\s+(?:ley|resolucion|documento)\s+(?:regula|rige|aprueba)\b/u;
 
 const CAUSALS: ReadonlyArray<{
   id: string;

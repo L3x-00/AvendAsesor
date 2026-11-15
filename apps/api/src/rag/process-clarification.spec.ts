@@ -131,6 +131,23 @@ describe('causalClarificationFor', () => {
     ).toBeNull();
   });
 
+  it('conserva la aclaración cuando la norma solo se menciona como fuente', () => {
+    // «Qué requisitos pide la norma» no pregunta por la identidad de la norma:
+    // sigue dependiendo de la causal.
+    expect(
+      causalClarificationFor(
+        '¿Qué requisitos pide la norma para la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).not.toBeNull();
+    expect(
+      causalClarificationFor('¿Qué plazo fija la norma para la reasignación?', [
+        SALUD,
+        EMERGENCIA,
+      ]),
+    ).not.toBeNull();
+  });
+
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {
     expect(
       causalClarificationFor('¿Qué debo solicitar para la reasignación?', [

@@ -141,7 +141,22 @@ export function detectTopicIntent(question: string): TopicIntent | null {
   // elige uno y el enrutamiento normal decide con la evidencia.
   const temporaryPlacement = isTemporaryPlacementQuestion(question);
   const reassignment = isReassignmentQuestion(question);
-  if (temporaryPlacement && reassignment) return null;
+  // Una consulta que nombra el destaque y además una figura médica conserva la
+  // intención de licencia: es la ruta que aplica la comprobación clínica
+  // (régimen, CITT, cobertura) y puede negarse a responder. Elegir el destaque
+  // desactivaría esa compuerta en un turno mixto.
+  if (temporaryPlacement && isMedicalLeaveQuestion(question)) {
+    return INTENTS['medical-leave'];
+  }
+  if (temporaryPlacement && reassignment) {
+    // Solo la comparación explícita deja el tema abierto; si la persona nombra
+    // los dos sin compararlos, manda el proceso que ya se reconocía antes.
+    return /\b(?:diferencia(?:s)?|en lugar de|en vez de|comparar|versus)\b/u.test(
+      text,
+    )
+      ? null
+      : INTENTS.reassignment;
+  }
   if (temporaryPlacement) return INTENTS['temporary-placement'];
   if (reassignment) {
     // El auxiliar tiene su propio procedimiento de reasignación; la etiqueta y

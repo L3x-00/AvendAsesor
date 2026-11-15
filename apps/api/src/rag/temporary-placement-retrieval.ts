@@ -38,11 +38,16 @@ const DESTAQUE_NOUN = /\bdestaques?\b/u;
 const DESTAQUE_SELF = /\bdestacar(?:me|se|nos|lo|la)\b/u;
 /** «me destaco», «me destacaría»: primera persona sin el infinitivo. */
 const DESTAQUE_FIRST_PERSON = /\bme\s+destac(?:o|are|aria|e)\b/u;
-/** Formas que también aparecen en sentido figurado: exigen contexto educativo. */
+/** Formas que también aparecen en sentido figurado: exigen contexto de traslado. */
 const DESTAQUE_CONJUGATED = /\bdestac(?:ar|o|a|an|amos|are|aria|aran)\b/u;
 const DESTAQUE_PARTICIPLE = /\bdestacad[oa]s?\b/u;
-const EDUCATIONAL_CONTEXT =
-  /\b(?:docentes?|profesor(?:a|es|as)?|nombrad[oa]s?|ugel|dre|colegios?|escuelas?|institucion educativa|ie|plazas?|vacantes?)\b/u;
+/**
+ * Indicio de traslado o de plaza, no de docencia: «destacar en el examen» y
+ * «docente destacado del año» son lenguaje corriente en un colegio y no piden
+ * el proceso. «Nombrado» sí lo pide: el destaque es del personal nombrado.
+ */
+const TRANSFER_CONTEXT =
+  /\b(?:nombrad[oa]s?|plazas?|plaza de origen|colegios?|escuelas?|institucion educativa|\bie\b|ugel|dre|otr[oa]s?\s+(?:colegio|escuela|institucion educativa|ie|ugel|dre|plaza))\b/u;
 
 const RENEWAL = /\b(?:renov\p{L}*|prorrog\p{L}*|ampliacion|vigencia)\b/u;
 
@@ -66,7 +71,7 @@ export function isTemporaryPlacementQuestion(question: string): boolean {
     return true;
   return (
     (DESTAQUE_CONJUGATED.test(text) || DESTAQUE_PARTICIPLE.test(text)) &&
-    EDUCATIONAL_CONTEXT.test(text)
+    TRANSFER_CONTEXT.test(text)
   );
 }
 

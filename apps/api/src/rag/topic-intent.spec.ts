@@ -153,6 +153,28 @@ describe('detectTopicIntent', () => {
     ).toBeNull();
   });
 
+  it('nombra los dos procesos sin compararlos: conserva la reasignación', () => {
+    // La comparación deja el tema abierto; una mención de ambos sin comparar
+    // conserva la intención que el sistema ya reconocía.
+    expect(
+      detectTopicIntent(
+        'quiero reasignarme a otra ugel y tambien me interesa el destaque',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
+  it('conserva la compuerta médica en un turno que menciona el destaque', () => {
+    // La licencia aplica una comprobación clínica que el destaque no tiene:
+    // elegir el destaque desactivaría esa compuerta en un turno mixto.
+    expect(
+      detectTopicIntent('tengo descanso medico, puedo destacarme a otra ugel'),
+    ).toMatchObject({ id: 'medical-leave' });
+    // La causal médica de la reasignación sigue siendo reasignación.
+    expect(
+      detectTopicIntent('quiero reasignarme por descanso medico a otra ugel'),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
   it.each([
     // La cifra manda sobre el nombre del proceso, también en el destaque.
     '¿Me siguen pagando si me destaco en otra UGEL?',
