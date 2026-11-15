@@ -2,6 +2,7 @@ import { detectTopicIntent } from './topic-intent';
 import { reassignmentRole } from './reassignment-retrieval';
 import { hasTopicTerm } from './domain-lexicon';
 import { normalizeSpanishText } from './text-normalization';
+import { temporaryPlacementQueries } from './temporary-placement-retrieval';
 
 /**
  * El chat general identifica la intención principal de cada consulta sin que la
@@ -134,6 +135,53 @@ describe('detectTopicIntent', () => {
       detectTopicIntent('mi colega asciende de la primera a la segunda escala'),
     ).toMatchObject({ id: 'career-progression' });
   });
+
+  it('reconoce el destaque por su término y por su forma verbal', () => {
+    expect(detectTopicIntent('como destacarme en otro colegio')).toMatchObject({
+      id: 'temporary-placement',
+      label: 'el destaque docente',
+      moduleName: 'Contratación y desplazamientos',
+    });
+    expect(detectTopicIntent('que causales existen en destaque')).toMatchObject(
+      { id: 'temporary-placement' },
+    );
+  });
+
+  it('no elige un proceso cuando la consulta compara destaque y reasignación', () => {
+    expect(
+      detectTopicIntent('que diferencia hay entre destaque y reasignacion'),
+    ).toBeNull();
+  });
+
+  it.each([
+    // La cifra manda sobre el nombre del proceso, también en el destaque.
+    '¿Me siguen pagando si me destaco en otra UGEL?',
+    '¿Cuánto me pagan por un destaque?',
+    // Negar el trámite no lo abre.
+    'No quiero un destaque, quiero renunciar',
+    // Un auxiliar no se rige por el destaque de profesores.
+    'Soy auxiliar y quiero destacarme en otra IE',
+    // El verbo figurado no abre el proceso.
+    'Quiero destacar en mi evaluación de desempeño',
+  ])('no fuerza el destaque en «%s»', (question) => {
+    expect(detectTopicIntent(question)).toBeNull();
+  });
+
+  it.each([
+    // C05 del arnés de aceptación: consulta de un directivo sobre reemplazo.
+    '¿Quién reemplaza al director cuando se encuentra de licencia?',
+    // C18: tabla de incrementos de remuneración (tabla comparativa).
+    'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
+    // O03: monto por jornada de un contratado.
+    'Soy docente contratado de secundaria con jornada de 30 horas. ¿Cuánto debería ganar en 2025? Muéstralo en una tabla y cita el documento y la página.',
+  ])(
+    'no atribuye una intención de proceso a la consulta de aceptación «%s»',
+    (question) => {
+      expect(detectTopicIntent(question)?.id).not.toBe('temporary-placement');
+      // Y no gasta una búsqueda canónica del destaque en un tema ajeno.
+      expect(temporaryPlacementQueries(question)).toEqual([]);
+    },
+  );
 
   it('reconoce la expulsión del cargo como tema propio, no como seguimiento', () => {
     // Antes del arreglo, «cuándo es expulsado un docente» no nombraba ningún

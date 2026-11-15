@@ -175,6 +175,15 @@ export function isReassignmentCausalEvidence(
 }
 
 /**
+ * El texto presenta la reasignación como el trámite que regula, no como una
+ * mención incidental. Muchos títulos del corpus son solo la identidad de la
+ * norma («RSG N.° 326-2017-MINEDU»), así que la ausencia de la palabra en el
+ * título no impide reconocer un fragmento que trata el proceso.
+ */
+const REASSIGNMENT_PROCESS_FRAMING =
+  /\b(?:proceso|procedimiento|solicitud|tramite|norma tecnica|etapas?|cronograma|causales?|requisitos|plazas?)\b[\s\S]{0,60}\breasignacion(?:es)?\b|\breasignacion(?:es)?\b[\s\S]{0,60}\b(?:docentes?|profesor(?:es)?|proceso|procedimiento|solicitud|etapas?|causales?|requisitos|norma tecnica|plazas?)\b/u;
+
+/**
  * Fuente que trata el proceso de reasignación, no una mención incidental de la
  * palabra en un listado de supuestos de otro régimen.
  */
@@ -192,15 +201,20 @@ export function isDirectReassignmentEvidence(
     // reasignación y permuta de profesores.
     return /\bauxiliar(?:es)?\s+de\s+educacion\b/u.test(evidence);
   }
-  // La norma que regula el proceso lo anuncia en su título. Una mención de
-  // «reasignación» dentro de un procedimiento de otro régimen (por ejemplo,
-  // situaciones administrativas de auxiliares) no responde la consulta de un
-  // profesor y no debe desplazar a la norma propia.
+  // La norma que regula el proceso lo anuncia en su título.
   if (/\breasignacion\b/u.test(title)) return true;
-  return (
+  if (
     role === 'docente' &&
     /\bprofesor(?:es)?\b[\s\S]{0,80}\breasignacion\b|\breasignacion\b[\s\S]{0,80}\bprofesor(?:es)?\b/u.test(
       evidence,
     )
+  )
+    return true;
+  // Una mención de «reasignación» dentro de un procedimiento de otro régimen
+  // (por ejemplo, situaciones administrativas de auxiliares) no responde la
+  // consulta de un profesor y no debe desplazar a la norma propia.
+  return (
+    !/\bauxiliar(?:es)?\s+de\s+educacion\b/u.test(evidence) &&
+    REASSIGNMENT_PROCESS_FRAMING.test(evidence)
   );
 }

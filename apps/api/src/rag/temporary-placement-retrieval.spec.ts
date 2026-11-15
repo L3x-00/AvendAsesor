@@ -1,4 +1,9 @@
-import { temporaryPlacementQueries } from './temporary-placement-retrieval';
+import {
+  isDirectTemporaryPlacementEvidence,
+  isTemporaryPlacementQuestion,
+  temporaryPlacementQueries,
+  treatsTemporaryPlacement,
+} from './temporary-placement-retrieval';
 
 describe('temporary placement retrieval', () => {
   it('busca el trámite temporal sin modificar la pregunta', () => {
@@ -46,5 +51,121 @@ describe('temporary placement retrieval', () => {
         'no quiero perder mi plaza por un tiempo, pero quiero trabajar en otro colegio',
       ),
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * La forma verbal y coloquial del proceso («cómo destacarme») no aporta la
+ * denominación del corpus: sin expansión, la similitud vectorial de dos
+ * palabras no alcanzaba el umbral y el turno terminaba en «sin evidencia».
+ */
+describe('destaque expresado con el verbo o el término del proceso', () => {
+  it.each([
+    'como puedo destacarme en otro colegio',
+    'como hago para destacarme',
+    'quiero destacarse en otra ugel',
+  ])('expande «%s» con la denominación del corpus', (question) => {
+    expect(isTemporaryPlacementQuestion(question)).toBe(true);
+    expect(temporaryPlacementQueries(question)).toEqual([
+      expect.stringContaining('destaque docente'),
+    ]);
+  });
+
+  it('no gasta una segunda búsqueda cuando la pregunta ya usa el término', () => {
+    expect(isTemporaryPlacementQuestion('renovacion de destaque hay?')).toBe(
+      true,
+    );
+    expect(temporaryPlacementQueries('renovacion de destaque hay?')).toEqual(
+      [],
+    );
+    expect(
+      temporaryPlacementQueries('que causales existen en destaque?'),
+    ).toEqual([]);
+  });
+
+  it('agrega la causal declarada a la búsqueda', () => {
+    expect(
+      temporaryPlacementQueries('como me destaco por causal de salud'),
+    ).toEqual([
+      expect.stringContaining('destaque docente'),
+      expect.stringContaining('salud'),
+    ]);
+    expect(
+      temporaryPlacementQueries('como me destaco por unidad familiar y salud'),
+    ).toEqual([
+      expect.stringContaining('destaque docente'),
+      expect.stringContaining('unidad familiar'),
+    ]);
+  });
+
+  it('agrega la renovación cuando corresponde', () => {
+    expect(temporaryPlacementQueries('puedo renovar si me destaco')).toEqual([
+      expect.stringContaining('destaque docente'),
+      expect.stringContaining('renovación'),
+    ]);
+  });
+
+  it('no abre el proceso cuando la persona lo rechaza', () => {
+    expect(
+      isTemporaryPlacementQuestion('no quiero destacarme, quiero renunciar'),
+    ).toBe(false);
+    expect(
+      temporaryPlacementQueries('no quiero destacarme, quiero renunciar'),
+    ).toEqual([]);
+  });
+
+  it('no atribuye el destaque al régimen de auxiliares', () => {
+    expect(
+      isTemporaryPlacementQuestion(
+        'soy auxiliar y quiero destacarme en otra ie',
+      ),
+    ).toBe(false);
+    expect(
+      temporaryPlacementQueries('soy auxiliar y quiero destacarme en otra ie'),
+    ).toEqual([]);
+  });
+
+  it('exige contexto educativo en las formas ambiguas del verbo', () => {
+    expect(
+      isTemporaryPlacementQuestion('quiero destacar en mi evaluacion'),
+    ).toBe(false);
+    expect(
+      isTemporaryPlacementQuestion(
+        'soy docente nombrado y quiero destacar en otra institucion educativa',
+      ),
+    ).toBe(true);
+    expect(isTemporaryPlacementQuestion('un destacado plato tipico')).toBe(
+      false,
+    );
+  });
+
+  it('reconoce el fragmento que trata el destaque, no la pregunta', () => {
+    const destaque = {
+      chunkContent:
+        'El destaque es un desplazamiento temporal de un profesor nombrado.',
+      documentTitle: 'Norma tecnica del destaque docente',
+      sectionTitle: null,
+    };
+    expect(treatsTemporaryPlacement(destaque)).toBe(true);
+    expect(
+      treatsTemporaryPlacement({
+        chunkContent: 'Documento sin el proceso.',
+        documentTitle: 'RSG 0001-2026-MINEDU',
+        sectionTitle: null,
+      }),
+    ).toBe(false);
+    expect(
+      treatsTemporaryPlacement({
+        chunkContent:
+          'Los docentes destacados presentan su solicitud ante la UGEL.',
+        documentTitle: 'RSG 0001-2026-MINEDU',
+      }),
+    ).toBe(true);
+    expect(
+      isDirectTemporaryPlacementEvidence('como puedo destacarme', destaque),
+    ).toBe(true);
+    expect(
+      isDirectTemporaryPlacementEvidence('cuanto gana un docente', destaque),
+    ).toBe(false);
   });
 });

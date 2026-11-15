@@ -109,6 +109,28 @@ describe('causalClarificationFor', () => {
     ).toBeNull();
   });
 
+  it('no pregunta cuando la consulta pide la norma del proceso', () => {
+    // «¿Cuál es la norma técnica de la reasignación?» se responde con la norma
+    // que el corpus identifica; pedir la causal dejaría sin contestar la
+    // identidad pedida.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica para la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
+    expect(
+      causalClarificationFor('¿Qué norma regula la reasignación docente?', [
+        SALUD,
+      ]),
+    ).toBeNull();
+    expect(
+      causalClarificationFor('¿Cuál es la base legal de la reasignación?', [
+        SALUD,
+      ]),
+    ).toBeNull();
+  });
+
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {
     expect(
       causalClarificationFor('¿Qué debo solicitar para la reasignación?', [

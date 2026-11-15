@@ -123,6 +123,15 @@ const answers: Record<
     moduleName: 'Auxiliar de educación',
     page: 21,
   }),
+  'temporary-placement': evidenceSource({
+    chunkContent:
+      'El destaque se solicita para desempeñar funciones en otra institución educativa por un periodo determinado, sin perder la plaza de origen.',
+    chunkId: 'temporary-placement',
+    documentTitle: 'Norma técnica del destaque docente',
+    moduleId: 'con',
+    moduleName: 'Contratación y desplazamientos',
+    page: 12,
+  }),
   disciplinary: evidenceSource({
     chunkContent:
       'En el proceso administrativo disciplinario, el profesor notificado tiene derecho a presentar sus descargos y medios probatorios para su defensa.',

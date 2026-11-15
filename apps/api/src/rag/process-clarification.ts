@@ -19,6 +19,15 @@ const REASSIGNMENT_ELIGIBILITY = /\b(?:puedo|puede|es\s+posible)\b/u;
 const REASSIGNMENT_DESTINATION =
   /\b(?:otra|distinta)\s+(?:ugel|dre|provincia|region)\b|\b(?:ir(?:se)?|trasladar(?:me|se)?)\s+a\s+(?:otra|distinta)\b/u;
 
+/**
+ * La consulta pide identificar la norma del proceso, no resolver el caso
+ * propio. Interrumpirla con la causal dejaría sin respuesta exactamente lo que
+ * se preguntó («¿cuál es la norma técnica de la reasignación?»), así que se
+ * responde con la norma que el corpus ya identifica.
+ */
+const NORM_IDENTITY_REQUEST =
+  /\bnorma(?:s)?\s+(?:tecnica(?:s)?|que\s+(?:regula|rige)|aplicable(?:s)?|vigente(?:s)?)\b|\b(?:cual(?:es)?\s+(?:es|son)\s+)?(?:la|las)\s+norma(?:s)?\s+(?:de|del|para)\b|\bque\s+norma(?:s)?\s+(?:regula|rige|aplica)\b|\bbase\s+legal\b|\bmarco\s+legal\b|\bque\s+(?:ley|resolucion|documento)\s+(?:regula|rige|aprueba)\b/u;
+
 const CAUSALS: ReadonlyArray<{
   id: string;
   label: string;
@@ -59,6 +68,18 @@ export function causalsInQuestion(question: string): string[] {
   );
 }
 
+/**
+ * Nombres con que el corpus denomina las causales declaradas. Se usan para
+ * ampliar la consulta de búsqueda con la sección que rige ese motivo, no para
+ * afirmar que la persona cumpla el supuesto.
+ */
+export function causalLabelsInQuestion(question: string): string[] {
+  const declared = causalsInQuestion(question);
+  return CAUSALS.filter((causal) => declared.includes(causal.id)).map(
+    (causal) => causal.label,
+  );
+}
+
 /** Causales distintas que la evidencia recuperada distingue. */
 export function causalsInEvidence(sources: RetrievedChunk[]): string[] {
   const found = new Set<string>();
@@ -96,6 +117,9 @@ export function causalClarificationFor(
   )
     return null;
   if (causalsInQuestion(question).length) return null;
+  // La identidad de la norma se responde con la norma; pedir la causal la
+  // dejaría sin contestar.
+  if (NORM_IDENTITY_REQUEST.test(text)) return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con
   // su número y año) acota la consulta a ese documento; pedir la causal dejaría
   // el turno sin respuesta. La ruta exacta ya limita la evidencia.

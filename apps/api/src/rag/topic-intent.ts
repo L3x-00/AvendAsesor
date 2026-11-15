@@ -27,6 +27,10 @@ import {
 } from './remuneration-retrieval';
 import { normalizeSpanishText } from './text-normalization';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
+import {
+  isDirectTemporaryPlacementEvidence,
+  isTemporaryPlacementQuestion,
+} from './temporary-placement-retrieval';
 
 /**
  * Intención temática principal de una consulta en el chat general. No decide el
@@ -42,6 +46,7 @@ import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 
 export type TopicIntentId =
   | 'reassignment'
+  | 'temporary-placement'
   | 'medical-leave'
   | 'career-progression'
   | 'rural-allocation'
@@ -61,6 +66,11 @@ const INTENTS: Record<TopicIntentId, TopicIntent> = {
   reassignment: {
     id: 'reassignment',
     label: 'la reasignación docente',
+    moduleName: 'Contratación y desplazamientos',
+  },
+  'temporary-placement': {
+    id: 'temporary-placement',
+    label: 'el destaque docente',
     moduleName: 'Contratación y desplazamientos',
   },
   'medical-leave': {
@@ -126,7 +136,14 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     return null;
   }
   if (isDisciplinaryQuestion(question)) return INTENTS.disciplinary;
-  if (isReassignmentQuestion(question)) {
+  // El destaque y la reasignación son procesos distintos del mismo módulo. Si
+  // la consulta nombra ambos, se trata de una comparación: la intención no
+  // elige uno y el enrutamiento normal decide con la evidencia.
+  const temporaryPlacement = isTemporaryPlacementQuestion(question);
+  const reassignment = isReassignmentQuestion(question);
+  if (temporaryPlacement && reassignment) return null;
+  if (temporaryPlacement) return INTENTS['temporary-placement'];
+  if (reassignment) {
     // El auxiliar tiene su propio procedimiento de reasignación; la etiqueta y
     // el módulo deben decirlo para no atribuirle la norma de profesores.
     const role = reassignmentRole(question);
@@ -167,6 +184,8 @@ export function isTopicIntentEvidence(
   switch (intent.id) {
     case 'reassignment':
       return isDirectReassignmentEvidence(question, source);
+    case 'temporary-placement':
+      return isDirectTemporaryPlacementEvidence(question, source);
     case 'medical-leave':
     case 'disciplinary':
       return isDirectAdministrativeEvidence(question, source);

@@ -101,7 +101,15 @@ import {
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
-import { temporaryPlacementQueries } from './temporary-placement-retrieval';
+import {
+  isDirectTemporaryPlacementEvidence,
+  temporaryPlacementQueries,
+  treatsTemporaryPlacement,
+} from './temporary-placement-retrieval';
+import {
+  inheritedProcessQueries,
+  inheritedTopicIntent,
+} from './process-context';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 import {
   medicalLeaveContextRequests,
@@ -1873,6 +1881,10 @@ export class RagService {
               question,
               Boolean(options.legalModule || options.legalCrossModule),
             ),
+            // Un seguimiento que no repite el proceso («¿y por causal de
+            // salud?», «¿cómo postulo?») recupera con la denominación del
+            // proceso que el hilo ya abrió. Aporta vocabulario, no hechos.
+            ...inheritedProcessQueries(question, priorUserQuestions),
           ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embed(
@@ -2147,10 +2159,19 @@ export class RagService {
         ...evaluationEvidenceQueries(question),
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
+        ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
+        ...inheritedProcessQueries(question, priorUserQuestions),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);
+      // El proceso heredado del hilo no repite su término en la consulta, así
+      // que la comprobación directa contra la pregunta no podría admitir su
+      // fragmento. Se evalúa el fragmento, no la pregunta: sigue exigiendo
+      // coincidencia léxica real y que la fuente trate el proceso.
+      const inheritedTemporaryPlacement =
+        inheritedTopicIntent(question, priorUserQuestions)?.id ===
+        'temporary-placement';
       if (canonicalRescueQueries.length) {
         const rescueEmbeddings = await this.embed(
           canonicalRescueQueries,
@@ -2185,6 +2206,9 @@ export class RagService {
                   isDirectAuxiliaryEvidence(question, candidate) ||
                   isDirectRemunerationEvidence(question, candidate) ||
                   isDirectReassignmentEvidence(question, candidate) ||
+                  isDirectTemporaryPlacementEvidence(question, candidate) ||
+                  (inheritedTemporaryPlacement &&
+                    treatsTemporaryPlacement(candidate)) ||
                   isDirectRationalizationEvidence(question, candidate)),
             ),
         );
