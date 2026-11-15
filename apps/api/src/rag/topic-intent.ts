@@ -149,9 +149,10 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     return INTENTS['medical-leave'];
   }
   if (temporaryPlacement && reassignment) {
-    // Solo la comparación explícita deja el tema abierto; si la persona nombra
-    // los dos sin compararlos, manda el proceso que ya se reconocía antes.
-    return /\b(?:diferencia(?:s)?|en lugar de|en vez de|comparar|versus)\b/u.test(
+    // La comparación explícita deja el tema abierto para que se responda con
+    // las dos normas. Sin señal de comparación se conserva la reasignación,
+    // que es lo que el sistema resolvía antes de reconocer el destaque.
+    return /\b(?:diferencia(?:s|n|rse)?|en lugar de|en vez de|comparar|versus|me conviene|conviene mas|cual (?:me )?(?:conviene|es mejor)|mejor opcion|son lo mismo)\b/u.test(
       text,
     )
       ? null

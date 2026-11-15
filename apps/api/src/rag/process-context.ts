@@ -5,6 +5,7 @@ import {
   causalsInQuestion,
 } from './process-clarification';
 import type { RetrievedChunk } from './retrieval.gateway';
+import { onlyAuxiliaryRegime } from './reassignment-retrieval';
 import {
   detectTopicIntent,
   type TopicIntent,
@@ -54,6 +55,15 @@ const NORMATIVE_ASPECT =
 const REJECTS_TOPIC =
   /\bnada\s+de\s+eso\b|\bolvidalo\b|\bdejemos\s+(?:eso|esto)\b|\bno\s+(?:quiero|me\s+interesa|necesito)\s+(?:nada\s+)?(?:de\s+)?(?:eso|esto|ese|esa|este|esta)\b/u;
 
+/**
+ * El turno introduce otro asunto (una persona, un conflicto, el aula). Los
+ * verbos del trámite son frecuentes en cualquier pregunta, así que sin este
+ * límite «¿qué hago si mi colega me insulta?» heredaría el proceso del hilo y
+ * respondería con la norma de otro tema.
+ */
+const OTHER_SUBJECT_OR_MATTER =
+  /\b(?:colegas?|director(?:a)?|subdirector(?:a)?|alumnos?|alumnas?|estudiantes?|apoderados?|padres?|conflictos?|insultos?|agresion(?:es)?|agred(?:e|io|en)|horario|aula|seccion(?:es)?|notas?|matricula|evaluacion del desempeno)\b/u;
+
 /** Módulo cuyo régimen documental es propio y no se comparte con docentes. */
 const AUXILIARY_MODULE = 'Auxiliar de educación';
 
@@ -99,13 +109,15 @@ const AUXILIARY_PROCESS_QUERIES: Partial<Record<TopicIntentId, string>> = {
  */
 export function isProcessDependentTurn(question: string): boolean {
   const text = normalizeSpanishText(question);
-  if (REJECTS_TOPIC.test(text)) return false;
-  return (
+  if (OTHER_SUBJECT_OR_MATTER.test(text)) return false;
+  const explicitRequest =
     causalsInQuestion(question).length > 0 ||
     PROCEDURE_VERB.test(text) ||
-    NORMATIVE_ASPECT.test(text) ||
-    refersBack(question)
-  );
+    NORMATIVE_ASPECT.test(text);
+  // Un rechazo solo corta la herencia cuando el turno no pide nada más: «no
+  // quiero eso, y el plazo» sigue pidiendo el plazo del proceso abierto.
+  if (!explicitRequest && REJECTS_TOPIC.test(text)) return false;
+  return explicitRequest || refersBack(question);
 }
 
 /**
@@ -173,7 +185,7 @@ const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
   'career-progression':
     /\b(?:ascenso|escala magisterial|concurso de ascenso)\b/u,
   'rural-allocation':
-    /\b(?:ambito rural|institucion educativa rural|asignacion por trabajo en ambito rural)\b/u,
+    /\b(?:ambito rural|institucion educativa rural|asignacion por trabajo en ambito rural|asignacion rural)\b/u,
   'auxiliary-requirements': /\bauxiliar(?:es)? de educacion\b/u,
   disciplinary:
     /\b(?:procedimiento administrativo disciplinario|proceso administrativo disciplinario|descargos)\b/u,
@@ -183,9 +195,10 @@ const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
 const AUXILIARY_REGIME = /\bauxiliares?\b/u;
 
 /**
- * El fragmento trata el proceso heredado. Para un proceso que también rige a
- * los docentes, el auxiliar exige además que el fragmento sea de su régimen:
- * heredar el tema no autoriza a entregarle la norma de profesores.
+ * El fragmento trata el proceso heredado, en el régimen de la persona. Se
+ * evalúa en los dos sentidos: un auxiliar no recibe la norma de profesores y un
+ * docente no recibe un fragmento que solo rige el régimen de auxiliares.
+ * Heredar el tema no autoriza a entregar la norma del otro régimen.
  */
 export function treatsProcessIntent(
   intent: TopicIntent,
@@ -199,6 +212,13 @@ export function treatsProcessIntent(
   );
   const pattern = PROCESS_EVIDENCE[intent.id];
   if (!pattern.test(title) && !pattern.test(body)) return false;
-  if (intent.moduleName !== AUXILIARY_MODULE) return true;
-  return AUXILIARY_REGIME.test(`${title} ${body}`);
+  if (intent.moduleName === AUXILIARY_MODULE) {
+    return AUXILIARY_REGIME.test(`${title} ${body}`);
+  }
+  // Reasignación y licencias rigen a los dos regímenes: un fragmento que solo
+  // trata a los auxiliares no responde la consulta de un docente.
+  return (
+    (intent.id !== 'reassignment' && intent.id !== 'medical-leave') ||
+    !onlyAuxiliaryRegime(`${title} ${body}`)
+  );
 }

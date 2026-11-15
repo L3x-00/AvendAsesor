@@ -153,6 +153,17 @@ describe('detectTopicIntent', () => {
     ).toBeNull();
   });
 
+  it.each([
+    '¿en qué se diferencian el destaque y la reasignación?',
+    '¿cuál me conviene: el destaque o la reasignación?',
+    'quiero comparar el destaque con la reasignación',
+    '¿el destaque y la reasignación son lo mismo?',
+  ])('trata «%s» como una comparación, no como un tema', (question) => {
+    // Las dos normas responden la comparación; elegir una sola dejaría fuera
+    // la mitad de lo que se preguntó.
+    expect(detectTopicIntent(question)).toBeNull();
+  });
+
   it('nombra los dos procesos sin compararlos: conserva la reasignación', () => {
     // La comparación deja el tema abierto; una mención de ambos sin comparar
     // conserva la intención que el sistema ya reconocía.

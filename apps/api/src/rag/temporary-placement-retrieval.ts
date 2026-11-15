@@ -47,7 +47,7 @@ const DESTAQUE_PARTICIPLE = /\bdestacad[oa]s?\b/u;
  * el proceso. «Nombrado» sí lo pide: el destaque es del personal nombrado.
  */
 const TRANSFER_CONTEXT =
-  /\b(?:nombrad[oa]s?|plazas?|plaza de origen|colegios?|escuelas?|institucion educativa|\bie\b|ugel|dre|otr[oa]s?\s+(?:colegio|escuela|institucion educativa|ie|ugel|dre|plaza))\b/u;
+  /\b(?:nombrad[oa]s?|plazas?|plaza de origen|colegios?|escuelas?|institucion educativa|\bie\b|ugel|dre|otr[oa]s?\s+(?:colegio|escuela|institucion educativa|ie|ugel|dre|plaza|region|provincia|zona|localidad|distrito))\b/u;
 
 const RENEWAL = /\b(?:renov\p{L}*|prorrog\p{L}*|ampliacion|vigencia)\b/u;
 

@@ -123,8 +123,13 @@ export function causalClarificationFor(
     return null;
   if (causalsInQuestion(question).length) return null;
   // La identidad de la norma se responde con la norma; pedir la causal la
-  // dejaría sin contestar.
-  if (NORM_IDENTITY_REQUEST.test(text)) return null;
+  // dejaría sin contestar. Un pedido de requisitos, plazos o documentos solo
+  // menciona la norma como fuente: esos datos cambian según la causal.
+  if (
+    NORM_IDENTITY_REQUEST.test(text) &&
+    !/\b(?:requisitos?|plazos?|documentos?|procedimiento|etapas?)\b/u.test(text)
+  )
+    return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con
   // su número y año) acota la consulta a ese documento; pedir la causal dejaría
   // el turno sin respuesta. La ruta exacta ya limita la evidencia.

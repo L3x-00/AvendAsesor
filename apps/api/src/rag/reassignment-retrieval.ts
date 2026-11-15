@@ -187,9 +187,10 @@ const REASSIGNMENT_PROCESS_FRAMING =
  * El fragmento trata el régimen de auxiliares y no el docente. Se compara el
  * régimen en el propio texto: un título que es solo la identidad de la norma
  * («RSG N.° 326-2017-MINEDU») no dice a quién rige, así que la palabra
- * «auxiliares» en el cuerpo es la que decide.
+ * «auxiliares» en el cuerpo es la que decide. Lo usan también los procesos que
+ * ambos regímenes comparten (reasignación, licencias), en los dos sentidos.
  */
-function onlyAuxiliaryRegime(evidence: string): boolean {
+export function onlyAuxiliaryRegime(evidence: string): boolean {
   return (
     AUXILIARY_ROLE_SIGNAL.test(evidence) && !TEACHING_ROLE_SIGNAL.test(evidence)
   );
@@ -210,8 +211,9 @@ export function isDirectReassignmentEvidence(
   const role = reassignmentRole(question);
   if (role === 'auxiliar') {
     // El auxiliar se rige por su propio procedimiento, no por la norma de
-    // reasignación y permuta de profesores.
-    return AUXILIARY_ROLE_SIGNAL.test(evidence);
+    // reasignación y permuta de profesores. «Auxiliares» aislado puede aludir a
+    // otro cargo, así que se exige el régimen de educación.
+    return /\bauxiliar(?:es)?\s+de\s+educacion\b/u.test(evidence);
   }
   // Una mención de «reasignación» dentro de un procedimiento de otro régimen
   // (por ejemplo, situaciones administrativas de auxiliares) no responde la

@@ -283,6 +283,19 @@ describe('contexto de proceso del hilo', () => {
           documentTitle: 'Norma técnica de reasignación y permuta',
         }),
       ).toBe(true);
+      // El sentido inverso también: un docente no recibe un fragmento que solo
+      // rige a los auxiliares.
+      const docente = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      expect(
+        treatsProcessIntent(docente, {
+          chunkContent:
+            'Los auxiliares de educación presentan su solicitud de reasignación ante la UGEL.',
+          documentTitle: 'RSG N.° 326-2017-MINEDU',
+        }),
+      ).toBe(false);
+      expect(treatsProcessIntent(docente, docenteChunk)).toBe(true);
     });
   });
 
@@ -293,6 +306,11 @@ describe('contexto de proceso del hilo', () => {
       'no me interesa, dejemos eso',
       // Pregunta autónoma que ya trae su propio tema.
       'que documentos piden para la matricula escolar',
+      // Otro asunto: un verbo del trámite («qué hago») no basta cuando el
+      // turno habla de una persona o de un conflicto del aula.
+      'que hago si mi colega me insulta',
+      'como presento un reclamo contra el director',
+      'que hago si mis alumnos no tienen materiales',
     ])('no hereda el proceso en «%s»', (question) => {
       expect(
         inheritedTopicIntent(question, [
@@ -300,6 +318,16 @@ describe('contexto de proceso del hilo', () => {
           'que causales existen en el destaque',
         ]),
       ).toBeNull();
+    });
+
+    it('conserva el proceso cuando el rechazo viene con una nueva pregunta', () => {
+      // «No quiero eso» descarta la respuesta anterior, no el proceso: el
+      // plazo sigue siendo el del proceso abierto.
+      expect(
+        inheritedTopicIntent('no quiero eso, y el plazo', [
+          'como destacarme en otro colegio',
+        ]),
+      ).toMatchObject({ id: 'temporary-placement' });
     });
 
     it.each([

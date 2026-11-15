@@ -1681,6 +1681,16 @@ export class RagService {
       options.topicIntent || options.legalCrossModule
         ? null
         : inheritedTopicIntent(question, priorUserQuestions);
+    /**
+     * Consulta canónica del proceso heredado y fragmentos que esa búsqueda
+     * devolvió. Un fragmento del documento puede no repetir el nombre del
+     * proceso («el plazo para presentar la solicitud es de quince días») y aun
+     * así responderlo: haber sido recuperado por la consulta del proceso, con
+     * el umbral general, es la atribución que se le puede exigir.
+     */
+    const inheritedProcessQuery =
+      processQueriesForIntent(inheritedIntent, question)[0] ?? null;
+    let inheritedProcessChunkIds = new Set<string>();
     const auxiliaryHiringDocuments =
       !options.legalCrossModule &&
       !directReferences.length &&
@@ -1939,6 +1949,16 @@ export class RagService {
           (result) => result.global,
         );
         options.abortSignal?.throwIfAborted();
+        const inheritedProcessIndex = inheritedProcessQuery
+          ? canonicalQueries.indexOf(inheritedProcessQuery)
+          : -1;
+        if (inheritedProcessIndex >= 0) {
+          inheritedProcessChunkIds = new Set(
+            (canonicalResults[inheritedProcessIndex]?.global ?? []).map(
+              (source) => source.chunkId,
+            ),
+          );
+        }
         const canonicalSelectedSources = canonicalResults.flatMap(
           (result) => result.selected,
         );
@@ -2279,7 +2299,8 @@ export class RagService {
     ) {
       const intentSources = globalRoutingSources.filter((source) =>
         inheritedScope
-          ? treatsProcessIntent(topicIntent, source)
+          ? treatsProcessIntent(topicIntent, source) ||
+            inheritedProcessChunkIds.has(source.chunkId)
           : isTopicIntentEvidence(topicIntent, question, source),
       );
       if (!intentSources.length) {
