@@ -191,7 +191,21 @@ export function detectTopicIntent(question: string): TopicIntent | null {
       (COMPARISON_CUE.test(text) || COMPARISON_CUE_EXTENDED.test(text)) &&
       !NEGATED_PREFERENCE.test(text) &&
       !(NEGATED_EQUIVALENCE.test(text) && PREFERENCE_CUE.test(text));
-    return compares ? null : INTENTS.reassignment;
+    if (compares) return null;
+    // Quien elige el destaque no recibe la norma de reasignación: la preferencia
+    // por uno de los dos procesos decide, y solo su ausencia conserva la
+    // reasignación que el sistema resolvía antes de reconocer el destaque.
+    const prefersDestaque =
+      /\b(?:quiero|quisiera|prefiero|preferiria|elijo|me quedo con|voy por)\s+(?:el\s+|un\s+)?(?:destaque|destacarme)\b/u.test(
+        text,
+      );
+    const prefersReassignment =
+      /\b(?:quiero|quisiera|prefiero|preferiria|elijo|me quedo con|voy por)\s+(?:la\s+|una\s+)?(?:reasignacion|reasignarme)\b/u.test(
+        text,
+      );
+    return prefersDestaque && !prefersReassignment
+      ? INTENTS['temporary-placement']
+      : INTENTS.reassignment;
   }
   if (temporaryPlacement) return INTENTS['temporary-placement'];
   if (reassignment) {

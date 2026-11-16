@@ -304,6 +304,61 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  it('admite el plazo de la norma conjunta en un hilo de reasignación', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    const plazoConjunto = {
+      ...plazoChunk,
+      chunkContent:
+        'El plazo para presentar la solicitud es de quince días hábiles.',
+      chunkId: 'plazo-conjunto',
+      documentTitle: 'Norma técnica de reasignación y permuta',
+      sectionTitle: 'Del plazo',
+    };
+    // El título de la norma nombra los dos trámites; el plazo no repite el
+    // nombre del proceso y aun así es la respuesta del seguimiento.
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /reasignaci/.test(queryFor(embedding)) ? [plazoConjunto] : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'plazo-conjunto' }],
+    });
+  });
+
+  it('no entrega otra licencia en un hilo de licencia', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    const paternidad = {
+      ...plazoChunk,
+      chunkContent:
+        'La licencia por paternidad se otorga por diez días calendario con goce de remuneraciones.',
+      chunkId: 'licencia-paternidad',
+      documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+      sectionTitle: 'De la licencia por paternidad',
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /incapacidad temporal|descanso médico|descanso medico|citt/.test(
+            queryFor(embedding),
+          )
+            ? [paternidad]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y los requisitos', null, ['necesito descanso medico']),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
   it('admite la licencia nombrada por su causal', async () => {
     const { service, gateway, queryFor } = buildSearchable();
     // El corpus titula la sección con la causal; ese fragmento es el propio

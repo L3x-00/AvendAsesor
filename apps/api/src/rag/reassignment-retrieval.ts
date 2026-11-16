@@ -213,6 +213,10 @@ const REASSIGNMENT_PROCESS_FRAMING =
  */
 const AUXILIARY_POPULATION = /\bauxiliares?\s+de\s+educaci[oó]n\b/u;
 
+/** Docencia propiamente dicha: no incluye el vínculo («nombrado», «contratado»). */
+const TEACHING_POPULATION =
+  /\b(?:docentes?|profesor(?:a|es|as)?|maestr[oa]s?)\b/u;
+
 export function onlyAuxiliaryRegime(evidence: string): boolean {
   const auxiliary = AUXILIARY_POPULATION.exec(evidence);
   if (!auxiliary) return false;
@@ -225,11 +229,12 @@ export function onlyAuxiliaryRegime(evidence: string): boolean {
  * El texto nombra a alguno de los dos regímenes. Lo usa la compuerta del
  * proceso heredado para decidir si el régimen se lee del desarrollo del
  * fragmento o, cuando el cuerpo no lo repite (un plazo no dice a quién rige),
- * del título de la norma.
+ * del título de la norma. «Nombrado» y «contratado» describen el vínculo, no el
+ * régimen: un requisito del «personal nombrado» rige a los dos.
  */
 export function namesStaffRegime(evidence: string): boolean {
   return (
-    AUXILIARY_POPULATION.test(evidence) || TEACHING_ROLE_SIGNAL.test(evidence)
+    AUXILIARY_POPULATION.test(evidence) || TEACHING_POPULATION.test(evidence)
   );
 }
 

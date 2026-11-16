@@ -69,12 +69,12 @@ const PROCEDURAL_CONDITIONAL =
 /**
  * Causal declarada como motivo del trámite. Se acepta el nombre técnico
  * («causal», «unidad familiar», «salud») y la forma coloquial introducida como
- * motivo («por mi familia», «por salud», «debido a mi esposo»). Una simple
- * descripción de la situación —«mi esposo vive allá»— no ata el turno al
+ * motivo («por mi familia», «por razones familiares», «debido a mi esposo»). Una
+ * simple descripción de la situación —«mi esposo vive allá»— no ata el turno al
  * proceso: es una afirmación autónoma que puede ser otra consulta.
  */
 const DECLARED_CAUSAL =
-  /\bcausal(?:es)?\b|\bunidad familiar\b|\binteres personal\b|\bmotivos? personales\b|\bsalud\b|\benfermedad\b|\bdiscapacidad\b|\bemergencia\b|\bviolencia\b|\btratamiento medico\b|\b(?:por|debido a|a causa de|por motivo de|por razon de)\s+(?:mi\s+|su\s+|la\s+|el\s+)?(?:familia(?:r|res)?|hij[oa]s?|conyuge|espos[oa]|pareja)\b/u;
+  /\bcausal(?:es)?\b|\bunidad familiar\b|\binteres personal\b|\bmotivos? personales\b|\bsalud\b|\benfermedad\b|\bdiscapacidad\b|\bemergencia\b|\bviolencia\b|\btratamiento medico\b|\b(?:por|debido a|a causa de)\s+(?:(?:mis?|sus?|la|el|los|las)\s+)?(?:(?:motivos?|razones?)\s+(?:personales?|familiar(?:es)?|de salud|de familia)|familia(?:r|res)?|hij[oa]s?|conyuge|espos[oa]|pareja)\b/u;
 
 /** La persona descarta el tema: no hay trámite que completar. */
 const REJECTS_TOPIC =
@@ -134,7 +134,11 @@ const AUXILIARY_PROCESS_QUERIES: Partial<Record<TopicIntentId, string>> = {
  */
 export function isProcessDependentTurn(question: string): boolean {
   const text = normalizeSpanishText(question);
-  if (OTHER_SUBJECT_OR_MATTER.test(text)) return false;
+  // Una condicional sobre el trámite manda sobre la mención de un tercero: «¿y
+  // si el director no firma mi solicitud?» sigue siendo el proceso abierto.
+  const proceduralConditional = PROCEDURAL_CONDITIONAL.test(text);
+  if (!proceduralConditional && OTHER_SUBJECT_OR_MATTER.test(text))
+    return false;
   // Una causal solo ata el turno al proceso cuando el turno la nombra como
   // causal; describir la situación de un tercero no es preguntar por el trámite.
   const causalDependency =
@@ -147,9 +151,7 @@ export function isProcessDependentTurn(question: string): boolean {
   // quiero eso, y el plazo» sigue pidiendo el plazo del proceso abierto.
   if (!explicitRequest && REJECTS_TOPIC.test(text)) return false;
   // «¿Y si la UGEL no me responde?» continúa el proceso abierto sin nombrarlo.
-  return (
-    explicitRequest || refersBack(question) || PROCEDURAL_CONDITIONAL.test(text)
-  );
+  return explicitRequest || refersBack(question) || proceduralConditional;
 }
 
 /**
@@ -318,20 +320,38 @@ function mentionsOtherProcess(
 /**
  * Trámites hermanos que el corpus distingue del proceso consultado y que no
  * forman parte de las ocho intenciones: permuta, encargo, cese, jubilación,
- * nombramiento, designación, contratación docente, licencias y permisos. Se
- * evalúan sobre el encuadre: el desarrollo del propio proceso suele mencionarlos
- * de pasada.
+ * renuncia, licencia o permiso de otro motivo y contratación docente. Se evalúan
+ * sobre el encuadre: el desarrollo del propio proceso suele mencionarlos de
+ * pasada.
+ *
+ * No se incluyen «nombramiento», «designación» ni «contrato de servicio»: en el
+ * corpus aparecen como requisitos del trámite («se requiere nombramiento
+ * vigente»), no como trámites que compitan con él, y tratarlos como hermanos
+ * dejaba sin evidencia los requisitos del propio proceso.
  */
-const OTHER_PROCEDURE =
-  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|licencias?|permisos?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos|nombramientos?|designacion(?:es)?|contratos? de servicio)\b/u;
+const SIBLING_PROCEDURE =
+  'permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos';
 
 /**
- * En un hilo de licencia, la licencia y el permiso son el propio proceso: la
- * norma que los desarrolla se llama por su causal («licencia por salud») y
- * rechazarla dejaría el turno sin evidencia.
+ * La licencia y el permiso solo cuentan como otro trámite cuando se enuncian
+ * como el trámite («licencia por paternidad», «solicitar una licencia»), no
+ * cuando aparecen como condición del propio («no estar en uso de licencia»).
  */
-const OTHER_PROCEDURE_WITHOUT_LEAVE =
-  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos|nombramientos?|designacion(?:es)?|contratos? de servicio)\b/u;
+const OTHER_PROCEDURE = new RegExp(
+  `\\b(?:${SIBLING_PROCEDURE}|licencias? por|permisos? por|solicitar (?:una )?(?:licencia|permiso)|tramite de (?:licencia|permiso))\\b`,
+  'u',
+);
+
+/**
+ * En un hilo de licencia, la licencia y el permiso de la causal propia son el
+ * propio proceso: se exceptúa la causal, no la familia entera, para que una
+ * licencia por paternidad o un permiso por matrimonio sigan siendo otro trámite
+ * y para que el plazo del propio trámite siga respondiéndose.
+ */
+const OTHER_PROCEDURE_WITHOUT_OWN_LEAVE = new RegExp(
+  `\\b(?:${SIBLING_PROCEDURE})\\b|\\blicencias? por (?!enfermedad|salud|incapacidad|emergencia|unidad familiar)\\w|\\bpermisos? por (?!salud|enfermedad)\\w`,
+  'u',
+);
 
 function mentionsOtherProcedure(
   intent: TopicIntent,
@@ -341,13 +361,19 @@ function mentionsOtherProcedure(
 ): boolean {
   const pattern =
     intent.id === 'medical-leave'
-      ? OTHER_PROCEDURE_WITHOUT_LEAVE
+      ? OTHER_PROCEDURE_WITHOUT_OWN_LEAVE
       : OTHER_PROCEDURE;
-  const framing = normalizeSpanishText(
-    `${source.documentTitle} ${source.sectionTitle ?? ''}`,
-  );
+  const title = normalizeSpanishText(source.documentTitle);
+  const section = normalizeSpanishText(source.sectionTitle ?? '');
+  // El título de una norma conjunta —«Norma técnica de reasignación y
+  // permuta»— nombra los dos trámites: el hermano que el mismo título enuncia no
+  // es indicio de otro trámite, y el fragmento debe decidirse por su sección y su
+  // cuerpo.
+  const titleNamesOwnProcess = PROCESS_EVIDENCE[intent.id].test(title);
   return (
-    pattern.test(framing) || pattern.test(openingSentence(bodyText(source)))
+    (!titleNamesOwnProcess && pattern.test(title)) ||
+    pattern.test(section) ||
+    pattern.test(openingSentence(bodyText(source)))
   );
 }
 

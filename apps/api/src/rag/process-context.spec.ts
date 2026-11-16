@@ -625,6 +625,136 @@ describe('contexto de proceso del hilo', () => {
       ).toBe(false);
     });
 
+    it('admite el plazo y los requisitos de la norma conjunta', () => {
+      const reassignment = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      // El título «reasignación y permuta» nombra los dos trámites: el hermano
+      // que enuncia el mismo título no convierte el plazo en otra cosa.
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud es de quince días hábiles.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'Se requiere tener nombramiento vigente y tres años de servicio oficial.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('no admite otra licencia ni otro permiso en un hilo de licencia', () => {
+      const licencia = intent('necesito descanso medico');
+      // La excepción es la causal propia, no la familia entera: una licencia por
+      // paternidad o un permiso por matrimonio son otro trámite.
+      expect(
+        treatsInheritedProcess(
+          licencia,
+          {
+            chunkContent:
+              'La licencia por paternidad se otorga por diez días calendario con goce de remuneraciones.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          licencia,
+          {
+            chunkContent:
+              'El permiso por matrimonio se otorga por cinco días hábiles.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('admite los requisitos del destaque que mencionan el vínculo o la licencia', () => {
+      // «Nombramiento» y «licencia» son condiciones del requisito, no trámites
+      // que compitan con el destaque.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Para ser destacado se requiere tener nombramiento vigente y tres años de servicio oficial.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Los postulantes deben acreditar nombramiento vigente y no encontrarse en uso de licencia.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('descarta la sección de permuta aunque el cuerpo nombre la reasignación', () => {
+      const reassignment = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'Disposiciones específicas de la permuta. La permuta y la reasignación se solicitan ante la UGEL de destino.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Disposiciones específicas de la permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('conserva el régimen del título cuando el cuerpo solo dice «personal nombrado»', () => {
+      // El módulo de la licencia lo fija la comprobación clínica del servicio;
+      // aquí se representa la intención que llega a la compuerta.
+      const auxiliar: TopicIntent = {
+        ...intent('soy auxiliar de educacion y necesito descanso medico'),
+        moduleName: 'Auxiliar de educación',
+      };
+      // «Nombrado» describe el vínculo, no el régimen: el título sigue siendo la
+      // fuente cuando el cuerpo no nombra a la población.
+      expect(
+        treatsInheritedProcess(
+          auxiliar,
+          {
+            chunkContent:
+              'El personal nombrado presenta su solicitud de licencia por salud ante la UGEL.',
+            documentTitle:
+              'Norma técnica de licencias para auxiliares de educación',
+            sectionTitle: 'De la licencia',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
     it('no atribuye el régimen por el título del documento', () => {
       const auxiliar = intent('soy auxiliar y quiero reasignarme');
       // Un documento titulado «para auxiliares de educación» puede tener
@@ -696,6 +826,10 @@ describe('contexto de proceso del hilo', () => {
       'y si tengo una enfermedad, que causal invoco',
       'y por causal de unidad familiar',
       'y por mi familia',
+      'y por razones familiares',
+      'y por motivo familiar',
+      // Condicional sobre el trámite en la que interviene un tercero.
+      'y si el director no firma mi solicitud',
     ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
       expect(
         inheritedTopicIntent(question, ['como destacarme en otro colegio']),

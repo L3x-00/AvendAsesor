@@ -203,6 +203,20 @@ describe('detectTopicIntent', () => {
   );
 
   it.each([
+    'quiero el destaque, no la reasignacion',
+    'no es lo mismo el destaque que la reasignacion, quiero el destaque',
+    'prefiero destacarme antes que reasignarme',
+  ])(
+    'respeta la preferencia por el destaque en un turno que nombra los dos: «%s»',
+    (question) => {
+      // Elegir el destaque no puede recibir la norma de reasignación.
+      expect(detectTopicIntent(question)).toMatchObject({
+        id: 'temporary-placement',
+      });
+    },
+  );
+
+  it.each([
     'el destaque no me conviene, quiero reasignarme',
     'no me conviene el destaque, prefiero la reasignación',
   ])(
