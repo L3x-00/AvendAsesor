@@ -228,11 +228,25 @@ export function processQueriesForIntent(
 }
 
 /**
+ * La enfermedad del familiar, con o sin «licencia por» delante: la norma la
+ * enuncia de las dos formas («licencia por enfermedad de un familiar», «cuando
+ * la solicitud es por enfermedad de mi hijo»). El posesivo y el artículo plural
+ * cuentan igual que el singular, y el parentesco admite el plural y el grado
+ * («familiares directos»).
+ */
+const FAMILY_POSSESSOR =
+  'de\\s+los|de\\s+las|de\\s+un|de\\s+una|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus|del|de';
+
+const FAMILY_KIN =
+  'familiar(?:es)?(?:\\s+directos?)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?';
+
+const FAMILY_ILLNESS = `enfermedad (?:${FAMILY_POSSESSOR}) (?:${FAMILY_KIN})`;
+
+/**
  * La enfermedad como causal propia. La del familiar —con o sin posesivo— es otra
  * causal y su plazo no responde el descanso médico de la persona.
  */
-const OWN_ILLNESS =
-  'enfermedad(?!\\s+(?:de|del|de\\s+un|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus)\\s+(?:familiar|hij[oa]s?|padres?|madres?|conyugues?|parientes?))';
+const OWN_ILLNESS = `enfermedad(?!\\s+(?:${FAMILY_POSSESSOR})\\s+(?:${FAMILY_KIN}))`;
 
 /**
  * Señal textual con la que el corpus nombra cada proceso. La herencia aporta el
@@ -364,18 +378,11 @@ function mainClause(text: string): string {
 }
 
 /**
- * La enfermedad del familiar, con o sin «licencia por» delante: la norma la
- * enuncia de las dos formas («licencia por enfermedad de un familiar», «cuando
- * la solicitud es por enfermedad de mi hijo»). El posesivo cuenta igual que el
- * artículo.
- */
-const FAMILY_ILLNESS =
-  'enfermedad (?:de|del|de un|de mi|de su|de mis|de sus) (?:familiar(?: directo)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?)';
-
-/**
  * Causales de licencia o permiso que no son la del proceso consultado. Se
  * nombran una por una para el hilo de licencia: la causal propia es solo la
- * clínica.
+ * clínica. La enfermedad del familiar se compone con `FAMILY_POSSESSOR` y
+ * `FAMILY_KIN`, de modo que la enumeración de causales y la comprobación del
+ * cuerpo no puedan divergir.
  */
 const FOREIGN_LEAVE_CAUSAL = `licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|${FAMILY_ILLNESS})|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)|${FAMILY_ILLNESS}`;
 
@@ -511,6 +518,69 @@ function bodyNamesOtherProcedure(
   return otherProcedurePattern(intent).test(development);
 }
 
+/**
+ * Verbos que toman el trámite como objeto: «acogerse a la permuta», «solicitar
+ * la renuncia», «gozar de un encargo». El hermano que aparece detrás de ellos es
+ * el trámite del fragmento, aunque el propio se nombre de paso en la misma
+ * oración. Entre el verbo y el trámite caben hasta dos partículas («acogerse a
+ * la permuta», «optar por la permuta»).
+ */
+const SIBLING_GOVERNING_VERB =
+  /\b(?:acogerse|acoger|solicitar|solicita|pedir|pide|tramitar|tramita|optar|opta|elegir|elige|presentar|presenta|gozar|goza)\s+(?:(?:a|al|por|para|la|el|los|las|una|un|de|del)\s+){0,2}$/u;
+
+/**
+ * El hermano lleva su propia cláusula de relativo —«la licencia por paternidad,
+ * que se otorga por diez días»—: el fragmento enuncia su régimen y no una
+ * condición del propio.
+ */
+const SIBLING_RELATIVE_CLAUSE =
+  /^\s*,\s*(?:que|el cual|la cual|los cuales|las cuales|quien|quienes)\s+(?:se\s+\p{L}+|es|son|ser[áa]n?|consiste[n]?|contempla[n]?|comprende[n]?|implica[n]?|corresponde[n]?|procede[n]?|aplica[n]?|rige[n]?|establece[n]?|requiere[n]?|debe[n]?|puede[n]?|tiene[n]?)\b/u;
+
+/**
+ * El hermano abre la oración y es su sujeto. El artículo definido o indefinido
+ * delante no cambia esa posición: «La permuta se solicita ante la UGEL» enuncia
+ * la permuta, no el plazo del proceso consultado.
+ */
+const SIBLING_SUBJECT = /^\s*(?:(?:el|la|los|las|un|una|del|al)\s+)?$/u;
+
+/**
+ * El sujeto coordinado —«la permuta y la reasignación se solicitan»— trata los
+ * dos procesos: el hermano no desplaza al consultado y el fragmento sigue
+ * sirviendo, como cuando la sección los nombra juntos.
+ */
+const SIBLING_COORDINATION = /^\s*(?:,|y|e)\s+/u;
+
+/**
+ * El cuerpo desarrolla al hermano como sujeto de su propia oración, no como
+ * complemento del trámite consultado. La distinción separa «el descanso médico
+ * no es acumulable con la licencia por paternidad, que se otorga por diez días»
+ * del requisito del destaque «la plaza se genera por cese, jubilación o
+ * renuncia», que menciona al hermano de paso.
+ */
+function bodyDevelopsSibling(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const development = mainClause(bodySentence(source));
+  const match = otherProcedurePattern(intent).exec(development);
+  if (!match) return false;
+  if (
+    PROCEDURE_AS_CONDITION.test(development) &&
+    !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
+  )
+    return false;
+  const before = development.slice(0, match.index);
+  const after = development.slice(match.index + match[0].length);
+  const coordinated =
+    SIBLING_COORDINATION.test(after) &&
+    namesOwnProcess(intent, { chunkContent: after, documentTitle: '' });
+  if (!coordinated && SIBLING_SUBJECT.test(before)) return true;
+  if (!coordinated && SIBLING_GOVERNING_VERB.test(before)) return true;
+  return SIBLING_RELATIVE_CLAUSE.test(after);
+}
+
 function mentionsOtherProcedure(
   intent: TopicIntent,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
@@ -536,12 +606,29 @@ function mentionsOtherProcedure(
 }
 
 /**
- * El rótulo del anexo —«Anexo 2:», «Anexo II.-»— no es una oración. Sin quitarlo,
- * la primera oración del fragmento se reduce al rótulo y el contenido del anexo
- * queda fuera de la comprobación del trámite: el cuadro de plazas se leía como
- * «anexo 2» y la sección del hermano no llegaba a evaluarse.
+ * El rótulo del anexo, el cuadro o la tabla —«Anexo 2:», «Anexo N.° 2», «Anexo
+ * Nº 2», «Anexo 2-A», «Anexo II.-», «Cuadro N° 2», «Tabla 2»— no es una oración.
+ * Sin quitarlo, la primera oración del fragmento se reduce al rótulo y el
+ * contenido del anexo queda fuera de la comprobación del trámite: el cuadro de
+ * plazas se leía como «anexo 2» y la sección del hermano no llegaba a evaluarse.
  */
-const ANNEX_LABEL = /^anexos?\s+(?:\d+|[ivxlcdm]+)\s*[:.\-–]?\s*/u;
+const ANNEX_LABEL =
+  /^(?:anexos?|cuadros?|tablas?)\s+(?:n\s*[.°º]{1,2}\s*)?(?:\d+|[ivxlcdm]+)(?:\s*[-–]\s*[a-z])?\s*[:.\-–]?\s*/u;
+
+/**
+ * Los rótulos se acumulan —«Anexo 2: Cuadro N.° 2: …»—, así que se descartan
+ * hasta que el fragmento empieza por su contenido. El tope evita un bucle si un
+ * rótulo vacío volviera a coincidir.
+ */
+function stripAnnexLabels(text: string): string {
+  let result = text;
+  for (let guard = 0; guard < 4; guard += 1) {
+    const stripped = result.replace(ANNEX_LABEL, '');
+    if (stripped === result) break;
+    result = stripped;
+  }
+  return result;
+}
 
 /**
  * Primera oración del cuerpo (solo el contenido, sin la sección ni el título de
@@ -553,7 +640,7 @@ const ANNEX_LABEL = /^anexos?\s+(?:\d+|[ivxlcdm]+)\s*[:.\-–]?\s*/u;
  * verbo.
  */
 function openingSentence(text: string): string {
-  return text.replace(ANNEX_LABEL, '').split(/[.;:]/u)[0] ?? text;
+  return stripAnnexLabels(text).split(/[.;:]/u)[0] ?? text;
 }
 
 function bodySentence(
@@ -584,6 +671,11 @@ function admitsOwnProcedure(
   const pattern = otherProcedurePattern(intent);
   if (sectionNamesOtherProcedure(intent, pattern, source)) return false;
   if (framesOtherProcedure(bodySentence(source), pattern)) return false;
+  // El hermano como sujeto de su propia oración acusa aunque el propio trámite
+  // se nombre de paso en la misma oración: «el descanso médico no es acumulable
+  // con la licencia por paternidad, que se otorga por diez días» enuncia el
+  // régimen de la paternidad, no el del descanso médico.
+  if (bodyDevelopsSibling(intent, source)) return false;
   if (namesOwnProcess(intent, { ...source, sectionTitle: null })) return true;
   // El proceso se identificó solo por la sección: el cuerpo decide, porque puede
   // desarrollar el hermano («los docentes pueden acogerse a la permuta»).
@@ -674,9 +766,15 @@ export function belongsToAdmittedProcedure(
   },
 ): boolean {
   if (!matchesRegime(intent, source)) return false;
+  if (admitsOwnProcedure(intent, source)) return true;
+  // La pregunta nombra el proceso, pero el fragmento no lo desarrolla: solo se
+  // admite si tampoco trata otro proceso del corpus. Sin esta condición, el
+  // título de la norma conjunta —que nombra el propio trámite junto con los
+  // demás— dejaba pasar la sección de la reasignación como única cita de una
+  // pregunta de destaque.
   return (
-    admitsOwnProcedure(intent, source) ||
-    !mentionsOtherProcedure(intent, source)
+    !mentionsOtherProcedure(intent, source) &&
+    !mentionsOtherProcess(intent, source)
   );
 }
 

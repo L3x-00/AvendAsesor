@@ -1005,21 +1005,89 @@ describe('contexto de proceso del hilo', () => {
       // anexo de plazas no repite el trámite: si el título contara como
       // encuadre, el cuadro de plazas del destaque se leería como reasignación y
       // la ampliación por versión lo perdería.
+      for (const chunkContent of [
+        'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+        'Anexo N.° 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+        'Anexo Nº 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+        'Anexo 2-A: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+        'Cuadro N° 2: las plazas del destaque por región.',
+        'Tabla 2: las plazas del destaque por región.',
+        // Los rótulos se acumulan y el cuerpo empieza después del último.
+        'Anexo 2: Cuadro N° 2: las plazas del destaque por región.',
+      ])
+        expect(
+          belongsToAdmittedVersion(
+            intent('quiero destacarme en otro colegio'),
+            {
+              chunkContent,
+              documentTitle:
+                'Norma técnica de reasignación, permuta y destaque',
+              sectionTitle: 'Anexo 2',
+            },
+          ),
+        ).toBe(true);
+      // Contramuestra: el anexo que sí desarrolla el hermano sigue fuera, con
+      // cualquiera de los rótulos, incluso con dos rótulos encadenados: el
+      // contenido empieza después del último.
+      for (const chunkContent of [
+        'Anexo 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
+        'Anexo N.° 3: la permuta se solicita ante la UGEL de destino.',
+        'Cuadro N° 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
+        'Anexo 3: Cuadro N° 3: la permuta se solicita ante la UGEL de destino.',
+      ])
+        expect(
+          belongsToAdmittedVersion(
+            intent('quiero destacarme en otro colegio'),
+            {
+              chunkContent,
+              documentTitle:
+                'Norma técnica de reasignación, permuta y destaque',
+              sectionTitle: 'Anexo 3',
+            },
+          ),
+        ).toBe(false);
+    });
+
+    it('no admite el fragmento de otro proceso del corpus en una pregunta de destaque', () => {
+      // El título de la norma conjunta nombra el destaque, así que no sirve como
+      // encuadre: sin la comprobación de otro proceso, la sección de la
+      // reasignación quedaba como única cita de una pregunta de destaque.
       expect(
-        belongsToAdmittedVersion(intent('quiero destacarme en otro colegio'), {
-          chunkContent:
-            'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
-          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
-          sectionTitle: 'Anexo 2',
-        }),
+        belongsToAdmittedProcedure(
+          intent('quiero destacarme en otro colegio'),
+          {
+            chunkContent:
+              'La reasignación se solicita ante la UGEL de origen y se resuelve en la de destino.',
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'De la reasignación',
+          },
+        ),
+      ).toBe(false);
+      // Contramuestra: el plazo del destaque que no repite el trámite sigue
+      // admitiéndose en la pregunta explícita.
+      expect(
+        belongsToAdmittedProcedure(
+          intent('quiero destacarme en otro colegio'),
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud es de quince días hábiles.',
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Del plazo',
+          },
+        ),
       ).toBe(true);
-      // Contramuestra: el anexo que sí desarrolla el hermano sigue fuera.
+      // El régimen sigue rigiendo la compuerta explícita: un auxiliar no recibe
+      // el procedimiento que solo desarrolla la norma de profesores.
+      const auxiliar: TopicIntent = {
+        ...intent('necesito descanso medico'),
+        moduleName: 'Auxiliar de educación',
+      };
       expect(
-        belongsToAdmittedVersion(intent('quiero destacarme en otro colegio'), {
+        belongsToAdmittedProcedure(auxiliar, {
           chunkContent:
-            'Anexo 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
-          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
-          sectionTitle: 'Anexo 3',
+            'La licencia por enfermedad del docente se otorga por el plazo que indique el certificado médico.',
+          documentTitle: 'Norma técnica de licencias de profesores',
+          sectionTitle: 'De la licencia por enfermedad',
         }),
       ).toBe(false);
     });
@@ -1214,6 +1282,105 @@ describe('contexto de proceso del hilo', () => {
             true,
           ),
         ).toBe(false);
+    });
+
+    it('reconoce la causal del familiar en plural y con artículo', () => {
+      // El artículo plural —«de los padres», «de las madres»— y el parentesco en
+      // plural enuncian la misma causal ajena que el posesivo singular. Sin
+      // reconocerlos, «enfermedad de los padres» se leía como la enfermedad de la
+      // persona y su plazo desplazaba a la causal clínica.
+      const licencias = 'Norma técnica de licencias, permisos y vacaciones';
+      for (const chunkContent of [
+        'La licencia por enfermedad de los padres se otorga por cinco días hábiles.',
+        'La licencia por enfermedad de las madres se otorga por cinco días hábiles.',
+        'La licencia por enfermedad de familiares directos se otorga por cinco días hábiles.',
+        // Como afirmación, enmarque y requisito del propio trámite. La causal
+        // desnuda —sin «licencia por» delante— es la que prueba la enumeración:
+        // con ella, el plural del parentesco no se lee como la enfermedad de la
+        // persona.
+        'Cuando la solicitud es por enfermedad de los padres, se otorgan tres días.',
+        'Cuando la solicitud es por enfermedad de familiares directos, se otorgan tres días.',
+        'En el caso de la enfermedad de las madres, se otorgan tres días.',
+        'No encontrarse en uso de licencia por enfermedad de los padres.',
+      ]) {
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle: licencias,
+              sectionTitle: 'Del plazo',
+            },
+            true,
+          ),
+        ).toBe(false);
+        expect(
+          belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(false);
+      }
+      // Contramuestra: la enfermedad de la propia persona sigue siendo la causal
+      // del proceso, con artículo definido.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'En el caso de la enfermedad del docente, se otorgan siete días.',
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('acusa el régimen del hermano aunque el propio se nombre antes', () => {
+      // El descanso médico es el sujeto de la oración, pero la cláusula de
+      // relativo enuncia el régimen de la paternidad: el fragmento desarrolla
+      // otra licencia y su plazo no responde la causal clínica.
+      const licencias = 'Norma técnica de licencias, permisos y vacaciones';
+      for (const chunkContent of [
+        'El descanso médico no es acumulable con la licencia por paternidad, que se otorga por diez días.',
+        'El descanso médico y la licencia por maternidad, que se otorga por noventa días, no son acumulables.',
+        // El hermano abre la oración y el propio aparece después: el artículo
+        // delante no lo convierte en complemento.
+        'La licencia por maternidad se otorga por noventa días; el descanso médico se acredita con el CITT.',
+      ]) {
+        expect(
+          belongsToAdmittedVersion(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(false);
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle: licencias,
+              sectionTitle: 'Del plazo',
+            },
+            true,
+          ),
+        ).toBe(false);
+      }
+      // Contramuestra: la mención del hermano de paso no acusa cuando el cuerpo
+      // desarrolla el propio trámite. La tolera la compuerta del proceso
+      // consultado, no la de la versión, que solo admite fragmentos sin
+      // mención alguna del hermano.
+      expect(
+        belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+          chunkContent:
+            'El descanso médico se otorga por el plazo del certificado y no suspende el cese del vínculo.',
+          documentTitle: licencias,
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(true);
     });
 
     it('admite la licencia por enfermedad del propio docente', () => {

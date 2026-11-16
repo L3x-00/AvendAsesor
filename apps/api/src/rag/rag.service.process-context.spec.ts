@@ -431,6 +431,32 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  it('no responde una pregunta de destaque con la sección de la reasignación', async () => {
+    const { service, gateway } = buildSearchable();
+    // El título de la norma conjunta nombra el destaque, así que el título no
+    // acusa otro proceso: la sección de la reasignación se colaba como única
+    // cita de una pregunta de destaque por la sola puerta de «sin mención de un
+    // trámite hermano».
+    const reasignacion = {
+      ...plazoChunk,
+      chunkContent:
+        'La reasignación se solicita ante la UGEL de origen y se resuelve en la de destino.',
+      chunkId: 'reasignacion-seccion',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'De la reasignación',
+      semanticScore: 0.78,
+    };
+    gateway.search.mockImplementation(() => Promise.resolve([reasignacion]));
+
+    await expect(
+      service.retrieve('quiero destacarme en otro colegio', null, [], {
+        topicIntent: destaqueIntent,
+      }),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
   const reassignmentIntent = {
     id: 'reassignment' as const,
     label: 'la reasignación',
@@ -546,12 +572,14 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
-  it('no entrega el plazo enmarcado en la permuta aunque puntúe más alto', async () => {
+  it('no entrega el plazo enmarcado en la permuta aunque su puntaje sea mayor', async () => {
     const { service, gateway } = buildSearchable();
     // El enmarque del hermano no necesita sección propia: «si se trata de una
     // permuta» dentro del plazo basta, y con la marca en la subordinada la
     // oración principal no la contiene. Antes de reconocer la marca, la
-    // consolidación por versión citaba solo ese fragmento.
+    // consolidación por versión citaba solo ese fragmento. El puntaje más alto
+    // (0.78 frente a 0.66) no decide la entrega: la compuerta del proceso filtra
+    // antes de elegir y el margen de relevancia de 0.12 no llega a aplicarse.
     const requisitos = {
       ...plazoChunk,
       chunkContent:
