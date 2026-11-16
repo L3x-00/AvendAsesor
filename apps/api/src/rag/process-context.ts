@@ -355,8 +355,15 @@ function mentionsOtherProcess(
   // El rótulo del anexo nombra el trámite del fragmento —«Anexo de la
   // reasignación: requisitos para postular»—, y el recorte del rótulo lo escondía
   // de esta comprobación: el anexo se entregaba a una pregunta de destaque por su
-  // contenido, que no repite el trámite.
-  const rawOpening = mainClause(rawOpeningSentence(source));
+  // contenido, que no repite el trámite. Un rótulo conjunto —«Anexo de la
+  // reasignación y el destaque»— no acusa a ninguno de los dos.
+  const raw = rawOpeningSentence(source);
+  const rawOpening = namesOwnProcess(intent, {
+    chunkContent: raw,
+    documentTitle: '',
+  })
+    ? ''
+    : mainClause(raw);
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
     if (id === intent.id) return false;
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
@@ -516,7 +523,7 @@ function bodyNamesOtherProcedure(
     sectionTitle?: string | null;
   },
 ): boolean {
-  return bodySentences(source).some((sentence) => {
+  return bodySentences(intent, source).some((sentence) => {
     const development = mainClause(sentence);
     if (
       PROCEDURE_AS_CONDITION.test(development) &&
@@ -538,12 +545,9 @@ const SIBLING_GOVERNING_VERB =
   /\b(?:acogerse|acoger|solicitar|solicita|pedir|pide|tramitar|tramita|optar|opta|elegir|elige|presentar|presenta|gozar|goza)\s+(?:(?:a|al|por|para|la|el|los|las|una|un|de|del)\s+){0,2}$/u;
 
 /**
- * Marcas de verbo conjugado en la oración del trámite. Sirven a dos preguntas
- * distintas sobre el mismo inventario: si el hermano abre su propia cláusula de
- * relativo —«, que se otorga por diez días»— y si el proceso consultado ya lleva
- * verbo antes del conector —«el descanso médico se acredita con el CITT y la
- * licencia por paternidad se otorga por diez días»—, en cuyo caso el sujeto de la
- * segunda cláusula es solo el hermano.
+ * Marcas de verbo conjugado en la cláusula de relativo del hermano —«la licencia
+ * por paternidad, que se otorga por diez días»—: el fragmento enuncia su régimen
+ * y no una condición del propio.
  */
 const CONJUGATED_VERB =
   /\b(?:se\s+\p{L}+|es|son|ser[áa]n?|consiste[n]?|contempla[n]?|comprende[n]?|implica[n]?|corresponde[n]?|procede[n]?|aplica[n]?|rige[n]?|establece[n]?|requiere[n]?|debe[n]?|puede[n]?|tiene[n]?|acredita[n]?|otorga[n]?|fija[n]?|genera[n]?|realiza[n]?|efect[úu]a[n]?|computa[n]?)\b/u;
@@ -588,6 +592,23 @@ const SIBLING_COORDINATED_SUBJECT =
   /(?:^|[,;]|\s(?:y|e|o|u))\s+(?:el|la|los|las|un|una)\s+$/u;
 
 /**
+ * Concordancia del verbo que sigue al hermano en la cláusula coordinada: en
+ * tercera persona del plural concuerda con los dos nombres —«el descanso médico y
+ * la licencia por paternidad se acreditan»—, y en singular concuerda solo con el
+ * hermano —«la licencia por paternidad se otorga»—. Se mide la terminación y no
+ * un inventario de verbos: en negativo, una lista cerrada convierte cualquier
+ * predicado que no esté en ella en un sujeto conjunto.
+ */
+const PLURAL_VERB = /^\s*(?:se\s+)?(?:\p{L}+(?:an|en|án|én)\b|son\b)/u;
+
+/**
+ * El hermano en plural —«las permutas», «las licencias por paternidad»—: el verbo
+ * plural concuerda con él solo, así que la cláusula puede enunciar su régimen sin
+ * compartir sujeto con el proceso consultado.
+ */
+const PLURAL_SIBLING = /^(?:los|las|unos|unas|\p{L}+s)\b/u;
+
+/**
  * El proceso consultado en el tramo: `PROCESS_EVIDENCE` más el participio del
  * destaque («el docente destacado en otra UGEL»), que el corpus usa y que la
  * evidencia por sustantivo no reconoce.
@@ -596,32 +617,40 @@ function ownProcessPattern(intent: TopicIntent): RegExp {
   const evidence = PROCESS_EVIDENCE[intent.id].source;
   return new RegExp(
     intent.id === 'temporary-placement'
-      ? `(?:${evidence}|destacad[oa]s?)`
+      ? `(?:${evidence}|destacad[oa]s?\\b)`
       : evidence,
     'u',
   );
 }
 
 /**
- * El hermano es el sujeto de una cláusula coordinada propia —«… y la licencia por
+ * El hermano es el sujeto de su propia cláusula coordinada —«… y la licencia por
  * paternidad se otorga por diez días»—, no de un sujeto conjunto con el proceso
  * consultado. Devuelve `false` cuando los dos trámites comparten el sujeto.
  *
- * La pregunta se resuelve en el tramo que va del inicio de la oración al
- * conector, sin mirar el orden de los nombres. Si el tramo no nombra el proceso
- * consultado, el sujeto es solo el hermano. Si lo nombra sin verbo —«Asimismo, el
+ * El sujeto conjunto se reconoce por la concordancia: el verbo que sigue al
+ * hermano va en plural y el nombre del propio está en el tramo anterior —«el
  * descanso médico y la licencia por paternidad se acreditan», «el plazo del
- * destaque y la permuta se fijan»—, el nombre cierra una enumeración y los dos
- * trámites comparten el sujeto. Si el tramo ya tiene verbo —«el descanso médico se
- * acredita con el CITT y la licencia por paternidad se otorga por diez días»—, el
- * propio enunció lo suyo y el hermano abre su propia oración.
+ * destaque y la permuta se fijan»—. Si el tramo no nombra el proceso consultado
+ * —«según el reglamento, la licencia por paternidad se otorga»— o el hermano va
+ * en plural —«las licencias por paternidad se otorgan»—, el sujeto es solo el
+ * hermano. Un verbo en singular también lo es, aunque el propio aparezca antes:
+ * «el descanso médico se acredita con el CITT y la licencia por paternidad se
+ * otorga» enuncia el régimen del hermano. Lo que precede al nombre del propio es
+ * indiferente: un lead-in o un relativo del propio no cambian la concordancia.
  */
-function developsSiblingClause(intent: TopicIntent, before: string): boolean {
+function developsSiblingClause(
+  intent: TopicIntent,
+  before: string,
+  sibling: string,
+  after: string,
+): boolean {
   const coordination = SIBLING_COORDINATED_SUBJECT.exec(before);
   if (!coordination) return false;
   const prefix = before.slice(0, coordination.index).trim();
   if (!ownProcessPattern(intent).test(prefix)) return true;
-  return CONJUGATED_VERB.test(prefix);
+  if (PLURAL_SIBLING.test(sibling)) return true;
+  return !PLURAL_VERB.test(after);
 }
 
 /**
@@ -646,7 +675,7 @@ function bodyDevelopsSibling(
     sectionTitle?: string | null;
   },
 ): boolean {
-  return bodySentences(source).some((sentence) =>
+  return bodySentences(intent, source).some((sentence) =>
     sentenceDevelopsSibling(intent, mainClause(sentence)),
   );
 }
@@ -669,7 +698,7 @@ function sentenceDevelopsSibling(
       namesOwnProcess(intent, { chunkContent: after, documentTitle: '' });
     if (coordinated) continue;
     if (SIBLING_SUBJECT.test(before)) return true;
-    if (developsSiblingClause(intent, before)) return true;
+    if (developsSiblingClause(intent, before, match[0], after)) return true;
     if (SIBLING_GOVERNING_VERB.test(before)) return true;
     if (SIBLING_RELATIVE_CLAUSE.test(after)) return true;
   }
@@ -764,19 +793,25 @@ function rawOpeningSentence(
 
 /**
  * Oraciones del cuerpo sobre las que se evalúa el trámite: la que empieza
- * después del rótulo del anexo y la cruda. El rótulo puede nombrar el trámite
- * —«Cuadro de la permuta: plazas por región»—, y recortarlo antes de la
- * comprobación escondía al hermano: el fragmento se entregaba por las plazas que
- * enunciaba su contenido.
+ * después del rótulo del anexo y, cuando aporta, la cruda. El rótulo puede
+ * nombrar el trámite —«Cuadro de la permuta: plazas por región»—, y recortarlo
+ * antes de la comprobación escondía al hermano: el fragmento se entregaba por las
+ * plazas que enunciaba su contenido. Un rótulo que nombra los dos trámites —«Anexo
+ * de la permuta y el destaque»— es el encuadre de ambos, igual que la sección
+ * conjunta, y no desarrolla ninguno: la cruda solo aporta cuando acusa al hermano.
  */
 function bodySentences(
+  intent: TopicIntent,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
     sectionTitle?: string | null;
   },
 ): string[] {
   const sentence = bodySentence(source);
   const raw = rawOpeningSentence(source);
-  return raw === sentence ? [sentence] : [sentence, raw];
+  if (raw === sentence) return [sentence];
+  return namesOwnProcess(intent, { chunkContent: raw, documentTitle: '' })
+    ? [sentence]
+    : [sentence, raw];
 }
 
 function bodySentence(

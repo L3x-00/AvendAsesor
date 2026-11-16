@@ -686,6 +686,55 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
 
+  it('no entrega el plazo del hermano aunque el verbo del propio no esté en el inventario', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // El sujeto de la cláusula del hermano se decide por la concordancia del
+    // verbo, no por una lista cerrada: «cubre» queda fuera de cualquier
+    // inventario y aun así la cláusula sigue en singular, así que enuncia el
+    // plazo de la licencia por paternidad y no el del descanso médico. Con la
+    // lista en negativo, el fragmento se entregaba con citas válidas y su
+    // puntaje mayor (0.8) desplazaba al fragmento propio.
+    const propio = {
+      ...plazoChunk,
+      chunkContent:
+        'El descanso médico se acredita con el certificado médico o el CITT.',
+      chunkId: 'descanso-propio',
+      documentId: 'licencias',
+      documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+      documentVersionId: 'licencias-version',
+      sectionTitle: 'Del descanso médico',
+      semanticScore: 0.66,
+    };
+    const ajeno = {
+      ...propio,
+      chunkContent:
+        'El descanso médico cubre siete días hábiles y la licencia por paternidad se otorga por diez días calendario.',
+      chunkId: 'descanso-con-plazo-ajeno',
+      sectionTitle: 'Del plazo',
+      semanticScore: 0.8,
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /incapacidad temporal|descanso médico|descanso medico|citt/.test(
+            queryFor(embedding),
+          )
+            ? [ajeno, propio]
+            : [],
+        ),
+    );
+
+    const result = await service.retrieve('y el plazo', null, [
+      'necesito descanso medico',
+    ]);
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('descanso-propio');
+      expect(ids).not.toContain('descanso-con-plazo-ajeno');
+    }
+  });
+
   it('admite la licencia nombrada por su causal', async () => {
     const { service, gateway, queryFor } = buildSearchable();
     // El corpus titula la sección con la causal; ese fragmento es el propio

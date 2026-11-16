@@ -1016,6 +1016,11 @@ describe('contexto de proceso del hilo', () => {
         'Anexo 2: Cuadro N° 2: las plazas del destaque por región.',
         // El rótulo con dos puntos admite una palabra en lugar del número.
         'Tabla comparativa: las plazas del destaque por región.',
+        // El rótulo conjunto —que nombra los dos trámites— es el encuadre de
+        // ambos, igual que la sección conjunta: no desarrolla ninguno.
+        'Anexo de la permuta y el destaque: 120 plazas para Lima Metropolitana.',
+        'Cuadro comparativo destaque y permuta: 120 plazas para Lima Metropolitana.',
+        'Anexo de la reasignación y el destaque: 120 plazas para Lima Metropolitana.',
       ])
         expect(
           belongsToAdmittedVersion(
@@ -1047,6 +1052,10 @@ describe('contexto de proceso del hilo', () => {
         // Un separador suelto al inicio no vacía la primera oración: el trámite
         // sigue a la vista.
         '; la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
+        // El separador puede encabezar un rótulo: ahí la oración recortada es la
+        // única que ve el contenido, porque la cruda se corta en los dos puntos.
+        '; Anexo 2: la permuta se solicita ante la UGEL de destino.',
+        '. Anexo 3: la permuta se solicita ante la UGEL de destino.',
         // El rótulo no se come la primera letra del contenido: «contratación»
         // empieza por una letra romana y el numeral tiene que ser un token
         // completo, con o sin número de anexo delante.
@@ -1482,6 +1491,16 @@ describe('contexto de proceso del hilo', () => {
         // El tramo puede no nombrar el proceso consultado: el hermano sigue
         // siendo el sujeto de su cláusula, aunque el propio se nombre después.
         'Según el reglamento interno, la licencia por paternidad se otorga por diez días calendario y el descanso médico se acredita con el CITT.',
+        // El verbo del propio puede quedar fuera de cualquier inventario: lo que
+        // decide el sujeto es la concordancia de la cláusula del hermano. En
+        // singular, la cláusula enuncia su régimen y el fragmento no sirve.
+        'La licencia por enfermedad del docente cubre siete días y la licencia por paternidad se otorga por diez días calendario.',
+        'El descanso médico dura siete días hábiles y la licencia por paternidad se otorga por diez días calendario.',
+        'El descanso médico incluye siete días y la licencia por paternidad se otorga por diez días calendario.',
+        'El descanso médico varía según el certificado y la licencia por paternidad se otorga por diez días calendario.',
+        // El hermano en plural concuerda con su propio verbo plural: la cláusula
+        // no comparte sujeto con el proceso consultado.
+        'El descanso médico se acredita con el CITT y las licencias por paternidad se otorgan por diez días calendario.',
       ]) {
         expect(
           belongsToAdmittedVersion(intent('necesito descanso medico'), {
@@ -1526,6 +1545,9 @@ describe('contexto de proceso del hilo', () => {
       for (const chunkContent of [
         'Asimismo, el descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
         'El descanso médico del docente y la licencia por paternidad se acreditan con el mismo certificado.',
+        // El relativo del propio no cambia el sujeto: la concordancia sigue
+        // siendo plural.
+        'El descanso médico, que se otorga por siete días, y la licencia por paternidad se acreditan con el mismo certificado.',
       ]) {
         expect(
           belongsToAdmittedProcedure(intent('necesito descanso medico'), {
