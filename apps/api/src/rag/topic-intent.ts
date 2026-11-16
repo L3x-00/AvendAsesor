@@ -62,6 +62,19 @@ export interface TopicIntent {
   moduleName: string;
 }
 
+/**
+ * Señales de comparación entre el destaque y la reasignación. Las dos normas
+ * responden la comparación, así que la intención no elige una sola: «vs»,
+ * «comparame», «es lo mismo», «cuál solicito primero» y las diferencias pedidas
+ * de cualquier forma.
+ */
+const COMPARISON_CUE =
+  /\b(?:compar\p{L}*|diferencia(?:s|n|rse)?|en lugar de|en vez de|versus|vs|me conviene|conviene mas|mejor opcion|(?:es|son) lo mismo|compatibles?)\b|\bcual(?:es)?\b[^.?]{0,25}\b(?:conviene|es mejor|solicito|elijo|primero)\b/u;
+
+/** Preferencia negada: elige un proceso en lugar de compararlos. */
+const NEGATED_PREFERENCE =
+  /\b(?:no|nunca)\s+(?:me\s+)?(?:conviene|interesa|sirve)\b/u;
+
 const INTENTS: Record<TopicIntentId, TopicIntent> = {
   reassignment: {
     id: 'reassignment',
@@ -152,11 +165,12 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     // La comparación explícita deja el tema abierto para que se responda con
     // las dos normas. Sin señal de comparación se conserva la reasignación,
     // que es lo que el sistema resolvía antes de reconocer el destaque.
-    return /\b(?:diferencia(?:s|n|rse)?|en lugar de|en vez de|comparar|versus|me conviene|conviene mas|cual (?:me )?(?:conviene|es mejor)|mejor opcion|son lo mismo)\b/u.test(
-      text,
-    )
-      ? null
-      : INTENTS.reassignment;
+    //
+    // La preferencia negada no compara: «el destaque no me conviene, quiero
+    // reasignarme» elige la reasignación y conserva su compuerta.
+    const compares =
+      COMPARISON_CUE.test(text) && !NEGATED_PREFERENCE.test(text);
+    return compares ? null : INTENTS.reassignment;
   }
   if (temporaryPlacement) return INTENTS['temporary-placement'];
   if (reassignment) {

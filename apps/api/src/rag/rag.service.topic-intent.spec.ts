@@ -165,12 +165,18 @@ describe('RagService — intención temática del chat general', () => {
     await expect(
       service.retrieve(question, null, history),
     ).resolves.toMatchObject({ kind: 'no_evidence' });
+    // Aunque el gateway devolviera el fragmento genérico también en la búsqueda
+    // del proceso (un vecino léxico del corpus), no responde una reasignación:
+    // trata la contratación de auxiliares, no el proceso heredado.
+    gateway.search.mockResolvedValue([administrative]);
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
     // El gateway devuelve fragmentos según la consulta: el genérico de
     // situaciones administrativas aparece en la búsqueda de la pregunta, pero
     // no en la consulta del proceso (que es lo que ocurre en el corpus real).
-    // Así, el seguimiento de una reasignación de auxiliares no puede
-    // responderse con ese fragmento: no trata el proceso ni procede de su
-    // búsqueda.
     const answerByQuery = (respond: (query: string) => unknown[]) => {
       gateway.search.mockImplementation(
         ({ embedding }: { embedding: number[] }) =>

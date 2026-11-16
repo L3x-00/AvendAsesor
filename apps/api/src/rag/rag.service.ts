@@ -108,6 +108,7 @@ import {
 import {
   inheritedTopicIntent,
   processQueriesForIntent,
+  treatsInheritedProcess,
   treatsProcessIntent,
 } from './process-context';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
@@ -2299,8 +2300,11 @@ export class RagService {
     ) {
       const intentSources = globalRoutingSources.filter((source) =>
         inheritedScope
-          ? treatsProcessIntent(topicIntent, source) ||
-            inheritedProcessChunkIds.has(source.chunkId)
+          ? treatsInheritedProcess(
+              topicIntent,
+              source,
+              inheritedProcessChunkIds.has(source.chunkId),
+            )
           : isTopicIntentEvidence(topicIntent, question, source),
       );
       if (!intentSources.length) {

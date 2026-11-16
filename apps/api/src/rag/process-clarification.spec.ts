@@ -146,6 +146,14 @@ describe('causalClarificationFor', () => {
         EMERGENCIA,
       ]),
     ).not.toBeNull();
+    // «Procedimiento» forma parte del nombre de la norma: preguntar por la
+    // norma del procedimiento sigue siendo preguntar cuál es la norma.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica del procedimiento de reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
   });
 
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {

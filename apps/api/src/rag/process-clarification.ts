@@ -125,9 +125,11 @@ export function causalClarificationFor(
   // La identidad de la norma se responde con la norma; pedir la causal la
   // dejaría sin contestar. Un pedido de requisitos, plazos o documentos solo
   // menciona la norma como fuente: esos datos cambian según la causal.
+  // «Procedimiento» no cuenta: forma parte del nombre de la norma («norma
+  // técnica del procedimiento de reasignación»).
   if (
     NORM_IDENTITY_REQUEST.test(text) &&
-    !/\b(?:requisitos?|plazos?|documentos?|procedimiento|etapas?)\b/u.test(text)
+    !/\b(?:requisitos?|plazos?|documentos?|etapas?)\b/u.test(text)
   )
     return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con

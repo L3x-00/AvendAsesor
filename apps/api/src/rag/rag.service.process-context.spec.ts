@@ -196,4 +196,65 @@ describe('RagService - contexto de proceso del hilo', () => {
       ]),
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
+
+  const reassignmentPlazo = {
+    ...plazoChunk,
+    chunkContent:
+      'El plazo para presentar la solicitud de reasignación docente por unidad familiar es de quince días hábiles.',
+    chunkId: 'reassignment-plazo',
+    documentId: 'reasignacion-document',
+    documentTitle: 'Norma técnica de reasignación y permuta',
+    documentVersionId: 'reasignacion-version',
+  };
+
+  it('la procedencia no entrega la norma de otro proceso', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // La búsqueda del destaque devuelve un vecino léxico del corpus que trata
+    // la reasignación: citarlo sería responder otro proceso con apariencia de
+    // evidencia.
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /destaque docente/.test(queryFor(embedding))
+            ? [reassignmentPlazo]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('la procedencia no entrega la norma del otro régimen', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    const auxiliaryQuestion =
+      'y el plazo para presentar la solicitud de reasignacion?';
+    const docenteChunk = {
+      ...reassignmentPlazo,
+      chunkContent:
+        'La reasignación del profesor nombrado se solicita ante la UGEL de destino dentro del plazo de la norma técnica.',
+      documentTitle: 'Norma técnica de reasignación y permuta',
+    };
+    // Hilo de un auxiliar: la consulta canónica es la de su régimen, pero el
+    // corpus devuelve la norma de profesores. No puede responder ese hilo.
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /auxiliares de educacion|auxiliares de educación/.test(
+            queryFor(embedding),
+          )
+            ? [docenteChunk]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve(auxiliaryQuestion, null, [
+        'soy auxiliar y quiero reasignarme a otra ugel',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
 });

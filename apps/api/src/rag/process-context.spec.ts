@@ -3,6 +3,7 @@ import {
   isProcessDependentTurn,
   processCanonicalQuery,
   processQueriesForIntent,
+  treatsInheritedProcess,
   treatsProcessIntent,
 } from './process-context';
 import { detectTopicIntent, type TopicIntent } from './topic-intent';
@@ -296,6 +297,121 @@ describe('contexto de proceso del hilo', () => {
         }),
       ).toBe(false);
       expect(treatsProcessIntent(docente, docenteChunk)).toBe(true);
+      // «Auxiliares de la UGEL» es una función administrativa, no el régimen:
+      // el fragmento se evalúa por su contenido, no por la palabra suelta.
+      expect(
+        treatsProcessIntent(auxiliar, {
+          chunkContent:
+            'Los auxiliares de la UGEL recepcionan la solicitud de reasignación y sellan el expediente.',
+          documentTitle: 'Norma técnica de reasignación y permuta',
+        }),
+      ).toBe(false);
+      // Y una mención administrativa no descarta el fragmento del docente.
+      expect(
+        treatsProcessIntent(docente, {
+          chunkContent:
+            'El plazo para presentar la solicitud de reasignación es de quince días hábiles; la recepción del expediente la realiza el auxiliar de la oficina de personal.',
+          documentTitle: 'Norma técnica de reasignación y permuta',
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe('treatsInheritedProcess', () => {
+    const destaque = intent('como destacarme en otro colegio');
+
+    it('admite el fragmento del proceso y el que devolvió su búsqueda', () => {
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El destaque se solicita para desempeñar funciones en otra IE.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          false,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud es de quince días hábiles.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('la procedencia no basta si el fragmento trata otro proceso', () => {
+      // Un vecino léxico de la consulta del destaque no responde el destaque.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud de reasignación docente es de quince días hábiles.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La licencia por incapacidad temporal se solicita con el certificado médico o CITT.',
+            documentTitle: 'Norma técnica de licencias',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('tampoco admite por procedencia el fragmento del otro régimen', () => {
+      const auxiliar = intent('soy auxiliar y quiero reasignarme');
+      expect(
+        treatsInheritedProcess(
+          auxiliar,
+          {
+            chunkContent:
+              'La reasignación del profesor nombrado se solicita ante la UGEL.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+      const docente = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      expect(
+        treatsInheritedProcess(
+          docente,
+          {
+            chunkContent:
+              'La reasignación de los auxiliares de educación se solicita ante la UGEL.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('no admite un fragmento ajeno que no procede de la búsqueda del proceso', () => {
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud es de quince días hábiles.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          false,
+        ),
+      ).toBe(false);
     });
   });
 
@@ -335,6 +451,8 @@ describe('contexto de proceso del hilo', () => {
       'y a quien le pido',
       'que tengo que hacer',
       'y ahora que hago',
+      // Condicional que continúa el proceso abierto sin nombrarlo.
+      'y si la ugel no me responde',
     ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
       expect(
         inheritedTopicIntent(question, ['como destacarme en otro colegio']),

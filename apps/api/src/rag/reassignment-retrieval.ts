@@ -189,10 +189,17 @@ const REASSIGNMENT_PROCESS_FRAMING =
  * («RSG N.° 326-2017-MINEDU») no dice a quién rige, así que la palabra
  * «auxiliares» en el cuerpo es la que decide. Lo usan también los procesos que
  * ambos regímenes comparten (reasignación, licencias), en los dos sentidos.
+ *
+ * «El auxiliar de la oficina de personal» no es el régimen auxiliar: se exige
+ * la población del proceso o, al menos, que la palabra no designe una función
+ * administrativa.
  */
+const AUXILIARY_POPULATION =
+  /\bauxiliares?\s+de\s+educaci[oó]n\b|\bauxiliares\b(?!\s+de\s+(?:la\s+)?(?:oficina|personal|administraci[oó]n|secretar[ií]a|direcci[oó]n))\b/u;
+
 export function onlyAuxiliaryRegime(evidence: string): boolean {
   return (
-    AUXILIARY_ROLE_SIGNAL.test(evidence) && !TEACHING_ROLE_SIGNAL.test(evidence)
+    AUXILIARY_POPULATION.test(evidence) && !TEACHING_ROLE_SIGNAL.test(evidence)
   );
 }
 

@@ -117,7 +117,8 @@ export function isProcessDependentTurn(question: string): boolean {
   // Un rechazo solo corta la herencia cuando el turno no pide nada más: «no
   // quiero eso, y el plazo» sigue pidiendo el plazo del proceso abierto.
   if (!explicitRequest && REJECTS_TOPIC.test(text)) return false;
-  return explicitRequest || refersBack(question);
+  // «¿Y si la UGEL no me responde?» continúa el proceso abierto sin nombrarlo.
+  return explicitRequest || refersBack(question) || /\by si\b/u.test(text);
 }
 
 /**
@@ -192,13 +193,56 @@ const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
   rationalization: /\bracionalizacion\b/u,
 };
 
-const AUXILIARY_REGIME = /\bauxiliares?\b/u;
+const AUXILIARY_REGIME = /\bauxiliares?\s+de\s+educacion\b/u;
+
+/** Texto normalizado del fragmento: título, sección y cuerpo. */
+function sourceText(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): string {
+  return normalizeSpanishText(
+    `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
+  );
+}
 
 /**
- * El fragmento trata el proceso heredado, en el régimen de la persona. Se
- * evalúa en los dos sentidos: un auxiliar no recibe la norma de profesores y un
- * docente no recibe un fragmento que solo rige el régimen de auxiliares.
- * Heredar el tema no autoriza a entregar la norma del otro régimen.
+ * El fragmento corresponde al régimen de la persona. Se evalúa en los dos
+ * sentidos: un auxiliar no recibe la norma de profesores y un docente no recibe
+ * un fragmento que solo rige el régimen de auxiliares.
+ */
+function matchesRegime(intent: TopicIntent, text: string): boolean {
+  if (intent.moduleName === AUXILIARY_MODULE)
+    return AUXILIARY_REGIME.test(text);
+  // Solo reasignación y licencias se comparten entre regímenes; los demás
+  // procesos ya se distinguen por su propio nombre.
+  if (intent.id !== 'reassignment' && intent.id !== 'medical-leave')
+    return true;
+  return !onlyAuxiliaryRegime(text);
+}
+
+/**
+ * Señal de otro proceso cuando la del propio proceso no alcanza para
+ * distinguirlo. El proceso de contratación comparte población con la
+ * reasignación de auxiliares, así que se reconoce por el trámite de
+ * contratación y no por el nombre del régimen.
+ */
+const OTHER_PROCESS_EVIDENCE: Partial<Record<TopicIntentId, RegExp>> = {
+  'auxiliary-requirements':
+    /\b(?:contratacion|postulacion|contratar)\b[\s\S]{0,50}\bauxiliares?\s+de\s+educacion\b|\bauxiliares?\s+de\s+educacion\b[\s\S]{0,50}\b(?:contratacion|postulacion)\b/u,
+};
+
+/** El fragmento trata de forma explícita otro proceso del corpus. */
+function mentionsOtherProcess(intent: TopicIntent, text: string): boolean {
+  return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
+    if (id === intent.id) return false;
+    const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
+    return pattern.test(text);
+  });
+}
+
+/**
+ * El fragmento trata el proceso heredado, en el régimen de la persona.
  */
 export function treatsProcessIntent(
   intent: TopicIntent,
@@ -206,19 +250,34 @@ export function treatsProcessIntent(
     sectionTitle?: string | null;
   },
 ): boolean {
-  const title = normalizeSpanishText(source.documentTitle);
-  const body = normalizeSpanishText(
-    `${source.sectionTitle ?? ''} ${source.chunkContent}`,
-  );
-  const pattern = PROCESS_EVIDENCE[intent.id];
-  if (!pattern.test(title) && !pattern.test(body)) return false;
-  if (intent.moduleName === AUXILIARY_MODULE) {
-    return AUXILIARY_REGIME.test(`${title} ${body}`);
-  }
-  // Reasignación y licencias rigen a los dos regímenes: un fragmento que solo
-  // trata a los auxiliares no responde la consulta de un docente.
-  return (
-    (intent.id !== 'reassignment' && intent.id !== 'medical-leave') ||
-    !onlyAuxiliaryRegime(`${title} ${body}`)
-  );
+  const text = sourceText(source);
+  return PROCESS_EVIDENCE[intent.id].test(text) && matchesRegime(intent, text);
+}
+
+/**
+ * El fragmento puede responder un turno que hereda el proceso del hilo. Dos
+ * vías, ambas sujetas al régimen de la persona:
+ *
+ *  1. El fragmento trata el proceso: lo nombra en el título, la sección o el
+ *     cuerpo.
+ *  2. El fragmento no lo repite (el corpus desarrolla el plazo o el requisito
+ *     sin volver a nombrar el trámite), pero la búsqueda del proceso lo devolvió
+ *     con el umbral general y no trata otro proceso.
+ *
+ * La procedencia es condición necesaria, nunca suficiente: que un embedding
+ * sintético devuelva un vecino léxico no convierte el plazo de la reasignación
+ * en respuesta de un hilo sobre el destaque. Por eso el segundo camino exige,
+ * además, que no aparezca otro proceso del corpus.
+ */
+export function treatsInheritedProcess(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+  fromProcessQuery: boolean,
+): boolean {
+  const text = sourceText(source);
+  if (!matchesRegime(intent, text)) return false;
+  if (PROCESS_EVIDENCE[intent.id].test(text)) return true;
+  return fromProcessQuery && !mentionsOtherProcess(intent, text);
 }

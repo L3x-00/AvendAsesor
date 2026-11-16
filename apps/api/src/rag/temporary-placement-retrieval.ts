@@ -42,6 +42,12 @@ const DESTAQUE_FIRST_PERSON = /\bme\s+destac(?:o|are|aria|e)\b/u;
 const DESTAQUE_CONJUGATED = /\bdestac(?:ar|o|a|an|amos|are|aria|aran)\b/u;
 const DESTAQUE_PARTICIPLE = /\bdestacad[oa]s?\b/u;
 /**
+ * El sujeto es otra persona (un hijo, un alumno): «mi hijo fue destacado en otra
+ * zona» describe un logro, no el trámite del personal nombrado.
+ */
+const THIRD_PARTY_SUBJECT =
+  /\b(?:mi|su|nuestro|nuestra|el|la|los|las|un|una)\s+(?:hijos?|hijas?|alumnos?|alumnas?|estudiantes?|apoderados?|sobrinos?|sobrinas?|esposos?|esposas?|hermanos?|hermanas?)\b/u;
+/**
  * Indicio de traslado o de plaza, no de docencia: «destacar en el examen» y
  * «docente destacado del año» son lenguaje corriente en un colegio y no piden
  * el proceso. «Nombrado» sí lo pide: el destaque es del personal nombrado.
@@ -71,7 +77,8 @@ export function isTemporaryPlacementQuestion(question: string): boolean {
     return true;
   return (
     (DESTAQUE_CONJUGATED.test(text) || DESTAQUE_PARTICIPLE.test(text)) &&
-    TRANSFER_CONTEXT.test(text)
+    TRANSFER_CONTEXT.test(text) &&
+    !THIRD_PARTY_SUBJECT.test(text)
   );
 }
 

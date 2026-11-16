@@ -164,6 +164,17 @@ describe('destaque expresado con el verbo o el término del proceso', () => {
     ).toBe(true);
   });
 
+  it('no atribuye el destaque cuando el sujeto es otra persona', () => {
+    // «Mi hijo fue destacado» describe un logro, no el trámite del personal
+    // nombrado: el indicio de zona o provincia no basta.
+    expect(
+      isTemporaryPlacementQuestion('mi hijo fue destacado en otra zona'),
+    ).toBe(false);
+    expect(
+      isTemporaryPlacementQuestion('el alumno destacado de otra provincia'),
+    ).toBe(false);
+  });
+
   it('reconoce que un contratado también puede preguntar por el destaque', () => {
     // La norma reserva el destaque al personal nombrado: la respuesta correcta
     // es justamente esa, así que la búsqueda no se descarta por el vínculo.
