@@ -238,7 +238,7 @@ const FAMILY_POSSESSOR =
   'de\\s+los|de\\s+las|de\\s+la|de\\s+un|de\\s+una|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus|del|de';
 
 const FAMILY_KIN =
-  'familiar(?:es)?(?:\\s+directos?)?|hij[oa]s?|padres?|madres?|conyuges?|espos[oa]s?|parientes?';
+  'familiar(?:es)?(?:\\s+directos?)?|hij[oa]s?|padres?|madres?|conyug(?:u)?es?|espos[oa]s?|parientes?';
 
 const FAMILY_ILLNESS = `enfermedad (?:${FAMILY_POSSESSOR}) (?:${FAMILY_KIN})`;
 
@@ -352,10 +352,17 @@ function mentionsOtherProcess(
     `${titleNamesOwnProcess ? '' : title} ${source.sectionTitle ?? ''}`,
   );
   const opening = mainClause(openingSentence(bodyText(source)));
+  // El rótulo del anexo nombra el trámite del fragmento —«Anexo de la
+  // reasignación: requisitos para postular»—, y el recorte del rótulo lo escondía
+  // de esta comprobación: el anexo se entregaba a una pregunta de destaque por su
+  // contenido, que no repite el trámite.
+  const rawOpening = mainClause(rawOpeningSentence(source));
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
     if (id === intent.id) return false;
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
-    return pattern.test(framing) || pattern.test(opening);
+    return (
+      pattern.test(framing) || pattern.test(opening) || pattern.test(rawOpening)
+    );
   });
 }
 
@@ -509,13 +516,15 @@ function bodyNamesOtherProcedure(
     sectionTitle?: string | null;
   },
 ): boolean {
-  const development = mainClause(bodySentence(source));
-  if (
-    PROCEDURE_AS_CONDITION.test(development) &&
-    !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
-  )
-    return false;
-  return otherProcedurePattern(intent).test(development);
+  return bodySentences(source).some((sentence) => {
+    const development = mainClause(sentence);
+    if (
+      PROCEDURE_AS_CONDITION.test(development) &&
+      !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
+    )
+      return false;
+    return otherProcedurePattern(intent).test(development);
+  });
 }
 
 /**
@@ -529,21 +538,36 @@ const SIBLING_GOVERNING_VERB =
   /\b(?:acogerse|acoger|solicitar|solicita|pedir|pide|tramitar|tramita|optar|opta|elegir|elige|presentar|presenta|gozar|goza)\s+(?:(?:a|al|por|para|la|el|los|las|una|un|de|del)\s+){0,2}$/u;
 
 /**
+ * Marcas de verbo conjugado en la oración del trámite. Sirven a dos preguntas
+ * distintas sobre el mismo inventario: si el hermano abre su propia cláusula de
+ * relativo —«, que se otorga por diez días»— y si el proceso consultado ya lleva
+ * verbo antes del conector —«el descanso médico se acredita con el CITT y la
+ * licencia por paternidad se otorga por diez días»—, en cuyo caso el sujeto de la
+ * segunda cláusula es solo el hermano.
+ */
+const CONJUGATED_VERB =
+  /\b(?:se\s+\p{L}+|es|son|ser[áa]n?|consiste[n]?|contempla[n]?|comprende[n]?|implica[n]?|corresponde[n]?|procede[n]?|aplica[n]?|rige[n]?|establece[n]?|requiere[n]?|debe[n]?|puede[n]?|tiene[n]?|acredita[n]?|otorga[n]?|fija[n]?|genera[n]?|realiza[n]?|efect[úu]a[n]?|computa[n]?)\b/u;
+
+/**
  * El hermano lleva su propia cláusula de relativo —«la licencia por paternidad,
  * que se otorga por diez días»—: el fragmento enuncia su régimen y no una
  * condición del propio.
  */
-const SIBLING_RELATIVE_CLAUSE =
-  /^\s*,\s*(?:que|el cual|la cual|los cuales|las cuales|quien|quienes)\s+(?:se\s+\p{L}+|es|son|ser[áa]n?|consiste[n]?|contempla[n]?|comprende[n]?|implica[n]?|corresponde[n]?|procede[n]?|aplica[n]?|rige[n]?|establece[n]?|requiere[n]?|debe[n]?|puede[n]?|tiene[n]?)\b/u;
+const SIBLING_RELATIVE_CLAUSE = new RegExp(
+  `^\\s*,\\s*(?:que|el cual|la cual|los cuales|las cuales|quien|quienes)\\s+${CONJUGATED_VERB.source}`,
+  'u',
+);
 
 /**
  * El hermano abre la oración y es su sujeto. El artículo definido o indefinido
  * delante no cambia esa posición —«La permuta se solicita ante la UGEL»—, y el
  * rótulo del anexo o del cuadro tampoco: «Anexo contratación de docentes» sigue
- * siendo el trámite de contratación.
+ * siendo el trámite de contratación. El rótulo que lo nombra con preposición
+ * —«Anexo de la permuta: el plazo…»— es encuadre, como la sección: el anexo del
+ * hermano no se convierte en el proceso consultado porque su contenido lo repita.
  */
 const SIBLING_SUBJECT =
-  /^\s*(?:(?:el|la|los|las|un|una|del|al|anexos?|cuadros?|tablas?)\s+)?$/u;
+  /^\s*(?:(?:anexos?|cuadros?|tablas?)\s+(?:de\s+)?)?(?:(?:el|la|los|las|un|una|del|al)\s+)?$/u;
 
 /**
  * El hermano es el sujeto de una cláusula coordinada —«… y la licencia por
@@ -563,20 +587,41 @@ const SIBLING_SUBJECT =
 const SIBLING_COORDINATED_SUBJECT =
   /(?:^|[,;]|\s(?:y|e|o|u))\s+(?:el|la|los|las|un|una)\s+$/u;
 
+/**
+ * El proceso consultado en el tramo: `PROCESS_EVIDENCE` más el participio del
+ * destaque («el docente destacado en otra UGEL»), que el corpus usa y que la
+ * evidencia por sustantivo no reconoce.
+ */
+function ownProcessPattern(intent: TopicIntent): RegExp {
+  const evidence = PROCESS_EVIDENCE[intent.id].source;
+  return new RegExp(
+    intent.id === 'temporary-placement'
+      ? `(?:${evidence}|destacad[oa]s?)`
+      : evidence,
+    'u',
+  );
+}
+
+/**
+ * El hermano es el sujeto de una cláusula coordinada propia —«… y la licencia por
+ * paternidad se otorga por diez días»—, no de un sujeto conjunto con el proceso
+ * consultado. Devuelve `false` cuando los dos trámites comparten el sujeto.
+ *
+ * La pregunta se resuelve en el tramo que va del inicio de la oración al
+ * conector, sin mirar el orden de los nombres. Si el tramo no nombra el proceso
+ * consultado, el sujeto es solo el hermano. Si lo nombra sin verbo —«Asimismo, el
+ * descanso médico y la licencia por paternidad se acreditan», «el plazo del
+ * destaque y la permuta se fijan»—, el nombre cierra una enumeración y los dos
+ * trámites comparten el sujeto. Si el tramo ya tiene verbo —«el descanso médico se
+ * acredita con el CITT y la licencia por paternidad se otorga por diez días»—, el
+ * propio enunció lo suyo y el hermano abre su propia oración.
+ */
 function developsSiblingClause(intent: TopicIntent, before: string): boolean {
   const coordination = SIBLING_COORDINATED_SUBJECT.exec(before);
   if (!coordination) return false;
   const prefix = before.slice(0, coordination.index).trim();
-  const own = new RegExp(`(?:${PROCESS_EVIDENCE[intent.id].source})`, 'gu');
-  let last: RegExpExecArray | null = null;
-  for (const match of prefix.matchAll(own)) last = match;
-  if (!last) return true;
-  if (prefix.slice(last.index + last[0].length).trim()) return true;
-  const head = prefix
-    .slice(0, last.index)
-    .replace(/(?:^|\s)(?:el|la|los|las|un|una)\s+$/u, '')
-    .trim();
-  return head !== '';
+  if (!ownProcessPattern(intent).test(prefix)) return true;
+  return CONJUGATED_VERB.test(prefix);
 }
 
 /**
@@ -601,7 +646,15 @@ function bodyDevelopsSibling(
     sectionTitle?: string | null;
   },
 ): boolean {
-  const development = mainClause(bodySentence(source));
+  return bodySentences(source).some((sentence) =>
+    sentenceDevelopsSibling(intent, mainClause(sentence)),
+  );
+}
+
+function sentenceDevelopsSibling(
+  intent: TopicIntent,
+  development: string,
+): boolean {
   if (
     PROCEDURE_AS_CONDITION.test(development) &&
     !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
@@ -687,10 +740,43 @@ function stripAnnexLabels(text: string): string {
  * plazo del destaque que menciona la permuta al final. La sección se evalúa
  * aparte y el título queda fuera porque la identidad de la norma («RSG N.°
  * 326-2017-MINEDU») trae puntos y códigos que cortarían la oración antes de su
- * verbo.
+ * verbo. Un separador suelto al inicio —«; la permuta se solicita»— dejaría la
+ * primera oración vacía y la comprobación del trámite se perdería.
  */
 function openingSentence(text: string): string {
-  return stripAnnexLabels(text).split(/[.;:]/u)[0];
+  return stripAnnexLabels(text.replace(/^[.;:\s]+/u, '')).split(/[.;:]/u)[0];
+}
+
+/**
+ * Primera oración cruda del cuerpo: el rótulo del anexo queda intacto, porque
+ * puede nombrar el trámite del fragmento —«Cuadro de la permuta: plazas por
+ * región»—.
+ */
+function rawOpeningSentence(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): string {
+  return normalizeSpanishText(source.chunkContent)
+    .replace(/^[.;:\s]+/u, '')
+    .split(/[.;:]/u)[0];
+}
+
+/**
+ * Oraciones del cuerpo sobre las que se evalúa el trámite: la que empieza
+ * después del rótulo del anexo y la cruda. El rótulo puede nombrar el trámite
+ * —«Cuadro de la permuta: plazas por región»—, y recortarlo antes de la
+ * comprobación escondía al hermano: el fragmento se entregaba por las plazas que
+ * enunciaba su contenido.
+ */
+function bodySentences(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): string[] {
+  const sentence = bodySentence(source);
+  const raw = rawOpeningSentence(source);
+  return raw === sentence ? [sentence] : [sentence, raw];
 }
 
 function bodySentence(

@@ -1037,6 +1037,16 @@ describe('contexto de proceso del hilo', () => {
         'Cuadro N° 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
         'Anexo 3: Cuadro N° 3: la permuta se solicita ante la UGEL de destino.',
         'Tabla comparativa: la permuta se solicita ante la UGEL de destino.',
+        // El rótulo con dos puntos puede nombrar el trámite que el anexo
+        // desarrolla: recortarlo antes de la comprobación escondía al hermano y
+        // el anexo se entregaba por las plazas que enunciaba su contenido.
+        'Cuadro de la permuta: plazas por región y UGEL de destino.',
+        'Tabla de plazas de la permuta: 120 plazas por región.',
+        'Anexo de la reasignación: requisitos para postular.',
+        'Anexo licencia por paternidad: se otorga por diez días calendario.',
+        // Un separador suelto al inicio no vacía la primera oración: el trámite
+        // sigue a la vista.
+        '; la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
         // El rótulo no se come la primera letra del contenido: «contratación»
         // empieza por una letra romana y el numeral tiene que ser un token
         // completo, con o sin número de anexo delante.
@@ -1051,6 +1061,25 @@ describe('contexto de proceso del hilo', () => {
               documentTitle:
                 'Norma técnica de reasignación, permuta y destaque',
               sectionTitle: 'Anexo 3',
+            },
+          ),
+        ).toBe(false);
+      // El rótulo del anexo es el encuadre del fragmento igual que la sección:
+      // aunque el cuerpo nombre el proceso consultado, el anexo dedicado a la
+      // permuta no responde una pregunta de destaque. Sin la oración cruda, el
+      // recorte del rótulo dejaba la salida por nombre propio y la entregaba.
+      for (const chunkContent of [
+        'Anexo de la permuta: el plazo del destaque es de quince días hábiles.',
+        'Cuadro de la permuta: el plazo del destaque es de quince días hábiles.',
+      ])
+        expect(
+          belongsToAdmittedProcedure(
+            intent('quiero destacarme en otro colegio'),
+            {
+              chunkContent,
+              documentTitle:
+                'Norma técnica de reasignación, permuta y destaque',
+              sectionTitle: 'Del plazo',
             },
           ),
         ).toBe(false);
@@ -1307,6 +1336,8 @@ describe('contexto de proceso del hilo', () => {
         'La enfermedad de la madre se acredita con el certificado médico.',
         'La enfermedad de la esposa se acredita con el certificado médico.',
         'La enfermedad de la cónyuge se acredita con el certificado médico.',
+        // La forma con «u» —«cónyugue»— es la misma causal ajena.
+        'La enfermedad de la cónyugue se acredita con el certificado médico.',
         // Como afirmación, enmarque y requisito del propio trámite. La causal
         // desnuda —sin «licencia por» delante— es la que prueba la enumeración:
         // con ella, el plural del parentesco no se lee como la enfermedad de la
@@ -1448,6 +1479,9 @@ describe('contexto de proceso del hilo', () => {
         // Tampoco cuando el propio aparece después: la cláusula sigue siendo del
         // hermano y no del proceso consultado.
         'El plazo es de quince días hábiles, la licencia por paternidad se otorga por diez días y el descanso médico se acredita con el CITT.',
+        // El tramo puede no nombrar el proceso consultado: el hermano sigue
+        // siendo el sujeto de su cláusula, aunque el propio se nombre después.
+        'Según el reglamento interno, la licencia por paternidad se otorga por diez días calendario y el descanso médico se acredita con el CITT.',
       ]) {
         expect(
           belongsToAdmittedVersion(intent('necesito descanso medico'), {
@@ -1480,6 +1514,64 @@ describe('contexto de proceso del hilo', () => {
           sectionTitle: 'Del plazo',
         }),
       ).toBe(true);
+    });
+
+    it('admite el sujeto conjunto con lead-in, complemento o participio', () => {
+      // El sujeto conjunto no depende de lo que precede al nombre del propio ni
+      // de la forma en que lo nombra: un lead-in, un complemento o el participio
+      // del destaque dejan la cláusula tratando los dos trámites. El criterio
+      // mira el tramo que va del inicio de la oración al conector: sin verbo, los
+      // nombres comparten el sujeto.
+      const licencias = 'Norma técnica de licencias, permisos y vacaciones';
+      for (const chunkContent of [
+        'Asimismo, el descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
+        'El descanso médico del docente y la licencia por paternidad se acreditan con el mismo certificado.',
+      ]) {
+        expect(
+          belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(true);
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle: licencias,
+              sectionTitle: 'Del plazo',
+            },
+            true,
+          ),
+        ).toBe(true);
+      }
+      for (const chunkContent of [
+        'El plazo del destaque y la permuta se fijan por la UGEL de destino.',
+        'El docente destacado en otra UGEL y la permuta se rigen por el mismo plazo.',
+      ]) {
+        expect(
+          belongsToAdmittedProcedure(destaque, {
+            chunkContent,
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(true);
+      }
+      // Contramuestra: el verbo antes del conector deja al hermano solo en su
+      // cláusula, aunque el proceso consultado se nombre primero.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'El descanso médico se acredita con el CITT y la licencia por paternidad se otorga por diez días calendario.',
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(false);
     });
 
     it('admite la licencia por enfermedad del propio docente', () => {
