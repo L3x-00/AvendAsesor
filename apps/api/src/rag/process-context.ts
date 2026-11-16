@@ -235,10 +235,10 @@ export function processQueriesForIntent(
  * («familiares directos»).
  */
 const FAMILY_POSSESSOR =
-  'de\\s+los|de\\s+las|de\\s+un|de\\s+una|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus|del|de';
+  'de\\s+los|de\\s+las|de\\s+la|de\\s+un|de\\s+una|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus|del|de';
 
 const FAMILY_KIN =
-  'familiar(?:es)?(?:\\s+directos?)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?';
+  'familiar(?:es)?(?:\\s+directos?)?|hij[oa]s?|padres?|madres?|conyuges?|espos[oa]s?|parientes?';
 
 const FAMILY_ILLNESS = `enfermedad (?:${FAMILY_POSSESSOR}) (?:${FAMILY_KIN})`;
 
@@ -371,9 +371,9 @@ function mentionsOtherProcess(
  * que decide.
  */
 function mainClause(text: string): string {
-  const [before = ''] = text.split(
+  const before = text.split(
     /\b(?:si(?!\s*,)|cuando|mientras|siempre que|en caso de|salvo que)\b/u,
-  );
+  )[0];
   return before.trim().split(/\s+/u).length >= 3 ? before : text;
 }
 
@@ -538,24 +538,62 @@ const SIBLING_RELATIVE_CLAUSE =
 
 /**
  * El hermano abre la oración y es su sujeto. El artículo definido o indefinido
- * delante no cambia esa posición: «La permuta se solicita ante la UGEL» enuncia
- * la permuta, no el plazo del proceso consultado.
+ * delante no cambia esa posición —«La permuta se solicita ante la UGEL»—, y el
+ * rótulo del anexo o del cuadro tampoco: «Anexo contratación de docentes» sigue
+ * siendo el trámite de contratación.
  */
-const SIBLING_SUBJECT = /^\s*(?:(?:el|la|los|las|un|una|del|al)\s+)?$/u;
+const SIBLING_SUBJECT =
+  /^\s*(?:(?:el|la|los|las|un|una|del|al|anexos?|cuadros?|tablas?)\s+)?$/u;
 
 /**
- * El sujeto coordinado —«la permuta y la reasignación se solicitan»— trata los
- * dos procesos: el hermano no desplaza al consultado y el fragmento sigue
- * sirviendo, como cuando la sección los nombra juntos.
+ * El hermano es el sujeto de una cláusula coordinada —«… y la licencia por
+ * paternidad se otorga por diez días»—: esa cláusula enuncia su régimen, no una
+ * condición del propio trámite, salvo que comparta el sujeto con el proceso
+ * consultado —«el descanso médico y la licencia por paternidad se acreditan con
+ * el mismo certificado»—.
+ *
+ * En el sujeto conjunto el nombre del propio cierra la enumeración justo antes
+ * del conector y la cláusula trata los dos trámites; la exención es la simétrica
+ * de `SIBLING_COORDINATION`, que cubre el orden contrario. El nombre del propio
+ * tiene que cerrar la enumeración y no ser un complemento: en «el descanso médico
+ * se acredita con el CITT y la licencia por paternidad se otorga por diez días»,
+ * el proceso aparece antes regido por un verbo y el sujeto de la segunda cláusula
+ * es solo el hermano.
  */
-const SIBLING_COORDINATION = /^\s*(?:,|y|e)\s+/u;
+const SIBLING_COORDINATED_SUBJECT =
+  /(?:^|[,;]|\s(?:y|e|o|u))\s+(?:el|la|los|las|un|una)\s+$/u;
+
+function developsSiblingClause(intent: TopicIntent, before: string): boolean {
+  const coordination = SIBLING_COORDINATED_SUBJECT.exec(before);
+  if (!coordination) return false;
+  const prefix = before.slice(0, coordination.index).trim();
+  const own = new RegExp(`(?:${PROCESS_EVIDENCE[intent.id].source})`, 'gu');
+  let last: RegExpExecArray | null = null;
+  for (const match of prefix.matchAll(own)) last = match;
+  if (!last) return true;
+  if (prefix.slice(last.index + last[0].length).trim()) return true;
+  const head = prefix
+    .slice(0, last.index)
+    .replace(/(?:^|\s)(?:el|la|los|las|un|una)\s+$/u, '')
+    .trim();
+  return head !== '';
+}
+
+/**
+ * El sujeto coordinado —«la permuta y la reasignación se solicitan», «optar por
+ * la permuta o el destaque»— trata los dos procesos: el hermano no desplaza al
+ * consultado y el fragmento sigue sirviendo, como cuando la sección los nombra
+ * juntos.
+ */
+const SIBLING_COORDINATION = /^\s*(?:,|y|e|o|u)\s+/u;
 
 /**
  * El cuerpo desarrolla al hermano como sujeto de su propia oración, no como
  * complemento del trámite consultado. La distinción separa «el descanso médico
  * no es acumulable con la licencia por paternidad, que se otorga por diez días»
  * del requisito del destaque «la plaza se genera por cese, jubilación o
- * renuncia», que menciona al hermano de paso.
+ * renuncia», que menciona al hermano de paso. Se recorren todas las menciones:
+ * una puede ser de paso y la siguiente enunciar el régimen del hermano.
  */
 function bodyDevelopsSibling(
   intent: TopicIntent,
@@ -564,21 +602,25 @@ function bodyDevelopsSibling(
   },
 ): boolean {
   const development = mainClause(bodySentence(source));
-  const match = otherProcedurePattern(intent).exec(development);
-  if (!match) return false;
   if (
     PROCEDURE_AS_CONDITION.test(development) &&
     !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
   )
     return false;
-  const before = development.slice(0, match.index);
-  const after = development.slice(match.index + match[0].length);
-  const coordinated =
-    SIBLING_COORDINATION.test(after) &&
-    namesOwnProcess(intent, { chunkContent: after, documentTitle: '' });
-  if (!coordinated && SIBLING_SUBJECT.test(before)) return true;
-  if (!coordinated && SIBLING_GOVERNING_VERB.test(before)) return true;
-  return SIBLING_RELATIVE_CLAUSE.test(after);
+  const pattern = otherProcedurePattern(intent);
+  for (const match of development.matchAll(new RegExp(pattern.source, 'gu'))) {
+    const before = development.slice(0, match.index);
+    const after = development.slice(match.index + match[0].length);
+    const coordinated =
+      SIBLING_COORDINATION.test(after) &&
+      namesOwnProcess(intent, { chunkContent: after, documentTitle: '' });
+    if (coordinated) continue;
+    if (SIBLING_SUBJECT.test(before)) return true;
+    if (developsSiblingClause(intent, before)) return true;
+    if (SIBLING_GOVERNING_VERB.test(before)) return true;
+    if (SIBLING_RELATIVE_CLAUSE.test(after)) return true;
+  }
+  return false;
 }
 
 function mentionsOtherProcedure(
@@ -607,13 +649,21 @@ function mentionsOtherProcedure(
 
 /**
  * El rótulo del anexo, el cuadro o la tabla —«Anexo 2:», «Anexo N.° 2», «Anexo
- * Nº 2», «Anexo 2-A», «Anexo II.-», «Cuadro N° 2», «Tabla 2»— no es una oración.
- * Sin quitarlo, la primera oración del fragmento se reduce al rótulo y el
- * contenido del anexo queda fuera de la comprobación del trámite: el cuadro de
- * plazas se leía como «anexo 2» y la sección del hermano no llegaba a evaluarse.
+ * Nº 2», «Anexo 2-A», «Anexo II.-», «Cuadro N° 2», «Tabla 2», «Tabla
+ * comparativa:»— no es una oración. Sin quitarlo, la primera oración del
+ * fragmento se reduce al rótulo y el contenido del anexo queda fuera de la
+ * comprobación del trámite: el cuadro de plazas se leía como «anexo 2» y la
+ * sección del hermano no llegaba a evaluarse.
+ *
+ * El numeral o el romano tiene que terminar en un separador —dos puntos, punto,
+ * guion o espacio— y no en una letra más: los romanos se escriben con las mismas
+ * letras que empiezan muchas palabras («Anexo contratación de docentes»), y un
+ * rótulo que se conformara con la primera letra se comería el nombre del trámite
+ * y lo dejaría irreconocible. El rótulo con dos puntos admite una palabra en
+ * lugar del número —«Cuadro de plazas:»—, porque los dos puntos ya lo delimitan.
  */
 const ANNEX_LABEL =
-  /^(?:anexos?|cuadros?|tablas?)\s+(?:n\s*[.°º]{1,2}\s*)?(?:\d+|[ivxlcdm]+)(?:\s*[-–]\s*[a-z])?\s*[:.\-–]?\s*/u;
+  /^(?:anexos?|cuadros?|tablas?)\b[^:]{0,40}:\s*|^(?:anexos?|cuadros?|tablas?)\s+(?:n\s*[.°º]{1,2}\s*)?(?:\d+|[ivxlcdm]+)(?:\s*[-–]\s*[a-z])?\s*(?:[:.\-–]\s*|\s+|$)/u;
 
 /**
  * Los rótulos se acumulan —«Anexo 2: Cuadro N.° 2: …»—, así que se descartan
@@ -622,7 +672,7 @@ const ANNEX_LABEL =
  */
 function stripAnnexLabels(text: string): string {
   let result = text;
-  for (let guard = 0; guard < 4; guard += 1) {
+  for (let guard = 0; guard < 8; guard += 1) {
     const stripped = result.replace(ANNEX_LABEL, '');
     if (stripped === result) break;
     result = stripped;
@@ -640,7 +690,7 @@ function stripAnnexLabels(text: string): string {
  * verbo.
  */
 function openingSentence(text: string): string {
-  return stripAnnexLabels(text).split(/[.;:]/u)[0] ?? text;
+  return stripAnnexLabels(text).split(/[.;:]/u)[0];
 }
 
 function bodySentence(

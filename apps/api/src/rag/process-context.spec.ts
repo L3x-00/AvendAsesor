@@ -1014,6 +1014,8 @@ describe('contexto de proceso del hilo', () => {
         'Tabla 2: las plazas del destaque por región.',
         // Los rótulos se acumulan y el cuerpo empieza después del último.
         'Anexo 2: Cuadro N° 2: las plazas del destaque por región.',
+        // El rótulo con dos puntos admite una palabra en lugar del número.
+        'Tabla comparativa: las plazas del destaque por región.',
       ])
         expect(
           belongsToAdmittedVersion(
@@ -1034,6 +1036,12 @@ describe('contexto de proceso del hilo', () => {
         'Anexo N.° 3: la permuta se solicita ante la UGEL de destino.',
         'Cuadro N° 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
         'Anexo 3: Cuadro N° 3: la permuta se solicita ante la UGEL de destino.',
+        'Tabla comparativa: la permuta se solicita ante la UGEL de destino.',
+        // El rótulo no se come la primera letra del contenido: «contratación»
+        // empieza por una letra romana y el numeral tiene que ser un token
+        // completo, con o sin número de anexo delante.
+        'Anexo contratación de docentes se rige por su propio procedimiento.',
+        'Anexo 2: contratación de docentes se rige por su propio procedimiento.',
       ])
         expect(
           belongsToAdmittedVersion(
@@ -1294,6 +1302,11 @@ describe('contexto de proceso del hilo', () => {
         'La licencia por enfermedad de los padres se otorga por cinco días hábiles.',
         'La licencia por enfermedad de las madres se otorga por cinco días hábiles.',
         'La licencia por enfermedad de familiares directos se otorga por cinco días hábiles.',
+        // El singular femenino con artículo es la misma causal ajena: «la madre»,
+        // «la esposa» y «la cónyuge» no son la enfermedad de la persona.
+        'La enfermedad de la madre se acredita con el certificado médico.',
+        'La enfermedad de la esposa se acredita con el certificado médico.',
+        'La enfermedad de la cónyuge se acredita con el certificado médico.',
         // Como afirmación, enmarque y requisito del propio trámite. La causal
         // desnuda —sin «licencia por» delante— es la que prueba la enumeración:
         // con ella, el plural del parentesco no se lee como la enfermedad de la
@@ -1338,6 +1351,83 @@ describe('contexto de proceso del hilo', () => {
       ).toBe(true);
     });
 
+    it('admite la alternativa que incluye el proceso consultado', () => {
+      // «optar por la permuta o el destaque» ofrece los dos trámites, y «o la
+      // reasignación» también: el hermano va detrás de un verbo que lo rige,
+      // pero la coordinación con el propio proceso mantiene el fragmento.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El docente puede optar por la permuta o el destaque según las plazas disponibles.',
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Disposiciones generales',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          intent('quiero reasignarme a otra ugel'),
+          {
+            chunkContent:
+              'El docente puede optar por la permuta o la reasignación según las plazas disponibles.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Disposiciones generales',
+          },
+          true,
+        ),
+      ).toBe(true);
+      // Contramuestra: sin el propio proceso en la alternativa, el fragmento
+      // ofrece solo el hermano.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El docente puede optar por la permuta o el encargo según las plazas disponibles.',
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Disposiciones generales',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('acusa el hermano aunque la primera mención sea de paso', () => {
+      // El cuerpo se recorre entero: la primera mención acompaña al propio
+      // proceso y la segunda enuncia el régimen del hermano. Detenerse en la
+      // primera dejaba pasar el fragmento.
+      const licencias = 'Norma técnica de licencias, permisos y vacaciones';
+      const chunkContent =
+        'El descanso médico y la licencia por paternidad se acreditan con el certificado y la licencia por maternidad se otorga por noventa días.';
+      expect(
+        belongsToAdmittedVersion(intent('necesito descanso medico'), {
+          chunkContent,
+          documentTitle: licencias,
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          { chunkContent, documentTitle: licencias, sectionTitle: 'Del plazo' },
+          true,
+        ),
+      ).toBe(false);
+      // Contramuestra: con las dos menciones acompañando al propio, el fragmento
+      // sigue siendo suyo.
+      expect(
+        belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+          chunkContent:
+            'El descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
+          documentTitle: licencias,
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(true);
+    });
+
     it('acusa el régimen del hermano aunque el propio se nombre antes', () => {
       // El descanso médico es el sujeto de la oración, pero la cláusula de
       // relativo enuncia el régimen de la paternidad: el fragmento desarrolla
@@ -1349,6 +1439,15 @@ describe('contexto de proceso del hilo', () => {
         // El hermano abre la oración y el propio aparece después: el artículo
         // delante no lo convierte en complemento.
         'La licencia por maternidad se otorga por noventa días; el descanso médico se acredita con el CITT.',
+        // El hermano es el sujeto de la segunda cláusula coordinada: también
+        // enuncia su régimen, aunque el propio abra la oración.
+        'El descanso médico se acredita con el CITT y la licencia por paternidad se otorga por diez días calendario.',
+        // La cláusula del hermano no coordina con el nombre del propio: el
+        // proceso consultado no cierra la enumeración.
+        'El plazo es de quince días hábiles, la licencia por paternidad se otorga por diez días calendario.',
+        // Tampoco cuando el propio aparece después: la cláusula sigue siendo del
+        // hermano y no del proceso consultado.
+        'El plazo es de quince días hábiles, la licencia por paternidad se otorga por diez días y el descanso médico se acredita con el CITT.',
       ]) {
         expect(
           belongsToAdmittedVersion(intent('necesito descanso medico'), {
