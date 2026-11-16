@@ -106,6 +106,7 @@ import {
   temporaryPlacementQueries,
 } from './temporary-placement-retrieval';
 import {
+  belongsToAdmittedVersion,
   inheritedTopicIntent,
   processQueriesForIntent,
   treatsInheritedProcess,
@@ -2318,8 +2319,19 @@ export class RagService {
       // por versión, así que sin este filtro la cita de la respuesta podía ser
       // justo el fragmento que la compuerta acababa de rechazar (la licencia de
       // otra causal, la sección de la permuta).
+      // La versión admitida no basta: el resto de sus fragmentos pasa por la
+      // misma compuerta. La consolidación por documento elige un representante
+      // por versión, así que sin este filtro la cita de la respuesta podía ser
+      // justo el fragmento que la compuerta acababa de rechazar (la licencia de
+      // otra causal, la sección de la permuta). Un fragmento de la versión que
+      // no trata otro proceso sí completa la respuesta: el anexo o el cuadro de
+      // plazas del documento no repite el nombre del trámite.
       const evidence = globalRoutingSources.filter(
-        (source) => versions.has(source.documentVersionId) && admits(source),
+        (source) =>
+          versions.has(source.documentVersionId) &&
+          (!inheritedScope ||
+            admits(source) ||
+            belongsToAdmittedVersion(topicIntent, source)),
       );
       let sources = relevantSources(evidence, matchCount, salaryQuestion);
       if (topicIntent.id === 'reassignment') {

@@ -229,6 +229,13 @@ export function processQueriesForIntent(
 }
 
 /**
+ * La enfermedad como causal propia. La del familiar es otra causal y su plazo
+ * no responde el descanso médico de la persona.
+ */
+const OWN_ILLNESS =
+  'enfermedad(?!\\s+(?:de|del|de un)\\s+(?:familiar|hij[oa]s?|padre|madre|conyuge|pariente))';
+
+/**
  * Señal textual con la que el corpus nombra cada proceso. La herencia aporta el
  * proceso, no el término: cuando el turno actual es «¿y los requisitos?» la
  * comprobación directa contra la pregunta no puede admitir ningún fragmento, y
@@ -238,8 +245,10 @@ export function processQueriesForIntent(
 const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
   reassignment: /\breasignacion(?:es)?\b/u,
   'temporary-placement': /\bdestaques?\b/u,
-  'medical-leave':
-    /\b(?:descanso medic[oa]|incapacidad temporal|citt|licencias? por (?:enfermedad(?!\s+(?:de|del)\b)|salud|incapacidad|emergencia|unidad familiar)|permisos? por (?:salud|enfermedad(?!\s+(?:de|del)\b)))\b/u,
+  'medical-leave': new RegExp(
+    `\\b(?:descanso medic[oa]|incapacidad temporal|citt|licencias? por (?:${OWN_ILLNESS}|salud|incapacidad|emergencia|unidad familiar)|permisos? por (?:salud|${OWN_ILLNESS}))\\b`,
+    'u',
+  ),
   'career-progression':
     /\b(?:ascenso|escala magisterial|concurso de ascenso)\b/u,
   'rural-allocation':
@@ -332,26 +341,36 @@ function mentionsOtherProcess(
 }
 
 /**
- * Oración principal del desarrollo: la subordinada describe una condición
+ * La oración principal del desarrollo: la subordinada describe una condición
  * («el plazo se suspende si el docente tiene licencia por enfermedad») y no
- * cambia el trámite del fragmento. Si el fragmento abre directamente con la
+ * cambia el trámite del fragmento. Un «sí» afirmativo seguido de coma no abre
+ * subordinada, y «cuando» se deja dentro de la oración para no perder la
+ * mención del otro trámite. Si el fragmento abre directamente con la
  * condicional, la oración completa es la que decide.
  */
 function mainClause(text: string): string {
   const [before = ''] = text.split(
-    /\b(?:si|cuando|siempre que|en caso de|mientras|salvo que)\b/u,
+    /\b(?:si(?!\s*,)|siempre que|en caso de|salvo que)\b/u,
   );
   return before.trim().split(/\s+/u).length >= 3 ? before : text;
 }
 
 /**
  * Causales de licencia o permiso que no son la del proceso consultado. Se
- * nombran una por una: «licencia por más de treinta días» o «licencia por
- * enfermedad» en un requisito del propio trámite usan el «por» de duración o de
- * condición, no enuncian otro trámite.
+ * nombran una por una para el hilo de licencia: la causal propia es solo la
+ * clínica.
  */
 const FOREIGN_LEAVE_CAUSAL =
   'licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|enfermedad (?:de|del|de un) (?:familiar|familiar directo|hij[oa]|padre|madre|conyuge))|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)';
+
+/**
+ * La licencia o el permiso enunciados como trámite en un hilo de otro proceso.
+ * Se exceptúa el «por» de duración o de plazo («licencia por más de treinta
+ * días»), que describe una condición del requisito y no otro trámite. La causal
+ * se deja abierta: el corpus nombra tantas como la persona puede invocar.
+ */
+const LEAVE_AS_PROCEDURE =
+  'licencias? por (?!mas de|\\d|el plazo|un plazo)|permisos? por (?!mas de|\\d|el plazo|un plazo)|solicitar (?:una )?(?:licencia|permiso)|tramite de (?:licencia|permiso)';
 
 /**
  * Trámites hermanos que el corpus distingue del proceso consultado y que no
@@ -369,7 +388,7 @@ const SIBLING_PROCEDURE =
   'permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|jubilacion(?:es)?|renuncias?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos';
 
 const OTHER_PROCEDURE = new RegExp(
-  `\\b(?:${SIBLING_PROCEDURE}|${FOREIGN_LEAVE_CAUSAL}|solicitar (?:una )?(?:licencia|permiso)|tramite de (?:licencia|permiso))\\b`,
+  `\\b(?:${SIBLING_PROCEDURE}|${LEAVE_AS_PROCEDURE})\\b`,
   'u',
 );
 
@@ -381,17 +400,22 @@ const OTHER_PROCEDURE = new RegExp(
  * familiar» no es la incapacidad temporal propia.
  */
 const OTHER_PROCEDURE_WITHOUT_OWN_LEAVE = new RegExp(
-  `\\b(?:${SIBLING_PROCEDURE}|${FOREIGN_LEAVE_CAUSAL})\\b|\\blicencias? por (?!enfermedad(?!\\s+(?:de|del)\\b)|salud|incapacidad|emergencia|unidad familiar)\\w|\\bpermisos? por (?!salud|enfermedad(?!\\s+(?:de|del)\\b))\\w`,
+  `\\b(?:${SIBLING_PROCEDURE}|${FOREIGN_LEAVE_CAUSAL})\\b|\\blicencias? por (?!(?:${OWN_ILLNESS}|salud|incapacidad|emergencia|unidad familiar))\\w|\\bpermisos? por (?!salud|${OWN_ILLNESS})\\w`,
   'u',
 );
 
 /**
- * El otro trámite se nombra como condición o sanción del propio («no estar en
- * uso de licencia», «no haber sido sancionado con cese temporal»): no lo
+ * El otro trámite se nombra como requisito o sanción del propio («no encontrarse
+ * en uso de licencia», «no haber sido sancionado con cese temporal»): no lo
  * convierte en el trámite del fragmento.
+ *
+ * La enumeración es cerrada a propósito. Un «gozar de», «acogerse a» o «en uso
+ * de» suelto describe el otro trámite y no una condición del propio: «los
+ * docentes pueden acogerse a la permuta» y «el directivo puede gozar de un
+ * encargo» desarrollan la permuta y el encargo, no el proceso consultado.
  */
 const PROCEDURE_AS_CONDITION =
-  /\b(?:en uso de|hacer uso de|gozar de|acogerse a|no (?:haber sido |estar |encontrarse )(?:sancionad|incurrid|comprendid)\p{L}*|sancionad\p{L}* con)\b/u;
+  /\b(?:no\s+(?:haber\s+sido\s+sancionad|haber\s+incurrid|estar\s+(?:sancionad|incurrid|incurso|comprendid|en\s+uso)|encontrarse\s+(?:sancionad|incurrid|incurso|comprendid|en\s+uso)|registrar\s+(?:sancion|cese)|tener\s+(?:sancion|cese))\p{L}*|sancionad\p{L}*\s+con\s+(?:cese|suspension|destitucion|amonestacion)|sin\s+(?:hacer\s+uso|estar\s+en\s+uso|encontrarse\s+en\s+uso))\b/u;
 
 function mentionsOtherProcedure(
   intent: TopicIntent,
@@ -406,17 +430,20 @@ function mentionsOtherProcedure(
   const title = normalizeSpanishText(source.documentTitle);
   const section = normalizeSpanishText(source.sectionTitle ?? '');
   const development = mainClause(openingSentence(bodyText(source)));
-  if (PROCEDURE_AS_CONDITION.test(development)) return false;
+  // La sección es el encuadre del fragmento: si ella nombra otro trámite, la
+  // condición de la primera oración no lo desmiente («De la licencia por
+  // paternidad» + «el docente en uso de licencia por paternidad»).
+  if (pattern.test(section)) return true;
   // El título de una norma conjunta —«Norma técnica de reasignación y
   // permuta»— nombra los dos trámites: el hermano que el mismo título enuncia no
   // es indicio de otro trámite, y el fragmento debe decidirse por su sección y su
   // cuerpo.
   const titleNamesOwnProcess = PROCESS_EVIDENCE[intent.id].test(title);
-  return (
-    (!titleNamesOwnProcess && pattern.test(title)) ||
-    pattern.test(section) ||
-    pattern.test(development)
-  );
+  if (!titleNamesOwnProcess && pattern.test(title)) return true;
+  // El requisito o la sanción del propio trámite no lo convierte en otro
+  // trámite.
+  if (PROCEDURE_AS_CONDITION.test(development)) return false;
+  return pattern.test(development);
 }
 
 /**
@@ -476,6 +503,25 @@ export function treatsInheritedProcess(
   }
   return (
     fromProcessQuery &&
+    !mentionsOtherProcess(intent, source) &&
+    !mentionsOtherProcedure(intent, source)
+  );
+}
+
+/**
+ * El fragmento comparte la versión admitida sin tratar otro proceso. Se usa al
+ * ampliar la respuesta con los demás fragmentos del documento: una tabla o un
+ * anexo del propio trámite no repite su nombre ni proviene de su consulta, y aun
+ * así completa la respuesta.
+ */
+export function belongsToAdmittedVersion(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  return (
+    matchesRegime(intent, source) &&
     !mentionsOtherProcess(intent, source) &&
     !mentionsOtherProcedure(intent, source)
   );

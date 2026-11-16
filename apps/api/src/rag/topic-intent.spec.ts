@@ -226,6 +226,10 @@ describe('detectTopicIntent', () => {
     'el destaque no me conviene, quiero reasignarme',
     'no me conviene el destaque, prefiero la reasignación',
     'necesito reasignarme, el destaque no me sirve',
+    // El rechazo tiene que leerse como rechazo: «quiero el destaque» dentro de
+    // «no quiero el destaque» no elige el destaque.
+    'necesito reasignarme, no quiero el destaque',
+    'prefiero la reasignacion, tampoco quiero el destaque',
   ])(
     'no confunde una preferencia negada con una comparación: «%s»',
     (question) => {
@@ -237,12 +241,17 @@ describe('detectTopicIntent', () => {
     },
   );
 
-  it('no elige un solo proceso cuando la persona pide los dos', () => {
-    // Sin preferencia legible no se descarta ninguna compuerta: se conserva la
-    // intención que el sistema ya reconocía antes de reconocer el destaque.
+  it('conserva la reasignación cuando la persona pide los dos procesos', () => {
+    // Sin preferencia legible no se descarta ninguna compuerta: el turno no
+    // declara que el destaque sea el elegido y se mantiene el proceso que el
+    // sistema ya reconocía.
     expect(
       detectTopicIntent('quiero el destaque y tambien quiero reasignarme'),
     ).toMatchObject({ id: 'reassignment' });
+    // Con la elección explícita, el mismo par de menciones sí decide.
+    expect(
+      detectTopicIntent('necesito el destaque, no quiero la reasignacion'),
+    ).toMatchObject({ id: 'temporary-placement' });
   });
 
   it('nombra los dos procesos sin compararlos: conserva la reasignación', () => {

@@ -798,39 +798,93 @@ describe('contexto de proceso del hilo', () => {
           true,
         ),
       ).toBe(false);
-      // La guarda no depende de la búsqueda que trajo el fragmento: aunque no
-      // provenga de la consulta del proceso, la sección exclusiva de la permuta
-      // no desarrolla la reasignación.
+      // Es la sección la que acusa: el mismo cuerpo sin ella no descarta el
+      // fragmento, porque su primera oración desarrolla la reasignación.
       expect(
         treatsInheritedProcess(
           reassignment,
           {
             chunkContent:
-              'Disposiciones específicas de la permuta. La permuta exige acuerdo entre las partes.',
+              'La permuta y la reasignación se solicitan ante la UGEL de destino.',
             documentTitle: 'Norma técnica de reasignación y permuta',
-            sectionTitle: 'Disposiciones específicas de la permuta',
           },
-          false,
+          true,
         ),
-      ).toBe(false);
+      ).toBe(true);
     });
 
-    it('descarta la sección de permuta aunque el cuerpo nombre la reasignación', () => {
-      const reassignment = intent(
-        'soy docente nombrado y quiero reasignarme a otra ugel',
-      );
+    it('acusa la sección aunque el cuerpo presente el otro trámite como condición', () => {
+      // La exención por condición es de la oración, no del encuadre: una sección
+      // «De la licencia por paternidad» no deja de ser otro trámite porque el
+      // cuerpo lo nombre como requisito («no encontrarse en uso de…»).
       expect(
         treatsInheritedProcess(
-          reassignment,
+          intent('necesito descanso medico'),
           {
             chunkContent:
-              'Disposiciones específicas de la permuta. La permuta y la reasignación se solicitan ante la UGEL de destino.',
-            documentTitle: 'Norma técnica de reasignación y permuta',
-            sectionTitle: 'Disposiciones específicas de la permuta',
+              'No encontrarse en uso de licencia por paternidad al momento de la solicitud.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'De la licencia por paternidad',
           },
           true,
         ),
       ).toBe(false);
+    });
+
+    it('no exime el otro trámite cuando el cuerpo lo desarrolla', () => {
+      // «Acogerse a» y «gozar de» describen el otro trámite, no una condición del
+      // propio: solo el requisito o la sanción se exceptúan.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El directivo puede gozar de un encargo de funciones directivas por un año.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          intent('soy docente nombrado y quiero reasignarme a otra ugel'),
+          {
+            chunkContent:
+              'Los docentes pueden acogerse a la permuta cuando exista acuerdo entre las partes.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La licencia por capacitación oficial se otorga con goce de remuneraciones.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('admite la licencia por enfermedad del propio docente', () => {
+      // «Enfermedad del docente» es la causal propia; solo la del familiar es
+      // otra causal.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'La licencia por enfermedad del docente se otorga por el plazo que indique el certificado médico.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'De la licencia por enfermedad',
+          },
+          true,
+        ),
+      ).toBe(true);
     });
 
     it('conserva el régimen del título cuando el cuerpo solo dice «personal nombrado»', () => {
