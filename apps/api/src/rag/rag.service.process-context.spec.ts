@@ -197,6 +197,34 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
 
+  it('admite el plazo del destaque aunque su sección nombre la plaza', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // Una norma de destaque titula «Plaza orgánica y plaza eventual» la sección
+    // donde fija su propio plazo. La mención no convierte el fragmento en otro
+    // proceso: los tres aspectos de «Cargos y plazas» se dirimen con la compuerta
+    // del módulo, no con la señal de trámite ajeno.
+    const anexoPlaza = {
+      ...plazoChunk,
+      chunkId: 'anexo-plaza',
+      sectionTitle: 'Plaza orgánica y plaza eventual',
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /destaque docente/.test(queryFor(embedding)) ? [anexoPlaza] : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'anexo-plaza' }],
+    });
+  });
+
   const reassignmentPlazo = {
     ...plazoChunk,
     chunkContent:
@@ -837,6 +865,228 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({
       kind: 'evidence',
       sources: [{ chunkId: 'licencia-salud' }],
+    });
+  });
+
+  /**
+   * El tema heredado de «Cargos y plazas» pasa por la misma compuerta que la
+   * ruta directa. Sin ella, un seguimiento tras «plaza orgánica y eventual»
+   * aceptaba la norma del destaque que solo dice «conserva su plaza orgánica».
+   */
+  const positionNorm = {
+    ...plazoChunk,
+    chunkContent:
+      'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato mientras exista la necesidad de servicio.',
+    chunkId: 'position-norm',
+    documentId: 'position-document',
+    documentTitle: 'Norma sobre cargos y plazas',
+    documentVersionId: 'position-version',
+    moduleIds: ['cargos'],
+    moduleNames: ['Cargos y plazas'],
+    sectionTitle: 'De las plazas',
+    semanticScore: 0.78,
+  };
+
+  const destaquePlaza = {
+    ...plazoChunk,
+    chunkContent:
+      'Durante el destaque el profesor conserva su plaza orgánica de origen.',
+    chunkId: 'destaque-plaza',
+    documentTitle: 'Norma técnica del destaque docente',
+    sectionTitle: 'De los derechos del destacado',
+    semanticScore: 0.9,
+  };
+
+  it('hereda el tema de las plazas y entrega su norma', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([positionNorm]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'position-norm' }],
+    });
+  });
+
+  it('no responde el tema heredado con la mención del destaque', async () => {
+    const { service, gateway } = buildSearchable();
+    // El destaque puntúa más alto y nombra la plaza orgánica, pero regula otro
+    // proceso: la compuerta lo descarta y la norma del tema responde.
+    gateway.search.mockResolvedValue([destaquePlaza, positionNorm]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'position-norm' }],
+    });
+  });
+
+  it('no responde el tema heredado con la única mención incidental', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([destaquePlaza]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  /**
+   * La dirección inversa: un hilo de destaque no responde su seguimiento con la
+   * norma que regula las plazas. El encabezado de esa norma no la descarta —una
+   * sección de la norma de destaque puede titularse igual—, pero el cuerpo sí
+   * decide cuando clasifica las plazas.
+   */
+  it('no responde el plazo del destaque con la norma de las plazas', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([positionNorm]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  /**
+   * Banda aceptada a propósito: un fragmento del trámite del hilo que enuncia la
+   * pareja de plazas sin nombrar su trámite ni en el cuerpo ni en la sección se
+   * descarta. Es un falso negativo conocido y se prefiere a la respuesta cruzada;
+   * si alguien afloja la comprobación de cuerpo, esta prueba lo acusa.
+   */
+  it('descarta el requisito del trámite que enuncia la pareja sin nombrarse', async () => {
+    const { service, gateway } = buildSearchable();
+    const requisitoSinNombre = {
+      ...plazoChunk,
+      chunkContent:
+        'El postulante debe acreditar vínculo en una plaza orgánica o en una plaza eventual según corresponda.',
+      chunkId: 'requisito-sin-nombre',
+      sectionTitle: 'De los requisitos',
+      semanticScore: 0.88,
+    };
+    gateway.search.mockResolvedValue([requisitoSinNombre]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('entrega el plazo del destaque y no la norma de las plazas', async () => {
+    const { service, gateway } = buildSearchable();
+    // Las dos fuentes comparten la consulta del proceso; el cuerpo decide cuál
+    // responde el seguimiento.
+    gateway.search.mockResolvedValue([
+      { ...positionNorm, semanticScore: 0.92 },
+      plazoChunk,
+    ]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'plazo-chunk' }],
+    });
+  });
+
+  it('no responde el clasificador heredado con una cita de paso', async () => {
+    const { service, gateway } = buildSearchable();
+    const cita = {
+      ...plazoChunk,
+      chunkContent:
+        'La institución cuenta con el PEI, el MOF, el CAP y el clasificador de cargos como instrumentos de gestión.',
+      chunkId: 'cita-clasificador',
+      documentTitle: 'Norma de organización interna',
+      sectionTitle: 'De los instrumentos de gestión',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([cita]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, ['clasificador de cargos']),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('no responde las horas heredadas con la jornada de un contrato', async () => {
+    const { service, gateway } = buildSearchable();
+    const contractHours = {
+      ...plazoChunk,
+      chunkContent:
+        'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales que se aprueba por resolución.',
+      chunkId: 'contract-hours',
+      documentTitle: 'Norma del proceso de contratación docente',
+      sectionTitle: 'Carga horaria y jornada del contrato',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([contractHours]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'que es el cuadro de distribucion de horas',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('busca el tema heredado con su propia denominación', async () => {
+    const { service, embeddings } = build();
+    await service.retrieve('y los requisitos?', null, [
+      'diferencia entre plaza organica y eventual',
+    ]);
+
+    const queries = embeddedQueries(embeddings);
+    // Las dos adiciones del merge son necesarias: sin la consulta canónica del
+    // proceso heredado no habría nada que recuperar.
+    expect(
+      queries.some((query) => query.includes('plaza orgánica plaza eventual')),
+    ).toBe(true);
+  });
+
+  it('rescata el proceso heredado cuando la búsqueda vectorial no devuelve nada', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // El proceso del hilo aporta su denominación al rescate léxico: la pregunta
+    // del turno («y los requisitos») no la repite, y la búsqueda vectorial no
+    // devolvió nada. Sin esa consulta, el turno se quedaba sin evidencia.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'Para postular al destaque se requiere tener vínculo nombrado y tres años de servicio.',
+      chunkId: 'requisitos-destaque',
+      documentTitle: 'Norma técnica del destaque docente',
+      lexicalScore: 0.8,
+      sectionTitle: 'Requisitos del destaque',
+    };
+    gateway.search.mockImplementation(
+      ({
+        embedding,
+        matchThreshold,
+      }: {
+        embedding: number[];
+        matchThreshold: number;
+      }) =>
+        Promise.resolve(
+          matchThreshold === 0 && /destaque docente/.test(queryFor(embedding))
+            ? [requisitos]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'requisitos-destaque' }],
     });
   });
 });

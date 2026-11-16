@@ -77,6 +77,10 @@ describe('inheritedFactorQuestions', () => {
   it.each([
     'Jornada de 30 horas',
     'Mi carga horaria es de 30 horas',
+    // «horas pedagógicas» con cifra es un factor del monto: si el léxico lo
+    // tratara como tema, la respuesta a la aclaración cortaría la herencia.
+    '30 horas pedagógicas',
+    'con 30 horas pedagogicas',
     'Escala magisterial 2',
   ])('«%s» responde a la aclaración y no interrumpe la herencia', (answer) => {
     expect(

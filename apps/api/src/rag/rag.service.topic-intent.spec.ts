@@ -58,7 +58,7 @@ function setup() {
   } as never);
   const queryFor = (embedding: number[]): string =>
     queryByVector.get(embedding[0]) ?? '';
-  return { gateway, queryFor, service };
+  return { embeddings, gateway, queryFor, service };
 }
 
 const reassignmentSource = {
@@ -265,6 +265,247 @@ describe('RagService — intención temática del chat general', () => {
         topicIntent: detectTopicIntent(question),
       }),
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('responde la condición de la plaza con su norma y no con una mención del destaque', async () => {
+    const { gateway, service } = setup();
+    const positionSource = {
+      ...baseSource,
+      chunkContent:
+        'La plaza orgánica se crea por resolución de creación de la institución educativa; la plaza eventual se atiende con contrato mientras exista la necesidad de servicio.',
+      chunkId: 'position-chunk',
+      documentId: 'position-document',
+      documentTitle: 'Norma sobre plazas orgánicas y eventuales',
+      documentVersionId: 'position-version',
+      moduleIds: ['cargos'],
+      moduleNames: ['Cargos y plazas'],
+      semanticScore: 0.78,
+    };
+    const destaqueMention = {
+      ...baseSource,
+      chunkContent:
+        'El destaque se autoriza al profesor nombrado sin que pierda la plaza de origen en su institución educativa.',
+      chunkId: 'destaque-mention',
+      documentId: 'destaque-document',
+      documentTitle: 'Norma técnica del destaque docente',
+      documentVersionId: 'destaque-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.9,
+    };
+    const question = 'diferencia entre plaza organica y eventual';
+
+    gateway.search.mockResolvedValue([destaqueMention]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+
+    gateway.search.mockResolvedValue([destaqueMention, positionSource]);
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'position-chunk',
+    ]);
+
+    // Una norma del mismo módulo que solo menciona «plazas excedentes» regula la
+    // racionalización, no la diferencia entre plaza orgánica y eventual.
+    const rationalizationMention = {
+      ...positionSource,
+      chunkContent:
+        'Las plazas excedentes se determinan al cierre del proceso de matrícula y se comunican a la UGEL.',
+      chunkId: 'excedente-mention',
+      documentId: 'excedente-document',
+      documentTitle: 'Norma técnica de racionalización de plazas',
+      documentVersionId: 'excedente-version',
+      semanticScore: 0.95,
+    };
+    gateway.search.mockResolvedValue([rationalizationMention]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no responde el cuadro de distribución de horas con la jornada de un contrato', async () => {
+    const { gateway, service } = setup();
+    const hoursSource = {
+      ...baseSource,
+      chunkContent:
+        'El cuadro de distribución de horas de clase se elabora antes del inicio del año escolar y lo aprueba la dirección de la institución educativa.',
+      chunkId: 'hours-chunk',
+      documentId: 'hours-document',
+      documentTitle: 'Orientaciones para el cuadro de distribución de horas',
+      documentVersionId: 'hours-version',
+      moduleIds: ['cargos'],
+      moduleNames: ['Cargos y plazas'],
+      semanticScore: 0.76,
+    };
+    const contractHours = {
+      ...baseSource,
+      chunkContent:
+        'El profesor contratado percibe una remuneración mensual de acuerdo con la jornada laboral de treinta horas establecida para la modalidad.',
+      chunkId: 'contract-hours',
+      documentId: 'contract-document',
+      documentTitle: 'Norma del proceso de contratación docente',
+      documentVersionId: 'contract-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.88,
+    };
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    gateway.search.mockResolvedValue([contractHours]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+
+    gateway.search.mockResolvedValue([contractHours, hoursSource]);
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'hours-chunk',
+    ]);
+  });
+
+  it('una pregunta de destaque conserva su respuesta aunque nombre la plaza orgánica', async () => {
+    const { gateway, service } = setup();
+    const destaqueSource = {
+      ...baseSource,
+      chunkContent:
+        'El destaque se autoriza al profesor nombrado para desempeñar funciones en otra institución educativa; durante el destaque conserva su plaza orgánica de origen.',
+      chunkId: 'destaque-chunk',
+      documentId: 'destaque-document',
+      documentTitle: 'Norma técnica del destaque docente',
+      documentVersionId: 'destaque-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.85,
+    };
+    gateway.search.mockResolvedValue([destaqueSource]);
+    const question = 'durante el destaque sigo ocupando mi plaza organica';
+
+    // El proceso nombrado manda: la intención es el destaque, no «Cargos y
+    // plazas», y la respuesta sigue siendo la del destaque en vez de una
+    // ausencia del otro tema.
+    expect(detectTopicIntent(question)?.id).toBe('temporary-placement');
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'destaque-chunk',
+    ]);
+  });
+
+  it('no responde el tema con una norma de encargatura aunque su sección nombre la plaza', async () => {
+    const { gateway, service } = setup();
+    const encargaturaSource = {
+      ...baseSource,
+      chunkContent:
+        'La plaza orgánica es la plaza de origen que el profesor encargado conserva mientras dura la encargatura.',
+      chunkId: 'encargatura-chunk',
+      documentId: 'encargatura-document',
+      documentTitle: 'Norma técnica de encargatura de cargos directivos',
+      documentVersionId: 'encargatura-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      sectionTitle: 'De la plaza orgánica',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([encargaturaSource]);
+    const question = 'diferencia entre plaza organica y eventual';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no responde el cuadro de horas con la carga horaria de un contrato', async () => {
+    const { gateway, service } = setup();
+    const contractSource = {
+      ...baseSource,
+      chunkContent:
+        'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales que se aprueba por resolución de la dirección.',
+      chunkId: 'contract-section',
+      documentId: 'contract-section-document',
+      documentTitle: 'Norma del proceso de contratación docente',
+      documentVersionId: 'contract-section-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      sectionTitle: 'Carga horaria y jornada del contrato',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([contractSource]);
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no responde el cuadro de horas con la jornada de los auxiliares', async () => {
+    const { gateway, service } = setup();
+    const auxiliarySource = {
+      ...baseSource,
+      chunkContent:
+        'La carga horaria de los auxiliares se distribuye en la institución educativa según el turno asignado.',
+      chunkId: 'auxiliar-hours-chunk',
+      documentId: 'auxiliar-hours-document',
+      documentTitle: 'Norma sobre el trabajo de los auxiliares de educación',
+      documentVersionId: 'auxiliar-hours-version',
+      moduleIds: ['auxiliares'],
+      moduleNames: ['Auxiliar de educación'],
+      sectionTitle: 'Distribución de horas',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([auxiliarySource]);
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no añade consultas del cuadro de horas a la respuesta elíptica de una cifra', async () => {
+    const { embeddings, gateway, service } = setup();
+    gateway.search.mockResolvedValue([]);
+    const prior = 'cuanto gana un docente nombrado de secundaria';
+
+    await service.retrieve('30 horas pedagogicas', null, [prior], {
+      salaryContextQuestions: [prior],
+    });
+
+    const embedded = embeddings.embed.mock.calls.flatMap(
+      (call: unknown[]) => call[0] as string[],
+    );
+    // La carga horaria es un factor del monto: el turno sigue siendo salarial.
+    expect(
+      embedded.some((query) =>
+        query.includes('cuadro de distribución de horas'),
+      ),
+    ).toBe(false);
   });
 
   it('sin evidencia del ascenso no ofrece los módulos que solo comparten palabras', async () => {

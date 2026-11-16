@@ -59,6 +59,12 @@ const questions = {
     'mi director dice que me va sancionar pero yo quiero saber si tengo derecho a defenderme',
   rationalization:
     'en mi colegio estan bajando los alumnos y dicen que van a reducir plazas eso se puede',
+  hours: 'que es el cuadro de distribucion de horas y para que lo usan',
+  hoursDecision:
+    'soy profesor de secundaria y quiero saber quien decide cuantas horas me tocan',
+  surplus: 'que significa cuando dicen que mi plaza esta excedente',
+  condition: 'diferencia entre plaza organica y eventual',
+  classifier: 'donde puedo revisar el clasificador de cargos de mi colegio',
 } as const;
 
 function evidenceSource(input: {
@@ -92,7 +98,14 @@ function evidenceSource(input: {
 const answers: Record<
   Exclude<
     TopicIntentId,
-    'career-progression' | 'rationalization' | 'medical-leave'
+    | 'career-progression'
+    | 'rationalization'
+    | 'medical-leave'
+    // «Cargos y plazas» no tiene corpus en el catálogo de prueba: son las
+    // intenciones que deben informar la ausencia del tema, no inventar fuentes.
+    | 'teaching-hours'
+    | 'position-condition'
+    | 'position-classifier'
   >,
   ReturnType<typeof evidenceSource>
 > = {
@@ -195,6 +208,9 @@ function setup() {
           if (
             intent === 'career-progression' ||
             intent === 'rationalization' ||
+            intent === 'teaching-hours' ||
+            intent === 'position-condition' ||
+            intent === 'position-classifier' ||
             !intent
           ) {
             return Promise.resolve({
@@ -275,6 +291,13 @@ describe('ChatService — consultas del chat general', () => {
     ['auxiliary-requirements', questions.auxiliary, 'auxiliary-requirements'],
     ['disciplinary', questions.disciplinary, 'disciplinary'],
     ['rationalization', questions.rationalization, 'rationalization'],
+    // «Cargo y plazas»: el módulo no tiene corpus, pero el tema debe
+    // identificarse para informar su ausencia en vez de ofrecer otros módulos.
+    ['teaching-hours', questions.hours, 'teaching-hours'],
+    ['teaching-hours', questions.hoursDecision, 'teaching-hours'],
+    ['position-condition', questions.surplus, 'position-condition'],
+    ['position-condition', questions.condition, 'position-condition'],
+    ['position-classifier', questions.classifier, 'position-classifier'],
   ] as const)(
     '%s: identifica la intención y no ofrece módulos alternativos',
     async (_label, question, intentId) => {
@@ -315,6 +338,27 @@ describe('ChatService — consultas del chat general', () => {
       'la racionalización de plazas',
       'Cargos y plazas',
     ],
+    [
+      questions.hours,
+      'el cuadro de distribución de horas y la asignación de la carga horaria docente',
+      'Cargos y plazas',
+    ],
+    [
+      questions.hoursDecision,
+      'el cuadro de distribución de horas y la asignación de la carga horaria docente',
+      'Cargos y plazas',
+    ],
+    [
+      questions.surplus,
+      'la condición de la plaza (orgánica, eventual o excedente)',
+      'Cargos y plazas',
+    ],
+    [
+      questions.condition,
+      'la condición de la plaza (orgánica, eventual o excedente)',
+      'Cargos y plazas',
+    ],
+    [questions.classifier, 'el clasificador de cargos', 'Cargos y plazas'],
   ])(
     'sin documentos del tema informa la ausencia específica: «%s»',
     async (question, label, moduleName) => {
@@ -366,6 +410,49 @@ describe('ChatService — consultas del chat general', () => {
       }
       expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
       expect(expected.length).toBeGreaterThan(0);
+    },
+  );
+
+  it.each([
+    questions.hours,
+    questions.hoursDecision,
+    questions.surplus,
+    questions.condition,
+    questions.classifier,
+    questions.rationalization,
+  ])(
+    'dentro del módulo «Cargos y plazas» sin corpus informa la ausencia sin desviar: «%s»',
+    async (question) => {
+      const { catalogService, historyGateway, ragService, service } = setup();
+      historyGateway.getConversationContext.mockResolvedValue({
+        conversationId: CONVERSATION_ID,
+        messages: [],
+        selectedModuleId: 'car',
+      });
+
+      const events = await collect(service, question);
+      const message = messageOf(events, 'no_evidence');
+
+      // El módulo existe pero no tiene documentos: se dice eso, se conserva el
+      // módulo y no se ofrece otra conversación.
+      expect(message).toContain('Cargos y plazas');
+      expect(message).toContain('no cuento con documentación disponible');
+      expect(message).not.toContain('¿Qué trámite');
+      expect(events.some((event) => event.type === 'clarification')).toBe(
+        false,
+      );
+      const done = events.at(-1);
+      expect(done?.type).toBe('done');
+      const doneData =
+        done && 'data' in done ? (done.data as Record<string, unknown>) : {};
+      expect(doneData).not.toHaveProperty('modules');
+      expect(
+        events.some((event) => event.type === 'conversation') &&
+          (events[0] as { data: { moduleId: string | null } }).data.moduleId,
+      ).toBe('car');
+      // Sin documentos no se consulta el corpus ni se inventan fuentes.
+      expect(ragService.retrieve).not.toHaveBeenCalled();
+      expect(catalogService.availableDocuments).toHaveBeenCalled();
     },
   );
 

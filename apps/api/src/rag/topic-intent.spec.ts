@@ -69,6 +69,36 @@ describe('detectTopicIntent', () => {
       'rationalization',
       'Cargos y plazas',
     ],
+    [
+      'que es el cuadro de distribucion de horas y para que lo usan',
+      'teaching-hours',
+      'Cargos y plazas',
+    ],
+    [
+      'soy profesor de secundaria y quiero saber quien decide cuantas horas me tocan',
+      'teaching-hours',
+      'Cargos y plazas',
+    ],
+    [
+      'que significa cuando dicen que mi plaza esta excedente',
+      'position-condition',
+      'Cargos y plazas',
+    ],
+    [
+      'diferencia entre plaza organica y eventual',
+      'position-condition',
+      'Cargos y plazas',
+    ],
+    [
+      'donde puedo revisar el clasificador de cargos de mi colegio',
+      'position-classifier',
+      'Cargos y plazas',
+    ],
+    [
+      'soy nombrado y mi colegio entro a racionalizacion, me pueden mandar a otra escuela',
+      'rationalization',
+      'Cargos y plazas',
+    ],
   ] as const)('reconoce «%s» como %s', (question, id, moduleName) => {
     expect(detectTopicIntent(question)).toMatchObject({ id, moduleName });
   });
@@ -94,6 +124,12 @@ describe('detectTopicIntent', () => {
     '¿Cuánto gana un auxiliar de educación?',
     // Una plaza mencionada sin reducción ni matrícula no es racionalización.
     '¿Cuántas plazas hay en mi colegio?',
+    // Una plaza vacante pertenece a la contratación, no a la condición de la plaza.
+    '¿Cómo me inscribo a una plaza vacante?',
+    // La jornada extraordinaria se consulta por su pago, no por su distribución.
+    '¿Me pagan las horas extras que trabajé?',
+    // Un cargo mencionado sin clasificador no es el clasificador de cargos.
+    '¿Qué requisitos tiene el cargo de director?',
     // Un caso de evaluación docente no es ascenso.
     '¿Qué pasa si me evalúan con desempeño desfavorable?',
   ])('no fuerza una intención en «%s»', (question) => {

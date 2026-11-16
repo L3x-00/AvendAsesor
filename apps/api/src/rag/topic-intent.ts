@@ -22,6 +22,12 @@ import {
   isRationalizationQuestion,
 } from './rationalization-retrieval';
 import {
+  isDirectTeachingPositionEvidence,
+  isHoursDistributionQuestion,
+  isPositionClassifierQuestion,
+  isPositionConditionQuestion,
+} from './teaching-position-retrieval';
+import {
   isDirectRemunerationEvidence,
   isRuralAllocationQuestion,
 } from './remuneration-retrieval';
@@ -52,7 +58,10 @@ export type TopicIntentId =
   | 'rural-allocation'
   | 'auxiliary-requirements'
   | 'disciplinary'
-  | 'rationalization';
+  | 'rationalization'
+  | 'teaching-hours'
+  | 'position-condition'
+  | 'position-classifier';
 
 export interface TopicIntent {
   id: TopicIntentId;
@@ -186,6 +195,22 @@ const INTENTS: Record<TopicIntentId, TopicIntent> = {
     label: 'la racionalización de plazas',
     moduleName: 'Cargos y plazas',
   },
+  'teaching-hours': {
+    id: 'teaching-hours',
+    label:
+      'el cuadro de distribución de horas y la asignación de la carga horaria docente',
+    moduleName: 'Cargos y plazas',
+  },
+  'position-condition': {
+    id: 'position-condition',
+    label: 'la condición de la plaza (orgánica, eventual o excedente)',
+    moduleName: 'Cargos y plazas',
+  },
+  'position-classifier': {
+    id: 'position-classifier',
+    label: 'el clasificador de cargos',
+    moduleName: 'Cargos y plazas',
+  },
 };
 
 export function medicalLeaveTopicIntent(
@@ -276,6 +301,16 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     return INTENTS['auxiliary-requirements'];
   }
   if (isRationalizationQuestion(question)) return INTENTS.rationalization;
+  // El resto del módulo «Cargos y plazas»: la reducción por matrícula ya se
+  // resolvió arriba porque es la lectura más específica de «plaza». Aquí quedan
+  // la distribución de horas, la condición de la plaza y el clasificador.
+  if (isHoursDistributionQuestion(question)) return INTENTS['teaching-hours'];
+  if (isPositionConditionQuestion(question)) {
+    return INTENTS['position-condition'];
+  }
+  if (isPositionClassifierQuestion(question)) {
+    return INTENTS['position-classifier'];
+  }
   return null;
 }
 
@@ -283,11 +318,16 @@ export function detectTopicIntent(question: string): TopicIntent | null {
  * Evidencia que trata directamente la intención identificada. Se usa para
  * separar la documentación del tema de las coincidencias de vocabulario
  * laboral: la lista de módulos alternativos no debe nacer de esas coincidencias.
+ * El fragmento se pasa completo para que una intención pueda exigir además la
+ * asociación de la fuente a su módulo.
  */
 export function isTopicIntentEvidence(
   intent: TopicIntent,
   question: string,
-  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    moduleNames?: readonly string[];
+    sectionTitle?: string | null;
+  },
 ): boolean {
   switch (intent.id) {
     case 'reassignment':
@@ -305,5 +345,9 @@ export function isTopicIntentEvidence(
       return isDirectAuxiliaryEvidence(question, source);
     case 'rationalization':
       return isDirectRationalizationEvidence(question, source);
+    case 'teaching-hours':
+    case 'position-condition':
+    case 'position-classifier':
+      return isDirectTeachingPositionEvidence(question, source);
   }
 }

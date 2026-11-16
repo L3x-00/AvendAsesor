@@ -100,6 +100,10 @@ import {
   isDirectRationalizationEvidence,
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
+import {
+  isDirectTeachingPositionEvidence,
+  teachingPositionEvidenceQueries,
+} from './teaching-position-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
 import {
   isDirectTemporaryPlacementEvidence,
@@ -1899,6 +1903,7 @@ export class RagService {
             ...reassignmentEvidenceQueries(question),
             ...temporaryPlacementQueries(question),
             ...rationalizationEvidenceQueries(question),
+            ...teachingPositionEvidenceQueries(salaryQuestion),
             ...legalEvidenceQueries(
               question,
               Boolean(options.legalModule || options.legalCrossModule),
@@ -2193,6 +2198,7 @@ export class RagService {
         ...reassignmentEvidenceQueries(question),
         ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
+        ...teachingPositionEvidenceQueries(salaryQuestion),
         ...processQueriesForIntent(inheritedIntent, question),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
@@ -2239,7 +2245,8 @@ export class RagService {
                   isDirectTemporaryPlacementEvidence(question, candidate) ||
                   (inheritedIntent &&
                     treatsProcessIntent(inheritedIntent, candidate)) ||
-                  isDirectRationalizationEvidence(question, candidate)),
+                  isDirectRationalizationEvidence(question, candidate) ||
+                  isDirectTeachingPositionEvidence(question, candidate)),
             ),
         );
       }

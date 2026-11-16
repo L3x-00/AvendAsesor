@@ -16,6 +16,12 @@ import {
   type TopicIntentId,
 } from './topic-intent';
 import { namesTemporaryPlacementProcess } from './temporary-placement-retrieval';
+import {
+  POSITION_ASPECT_DENOMINATION,
+  regulatesPositionAspect,
+  treatsPositionAspect,
+  type PositionAspect,
+} from './teaching-position-retrieval';
 import { normalizeSpanishText } from './text-normalization';
 
 /**
@@ -122,6 +128,12 @@ const PROCESS_CANONICAL_QUERIES: Record<TopicIntentId, string> = {
     'proceso administrativo disciplinario docente derecho de defensa descargos notificación',
   rationalization:
     'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
+  'teaching-hours':
+    'cuadro de distribución de horas de clase jornada laboral docente institución educativa',
+  'position-condition':
+    'plaza orgánica plaza eventual docente nombramiento cuadro de plazas',
+  'position-classifier':
+    'clasificador de cargos niveles de cargo manual de organización y funciones institución educativa',
 };
 
 /**
@@ -270,10 +282,33 @@ const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
   disciplinary:
     /\b(?:procedimiento administrativo disciplinario|proceso administrativo disciplinario|descargos)\b/u,
   rationalization: /\bracionalizacion\b/u,
+  /**
+   * Los tres aspectos de «Cargos y plazas» se nombran con su denominación, no
+   * con una palabra suelta: «plaza» o «horas» aparecen en casi todos los
+   * trámites. La señal se toma de `POSITION_ASPECT_DENOMINATION`, la misma que
+   * usa la compuerta, para que no haya dos definiciones del tema. Aquí identifica
+   * el proceso en el título y en la procedencia de la consulta; la admisión del
+   * fragmento la decide `treatsPositionAspect`, y por eso estos tres tampoco
+   * cuentan como proceso ajeno.
+   */
+  'teaching-hours': POSITION_ASPECT_DENOMINATION.hours,
+  'position-condition': POSITION_ASPECT_DENOMINATION.condition,
+  'position-classifier': POSITION_ASPECT_DENOMINATION.classifier,
+};
+
+/**
+ * Intención heredada de «Cargos y plazas» y el aspecto que le corresponde. Estos
+ * tres no tienen una señal léxica propia que baste por sí sola —«plaza» y
+ * «cargo» están en todos los trámites—, así que se evalúan con la compuerta del
+ * módulo (`treatsPositionAspect`) y no con `PROCESS_EVIDENCE`.
+ */
+const POSITION_ASPECTS: Partial<Record<TopicIntentId, PositionAspect>> = {
+  'teaching-hours': 'hours',
+  'position-condition': 'condition',
+  'position-classifier': 'classifier',
 };
 
 const AUXILIARY_REGIME = /\bauxiliares?\s+de\s+educacion\b/u;
-
 /** Texto normalizado del fragmento: título, sección y cuerpo. */
 function sourceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
@@ -366,6 +401,20 @@ function mentionsOtherProcess(
     : mainClause(raw);
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
     if (id === intent.id) return false;
+    // Los tres aspectos de «Cargos y plazas» no son trámites hermanos: una norma
+    // de destaque, reasignación o contratación nombra «plaza orgánica» o «carga
+    // horaria» al regular su propio procedimiento, y el encabezado no puede
+    // descartarla. El cuerpo sí decide: si regula el aspecto, el fragmento es del
+    // tema y no del trámite del hilo. Sin esta comprobación, un hilo de destaque
+    // respondía «¿y el plazo?» con la definición de plaza orgánica y eventual.
+    //
+    // El complemento es deliberado: un fragmento del otro trámite que enuncia la
+    // pareja de plazas —o la define— sin nombrar su trámite ni en el cuerpo ni en
+    // la sección se descarta, aunque pudiera ser un requisito del propio trámite.
+    // Se acepta ese falso negativo porque el turno informa ausencia y no una cita
+    // equivocada; aflojar esta comprobación reabre el caso contrario, que es peor.
+    const aspect = POSITION_ASPECTS[id];
+    if (aspect) return regulatesPositionAspect(source.chunkContent, aspect);
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
     return (
       pattern.test(framing) || pattern.test(opening) || pattern.test(rawOpening)
@@ -1096,6 +1145,15 @@ export function treatsInheritedProcess(
   },
   fromProcessQuery: boolean,
 ): boolean {
+  const positionAspect = POSITION_ASPECTS[intent.id];
+  if (positionAspect) {
+    // Los temas de «Cargos y plazas» no tienen una forma verbal que baste: el
+    // fragmento tiene que tratar el aspecto y pertenecer al módulo. La
+    // procedencia de la consulta no sustituye esa comprobación —un desplazamiento
+    // léxico desde «plaza eventual» hacia la norma del destaque es exactamente el
+    // caso que hay que descartar—.
+    return treatsPositionAspect(source, positionAspect);
+  }
   if (!matchesRegime(intent, source)) return false;
   if (admitsOwnProcedure(intent, source)) return true;
   return (
@@ -1160,6 +1218,14 @@ export function belongsToAdmittedProcedure(
  * cuerpo: es lo que el chunk trata, no el nombre del documento. El destaque
  * tiene su propia comprobación porque el participio («docentes destacados»)
  * aparece en textos de otros trámites.
+ *
+ * Los tres aspectos de «Cargos y plazas» pasan por la misma compuerta que la
+ * ruta directa —tratar el aspecto y pertenecer al módulo—, porque «plaza
+ * orgánica» y «clasificador de cargos» aparecen de paso en normas de destaque,
+ * reasignación y organización interna: en un seguimiento, una mención suelta no
+ * es evidencia del tema. Esta comprobación cubre el fragmento que nombra el
+ * proceso; el que solo podría colarse por la procedencia de la consulta se corta
+ * antes, en la rama temprana de `treatsInheritedProcess`.
  */
 function namesOwnProcess(
   intent: TopicIntent,
@@ -1170,5 +1236,7 @@ function namesOwnProcess(
   if (intent.id === 'temporary-placement') {
     return namesTemporaryPlacementProcess(source);
   }
+  const aspect = POSITION_ASPECTS[intent.id];
+  if (aspect) return treatsPositionAspect(source, aspect);
   return PROCESS_EVIDENCE[intent.id].test(bodyText(source));
 }
