@@ -129,7 +129,7 @@ export function causalClarificationFor(
   // técnica del procedimiento de reasignación»).
   if (
     NORM_IDENTITY_REQUEST.test(text) &&
-    !/\b(?:requisitos?|plazos?|documentos?|etapas?)\b/u.test(text)
+    !/\b(?:requisitos?|plazos?|documentos?)\b/u.test(text)
   )
     return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con

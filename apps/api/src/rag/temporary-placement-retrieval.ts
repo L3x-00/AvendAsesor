@@ -46,7 +46,7 @@ const DESTAQUE_PARTICIPLE = /\bdestacad[oa]s?\b/u;
  * zona» describe un logro, no el trámite del personal nombrado.
  */
 const THIRD_PARTY_SUBJECT =
-  /\b(?:mi|su|nuestro|nuestra|el|la|los|las|un|una)\s+(?:hijos?|hijas?|alumnos?|alumnas?|estudiantes?|apoderados?|sobrinos?|sobrinas?|esposos?|esposas?|hermanos?|hermanas?)\b/u;
+  /\b(?:mi|su|nuestro|nuestra|el|la|los|las|un|una)\s+(?:hijos?|hijas?|alumnos?|alumnas?|estudiantes?|apoderados?)\b/u;
 /**
  * Indicio de traslado o de plaza, no de docencia: «destacar en el examen» y
  * «docente destacado del año» son lenguaje corriente en un colegio y no piden

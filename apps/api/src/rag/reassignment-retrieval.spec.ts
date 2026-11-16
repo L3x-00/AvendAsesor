@@ -158,10 +158,20 @@ describe('evidencia directa de reasignación', () => {
       isDirectReassignmentEvidence(
         'soy docente nombrado y quiero reasignarme a otra ugel',
         source(
-          'Los auxiliares presentan su solicitud de reasignación ante la UGEL de destino.',
+          'Los auxiliares de educación presentan su solicitud de reasignación ante la UGEL de destino.',
         ),
       ),
     ).toBe(false);
+    // «Los auxiliares de la UGEL» es una función de oficina: no atribuye el
+    // fragmento al régimen de auxiliares de educación.
+    expect(
+      isDirectReassignmentEvidence(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+        source(
+          'Los auxiliares de la UGEL recepcionan la solicitud de reasignación y sellan el expediente.',
+        ),
+      ),
+    ).toBe(true);
     // Un fragmento mixto conserva su alcance: no se descarta por nombrar a los
     // auxiliares junto con los docentes.
     expect(
@@ -172,5 +182,14 @@ describe('evidencia directa de reasignación', () => {
         ),
       ),
     ).toBe(true);
+    // Y en el orden inverso, el fragmento se atribuye al régimen auxiliar.
+    expect(
+      isDirectReassignmentEvidence(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+        source(
+          'Los auxiliares de educación presentan su solicitud de reasignación en los mismos plazos que los docentes.',
+        ),
+      ),
+    ).toBe(false);
   });
 });

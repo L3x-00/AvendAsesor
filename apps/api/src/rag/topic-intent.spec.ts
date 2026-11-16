@@ -163,10 +163,31 @@ describe('detectTopicIntent', () => {
     'destaque vs reasignación',
     '¿son compatibles el destaque y la reasignación?',
     '¿cuál solicito primero: el destaque o la reasignación?',
+    '¿cuál es más conveniente: el destaque o la reasignación?',
+    '¿cuál me recomiendas, el destaque o la reasignación?',
+    '¿en qué se distinguen el destaque y la reasignación?',
+    '¿qué ventajas tiene el destaque frente a la reasignación?',
   ])('trata «%s» como una comparación, no como un tema', (question) => {
     // Las dos normas responden la comparación; elegir una sola dejaría fuera
     // la mitad de lo que se preguntó.
     expect(detectTopicIntent(question)).toBeNull();
+  });
+
+  it('compara también cuando la equivalencia se niega', () => {
+    // «No es lo mismo» pide la diferencia: las dos normas participan.
+    expect(
+      detectTopicIntent('el destaque no es lo mismo que la reasignacion'),
+    ).toBeNull();
+  });
+
+  it('no compara cuando la equivalencia negada acompaña una preferencia', () => {
+    // Negar la equivalencia y elegir es una decisión: la reasignación conserva
+    // su intención y su compuerta.
+    expect(
+      detectTopicIntent(
+        'no es lo mismo el destaque que la reasignacion, prefiero reasignarme',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
   });
 
   it.each([

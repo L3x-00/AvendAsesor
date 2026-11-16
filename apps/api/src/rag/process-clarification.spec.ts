@@ -154,6 +154,14 @@ describe('causalClarificationFor', () => {
         [SALUD, EMERGENCIA],
       ),
     ).toBeNull();
+    // Las etapas son parte del nombre de la norma, no un dato que cambie con la
+    // causal: la identidad de la norma se responde con la norma.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica de las etapas de la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
   });
 
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {

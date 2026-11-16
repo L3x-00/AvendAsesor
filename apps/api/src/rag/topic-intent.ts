@@ -65,8 +65,8 @@ export interface TopicIntent {
 /**
  * Señales de comparación entre el destaque y la reasignación. Las dos normas
  * responden la comparación, así que la intención no elige una sola: «vs»,
- * «comparame», «es lo mismo», «cuál solicito primero» y las diferencias pedidas
- * de cualquier forma.
+ * «comparame», «es lo mismo», «cuál me recomiendas», «en qué se distinguen» y
+ * las diferencias pedidas de cualquier forma.
  */
 const COMPARISON_CUE =
   /\b(?:compar\p{L}*|diferencia(?:s|n|rse)?|en lugar de|en vez de|versus|vs|me conviene|conviene mas|mejor opcion|(?:es|son) lo mismo|compatibles?)\b|\bcual(?:es)?\b[^.?]{0,25}\b(?:conviene|es mejor|solicito|elijo|primero)\b/u;
@@ -74,6 +74,24 @@ const COMPARISON_CUE =
 /** Preferencia negada: elige un proceso en lugar de compararlos. */
 const NEGATED_PREFERENCE =
   /\b(?:no|nunca)\s+(?:me\s+)?(?:conviene|interesa|sirve)\b/u;
+
+/**
+ * Comparaciones que también se preguntan con otras palabras: «cuál es más
+ * conveniente», «cuál me recomiendas», «en qué se distinguen», «cuál tiene más
+ * ventajas». El alternante de «cuál» exige dos procesos nombrados en la misma
+ * pregunta, así que no se dispara en una consulta de un solo tema.
+ */
+const COMPARISON_CUE_EXTENDED =
+  /\b(?:recomiend\p{L}*|distingu\p{L}*|distingan|ventajas?|convenient\p{L}*)\b|\bcual(?:es)?\b[^.?]{0,40}\b(?:conviene|es mejor|recomiendas|ventajas|distinguen|solicito|elijo|primero)\b/u;
+
+/**
+ * Negación de la equivalencia («no es lo mismo X que Y»). Compara, salvo que el
+ * turno además exprese una preferencia: ahí la persona ya eligió.
+ */
+const NEGATED_EQUIVALENCE = /\bno\s+(?:es|son)\s+(?:lo mismo|compatibles?)\b/u;
+
+const PREFERENCE_CUE =
+  /\b(?:quiero|quisiera|prefiero|preferiria|elijo|necesito|me quedo con|voy a solicitar|voy por)\b/u;
 
 const INTENTS: Record<TopicIntentId, TopicIntent> = {
   reassignment: {
@@ -167,9 +185,12 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     // que es lo que el sistema resolvía antes de reconocer el destaque.
     //
     // La preferencia negada no compara: «el destaque no me conviene, quiero
-    // reasignarme» elige la reasignación y conserva su compuerta.
+    // reasignarme» elige la reasignación y conserva su compuerta. Tampoco
+    // compara negar la equivalencia cuando el turno ya expresa una preferencia.
     const compares =
-      COMPARISON_CUE.test(text) && !NEGATED_PREFERENCE.test(text);
+      (COMPARISON_CUE.test(text) || COMPARISON_CUE_EXTENDED.test(text)) &&
+      !NEGATED_PREFERENCE.test(text) &&
+      !(NEGATED_EQUIVALENCE.test(text) && PREFERENCE_CUE.test(text));
     return compares ? null : INTENTS.reassignment;
   }
   if (temporaryPlacement) return INTENTS['temporary-placement'];

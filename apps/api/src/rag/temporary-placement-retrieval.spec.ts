@@ -175,6 +175,17 @@ describe('destaque expresado con el verbo o el término del proceso', () => {
     ).toBe(false);
   });
 
+  it('atribuye el destaque al cónyuge: es personal nombrado', () => {
+    // La esposa es docente nombrada, no un hijo: su traslado con conservación
+    // de plaza sí es el trámite del destaque (habitualmente preguntado por
+    // otra persona).
+    expect(
+      isTemporaryPlacementQuestion(
+        'mi esposa fue destacada a otra region y conserva su plaza',
+      ),
+    ).toBe(true);
+  });
+
   it('reconoce que un contratado también puede preguntar por el destaque', () => {
     // La norma reserva el destaque al personal nombrado: la respuesta correcta
     // es justamente esa, así que la búsqueda no se descarta por el vínculo.

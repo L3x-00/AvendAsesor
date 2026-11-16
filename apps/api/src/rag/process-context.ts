@@ -5,7 +5,10 @@ import {
   causalsInQuestion,
 } from './process-clarification';
 import type { RetrievedChunk } from './retrieval.gateway';
-import { onlyAuxiliaryRegime } from './reassignment-retrieval';
+import {
+  onlyAuxiliaryRegime,
+  reassignmentRole,
+} from './reassignment-retrieval';
 import {
   detectTopicIntent,
   type TopicIntent,
@@ -50,6 +53,24 @@ const PROCEDURE_VERB =
 /** Aspectos normativos o de trámite que completan un proceso ya abierto. */
 const NORMATIVE_ASPECT =
   /\b(?:requisitos?|plazos?|cronograma|procedimiento|tramites?|documentos?|etapas?|formato|formulario|anexo|pasos?)\b/u;
+
+/**
+ * Condicional que continúa el trámite abierto («¿y si la UGEL no me
+ * responde?»). Exige un elemento del procedimiento: «¿y si mi hijo está
+ * enfermo?» es otra consulta y no hereda el proceso.
+ */
+const PROCEDURAL_CONDITIONAL =
+  /\by si\b[\s\S]{0,80}\b(?:ugel|dre|institucion educativa|\bie\b|no me (?:responde|contesta|firma|acepta|atiende)|no (?:me )?(?:firma|acepta|responde)|rechaz\p{L}*|vence|plazo|solicitud|expediente|cronograma)\b/u;
+
+/**
+ * Causal declarada como motivo del trámite. Las palabras con que la persona
+ * describe su situación («mi familia», «mis hijos», «mi esposo») sirven para
+ * ampliar la búsqueda cuando el proceso ya está abierto, pero no acreditan por
+ * sí solas que el turno dependa de él: «¿y si mi hijo está enfermo?» describe
+ * un problema ajeno al trámite y no hereda el proceso.
+ */
+const DECLARED_CAUSAL =
+  /\bcausal(?:es)?\b|\bunidad familiar\b|\binteres personal\b|\bmotivos? personales\b|\bsalud\b|\benfermedad\b|\bdiscapacidad\b|\bemergencia\b|\bviolencia\b|\btratamiento medico\b/u;
 
 /** La persona descarta el tema: no hay trámite que completar. */
 const REJECTS_TOPIC =
@@ -110,15 +131,21 @@ const AUXILIARY_PROCESS_QUERIES: Partial<Record<TopicIntentId, string>> = {
 export function isProcessDependentTurn(question: string): boolean {
   const text = normalizeSpanishText(question);
   if (OTHER_SUBJECT_OR_MATTER.test(text)) return false;
+  // Una causal solo ata el turno al proceso cuando el turno la nombra como
+  // causal; describir la situación de un tercero no es preguntar por el trámite.
+  const causalDependency =
+    causalsInQuestion(question).length > 0 && DECLARED_CAUSAL.test(text);
   const explicitRequest =
-    causalsInQuestion(question).length > 0 ||
+    causalDependency ||
     PROCEDURE_VERB.test(text) ||
     NORMATIVE_ASPECT.test(text);
   // Un rechazo solo corta la herencia cuando el turno no pide nada más: «no
   // quiero eso, y el plazo» sigue pidiendo el plazo del proceso abierto.
   if (!explicitRequest && REJECTS_TOPIC.test(text)) return false;
   // «¿Y si la UGEL no me responde?» continúa el proceso abierto sin nombrarlo.
-  return explicitRequest || refersBack(question) || /\by si\b/u.test(text);
+  return (
+    explicitRequest || refersBack(question) || PROCEDURAL_CONDITIONAL.test(text)
+  );
 }
 
 /**
@@ -138,7 +165,17 @@ export function inheritedTopicIntent(
     const prior = priorUserQuestions[index];
     if (!prior || SYNTHETIC_CONTEXT.test(prior)) continue;
     const intent = detectTopicIntent(prior);
-    if (intent) return intent;
+    if (!intent) continue;
+    // La licencia se reconoce por su propia comprobación clínica, no por el
+    // módulo: el régimen de la persona viene del turno que abrió el hilo, y sin
+    // él un auxiliar recibiría la norma de profesores (y no la suya).
+    if (
+      intent.id === 'medical-leave' &&
+      reassignmentRole(prior) === 'auxiliar'
+    ) {
+      return { ...intent, moduleName: AUXILIARY_MODULE };
+    }
+    return intent;
   }
   return null;
 }
@@ -206,6 +243,17 @@ function sourceText(
   );
 }
 
+/** Texto del desarrollo: sección y cuerpo, sin la identidad de la norma. */
+function bodyText(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): string {
+  return normalizeSpanishText(
+    `${source.sectionTitle ?? ''} ${source.chunkContent}`,
+  );
+}
+
 /**
  * El fragmento corresponde al régimen de la persona. Se evalúa en los dos
  * sentidos: un auxiliar no recibe la norma de profesores y un docente no recibe
@@ -233,12 +281,60 @@ const OTHER_PROCESS_EVIDENCE: Partial<Record<TopicIntentId, RegExp>> = {
 };
 
 /** El fragmento trata de forma explícita otro proceso del corpus. */
-function mentionsOtherProcess(intent: TopicIntent, text: string): boolean {
+function mentionsOtherProcess(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  // El encuadre (título y sección) identifica el trámite del fragmento. Una
+  // mención incidental en el cuerpo —«la plaza se genera por cese o
+  // jubilación»— no convierte en otro trámite el plazo del destaque.
+  const framing = normalizeSpanishText(
+    `${source.documentTitle} ${source.sectionTitle ?? ''}`,
+  );
+  const opening = openingSentence(bodyText(source));
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
     if (id === intent.id) return false;
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
-    return pattern.test(text);
+    return pattern.test(framing) || pattern.test(opening);
   });
+}
+
+/**
+ * Trámites hermanos que el corpus distingue del proceso consultado y que no
+ * forman parte de las ocho intenciones: permuta, encargo, cese, jubilación,
+ * contratación docente, licencias y permisos de otro motivo. Se evalúan sobre el
+ * mismo encuadre: el desarrollo del propio proceso suele mencionarlos de pasada.
+ */
+const OTHER_PROCEDURE =
+  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|licencias? por|permisos? por|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos)\b/u;
+
+function mentionsOtherProcedure(
+  _intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const framing = normalizeSpanishText(
+    `${source.documentTitle} ${source.sectionTitle ?? ''}`,
+  );
+  return (
+    OTHER_PROCEDURE.test(framing) ||
+    OTHER_PROCEDURE.test(openingSentence(bodyText(source)))
+  );
+}
+
+/**
+ * Primera oración del cuerpo (sección y contenido, sin el título de la norma):
+ * el trámite que el fragmento desarrolla se anuncia ahí. Sirve para distinguir
+ * «La permuta entre profesores se solicita dentro del plazo» de un plazo del
+ * destaque que menciona la permuta al final. El título queda fuera porque la
+ * identidad de la norma («RSG N.° 326-2017-MINEDU») trae puntos y códigos que
+ * cortarían la oración antes de su verbo.
+ */
+function openingSentence(text: string): string {
+  return text.split(/[.;:]/u)[0] ?? text;
 }
 
 /**
@@ -250,8 +346,7 @@ export function treatsProcessIntent(
     sectionTitle?: string | null;
   },
 ): boolean {
-  const text = sourceText(source);
-  return PROCESS_EVIDENCE[intent.id].test(text) && matchesRegime(intent, text);
+  return treatsInheritedProcess(intent, source, false);
 }
 
 /**
@@ -262,12 +357,12 @@ export function treatsProcessIntent(
  *     cuerpo.
  *  2. El fragmento no lo repite (el corpus desarrolla el plazo o el requisito
  *     sin volver a nombrar el trámite), pero la búsqueda del proceso lo devolvió
- *     con el umbral general y no trata otro proceso.
+ *     con el umbral general y su encuadre no es de otro trámite.
  *
  * La procedencia es condición necesaria, nunca suficiente: que un embedding
  * sintético devuelva un vecino léxico no convierte el plazo de la reasignación
  * en respuesta de un hilo sobre el destaque. Por eso el segundo camino exige,
- * además, que no aparezca otro proceso del corpus.
+ * además, que el encuadre del fragmento no trate otro trámite.
  */
 export function treatsInheritedProcess(
   intent: TopicIntent,
@@ -279,5 +374,9 @@ export function treatsInheritedProcess(
   const text = sourceText(source);
   if (!matchesRegime(intent, text)) return false;
   if (PROCESS_EVIDENCE[intent.id].test(text)) return true;
-  return fromProcessQuery && !mentionsOtherProcess(intent, text);
+  return (
+    fromProcessQuery &&
+    !mentionsOtherProcess(intent, source) &&
+    !mentionsOtherProcedure(intent, source)
+  );
 }

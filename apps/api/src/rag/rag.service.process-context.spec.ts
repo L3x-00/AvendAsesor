@@ -257,4 +257,50 @@ describe('RagService - contexto de proceso del hilo', () => {
       ]),
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
+
+  it('conserva el régimen auxiliar en la licencia heredada', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    const docenteLicencia = {
+      ...plazoChunk,
+      chunkContent:
+        'El profesor presenta su solicitud de licencia por incapacidad temporal con el certificado médico o CITT.',
+      chunkId: 'docente-licencia',
+      documentId: 'licencias-docentes',
+      documentTitle: 'Norma técnica de licencias de profesores',
+      documentVersionId: 'licencias-docentes-version',
+    };
+    const auxiliarLicencia = {
+      ...docenteLicencia,
+      chunkContent:
+        'El auxiliar de educación presenta su solicitud de licencia por incapacidad temporal con el certificado médico o CITT.',
+      chunkId: 'auxiliar-licencia',
+      documentId: 'licencias-auxiliares',
+      documentTitle: 'Norma técnica de licencias para auxiliares de educación',
+      documentVersionId: 'licencias-auxiliares-version',
+    };
+    const history = ['soy auxiliar de educacion y necesito descanso medico'];
+    // La búsqueda de la licencia devuelve las dos normas: solo la del régimen
+    // de la persona puede responder el seguimiento.
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /incapacidad temporal|descanso médico|descanso medico/.test(
+            queryFor(embedding),
+          )
+            ? [docenteLicencia, auxiliarLicencia]
+            : [],
+        ),
+    );
+
+    const result = await service.retrieve('y los requisitos', null, history);
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      expect(result.sources.map((source) => source.chunkId)).toContain(
+        'auxiliar-licencia',
+      );
+      expect(result.sources.map((source) => source.chunkId)).not.toContain(
+        'docente-licencia',
+      );
+    }
+  });
 });

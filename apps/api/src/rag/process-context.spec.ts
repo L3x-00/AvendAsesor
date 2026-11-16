@@ -65,6 +65,30 @@ describe('contexto de proceso del hilo', () => {
       ).toMatchObject({ id: 'reassignment' });
     });
 
+    it('conserva el régimen auxiliar en una licencia heredada', () => {
+      // El régimen viene del turno que abrió el hilo, no del módulo de la
+      // intención: sin esto, un auxiliar recibiría la norma de profesores.
+      const intent = inheritedTopicIntent('y los requisitos', [
+        'soy auxiliar de educacion y necesito descanso medico',
+      ]);
+      expect(intent).toMatchObject({
+        id: 'medical-leave',
+        moduleName: 'Auxiliar de educación',
+      });
+      expect(
+        intent && processCanonicalQuery(intent, 'y los requisitos'),
+      ).toContain('auxiliares de educación');
+      // Un docente conserva el régimen docente.
+      expect(
+        inheritedTopicIntent('y los requisitos', [
+          'soy docente y necesito descanso medico',
+        ]),
+      ).toMatchObject({
+        id: 'medical-leave',
+        moduleName: 'Situaciones Administrativas',
+      });
+    });
+
     it('toma el proceso más reciente del hilo', () => {
       expect(
         inheritedTopicIntent('y el plazo?', [
@@ -413,6 +437,70 @@ describe('contexto de proceso del hilo', () => {
         ),
       ).toBe(false);
     });
+
+    it('no admite por procedencia el fragmento de un trámite hermano', () => {
+      // Los trámites que el corpus distingue del proceso no forman parte de las
+      // ocho intenciones: se reconocen por su propio nombre.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La permuta entre profesores se solicita dentro del plazo de la norma técnica.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La contratación de docentes se realiza mediante concurso público de méritos.',
+            documentTitle: 'Norma de contratación docente',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La licencia por paternidad se otorga por diez días calendario.',
+            documentTitle: 'Norma técnica de licencias',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El encargo de funciones directivas se solicita ante la UGEL.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('admite el plazo propio aunque mencione otro trámite al final', () => {
+      // La mención incidental forma parte del desarrollo del destaque.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud es de quince días hábiles; la plaza vacante se genera por cese, jubilación o racionalización.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
   });
 
   describe('turnos que no heredan', () => {
@@ -427,6 +515,10 @@ describe('contexto de proceso del hilo', () => {
       'que hago si mi colega me insulta',
       'como presento un reclamo contra el director',
       'que hago si mis alumnos no tienen materiales',
+      // La condicional no basta por sí sola: una condición sobre la salud de un
+      // tercero es otra consulta, no un seguimiento del trámite.
+      'y si mi hijo esta enfermo',
+      'y si mi esposo consigue trabajo en otra region',
     ])('no hereda el proceso en «%s»', (question) => {
       expect(
         inheritedTopicIntent(question, [
@@ -453,6 +545,11 @@ describe('contexto de proceso del hilo', () => {
       'y ahora que hago',
       // Condicional que continúa el proceso abierto sin nombrarlo.
       'y si la ugel no me responde',
+      'y si no me firma la solicitud',
+      // La causal nombrada como tal sí ata el turno al proceso abierto, aunque
+      // el motivo sea la salud o la familia.
+      'y si tengo una enfermedad, que causal invoco',
+      'y por causal de unidad familiar',
     ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
       expect(
         inheritedTopicIntent(question, ['como destacarme en otro colegio']),
