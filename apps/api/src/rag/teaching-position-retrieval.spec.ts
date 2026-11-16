@@ -3,7 +3,9 @@ import {
   isHoursDistributionQuestion,
   isPositionClassifierQuestion,
   isPositionConditionQuestion,
+  regulatesPositionAspect,
   teachingPositionEvidenceQueries,
+  treatsPositionAspect,
 } from './teaching-position-retrieval';
 import { hasTopicTerm } from './domain-lexicon';
 import { normalizeSpanishText } from './text-normalization';
@@ -740,6 +742,92 @@ describe('teaching-position-retrieval', () => {
           ),
         ).toBe(false);
       }
+    });
+  });
+
+  /**
+   * La compuerta sin la pregunta: se usa cuando el proceso viene del hilo. El
+   * cuerpo decide si el fragmento regula el aspecto, y la fuente se acepta por su
+   * módulo o por un encabezado que lo nombre con la misma fuerza.
+   */
+  describe('treatsPositionAspect', () => {
+    it('admite la fuente del módulo que define la plaza', () => {
+      expect(
+        treatsPositionAspect(
+          source(
+            'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato.',
+          ),
+          'condition',
+        ),
+      ).toBe(true);
+    });
+
+    it('no admite la mención de paso en una norma de otro proceso', () => {
+      expect(
+        treatsPositionAspect(
+          source(
+            'Durante el destaque el profesor conserva su plaza orgánica de origen.',
+            'Norma técnica del destaque docente',
+            ['Contratación y desplazamientos'],
+            'De los derechos del destacado',
+          ),
+          'condition',
+        ),
+      ).toBe(false);
+    });
+
+    it('admite por encabezado cuando el catálogo no atribuye la norma a otro proceso', () => {
+      expect(
+        treatsPositionAspect(
+          source(
+            'El cuadro de distribución de horas de clase se elabora antes del inicio del año escolar.',
+            'Norma sobre cargos y plazas',
+            ['Ley y reglamento'],
+            'Del cuadro de distribución de horas',
+          ),
+          'hours',
+        ),
+      ).toBe(true);
+    });
+  });
+
+  /**
+   * La comprobación de cuerpo es la que impide que la norma del tema pase por
+   * otro trámite: el encabezado puede titularse «Plaza orgánica y plaza
+   * eventual» sin regular la plaza, porque es la sección donde vive otro asunto.
+   */
+  describe('regulatesPositionAspect', () => {
+    it('reconoce el cuerpo que clasifica las plazas', () => {
+      expect(
+        regulatesPositionAspect(
+          'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato.',
+          'condition',
+        ),
+      ).toBe(true);
+    });
+
+    it('no confunde la mención del destaque ni el plazo', () => {
+      expect(
+        regulatesPositionAspect(
+          'Durante el destaque el profesor conserva su plaza orgánica de origen.',
+          'condition',
+        ),
+      ).toBe(false);
+      expect(
+        regulatesPositionAspect(
+          'El plazo para presentar la solicitud es de quince días hábiles.',
+          'condition',
+        ),
+      ).toBe(false);
+    });
+
+    it('no confunde la jornada del contrato con el cuadro de horas', () => {
+      expect(
+        regulatesPositionAspect(
+          'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales.',
+          'hours',
+        ),
+      ).toBe(false);
     });
   });
 

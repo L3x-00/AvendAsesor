@@ -938,6 +938,42 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
 
+  /**
+   * La dirección inversa: un hilo de destaque no responde su seguimiento con la
+   * norma que regula las plazas. El encabezado de esa norma no la descarta —una
+   * sección de la norma de destaque puede titularse igual—, pero el cuerpo sí
+   * decide cuando clasifica las plazas.
+   */
+  it('no responde el plazo del destaque con la norma de las plazas', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([positionNorm]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('entrega el plazo del destaque y no la norma de las plazas', async () => {
+    const { service, gateway } = buildSearchable();
+    // Las dos fuentes comparten la consulta del proceso; el cuerpo decide cuál
+    // responde el seguimiento.
+    gateway.search.mockResolvedValue([
+      { ...positionNorm, semanticScore: 0.92 },
+      plazoChunk,
+    ]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'plazo-chunk' }],
+    });
+  });
+
   it('no responde el clasificador heredado con una cita de paso', async () => {
     const { service, gateway } = buildSearchable();
     const cita = {
@@ -988,5 +1024,44 @@ describe('RagService - contexto de proceso del hilo', () => {
     expect(
       queries.some((query) => query.includes('plaza orgánica plaza eventual')),
     ).toBe(true);
+  });
+
+  it('rescata el proceso heredado cuando la búsqueda vectorial no devuelve nada', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // El proceso del hilo aporta su denominación al rescate léxico: la pregunta
+    // del turno («y los requisitos») no la repite, y la búsqueda vectorial no
+    // devolvió nada. Sin esa consulta, el turno se quedaba sin evidencia.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'Para postular al destaque se requiere tener vínculo nombrado y tres años de servicio.',
+      chunkId: 'requisitos-destaque',
+      documentTitle: 'Norma técnica del destaque docente',
+      lexicalScore: 0.8,
+      sectionTitle: 'Requisitos del destaque',
+    };
+    gateway.search.mockImplementation(
+      ({
+        embedding,
+        matchThreshold,
+      }: {
+        embedding: number[];
+        matchThreshold: number;
+      }) =>
+        Promise.resolve(
+          matchThreshold === 0 && /destaque docente/.test(queryFor(embedding))
+            ? [requisitos]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'requisitos-destaque' }],
+    });
   });
 });

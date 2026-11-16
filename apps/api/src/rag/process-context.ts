@@ -18,6 +18,7 @@ import {
 import { namesTemporaryPlacementProcess } from './temporary-placement-retrieval';
 import {
   POSITION_ASPECT_DENOMINATION,
+  regulatesPositionAspect,
   treatsPositionAspect,
   type PositionAspect,
 } from './teaching-position-retrieval';
@@ -400,13 +401,14 @@ function mentionsOtherProcess(
     : mainClause(raw);
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
     if (id === intent.id) return false;
-    // Los tres aspectos de «Cargos y plazas» no son trámites hermanos. Una
-    // norma de destaque, reasignación o contratación nombra «plaza orgánica» o
-    // «carga horaria» al regular su propio procedimiento; contarlo como otro
-    // proceso descartaría la fuente legítima. En la dirección contraria —un
-    // fragmento de otro trámite respondiendo el tema— decide la compuerta del
-    // módulo, que es más estricta que esta señal.
-    if (POSITION_ASPECTS[id]) return false;
+    // Los tres aspectos de «Cargos y plazas» no son trámites hermanos: una norma
+    // de destaque, reasignación o contratación nombra «plaza orgánica» o «carga
+    // horaria» al regular su propio procedimiento, y el encabezado no puede
+    // descartarla. El cuerpo sí decide: si regula el aspecto, el fragmento es del
+    // tema y no del trámite del hilo. Sin esta comprobación, un hilo de destaque
+    // respondía «¿y el plazo?» con la definición de plaza orgánica y eventual.
+    const aspect = POSITION_ASPECTS[id];
+    if (aspect) return regulatesPositionAspect(source.chunkContent, aspect);
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
     return (
       pattern.test(framing) || pattern.test(opening) || pattern.test(rawOpening)
@@ -1215,7 +1217,9 @@ export function belongsToAdmittedProcedure(
  * ruta directa —tratar el aspecto y pertenecer al módulo—, porque «plaza
  * orgánica» y «clasificador de cargos» aparecen de paso en normas de destaque,
  * reasignación y organización interna: en un seguimiento, una mención suelta no
- * es evidencia del tema.
+ * es evidencia del tema. Esta comprobación cubre el fragmento que nombra el
+ * proceso; el que solo podría colarse por la procedencia de la consulta se corta
+ * antes, en la rama temprana de `treatsInheritedProcess`.
  */
 function namesOwnProcess(
   intent: TopicIntent,

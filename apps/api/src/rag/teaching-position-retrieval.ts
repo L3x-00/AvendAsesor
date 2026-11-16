@@ -349,6 +349,20 @@ export function treatsPositionAspect(
   );
 }
 
+/**
+ * El cuerpo regula el aspecto. Se evalúa sin el encabezado y sin el catálogo, y
+ * es la comprobación que impide que una norma del tema pase por otro trámite: en
+ * un hilo de destaque, un fragmento puede titularse «Plaza orgánica y plaza
+ * eventual» sin regular la plaza (es la sección donde vive el plazo), pero si el
+ * cuerpo clasifica las plazas, el fragmento trata este tema y no el del hilo.
+ */
+export function regulatesPositionAspect(
+  chunkContent: string,
+  aspect: PositionAspect,
+): boolean {
+  return treatsAspect(normalizeSpanishText(chunkContent), aspect);
+}
+
 function aspectsInQuestion(question: string): PositionAspect[] {
   const aspects: PositionAspect[] = [];
   if (isHoursDistributionQuestion(question)) aspects.push('hours');
