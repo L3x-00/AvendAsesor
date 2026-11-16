@@ -18,3 +18,8 @@ Thumbs.db
 
 # Local, DPAPI-protected credentials used only by the production QA pilot.
 infrastructure/qa/.local/
+
+# Documentos generados (auditorias, revisiones, QA, documentacion tecnica,
+# consolidaciones, handoffs). Viven solo en disco: nunca se versionan ni se
+# empujan. Regla del Product Owner, 2026-11-15. Ver AGENTS.md.
+docs/
