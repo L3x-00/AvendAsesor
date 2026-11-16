@@ -1603,6 +1603,24 @@ describe('contexto de proceso del hilo', () => {
         'Dicho plazo del destaque y la permuta es de quince días hábiles.',
         'Todo plazo del destaque y la permuta se fija por la UGEL de destino.',
         'Conforme a la norma, el plazo del destaque y la permuta es de quince días hábiles.',
+        // La locución de marco va también sin coma: no es el sujeto del trámite.
+        'Conforme a la norma el plazo del destaque y la permuta es de quince días hábiles.',
+        // La subordinada antepuesta, el absoluto participial y la locución de
+        // marco tampoco son el sujeto: el tramo nominal empieza después de ellos.
+        'Cuando la UGEL publica el cronograma, el plazo del destaque y la permuta es de quince días hábiles.',
+        'Si el docente presenta la solicitud, el plazo del destaque y la permuta es de quince días hábiles.',
+        'Para postular, el plazo del destaque y la permuta es de quince días hábiles.',
+        'Como señala la norma, el plazo del destaque y la permuta es de quince días hábiles.',
+        'Aprobado el cronograma, el plazo del destaque y la permuta es de diez días hábiles.',
+        'Publicado el cronograma, el plazo del destaque y la permuta es de diez días hábiles.',
+        'De aprobarse el cronograma, el plazo del destaque y la permuta es de diez días hábiles.',
+        'En tanto se publique el cronograma, el plazo del destaque y la permuta es de diez días hábiles.',
+        // El anuncio con sujeto propio también es marco: el sujeto del anuncio
+        // no rige al trámite.
+        'La norma establece que el plazo del destaque y la permuta es de quince días hábiles.',
+        'El artículo 12 señala que el plazo del destaque y la permuta es de quince días hábiles.',
+        // El conector compuesto coordina igual que la conjunción simple.
+        'El plazo del destaque, así como la permuta, es de quince días hábiles.',
       ]) {
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1674,10 +1692,22 @@ describe('contexto de proceso del hilo', () => {
         // El verbo de anuncio no protege al predicado que lo sigue: la subordinada
         // vuelve a medirse y el sujeto con su verbo siguen dentro del tramo.
         'Se establece que la UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
-        // El relativo no es un marco discursivo: el tramo se mide completo y el
-        // predicado del relativo deja el nombre del propio dentro de él. Se acusa
-        // del lado seguro, porque la oración admite las dos lecturas.
+        // La subordinada antepuesta y el absoluto participial tampoco protegen al
+        // predicado que los sigue, y la incidental entre el verbo y su objeto deja
+        // el predicado delante del trámite.
+        'Cuando la UGEL publica el cronograma, la UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Aprobado el cronograma, la UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'La norma indica que la UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Se fija, cuando la norma lo dispone, el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // El relativo con verbo conjugado queda del lado seguro: el tramo se mide
+        // completo y el predicado deja el nombre del propio dentro de él. Es un
+        // coste fail-closed conocido: el participio —«el plazo fijado por la
+        // UGEL para el destaque y la permuta»— sí se admite, porque es un
+        // modificador y no una cláusula.
         'El plazo que la UGEL fija para el destaque y la permuta es de quince días hábiles.',
+        'El plazo que corresponde al destaque y la permuta es de diez días hábiles.',
+        // El conector compuesto no exime al predicado que lo precede.
+        'La UGEL fija el plazo del destaque, así como la permuta se solicita con acuerdo de partes.',
       ])
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1706,6 +1736,25 @@ describe('contexto de proceso del hilo', () => {
           sectionTitle: 'Del plazo',
         }),
       ).toBe(false);
+    });
+
+    it('documenta el límite conocido del tramo nominal con verbo y enlace', () => {
+      // Riesgo aceptado (R19-4): el verbo que no está en la lista de marcas y rige
+      // al trámite a través de un enlace —«autoriza para el destaque»— deja el
+      // predicado una posición antes de la preposición, así que la cadena lo lee
+      // como un complemento nominal. Cerrarlo exige categoría gramatical, no un
+      // inventario de verbos. Si se cierra, esta prueba debe pasar a `false`.
+      for (const chunkContent of [
+        'La UGEL autoriza para el destaque y la permuta se solicita con acuerdo de partes.',
+        'La UGEL evalúa al destaque y la permuta se solicita con acuerdo de partes.',
+      ])
+        expect(
+          belongsToAdmittedProcedure(destaque, {
+            chunkContent,
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(true);
     });
 
     it('admite la concordancia plural cuando la palabra parece un nombre', () => {

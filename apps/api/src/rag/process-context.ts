@@ -589,7 +589,7 @@ const SIBLING_SUBJECT =
  * es solo el hermano.
  */
 const SIBLING_COORDINATED_SUBJECT =
-  /(?:^|[,;]|\s(?:y|e|o|u))\s+(?:el|la|los|las|un|una)\s+$/u;
+  /(?:^|[,;]|\s(?:y|e|o|u)|,\s*asi\s+como|,\s*al\s+igual\s+que)\s+(?:el|la|los|las|un|una)\s+$/u;
 
 /**
  * Concordancia del verbo que sigue al hermano en la cláusula coordinada: en
@@ -649,37 +649,90 @@ const ANNOUNCING_FRAME =
  * El tramo que precede al nombre del propio es un sintagma nominal y no un
  * predicado: solo así los dos nombres comparten el sujeto.
  *
- * Se descarta primero el marco discursivo —«cabe señalar que», «se precisa que»,
- * «se establece que»—, porque la oración que decide es la subordinada. Después se
- * mide el sintagma: los determinantes se enlazan con preposiciones o comas —«el
- * plazo para el destaque», «Según la norma, el plazo del destaque»—, y un
- * determinante que aparece tras una palabra sin enlace abre otro sintagma, es
+ * Se descarta primero la subordinada antepuesta —«cuando la UGEL publica el
+ * cronograma,», «aprobado el cronograma,»— y el marco discursivo —«cabe señalar
+ * que», «la norma establece que»—, porque el sintagma que decide es el que sigue.
+ * Después se mide el tramo: los determinantes se enlazan con preposiciones o
+ * comas —«el plazo para el destaque», «Según la norma, el plazo del destaque»—, y
+ * un determinante que aparece tras una palabra sin enlace abre otro sintagma, es
  * decir, hay un predicado en medio —«la UGEL fija el plazo del destaque», «el
  * artículo 12 fija el plazo del destaque»—. La marca de verbo conjugado cierra el
  * caso en que el predicado encabeza el tramo —«se fija, según la norma, el plazo
  * del destaque»—.
  */
 function sharesSubjectWithSibling(beforeOwn: string): boolean {
-  const segment = afterLastFrame(beforeOwn);
+  const segment = stripFrameLocution(
+    afterLastFrame(afterPreposedClause(beforeOwn)),
+  );
   if (segment === '') return true;
   if (CONJUGATED_VERB.test(segment)) return false;
   return linkedNominalChain(segment);
 }
 
 /**
- * El marco discursivo se descarta solo cuando lo que lo precede son sus propias
- * marcas —«cabe señalar que», «es preciso indicar que», «se establece que»—. Un
- * relativo —«el plazo que fija la UGEL»— no es marco: su antecedente rige al
- * sintagma y el tramo se mide completo.
+ * Nexos que abren una subordinada antepuesta o un absoluto participial. La coma
+ * que cierra esa cláusula no interrumpe el tramo nominal que viene después
+ * —«Cuando la UGEL publica el cronograma, el plazo del destaque», «Aprobado el
+ * cronograma, el plazo del destaque»—. Solo se descarta cuando la cláusula abre
+ * el tramo: una incidental entre el verbo y su objeto —«se fija, cuando la norma
+ * lo dispone, el plazo del destaque»— deja el predicado delante y se acusa.
+ */
+const PREPOSED_CLAUSE =
+  /^(?:cuando|mientras|siempre|si|como|apenas|tras|antes|despues|una|en|de|para|con|a|dado|visto|salvo|pese|desde|entre|sobre|\p{L}+(?:ad|id)[oa]s?)\b/u;
+
+/** La subordinada antepuesta se descarta; el tramo empieza después de su coma. */
+function afterPreposedClause(text: string): string {
+  let start = 0;
+  for (const separator of text.matchAll(/[,;]/gu)) {
+    const index = separator.index;
+    if (PREPOSED_CLAUSE.test(text.slice(0, index).trim()))
+      start = index + separator[0].length;
+  }
+  return text.slice(start).trim();
+}
+
+/**
+ * La locución de marco puede ir sin coma —«Conforme a la norma el plazo del
+ * destaque», «De acuerdo con el reglamento el plazo del destaque»—: se descarta
+ * para medir el sintagma que sigue. No es un verbo, así que no se descarta
+ * cuando el trámite es el complemento de un predicado.
+ */
+const FRAME_LOCUTION =
+  /^(?:(?:de\s+acuerdo\s+con|conforme\s+a|segun|respecto\s+(?:a|de)|en\s+relacion\s+(?:a|con)|en\s+(?:el\s+)?(?:marco|caso|supuesto)\s+de|a\s+(?:tenor|efectos)\s+de|al\s+amparo\s+de)\s+(?:el|la|los|las)\s+\p{L}+)\s*/u;
+
+function stripFrameLocution(text: string): string {
+  return text.replace(FRAME_LOCUTION, '').trim();
+}
+
+/**
+ * El marco discursivo se descarta solo cuando lo que lo precede enuncia el marco:
+ * sus propias marcas —«cabe señalar que», «es preciso indicar que», «se establece
+ * que»— o una oración de anuncio con sujeto —«la norma establece que», «el
+ * artículo 12 señala que»—. Un relativo —«el plazo que fija la UGEL»— no anuncia
+ * nada: su antecedente rige al sintagma y el tramo se mide completo.
  */
 function afterLastFrame(text: string): string {
   const frame = /\b(?:que|como|si)\b/gu;
   let start = 0;
   for (let match = frame.exec(text); match; match = frame.exec(text)) {
     const leading = nominalTokens(text.slice(0, match.index));
-    if (leading.every(isFrameToken)) start = match.index + match[0].length;
+    if (announcesFrame(leading)) start = match.index + match[0].length;
   }
   return text.slice(start).trim();
+}
+
+/**
+ * Lo que precede al nexo enuncia el marco. Sin sujeto propio basta que sean las
+ * marcas del anuncio; con sujeto, el anuncio lo cierra un verbo de la lista y el
+ * sujeto tiene que ser un sintagma nominal —«la norma establece», «el artículo 12
+ * señala»—, nunca un predicado.
+ */
+function announcesFrame(leading: string[]): boolean {
+  if (leading.every(isFrameToken)) return true;
+  const announcement = leading[leading.length - 1];
+  if (!announcement || !ANNOUNCING_FRAME.test(announcement)) return false;
+  const subject = leading.slice(0, -1);
+  return linkedNominalChain(subject.join(' '));
 }
 
 function isFrameToken(token: string): boolean {
@@ -696,6 +749,11 @@ function nominalTokens(segment: string): string[] {
  * El tramo es una cadena nominal: abre con un determinante y cada determinante
  * posterior está enlazado con el anterior. Devuelve `false` —se acusa el
  * fragmento— cuando el tramo no abre con un sintagma nominal reconocible.
+ *
+ * Límite conocido: el verbo que no está en `CONJUGATED_VERB` y rige al trámite a
+ * través de un enlace —«la UGEL autoriza para el destaque»— deja el predicado una
+ * posición antes de la preposición y la cadena lo lee como complemento nominal.
+ * Separarlo exige categoría gramatical, no otro inventario de verbos.
  */
 function linkedNominalChain(segment: string): boolean {
   const tokens = nominalTokens(segment);
@@ -796,7 +854,8 @@ function developsSiblingClause(
  * consultado y el fragmento sigue sirviendo, como cuando la sección los nombra
  * juntos.
  */
-const SIBLING_COORDINATION = /^\s*(?:,|y|e|o|u)\s+/u;
+const SIBLING_COORDINATION =
+  /^\s*(?:,|y|e|o|u|asi\s+como|al\s+igual\s+que)\s+/u;
 
 /**
  * El cuerpo desarrolla al hermano como sujeto de su propia oración, no como
