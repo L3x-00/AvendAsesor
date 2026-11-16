@@ -229,11 +229,11 @@ export function processQueriesForIntent(
 }
 
 /**
- * La enfermedad como causal propia. La del familiar es otra causal y su plazo
- * no responde el descanso médico de la persona.
+ * La enfermedad como causal propia. La del familiar —con o sin posesivo— es otra
+ * causal y su plazo no responde el descanso médico de la persona.
  */
 const OWN_ILLNESS =
-  'enfermedad(?!\\s+(?:de|del|de un)\\s+(?:familiar|hij[oa]s?|padre|madre|conyuge|pariente))';
+  'enfermedad(?!\\s+(?:de|del|de\\s+un|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus)\\s+(?:familiar|hij[oa]s?|padre|madre|conyuge|pariente))';
 
 /**
  * Señal textual con la que el corpus nombra cada proceso. La herencia aporta el
@@ -342,15 +342,18 @@ function mentionsOtherProcess(
 
 /**
  * La oración principal del desarrollo: la subordinada describe una condición
- * («el plazo se suspende si el docente tiene licencia por enfermedad») y no
- * cambia el trámite del fragmento. Un «sí» afirmativo seguido de coma no abre
- * subordinada, y «cuando» se deja dentro de la oración para no perder la
- * mención del otro trámite. Si el fragmento abre directamente con la
- * condicional, la oración completa es la que decide.
+ * («el plazo se suspende si el docente tiene licencia por enfermedad», «mientras
+ * se resuelve la permuta») y no cambia el trámite del fragmento. Un «sí»
+ * afirmativo seguido de coma no abre subordinada. El enmarque del trámite —«el
+ * plazo es de quince días cuando se trata de una permuta»— sí acusa y se
+ * reconoce aparte por su marca (`PROCEDURE_FRAMING_CUE`), porque ahí la
+ * subordinada no describe una condición: dice de qué trámite habla el fragmento.
+ * Si el fragmento abre directamente con la subordinada, la oración completa es la
+ * que decide.
  */
 function mainClause(text: string): string {
   const [before = ''] = text.split(
-    /\b(?:si(?!\s*,)|siempre que|en caso de|salvo que)\b/u,
+    /\b(?:si(?!\s*,)|cuando|mientras|siempre que|en caso de|salvo que)\b/u,
   );
   return before.trim().split(/\s+/u).length >= 3 ? before : text;
 }
@@ -363,14 +366,21 @@ function mainClause(text: string): string {
 const FOREIGN_LEAVE_CAUSAL =
   'licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|enfermedad (?:de|del|de un) (?:familiar|familiar directo|hij[oa]|padre|madre|conyuge))|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)';
 
+const FOREIGN_LEAVE_CAUSAL_PATTERN = new RegExp(
+  `\\b(?:${FOREIGN_LEAVE_CAUSAL})\\b`,
+  'u',
+);
+
 /**
  * La licencia o el permiso enunciados como trámite en un hilo de otro proceso.
- * Se exceptúa el «por» de duración o de plazo («licencia por más de treinta
- * días»), que describe una condición del requisito y no otro trámite. La causal
- * se deja abierta: el corpus nombra tantas como la persona puede invocar.
+ * Se deja abierta la causal: el corpus nombra tantas como la persona puede
+ * invocar. La única excepción es el «por» de duración («licencia por más de
+ * treinta días»), que describe un requisito y no otro trámite; cuando el
+ * requisito lo enuncia como condición, la exención de `PROCEDURE_AS_CONDITION`
+ * lo resuelve.
  */
 const LEAVE_AS_PROCEDURE =
-  'licencias? por (?!mas de|\\d|el plazo|un plazo)|permisos? por (?!mas de|\\d|el plazo|un plazo)|solicitar (?:una )?(?:licencia|permiso)|tramite de (?:licencia|permiso)';
+  'licencias? por (?!mas de)|permisos? por (?!mas de)|solicitar (?:una )?(?:licencia|permiso)|tramite de (?:licencia|permiso)';
 
 /**
  * Trámites hermanos que el corpus distingue del proceso consultado y que no
@@ -391,6 +401,25 @@ const OTHER_PROCEDURE = new RegExp(
   `\\b(?:${SIBLING_PROCEDURE}|${LEAVE_AS_PROCEDURE})\\b`,
   'u',
 );
+
+/**
+ * La subordinada que enmarca el trámite del fragmento y no una condición del
+ * propio: «cuando se trata de una permuta», «en el caso de la licencia por
+ * paternidad», «tratándose de un encargo».
+ */
+const PROCEDURE_FRAMING_CUE =
+  /\b(?:cuando\s+se\s+(?:trata|trate|refiere|refiera)\s+de|en\s+(?:el\s+)?caso\s+de|tratandose\s+de|en\s+supuesto\s+de)\s+/u;
+
+/**
+ * El trámite enmarcado en la subordinada se evalúa con el patrón del proceso
+ * consultado, no con la lista completa de trámites hermanos: en un hilo de
+ * licencia, «en el caso de la licencia por enfermedad» nombra la causal propia y
+ * no otro trámite, mientras «en el caso de la licencia por paternidad» sí.
+ */
+function framesOtherProcedure(sentence: string, pattern: RegExp): boolean {
+  const cue = PROCEDURE_FRAMING_CUE.exec(sentence);
+  return cue ? pattern.test(sentence.slice(cue.index + cue[0].length)) : false;
+}
 
 /**
  * En un hilo de licencia, la licencia y el permiso de la causal propia son el
@@ -429,7 +458,8 @@ function mentionsOtherProcedure(
       : OTHER_PROCEDURE;
   const title = normalizeSpanishText(source.documentTitle);
   const section = normalizeSpanishText(source.sectionTitle ?? '');
-  const development = mainClause(openingSentence(bodyText(source)));
+  const sentence = openingSentence(bodyText(source));
+  const development = mainClause(sentence);
   // La sección es el encuadre del fragmento: si ella nombra otro trámite, la
   // condición de la primera oración no lo desmiente («De la licencia por
   // paternidad» + «el docente en uso de licencia por paternidad»).
@@ -440,9 +470,18 @@ function mentionsOtherProcedure(
   // cuerpo.
   const titleNamesOwnProcess = PROCESS_EVIDENCE[intent.id].test(title);
   if (!titleNamesOwnProcess && pattern.test(title)) return true;
+  // La subordinada puede enmarcar el trámite («el plazo es de quince días cuando
+  // se trata de una permuta») en lugar de describir una condición del propio.
+  if (framesOtherProcedure(sentence, pattern)) return true;
   // El requisito o la sanción del propio trámite no lo convierte en otro
-  // trámite.
-  if (PROCEDURE_AS_CONDITION.test(development)) return false;
+  // trámite, salvo que dentro del requisito se enuncie una causal de licencia
+  // ajena: «no encontrarse en uso de licencia por paternidad» sigue siendo la
+  // licencia por paternidad.
+  if (
+    PROCEDURE_AS_CONDITION.test(development) &&
+    !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
+  )
+    return false;
   return pattern.test(development);
 }
 
@@ -524,6 +563,23 @@ export function belongsToAdmittedVersion(
     matchesRegime(intent, source) &&
     !mentionsOtherProcess(intent, source) &&
     !mentionsOtherProcedure(intent, source)
+  );
+}
+
+/**
+ * El fragmento es del proceso consultado y no desarrolla un trámite hermano. Se
+ * aplica también cuando la pregunta nombra el proceso: el título de una norma
+ * conjunta —«Norma técnica de reasignación, permuta y destaque»— no convierte en
+ * destaque la sección que desarrolla la permuta.
+ */
+export function belongsToAdmittedProcedure(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  return (
+    matchesRegime(intent, source) && !mentionsOtherProcedure(intent, source)
   );
 }
 

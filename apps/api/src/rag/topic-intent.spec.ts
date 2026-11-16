@@ -226,10 +226,6 @@ describe('detectTopicIntent', () => {
     'el destaque no me conviene, quiero reasignarme',
     'no me conviene el destaque, prefiero la reasignación',
     'necesito reasignarme, el destaque no me sirve',
-    // El rechazo tiene que leerse como rechazo: «quiero el destaque» dentro de
-    // «no quiero el destaque» no elige el destaque.
-    'necesito reasignarme, no quiero el destaque',
-    'prefiero la reasignacion, tampoco quiero el destaque',
   ])(
     'no confunde una preferencia negada con una comparación: «%s»',
     (question) => {
@@ -240,6 +236,18 @@ describe('detectTopicIntent', () => {
       });
     },
   );
+
+  it('no elige el destaque cuando la persona lo rechaza', () => {
+    // «Quiero el destaque» dentro de «tampoco quiero el destaque» no es una
+    // elección. El rechazo con «tampoco» no lo corta la negación del propio
+    // proceso, que solo mira «no quiero»: la preferencia llega hasta aquí y sin
+    // descartarla se leería como una elección del destaque.
+    expect(
+      detectTopicIntent(
+        'tampoco quiero el destaque, y la reasignacion me da igual',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
+  });
 
   it('conserva la reasignación cuando la persona pide los dos procesos', () => {
     // Sin preferencia legible no se descarta ninguna compuerta: el turno no

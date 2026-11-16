@@ -378,6 +378,99 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  /**
+   * El chat fija la intención de la pregunta explícita; estas pruebas reproducen
+   * ese contrato sin depender del arnés completo.
+   */
+  const destaqueIntent = {
+    id: 'temporary-placement' as const,
+    label: 'el destaque',
+    moduleName: 'Contratación y desplazamientos',
+  };
+
+  it('entrega el fragmento admitido y no la sección de permuta mejor puntuada', async () => {
+    const { service, gateway } = buildSearchable();
+    // Pregunta explícita de destaque sobre la norma conjunta: la sección de la
+    // permuta puntúa más alto que los requisitos y comparte versión. Sin la
+    // compuerta en el conjunto entregado, la consolidación por versión citaba
+    // solo la permuta.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'Para postular al destaque se requiere nombramiento vigente y tres años de servicio oficial.',
+      chunkId: 'destaque-requisitos',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'Requisitos del destaque',
+      semanticScore: 0.7,
+    };
+    const permuta = {
+      ...requisitos,
+      chunkContent:
+        'Los docentes pueden acogerse a la permuta cuando exista acuerdo entre las partes.',
+      chunkId: 'permuta-seccion',
+      sectionTitle: 'Disposiciones específicas de la permuta',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(() =>
+      Promise.resolve([permuta, requisitos]),
+    );
+
+    const result = await service.retrieve(
+      'que requisitos tiene el destaque docente',
+      null,
+      [],
+      { topicIntent: destaqueIntent },
+    );
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('destaque-requisitos');
+      expect(ids).not.toContain('permuta-seccion');
+    }
+  });
+
+  it('entrega el anexo de la versión admitida aunque no nombre el trámite', async () => {
+    const { service, gateway } = buildSearchable();
+    // El cuadro de plazos del mismo documento no repite «destaque» ni proviene
+    // de una consulta propia, y aun así completa la respuesta: lo que no puede
+    // entrar es el fragmento que trata otro trámite.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'Para postular al destaque se requiere nombramiento vigente y tres años de servicio oficial.',
+      chunkId: 'destaque-requisitos',
+      documentId: 'destaque-document',
+      sectionTitle: 'Requisitos del destaque',
+      semanticScore: 0.66,
+    };
+    const anexo = {
+      ...requisitos,
+      chunkContent:
+        'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana y 45 para Arequipa.',
+      chunkId: 'destaque-anexo',
+      sectionTitle: 'Anexo 2',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(() =>
+      Promise.resolve([requisitos, anexo]),
+    );
+
+    const result = await service.retrieve(
+      'que requisitos tiene el destaque docente',
+      null,
+      [],
+      { topicIntent: destaqueIntent },
+    );
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('destaque-requisitos');
+      expect(ids).toContain('destaque-anexo');
+    }
+  });
+
   it('no entrega otra licencia en un hilo de licencia', async () => {
     const { service, gateway, queryFor } = buildSearchable();
     const paternidad = {

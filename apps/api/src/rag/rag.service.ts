@@ -106,6 +106,7 @@ import {
   temporaryPlacementQueries,
 } from './temporary-placement-retrieval';
 import {
+  belongsToAdmittedProcedure,
   belongsToAdmittedVersion,
   inheritedTopicIntent,
   processQueriesForIntent,
@@ -2306,7 +2307,11 @@ export class RagService {
               source,
               inheritedProcessChunkIds.has(source.chunkId),
             )
-          : isTopicIntentEvidence(topicIntent, question, source);
+          : // La pregunta nombra el proceso, pero el fragmento puede desarrollar
+            // otro trámite del mismo documento: el título de la norma conjunta
+            // no basta como evidencia.
+            isTopicIntentEvidence(topicIntent, question, source) &&
+            belongsToAdmittedProcedure(topicIntent, source);
       const intentSources = globalRoutingSources.filter(admits);
       if (!intentSources.length) {
         return { kind: 'no_evidence', topRelevanceScore: null };
@@ -2318,20 +2323,13 @@ export class RagService {
       // misma compuerta. La consolidación por documento elige un representante
       // por versión, así que sin este filtro la cita de la respuesta podía ser
       // justo el fragmento que la compuerta acababa de rechazar (la licencia de
-      // otra causal, la sección de la permuta).
-      // La versión admitida no basta: el resto de sus fragmentos pasa por la
-      // misma compuerta. La consolidación por documento elige un representante
-      // por versión, así que sin este filtro la cita de la respuesta podía ser
-      // justo el fragmento que la compuerta acababa de rechazar (la licencia de
       // otra causal, la sección de la permuta). Un fragmento de la versión que
       // no trata otro proceso sí completa la respuesta: el anexo o el cuadro de
       // plazas del documento no repite el nombre del trámite.
       const evidence = globalRoutingSources.filter(
         (source) =>
           versions.has(source.documentVersionId) &&
-          (!inheritedScope ||
-            admits(source) ||
-            belongsToAdmittedVersion(topicIntent, source)),
+          (admits(source) || belongsToAdmittedVersion(topicIntent, source)),
       );
       let sources = relevantSources(evidence, matchCount, salaryQuestion);
       if (topicIntent.id === 'reassignment') {

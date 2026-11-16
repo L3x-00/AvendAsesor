@@ -1,4 +1,5 @@
 import {
+  belongsToAdmittedProcedure,
   inheritedTopicIntent,
   isProcessDependentTurn,
   processCanonicalQuery,
@@ -868,6 +869,196 @@ describe('contexto de proceso del hilo', () => {
           true,
         ),
       ).toBe(false);
+    });
+
+    it('no acusa la mención del otro trámite en la subordinada del propio plazo', () => {
+      // «Mientras» y «cuando» describen una condición del trámite consultado: el
+      // plazo sigue siendo el del proceso abierto.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud se suspende mientras se resuelve la permuta.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Se presenta la solicitud cuando se acredite el cese en el cargo anterior.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('acusa el enmarque del trámite en la subordinada', () => {
+      // «Cuando se trata de» no describe una condición: dice de qué trámite
+      // habla el fragmento.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo es de quince días cuando se trata de una permuta.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo es de quince días en el caso de la permuta.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('evalúa el trámite enmarcado con el patrón del proceso consultado', () => {
+      // El enmarque de la causal propia no es otro trámite: en un hilo de
+      // licencia, «en el caso de la licencia por enfermedad» nombra la licencia
+      // que se consulta. La compuerta explícita no tiene la salida por nombre
+      // propio del hilo heredado, así que aquí se ve el efecto del enmarque.
+      const licencias = 'Norma técnica de licencias, permisos y vacaciones';
+      for (const chunkContent of [
+        'En el caso de la licencia por enfermedad, se otorga por el plazo del certificado médico.',
+        'Cuando se trata de la licencia por incapacidad temporal, se requiere CITT.',
+        'Tratándose de la licencia por salud, el plazo lo fija el certificado.',
+      ])
+        expect(
+          belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(true);
+      // La causal ajena enmarcada sí es otro trámite.
+      expect(
+        belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+          chunkContent:
+            'En el caso de la licencia por paternidad, se otorgan diez días.',
+          documentTitle: licencias,
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(false);
+    });
+
+    it('no exime la causal de licencia ajena aunque se enuncie como requisito', () => {
+      // El requisito exime el trámite hermano, no la causal ajena: la licencia
+      // por paternidad sigue siendo otra licencia.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'No encontrarse en uso de licencia por paternidad al momento de la solicitud.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'No encontrarse en uso de licencia por paternidad al momento de la solicitud.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          },
+          true,
+        ),
+      ).toBe(false);
+      // El requisito del propio trámite con la licencia por duración sigue
+      // admitiéndose.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'No encontrarse en uso de licencia por el plazo que fije la UGEL.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent: 'No encontrarse en uso de licencia por 30 días.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('acusa la licencia de otro motivo en un hilo de destaque', () => {
+      // La licencia enunciada como trámite es otro proceso, con cualquier causal
+      // y con cualquier duración; solo el requisito «en uso de» la exime.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La licencia por 30 días requiere autorización de la UGEL.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(false);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La licencia por el plazo que fije la UGEL requiere autorización.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('descarta la enfermedad del hijo como causal propia', () => {
+      // El posesivo también introduce la causal del familiar: «mi hijo» no es la
+      // incapacidad temporal de la persona.
+      for (const chunkContent of [
+        'La licencia por enfermedad de mi hijo se otorga por tres días hábiles.',
+        'La licencia por enfermedad de su hijo se otorga por tres días hábiles.',
+      ])
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle:
+                'Norma técnica de licencias, permisos y vacaciones',
+              sectionTitle: 'De la licencia',
+            },
+            true,
+          ),
+        ).toBe(false);
     });
 
     it('admite la licencia por enfermedad del propio docente', () => {
