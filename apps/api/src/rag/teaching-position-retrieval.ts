@@ -115,14 +115,6 @@ export function isPositionClassifierQuestion(question: string): boolean {
   return CLASSIFIER_SIGNAL.test(text) || CLASSIFICATION_SIGNAL.test(text);
 }
 
-function hasPositionQuestion(question: string): boolean {
-  return (
-    isHoursDistributionQuestion(question) ||
-    isPositionConditionQuestion(question) ||
-    isPositionClassifierQuestion(question)
-  );
-}
-
 /**
  * Consultas canónicas con la denominación que usa el corpus para cada aspecto
  * del módulo. Solo se habilitan por señal inequívoca y se ejecutan en el mismo
@@ -173,6 +165,19 @@ const TEACHING_SCOPE =
 /** El aspecto de la plaza: uno de sus tres estados. */
 const PLACE_CONDITION_TERM =
   /\bplazas?\s+(?:organicas?|eventual(?:es)?|excedent(?:e|es))\b|\b(?:organicas?|eventual(?:es)?)\s+plazas?\b|\bplazas?\s+se\s+clasifican?\s+en\b/u;
+/**
+ * Denominación con la que el corpus nombra cada aspecto. Es la única fuente de
+ * la señal léxica del tema: la usan la compuerta del módulo y las tablas que
+ * reconocen el proceso en el título y en la procedencia de la consulta, de modo
+ * que no puedan divergir. No sustituye la compuerta: «plaza orgánica» en la
+ * sección de una norma de destaque satisface esta señal y no el tema.
+ */
+export const POSITION_ASPECT_DENOMINATION: Record<PositionAspect, RegExp> = {
+  hours: HOURS_PROCESS_DENOMINATION,
+  condition: PLACE_CONDITION_TERM,
+  classifier: CLASSIFIER_SIGNAL,
+};
+
 /**
  * Una norma regula la condición de la plaza cuando clasifica las dos formas
  * —orgánica y eventual— o cuando define el término. Una mención suelta de
@@ -264,6 +269,13 @@ const COMPETING_MODULE =
   /\b(?:contratacion|desplazamientos?|remuneracion(?:es)?|licencias?|situaciones administrativas|evaluacion|auxiliar(?:es)?|destaque|encargatura|reasignacion|racionalizacion|ascensos?|ceses?|jubilacion|asistencia|permutas?|monitoreo)\b/u;
 
 /**
+ * Los tres aspectos del módulo, nombrados por su intención. La ruta heredada no
+ * tiene la pregunta a mano: el proceso del hilo ya dice qué aspecto se consulta,
+ * y la compuerta se aplica igual sobre el fragmento.
+ */
+export type PositionAspect = 'hours' | 'condition' | 'classifier';
+
+/**
  * La titularidad del aspecto en el propio documento también identifica la
  * fuente: una norma titulada «Normas sobre plazas orgánicas y eventuales»
  * regula el tema aunque el catálogo la asocie a otro módulo (por ejemplo, «Ley
@@ -275,7 +287,7 @@ const COMPETING_MODULE =
  * proceso—.
  */
 function namesAspectInHeading(
-  question: string,
+  aspect: PositionAspect,
   source: PositionEvidenceSource,
   evidence: string,
 ): boolean {
@@ -292,7 +304,7 @@ function namesAspectInHeading(
   const heading = normalizeSpanishText(
     `${source.documentTitle} ${source.sectionTitle ?? ''}`,
   );
-  if (isHoursDistributionQuestion(question)) {
+  if (aspect === 'hours') {
     if (HOURS_PROCESS_DENOMINATION.test(heading)) return true;
     // Una sección «Distribución de horas» de una norma que efectivamente
     // distribuye las horas del colegio en el cuerpo.
@@ -302,7 +314,7 @@ function namesAspectInHeading(
       TEACHING_SCOPE.test(evidence)
     );
   }
-  if (isPositionConditionQuestion(question)) {
+  if (aspect === 'condition') {
     return (
       PLACE_CONDITION_PAIR.test(heading) ||
       /\bplazas?\s+(?:organicas?|eventual(?:es)?)\s*:/u.test(heading) ||
@@ -310,6 +322,39 @@ function namesAspectInHeading(
     );
   }
   return CLASSIFIER_SIGNAL.test(heading) || CLASSIFICATION_SIGNAL.test(heading);
+}
+
+function treatsAspect(evidence: string, aspect: PositionAspect): boolean {
+  if (aspect === 'hours') return isHoursDistributionEvidence(evidence);
+  if (aspect === 'condition') return isPlaceConditionEvidence(evidence);
+  return CLASSIFIER_EVIDENCE.test(evidence);
+}
+
+/**
+ * Fuente que trata el aspecto del módulo, sin depender de la pregunta: se usa
+ * cuando el proceso ya viene del hilo. Exige lo mismo que la ruta directa —tratar
+ * el aspecto y pertenecer al módulo o identificarse por el encabezado—, porque la
+ * mención suelta de «plaza orgánica» en una norma de destaque no es evidencia del
+ * tema ni siquiera en un seguimiento.
+ */
+export function treatsPositionAspect(
+  source: PositionEvidenceSource,
+  aspect: PositionAspect,
+): boolean {
+  const evidence = evidenceText(source);
+  if (!treatsAspect(evidence, aspect)) return false;
+  return (
+    belongsToPositionModule(source) ||
+    namesAspectInHeading(aspect, source, evidence)
+  );
+}
+
+function aspectsInQuestion(question: string): PositionAspect[] {
+  const aspects: PositionAspect[] = [];
+  if (isHoursDistributionQuestion(question)) aspects.push('hours');
+  if (isPositionConditionQuestion(question)) aspects.push('condition');
+  if (isPositionClassifierQuestion(question)) aspects.push('classifier');
+  return aspects;
 }
 
 /**
@@ -322,18 +367,6 @@ export function isDirectTeachingPositionEvidence(
   question: string,
   source: PositionEvidenceSource,
 ): boolean {
-  if (!hasPositionQuestion(question)) return false;
-  const evidence = evidenceText(source);
-  const aspect =
-    (isHoursDistributionQuestion(question) &&
-      isHoursDistributionEvidence(evidence)) ||
-    (isPositionConditionQuestion(question) &&
-      isPlaceConditionEvidence(evidence)) ||
-    (isPositionClassifierQuestion(question) &&
-      CLASSIFIER_EVIDENCE.test(evidence));
-  if (!aspect) return false;
-  return (
-    belongsToPositionModule(source) ||
-    namesAspectInHeading(question, source, evidence)
-  );
+  const aspects = aspectsInQuestion(question);
+  return aspects.some((aspect) => treatsPositionAspect(source, aspect));
 }

@@ -197,6 +197,34 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
 
+  it('admite el plazo del destaque aunque su sección nombre la plaza', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // Una norma de destaque titula «Plaza orgánica y plaza eventual» la sección
+    // donde fija su propio plazo. La mención no convierte el fragmento en otro
+    // proceso: los tres aspectos de «Cargos y plazas» se dirimen con la compuerta
+    // del módulo, no con la señal de trámite ajeno.
+    const anexoPlaza = {
+      ...plazoChunk,
+      chunkId: 'anexo-plaza',
+      sectionTitle: 'Plaza orgánica y plaza eventual',
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /destaque docente/.test(queryFor(embedding)) ? [anexoPlaza] : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'anexo-plaza' }],
+    });
+  });
+
   const reassignmentPlazo = {
     ...plazoChunk,
     chunkContent:
@@ -838,5 +866,127 @@ describe('RagService - contexto de proceso del hilo', () => {
       kind: 'evidence',
       sources: [{ chunkId: 'licencia-salud' }],
     });
+  });
+
+  /**
+   * El tema heredado de «Cargos y plazas» pasa por la misma compuerta que la
+   * ruta directa. Sin ella, un seguimiento tras «plaza orgánica y eventual»
+   * aceptaba la norma del destaque que solo dice «conserva su plaza orgánica».
+   */
+  const positionNorm = {
+    ...plazoChunk,
+    chunkContent:
+      'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato mientras exista la necesidad de servicio.',
+    chunkId: 'position-norm',
+    documentId: 'position-document',
+    documentTitle: 'Norma sobre cargos y plazas',
+    documentVersionId: 'position-version',
+    moduleIds: ['cargos'],
+    moduleNames: ['Cargos y plazas'],
+    sectionTitle: 'De las plazas',
+    semanticScore: 0.78,
+  };
+
+  const destaquePlaza = {
+    ...plazoChunk,
+    chunkContent:
+      'Durante el destaque el profesor conserva su plaza orgánica de origen.',
+    chunkId: 'destaque-plaza',
+    documentTitle: 'Norma técnica del destaque docente',
+    sectionTitle: 'De los derechos del destacado',
+    semanticScore: 0.9,
+  };
+
+  it('hereda el tema de las plazas y entrega su norma', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([positionNorm]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'position-norm' }],
+    });
+  });
+
+  it('no responde el tema heredado con la mención del destaque', async () => {
+    const { service, gateway } = buildSearchable();
+    // El destaque puntúa más alto y nombra la plaza orgánica, pero regula otro
+    // proceso: la compuerta lo descarta y la norma del tema responde.
+    gateway.search.mockResolvedValue([destaquePlaza, positionNorm]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'position-norm' }],
+    });
+  });
+
+  it('no responde el tema heredado con la única mención incidental', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([destaquePlaza]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'diferencia entre plaza organica y eventual',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('no responde el clasificador heredado con una cita de paso', async () => {
+    const { service, gateway } = buildSearchable();
+    const cita = {
+      ...plazoChunk,
+      chunkContent:
+        'La institución cuenta con el PEI, el MOF, el CAP y el clasificador de cargos como instrumentos de gestión.',
+      chunkId: 'cita-clasificador',
+      documentTitle: 'Norma de organización interna',
+      sectionTitle: 'De los instrumentos de gestión',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([cita]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, ['clasificador de cargos']),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('no responde las horas heredadas con la jornada de un contrato', async () => {
+    const { service, gateway } = buildSearchable();
+    const contractHours = {
+      ...plazoChunk,
+      chunkContent:
+        'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales que se aprueba por resolución.',
+      chunkId: 'contract-hours',
+      documentTitle: 'Norma del proceso de contratación docente',
+      sectionTitle: 'Carga horaria y jornada del contrato',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([contractHours]);
+
+    await expect(
+      service.retrieve('y los requisitos?', null, [
+        'que es el cuadro de distribucion de horas',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('busca el tema heredado con su propia denominación', async () => {
+    const { service, embeddings } = build();
+    await service.retrieve('y los requisitos?', null, [
+      'diferencia entre plaza organica y eventual',
+    ]);
+
+    const queries = embeddedQueries(embeddings);
+    // Las dos adiciones del merge son necesarias: sin la consulta canónica del
+    // proceso heredado no habría nada que recuperar.
+    expect(
+      queries.some((query) => query.includes('plaza orgánica plaza eventual')),
+    ).toBe(true);
   });
 });
