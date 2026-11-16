@@ -157,6 +157,38 @@ describe('teaching-position-retrieval', () => {
         ),
       ).toBe(false);
     });
+
+    it('reconoce el tema cuando la persona nombra su propia condición', () => {
+      // «contratado» es la condición del consultante, no el proceso de
+      // contratación: la pregunta sigue siendo del tema.
+      expect(
+        isPositionConditionQuestion(
+          'Soy contratado y quiero saber qué es una plaza eventual',
+        ),
+      ).toBe(true);
+      // «encargado» sí nombra un proceso, pero la consulta pide la definición
+      // del tema: la duda conceptual manda sobre la circunstancia.
+      expect(
+        isPositionConditionQuestion(
+          'Estoy encargado como director y no sé qué es una plaza orgánica',
+        ),
+      ).toBe(true);
+    });
+
+    it('no se apropia de una consulta sobre el cese ni sobre el ascenso', () => {
+      // La guarda cubre la conjugación real: «cesan» no es «cese» y «asciendo»
+      // no es «asciende».
+      expect(
+        isPositionConditionQuestion(
+          'Si cesan en el cargo, ¿pierdo mi plaza orgánica?',
+        ),
+      ).toBe(false);
+      expect(
+        isPositionConditionQuestion(
+          'Si asciendo de escala, ¿cambia mi plaza orgánica?',
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('isPositionClassifierQuestion', () => {
@@ -255,6 +287,75 @@ describe('teaching-position-retrieval', () => {
           ),
         ),
       ).toBe(true);
+    });
+
+    it('no admite horas administrativas aunque la norma esté en el módulo', () => {
+      // La asociación al módulo no basta: el fragmento debe tratar las horas
+      // del colegio, no la jornada de otro régimen.
+      const administrative = [
+        'La carga horaria del personal administrativo es de cuarenta horas semanales.',
+        'La distribución de horas del personal de apoyo se aprueba por la dirección de la entidad.',
+        'El profesor contratado percibe una remuneración acorde a la jornada laboral de treinta horas.',
+      ];
+      for (const content of administrative) {
+        expect(
+          isDirectTeachingPositionEvidence(
+            hoursQuestion,
+            source(content, 'Norma de cargos y plazas', ['Cargos y plazas']),
+          ),
+        ).toBe(false);
+      }
+    });
+
+    it('admite las redacciones legales que definen la plaza', () => {
+      const definitions = [
+        'La plaza orgánica es aquella que se crea por resolución de creación de la institución educativa.',
+        'Plaza orgánica: plaza creada por resolución y que figura en el cuadro de plazas de la institución educativa.',
+        'Se denomina plaza eventual a la que se atiende con contrato mientras exista la necesidad de servicio.',
+      ];
+      for (const content of definitions) {
+        expect(
+          isDirectTeachingPositionEvidence(conditionQuestion, source(content)),
+        ).toBe(true);
+      }
+    });
+
+    it('admite la norma que titula el aspecto aunque esté en otro módulo', () => {
+      // La catalogación puede dejar la norma en «Ley y reglamento»; el título y
+      // la sección siguen identificando qué regula.
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'Se entiende por plaza orgánica la creada por resolución; la plaza eventual se atiende con contrato.',
+            'Normas sobre plazas orgánicas y eventuales',
+            ['Ley y reglamento'],
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El documento describe los niveles y requisitos de cada grupo ocupacional.',
+            'Clasificador de cargos de la institución educativa',
+            ['Ley y reglamento'],
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('no abre la puerta por el título si la norma no trata el aspecto', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'El destaque se autoriza al profesor nombrado sin que pierda la plaza de origen.',
+            'Norma sobre plazas orgánicas y eventuales',
+            ['Contratación y desplazamientos'],
+          ),
+        ),
+      ).toBe(false);
     });
 
     it('acusa una mención suelta de la plaza eventual', () => {
