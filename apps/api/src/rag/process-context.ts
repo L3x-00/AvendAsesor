@@ -639,11 +639,14 @@ const NOMINAL_FRAME =
 
 /**
  * Verbos de anuncio que abren una subordinada enunciativa —«cabe señalar que»,
- * «es preciso indicar que», «se precisa», «se establece»—: el trámite coordinado
- * vive en la subordinada y el anuncio no es su sujeto.
+ * «es preciso indicar que», «se precisa», «se establece», «las normas establecen
+ * que», «la norma estipula que»—: el trámite coordinado vive en la subordinada y
+ * el anuncio no es su sujeto. Se marcan por lema en las formas que aparecen en
+ * las normas —singular, plural y el infinitivo del anuncio—, no la conjugación
+ * entera.
  */
 const ANNOUNCING_FRAME =
-  /^(?:cabe|es|se|preciso|precisa|necesario|necesaria|importante|indicar|indica|senalar|senala|establece|establecer|dispone|disponer|determina|determinar|tener|tenerse|presente|cuenta|considerar|recordar|mencionar|advertir|agregar|anotar)$/u;
+  /^(?:cabe|es|se|preciso|precisa|precisar|necesario|necesaria|importante|indicar|indica|senalar|senala|establece|establecen|establecer|dispone|disponen|disponer|determina|determinan|determinar|estipula|estipulan|agrega|agregan|dice|dicen|refiere|refieren|tener|tenerse|presente|cuenta|considerar|recordar|mencionar|advertir|agregar|anotar)$/u;
 
 /**
  * El tramo que precede al nombre del propio es un sintagma nominal y no un
@@ -694,11 +697,13 @@ function afterPreposedClause(text: string): string {
 /**
  * La locución de marco puede ir sin coma —«Conforme a la norma el plazo del
  * destaque», «De acuerdo con el reglamento el plazo del destaque»—: se descarta
- * para medir el sintagma que sigue. No es un verbo, así que no se descarta
- * cuando el trámite es el complemento de un predicado.
+ * para medir el sintagma que sigue. Se reconoce por su nexo y por el artículo con
+ * una sola palabra, que es la forma en que la norma nombra su fuente. No es un
+ * verbo, así que no se descarta cuando el trámite es el complemento de un
+ * predicado.
  */
 const FRAME_LOCUTION =
-  /^(?:(?:de\s+acuerdo\s+con|conforme\s+a|segun|respecto\s+(?:a|de)|en\s+relacion\s+(?:a|con)|en\s+(?:el\s+)?(?:marco|caso|supuesto)\s+de|a\s+(?:tenor|efectos)\s+de|al\s+amparo\s+de)\s+(?:el|la|los|las)\s+\p{L}+)\s*/u;
+  /^(?:(?:de\s+acuerdo\s+con|conforme\s+a|segun|respecto\s+(?:a|de)|en\s+relacion\s+(?:a|con)|a\s+(?:tenor|efectos)\s+de|al\s+amparo\s+de)\s+(?:el|la|los|las)\s+\p{L}+)\s*/u;
 
 function stripFrameLocution(text: string): string {
   return text.replace(FRAME_LOCUTION, '').trim();
@@ -753,7 +758,11 @@ function nominalTokens(segment: string): string[] {
  * Límite conocido: el verbo que no está en `CONJUGATED_VERB` y rige al trámite a
  * través de un enlace —«la UGEL autoriza para el destaque»— deja el predicado una
  * posición antes de la preposición y la cadena lo lee como complemento nominal.
- * Separarlo exige categoría gramatical, no otro inventario de verbos.
+ * Separarlo exige categoría gramatical, no otro inventario de verbos. El descarte
+ * de la cláusula antepuesta amplía la superficie del límite, porque el predicado
+ * que sigue a la coma se mide como tramo —«cuando se publica el cronograma, la
+ * UGEL autoriza para el destaque»—; es el coste de admitir la subordinada
+ * antepuesta, y se acusa en cuanto el predicado encabeza el tramo.
  */
 function linkedNominalChain(segment: string): boolean {
   const tokens = nominalTokens(segment);

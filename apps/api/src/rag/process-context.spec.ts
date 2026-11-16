@@ -1419,6 +1419,20 @@ describe('contexto de proceso del hilo', () => {
           true,
         ),
       ).toBe(true);
+      // El conector compuesto coordina los dos trámites igual que «o»: el
+      // fragmento sigue tratando el proceso consultado.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Para solicitar la permuta así como el destaque se requiere vínculo nombrado y plaza vacante.',
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Disposiciones generales',
+          },
+          true,
+        ),
+      ).toBe(true);
       // Contramuestra: sin el propio proceso en la alternativa, el fragmento
       // ofrece solo el hermano.
       expect(
@@ -1621,6 +1635,11 @@ describe('contexto de proceso del hilo', () => {
         'El artículo 12 señala que el plazo del destaque y la permuta es de quince días hábiles.',
         // El conector compuesto coordina igual que la conjunción simple.
         'El plazo del destaque, así como la permuta, es de quince días hábiles.',
+        // El anuncio se reconoce también en plural y por el lema del verbo, y la
+        // locución de marco no se limita a «conforme a».
+        'De acuerdo con la norma el plazo del destaque y la permuta es de quince días hábiles.',
+        'Las normas establecen que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Cabe precisar que el plazo del destaque y la permuta es de quince días hábiles.',
       ]) {
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1701,9 +1720,10 @@ describe('contexto de proceso del hilo', () => {
         'Se fija, cuando la norma lo dispone, el plazo del destaque y la permuta se solicita con acuerdo de partes.',
         // El relativo con verbo conjugado queda del lado seguro: el tramo se mide
         // completo y el predicado deja el nombre del propio dentro de él. Es un
-        // coste fail-closed conocido: el participio —«el plazo fijado por la
-        // UGEL para el destaque y la permuta»— sí se admite, porque es un
-        // modificador y no una cláusula.
+        // coste fail-closed conocido. En cambio el participio —«el plazo fijado
+        // por la UGEL para el destaque y la permuta»— pasa: su forma no está entre
+        // las marcas de verbo conjugado y la cadena lee el tramo como nominal. Es
+        // el comportamiento actual del inventario, no una garantía de forma.
         'El plazo que la UGEL fija para el destaque y la permuta es de quince días hábiles.',
         'El plazo que corresponde al destaque y la permuta es de diez días hábiles.',
         // El conector compuesto no exime al predicado que lo precede.
@@ -1744,9 +1764,16 @@ describe('contexto de proceso del hilo', () => {
       // predicado una posición antes de la preposición, así que la cadena lo lee
       // como un complemento nominal. Cerrarlo exige categoría gramatical, no un
       // inventario de verbos. Si se cierra, esta prueba debe pasar a `false`.
+      //
+      // La subordinada antepuesta amplía la superficie de este límite (H1 de la
+      // ronda 20): al descartar la cláusula que abre el tramo, el predicado que
+      // sigue a la coma se mide como si fuera el tramo nominal. Es el precio de
+      // admitir la antepuesta y se mantiene declarado, no silencioso.
       for (const chunkContent of [
         'La UGEL autoriza para el destaque y la permuta se solicita con acuerdo de partes.',
         'La UGEL evalúa al destaque y la permuta se solicita con acuerdo de partes.',
+        'Cuando se publica el cronograma, la UGEL autoriza para el destaque y la permuta se solicita con acuerdo de partes.',
+        'Cuando se publica el cronograma, la norma alcanza al destaque y la permuta se solicita con acuerdo de partes.',
       ])
         expect(
           belongsToAdmittedProcedure(destaque, {
