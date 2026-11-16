@@ -955,6 +955,31 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({ kind: 'no_evidence' });
   });
 
+  /**
+   * Banda aceptada a propósito: un fragmento del trámite del hilo que enuncia la
+   * pareja de plazas sin nombrar su trámite ni en el cuerpo ni en la sección se
+   * descarta. Es un falso negativo conocido y se prefiere a la respuesta cruzada;
+   * si alguien afloja la comprobación de cuerpo, esta prueba lo acusa.
+   */
+  it('descarta el requisito del trámite que enuncia la pareja sin nombrarse', async () => {
+    const { service, gateway } = buildSearchable();
+    const requisitoSinNombre = {
+      ...plazoChunk,
+      chunkContent:
+        'El postulante debe acreditar vínculo en una plaza orgánica o en una plaza eventual según corresponda.',
+      chunkId: 'requisito-sin-nombre',
+      sectionTitle: 'De los requisitos',
+      semanticScore: 0.88,
+    };
+    gateway.search.mockResolvedValue([requisitoSinNombre]);
+
+    await expect(
+      service.retrieve('y el plazo para presentar la solicitud?', null, [
+        'como destacarme en otro colegio',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
   it('entrega el plazo del destaque y no la norma de las plazas', async () => {
     const { service, gateway } = buildSearchable();
     // Las dos fuentes comparten la consulta del proceso; el cuerpo decide cuál

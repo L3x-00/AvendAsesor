@@ -407,6 +407,12 @@ function mentionsOtherProcess(
     // descartarla. El cuerpo sí decide: si regula el aspecto, el fragmento es del
     // tema y no del trámite del hilo. Sin esta comprobación, un hilo de destaque
     // respondía «¿y el plazo?» con la definición de plaza orgánica y eventual.
+    //
+    // El complemento es deliberado: un fragmento del otro trámite que enuncia la
+    // pareja de plazas —o la define— sin nombrar su trámite ni en el cuerpo ni en
+    // la sección se descarta, aunque pudiera ser un requisito del propio trámite.
+    // Se acepta ese falso negativo porque el turno informa ausencia y no una cita
+    // equivocada; aflojar esta comprobación reabre el caso contrario, que es peor.
     const aspect = POSITION_ASPECTS[id];
     if (aspect) return regulatesPositionAspect(source.chunkContent, aspect);
     const pattern = OTHER_PROCESS_EVIDENCE[id] ?? PROCESS_EVIDENCE[id];
