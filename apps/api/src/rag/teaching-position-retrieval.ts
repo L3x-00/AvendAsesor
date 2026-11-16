@@ -253,10 +253,12 @@ const OBJECT_HEADING = /\b(?:plazas?(?: docentes?)?|carga horaria)\b/u;
  * contradice —está vacío o la norma vive en «Ley y reglamento»— el encabezado
  * sigue siendo la identidad disponible.
  *
- * Los nombres corresponden a los módulos raíz del catálogo real: «Auxiliar de
- * educación» en singular y «Situaciones administrativas», que agrupa licencias,
- * cese, jubilación y asistencia. Un módulo nuevo que nombre otro proceso debe
- * añadirse aquí: el fallo por omisión es responder de más, no de menos.
+ * Los nombres corresponden a los módulos raíz del catálogo real
+ * (`supabase/migrations/20260903110000_admin_module_permissions_and_evaluation_structure.sql`,
+ * líneas 214-220): «Auxiliar de educación» en singular y «Situaciones
+ * administrativas», que agrupa licencias, cese, jubilación y asistencia. Un
+ * módulo nuevo que nombre otro proceso debe añadirse aquí: el fallo por omisión
+ * es responder de más, no de menos.
  */
 const COMPETING_MODULE =
   /\b(?:contratacion|desplazamientos?|remuneracion(?:es)?|licencias?|situaciones administrativas|evaluacion|auxiliar(?:es)?|destaque|encargatura|reasignacion|racionalizacion|ascensos?|ceses?|jubilacion|asistencia|permutas?|monitoreo)\b/u;
