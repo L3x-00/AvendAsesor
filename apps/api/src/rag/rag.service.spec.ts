@@ -1289,13 +1289,24 @@ describe('RagService', () => {
   });
 
   it('keeps the prior topic on a module-free elliptical follow-up', async () => {
-    gateway.search.mockResolvedValue([source]);
+    // El fragmento debe tratar el proceso que abrió el hilo: con una
+    // reasignación heredada, un fragmento genérico ya no se entrega como
+    // evidencia de ese tema (compuerta temática del proceso heredado).
+    const reassignmentSource = {
+      ...source,
+      chunkContent:
+        'Artículo 1. La reasignación por unidad familiar se solicita dentro del plazo de la norma técnica.',
+    };
+    gateway.search.mockResolvedValue([reassignmentSource]);
 
     await expect(
       service.retrieve('¿Y cuál es el plazo?', null, [
         'Necesito una reasignación por unidad familiar.',
       ]),
-    ).resolves.toMatchObject({ kind: 'evidence', sources: [source] });
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [reassignmentSource],
+    });
 
     const embeddingCalls = embeddings.embed.mock.calls as Array<
       [string[], unknown]

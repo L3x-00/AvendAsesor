@@ -31,14 +31,23 @@ const baseSource = {
 };
 
 function setup() {
+  /**
+   * El gateway real busca con el vector, no con el texto, así que cada vector
+   * se registra con la consulta que lo produjo. Las pruebas que necesitan que
+   * el resultado dependa de la consulta (y no un mismo array para todas) lo
+   * recuperan con `queryFor`.
+   */
+  const queryByVector = new Map<number, string>();
   const embeddings = {
-    embed: jest
-      .fn()
-      .mockImplementation((queries: string[]) =>
-        Promise.resolve(
-          queries.map((_query, index) => vector(0.1 + index / 100)),
-        ),
+    embed: jest.fn().mockImplementation((queries: string[]) =>
+      Promise.resolve(
+        queries.map((query, index) => {
+          const value = 0.1 + index / 100;
+          queryByVector.set(value, query);
+          return vector(value);
+        }),
       ),
+    ),
   };
   const gateway = {
     search: jest.fn(),
@@ -47,7 +56,9 @@ function setup() {
   const service = new RagService(embeddings, gateway, {
     get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
   } as never);
-  return { embeddings, gateway, service };
+  const queryFor = (embedding: number[]): string =>
+    queryByVector.get(embedding[0]) ?? '';
+  return { embeddings, gateway, queryFor, service };
 }
 
 const reassignmentSource = {
@@ -105,7 +116,7 @@ const rationalizationMention = {
 
 describe('RagService — intención temática del chat general', () => {
   it('conserva la contratación auxiliar en el seguimiento documental aunque otro submódulo tenga mayor similitud', async () => {
-    const { gateway, service } = setup();
+    const { gateway, queryFor, service } = setup();
     const hiring = {
       ...baseSource,
       chunkId: 'hiring',
@@ -154,11 +165,50 @@ describe('RagService — intención temática del chat general', () => {
     await expect(
       service.retrieve(question, null, history),
     ).resolves.toMatchObject({ kind: 'no_evidence' });
+    // Aunque el gateway devolviera el fragmento genérico también en la búsqueda
+    // del proceso (un vecino léxico del corpus), no responde una reasignación:
+    // trata la contratación de auxiliares, no el proceso heredado.
     await expect(
       service.retrieve(question, null, [
         '¿Cómo pido reasignación como auxiliar de educación?',
       ]),
-    ).resolves.toMatchObject({ kind: 'evidence' });
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+    // El gateway devuelve fragmentos según la consulta: el genérico de
+    // situaciones administrativas aparece en la búsqueda de la pregunta, pero
+    // no en la consulta del proceso (que es lo que ocurre en el corpus real).
+    const answerByQuery = (respond: (query: string) => unknown[]) => {
+      gateway.search.mockImplementation(
+        ({ embedding }: { embedding: number[] }) =>
+          Promise.resolve(respond(queryFor(embedding))),
+      );
+    };
+    answerByQuery((query) =>
+      /reasignaci/.test(query) ? [] : [administrative],
+    );
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+    const auxiliaryReassignment = {
+      ...hiring,
+      chunkId: 'auxiliary-reassignment',
+      documentTitle: 'Norma técnica de reasignación y permuta',
+      chunkContent:
+        'La solicitud de reasignación de los auxiliares de educación se presenta con el expediente ante la UGEL de destino.',
+    };
+    answerByQuery((query) =>
+      /reasignaci/.test(query) ? [auxiliaryReassignment] : [],
+    );
+    await expect(
+      service.retrieve(question, null, [
+        '¿Cómo pido reasignación como auxiliar de educación?',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'auxiliary-reassignment' }],
+    });
+    gateway.search.mockResolvedValue([administrative]);
     await expect(
       service.retrieve(question, null, [
         '¿Qué requisitos necesita un auxiliar de educación para una queja contra la dirección?',
@@ -346,9 +396,10 @@ describe('RagService — intención temática del chat general', () => {
     gateway.search.mockResolvedValue([destaqueSource]);
     const question = 'durante el destaque sigo ocupando mi plaza organica';
 
-    // El proceso nombrado manda: sin intención de «Cargos y plazas», la
-    // respuesta sigue siendo la del destaque y no se convierte en ausencia.
-    expect(detectTopicIntent(question)).toBeNull();
+    // El proceso nombrado manda: la intención es el destaque, no «Cargos y
+    // plazas», y la respuesta sigue siendo la del destaque en vez de una
+    // ausencia del otro tema.
+    expect(detectTopicIntent(question)?.id).toBe('temporary-placement');
     const result = await service.retrieve(question, null, [], {
       topicIntent: detectTopicIntent(question),
     });

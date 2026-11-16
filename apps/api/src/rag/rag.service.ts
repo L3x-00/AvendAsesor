@@ -105,7 +105,18 @@ import {
   teachingPositionEvidenceQueries,
 } from './teaching-position-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
-import { temporaryPlacementQueries } from './temporary-placement-retrieval';
+import {
+  isDirectTemporaryPlacementEvidence,
+  temporaryPlacementQueries,
+} from './temporary-placement-retrieval';
+import {
+  belongsToAdmittedProcedure,
+  belongsToAdmittedVersion,
+  inheritedTopicIntent,
+  processQueriesForIntent,
+  treatsInheritedProcess,
+  treatsProcessIntent,
+} from './process-context';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 import {
   medicalLeaveContextRequests,
@@ -1668,6 +1679,25 @@ export class RagService {
       ? []
       : exactDocumentReferencesIn(question);
     const hasPrior = priorUserQuestions.length > 0;
+    /**
+     * Proceso que el hilo ya abrió, si el turno actual no lo nombra y depende de
+     * él. Se calcula una sola vez por consulta: alimenta la expansión canónica,
+     * el rescate léxico y la compuerta temática con el mismo valor.
+     */
+    const inheritedIntent =
+      options.topicIntent || options.legalCrossModule
+        ? null
+        : inheritedTopicIntent(question, priorUserQuestions);
+    /**
+     * Consulta canónica del proceso heredado y fragmentos que esa búsqueda
+     * devolvió. Un fragmento del documento puede no repetir el nombre del
+     * proceso («el plazo para presentar la solicitud es de quince días») y aun
+     * así responderlo: haber sido recuperado por la consulta del proceso, con
+     * el umbral general, es la atribución que se le puede exigir.
+     */
+    const inheritedProcessQuery =
+      processQueriesForIntent(inheritedIntent, question)[0] ?? null;
+    let inheritedProcessChunkIds = new Set<string>();
     const auxiliaryHiringDocuments =
       !options.legalCrossModule &&
       !directReferences.length &&
@@ -1878,6 +1908,10 @@ export class RagService {
               question,
               Boolean(options.legalModule || options.legalCrossModule),
             ),
+            // Un seguimiento que no repite el proceso («¿y por causal de
+            // salud?», «¿cómo postulo?») recupera con la denominación del
+            // proceso que el hilo ya abrió. Aporta vocabulario, no hechos.
+            ...processQueriesForIntent(inheritedIntent, question),
           ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embed(
@@ -1923,6 +1957,16 @@ export class RagService {
           (result) => result.global,
         );
         options.abortSignal?.throwIfAborted();
+        const inheritedProcessIndex = inheritedProcessQuery
+          ? canonicalQueries.indexOf(inheritedProcessQuery)
+          : -1;
+        if (inheritedProcessIndex >= 0) {
+          inheritedProcessChunkIds = new Set(
+            (canonicalResults[inheritedProcessIndex]?.global ?? []).map(
+              (source) => source.chunkId,
+            ),
+          );
+        }
         const canonicalSelectedSources = canonicalResults.flatMap(
           (result) => result.selected,
         );
@@ -2152,11 +2196,18 @@ export class RagService {
         ...evaluationEvidenceQueries(question),
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
+        ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
         ...teachingPositionEvidenceQueries(salaryQuestion),
+        ...processQueriesForIntent(inheritedIntent, question),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);
+      // El proceso heredado del hilo no repite su término en la consulta, así
+      // que la comprobación directa contra la pregunta no podría admitir su
+      // fragmento. Se evalúa el fragmento, no la pregunta: sigue exigiendo
+      // coincidencia léxica real y que la fuente trate el proceso (y, en los
+      // procesos compartidos, el régimen de la persona).
       if (canonicalRescueQueries.length) {
         const rescueEmbeddings = await this.embed(
           canonicalRescueQueries,
@@ -2191,6 +2242,9 @@ export class RagService {
                   isDirectAuxiliaryEvidence(question, candidate) ||
                   isDirectRemunerationEvidence(question, candidate) ||
                   isDirectReassignmentEvidence(question, candidate) ||
+                  isDirectTemporaryPlacementEvidence(question, candidate) ||
+                  (inheritedIntent &&
+                    treatsProcessIntent(inheritedIntent, candidate)) ||
                   isDirectRationalizationEvidence(question, candidate) ||
                   isDirectTeachingPositionEvidence(question, candidate)),
             ),
@@ -2238,26 +2292,51 @@ export class RagService {
     // documento), aunque el resto del corpus comparta vocabulario laboral. Si
     // ninguna fuente lo trata, la ausencia se informa por tema; no se ofrece
     // una lista de módulos alternativos.
+    //
+    // La compuerta también rige para el proceso heredado del hilo: sin ella,
+    // «¿y los requisitos?» dentro de un hilo sobre el destaque entregaba
+    // requisitos de cualquier otro proceso que compartiera la palabra, con
+    // citas válidas pero de tema ajeno.
+    const topicIntent = options.topicIntent ?? inheritedIntent;
+    const inheritedScope = !options.topicIntent && Boolean(inheritedIntent);
     if (
       !selectedModuleId &&
-      options.topicIntent &&
+      topicIntent &&
       !(
         salaryQuestionProfile(salaryQuestion).isSalaryQuestion &&
-        options.topicIntent.id !== 'rural-allocation'
+        topicIntent.id !== 'rural-allocation'
       )
     ) {
-      const topicIntent = options.topicIntent;
-      const intentSources = globalRoutingSources.filter((source) =>
-        isTopicIntentEvidence(topicIntent, question, source),
-      );
+      const admits = (source: RetrievedChunk) =>
+        inheritedScope
+          ? treatsInheritedProcess(
+              topicIntent,
+              source,
+              inheritedProcessChunkIds.has(source.chunkId),
+            )
+          : // La pregunta nombra el proceso, pero el fragmento puede desarrollar
+            // otro trámite del mismo documento: el título de la norma conjunta
+            // no basta como evidencia.
+            isTopicIntentEvidence(topicIntent, question, source) &&
+            belongsToAdmittedProcedure(topicIntent, source);
+      const intentSources = globalRoutingSources.filter(admits);
       if (!intentSources.length) {
         return { kind: 'no_evidence', topRelevanceScore: null };
       }
       const versions = new Set(
         intentSources.map((source) => source.documentVersionId),
       );
-      const evidence = globalRoutingSources.filter((source) =>
-        versions.has(source.documentVersionId),
+      // La versión admitida no basta: el resto de sus fragmentos pasa por la
+      // misma compuerta. La consolidación por documento elige un representante
+      // por versión, así que sin este filtro la cita de la respuesta podía ser
+      // justo el fragmento que la compuerta acababa de rechazar (la licencia de
+      // otra causal, la sección de la permuta). Un fragmento de la versión que
+      // no trata otro proceso sí completa la respuesta: el anexo o el cuadro de
+      // plazas del documento no repite el nombre del trámite.
+      const evidence = globalRoutingSources.filter(
+        (source) =>
+          versions.has(source.documentVersionId) &&
+          (admits(source) || belongsToAdmittedVersion(topicIntent, source)),
       );
       let sources = relevantSources(evidence, matchCount, salaryQuestion);
       if (topicIntent.id === 'reassignment') {

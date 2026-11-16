@@ -19,6 +19,20 @@ const REASSIGNMENT_ELIGIBILITY = /\b(?:puedo|puede|es\s+posible)\b/u;
 const REASSIGNMENT_DESTINATION =
   /\b(?:otra|distinta)\s+(?:ugel|dre|provincia|region)\b|\b(?:ir(?:se)?|trasladar(?:me|se)?)\s+a\s+(?:otra|distinta)\b/u;
 
+/**
+ * La consulta pide identificar la norma del proceso, no resolver el caso
+ * propio. Interrumpirla con la causal dejaría sin respuesta exactamente lo que
+ * se preguntó («¿cuál es la norma técnica de la reasignación?»), así que se
+ * responde con la norma que el corpus ya identifica.
+ *
+ * La condición es la IDENTIDAD de la norma (qué norma es, cuál la regula, cuál
+ * es su base legal). «Qué requisitos pide la norma para la reasignación» solo
+ * menciona la norma como fuente de un pedido que sigue dependiendo de la
+ * causal, y conserva su aclaración.
+ */
+const NORM_IDENTITY_REQUEST =
+  /\bnorma(?:s)?\s+(?:tecnica(?:s)?|que\s+(?:regula|rige)|aplicable(?:s)?|vigente(?:s)?)\b|\bcual(?:es)?\s+(?:es|son)\s+(?:(?:la|las|el)\s+)?(?:norma(?:s)?|ley|resolucion|marco\s+legal|base\s+legal)\b|\bque\s+norma(?:s)?\s+(?:regula|rige|aplica)\b|\bbase\s+legal\b|\bmarco\s+legal\b|\bque\s+(?:ley|resolucion|documento)\s+(?:regula|rige|aprueba)\b/u;
+
 const CAUSALS: ReadonlyArray<{
   id: string;
   label: string;
@@ -59,6 +73,18 @@ export function causalsInQuestion(question: string): string[] {
   );
 }
 
+/**
+ * Nombres con que el corpus denomina las causales declaradas. Se usan para
+ * ampliar la consulta de búsqueda con la sección que rige ese motivo, no para
+ * afirmar que la persona cumpla el supuesto.
+ */
+export function causalLabelsInQuestion(question: string): string[] {
+  const declared = causalsInQuestion(question);
+  return CAUSALS.filter((causal) => declared.includes(causal.id)).map(
+    (causal) => causal.label,
+  );
+}
+
 /** Causales distintas que la evidencia recuperada distingue. */
 export function causalsInEvidence(sources: RetrievedChunk[]): string[] {
   const found = new Set<string>();
@@ -96,6 +122,16 @@ export function causalClarificationFor(
   )
     return null;
   if (causalsInQuestion(question).length) return null;
+  // La identidad de la norma se responde con la norma; pedir la causal la
+  // dejaría sin contestar. Un pedido de requisitos, plazos o documentos solo
+  // menciona la norma como fuente: esos datos cambian según la causal.
+  // «Procedimiento» no cuenta: forma parte del nombre de la norma («norma
+  // técnica del procedimiento de reasignación»).
+  if (
+    NORM_IDENTITY_REQUEST.test(text) &&
+    !/\b(?:requisitos?|plazos?|documentos?)\b/u.test(text)
+  )
+    return null;
   // Lo que la persona escribió manda: una norma nombrada (RM, RSG, DS, Ley con
   // su número y año) acota la consulta a ese documento; pedir la causal dejaría
   // el turno sin respuesta. La ruta exacta ya limita la evidencia.

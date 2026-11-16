@@ -2,6 +2,7 @@ import { detectTopicIntent } from './topic-intent';
 import { reassignmentRole } from './reassignment-retrieval';
 import { hasTopicTerm } from './domain-lexicon';
 import { normalizeSpanishText } from './text-normalization';
+import { temporaryPlacementQueries } from './temporary-placement-retrieval';
 
 /**
  * El chat general identifica la intención principal de cada consulta sin que la
@@ -170,6 +171,184 @@ describe('detectTopicIntent', () => {
       detectTopicIntent('mi colega asciende de la primera a la segunda escala'),
     ).toMatchObject({ id: 'career-progression' });
   });
+
+  it('reconoce el destaque por su término y por su forma verbal', () => {
+    expect(detectTopicIntent('como destacarme en otro colegio')).toMatchObject({
+      id: 'temporary-placement',
+      label: 'el destaque docente',
+      moduleName: 'Contratación y desplazamientos',
+    });
+    expect(detectTopicIntent('que causales existen en destaque')).toMatchObject(
+      { id: 'temporary-placement' },
+    );
+  });
+
+  it('no elige un proceso cuando la consulta compara destaque y reasignación', () => {
+    expect(
+      detectTopicIntent('que diferencia hay entre destaque y reasignacion'),
+    ).toBeNull();
+  });
+
+  it.each([
+    '¿en qué se diferencian el destaque y la reasignación?',
+    '¿cuál me conviene: el destaque o la reasignación?',
+    'quiero comparar el destaque con la reasignación',
+    'comparame el destaque con la reasignación',
+    '¿el destaque y la reasignación son lo mismo?',
+    '¿es lo mismo el destaque que la reasignación?',
+    'destaque vs reasignación',
+    '¿son compatibles el destaque y la reasignación?',
+    '¿cuál solicito primero: el destaque o la reasignación?',
+    '¿cuál es más conveniente: el destaque o la reasignación?',
+    '¿cuál me recomiendas, el destaque o la reasignación?',
+    '¿en qué se distinguen el destaque y la reasignación?',
+    '¿qué ventajas tiene el destaque frente a la reasignación?',
+  ])('trata «%s» como una comparación, no como un tema', (question) => {
+    // Las dos normas responden la comparación; elegir una sola dejaría fuera
+    // la mitad de lo que se preguntó.
+    expect(detectTopicIntent(question)).toBeNull();
+  });
+
+  it('compara también cuando la equivalencia se niega', () => {
+    // «No es lo mismo» pide la diferencia: las dos normas participan.
+    expect(
+      detectTopicIntent('el destaque no es lo mismo que la reasignacion'),
+    ).toBeNull();
+  });
+
+  it('no compara cuando la equivalencia negada acompaña una preferencia', () => {
+    // Negar la equivalencia y elegir es una decisión: la reasignación conserva
+    // su intención y su compuerta.
+    expect(
+      detectTopicIntent(
+        'no es lo mismo el destaque que la reasignacion, prefiero reasignarme',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
+  it.each([
+    'no es lo mismo el destaque que la reasignacion, quiero saber la diferencia',
+    'no es lo mismo el destaque que la reasignacion, necesito entender',
+  ])(
+    'compara aunque el turno pida entender la diferencia: «%s»',
+    (question) => {
+      // «Quiero» y «necesito» no eligen un proceso: la pregunta sigue siendo
+      // cuál es la diferencia.
+      expect(detectTopicIntent(question)).toBeNull();
+    },
+  );
+
+  it.each([
+    'quiero el destaque, no la reasignacion',
+    'no es lo mismo el destaque que la reasignacion, quiero el destaque',
+    'prefiero destacarme antes que reasignarme',
+    'no quiero reasignarme, quiero el destaque',
+    'quiero destacarme, no quiero la reasignacion',
+    'voy a solicitar el destaque, no la reasignacion',
+    'necesito el destaque, no la reasignacion',
+    'no me interesa la reasignacion, quiero el destaque',
+  ])(
+    'respeta la preferencia por el destaque en un turno que nombra los dos: «%s»',
+    (question) => {
+      // Elegir el destaque no puede recibir la norma de reasignación, aunque la
+      // elección se exprese rechazando la otra.
+      expect(detectTopicIntent(question)).toMatchObject({
+        id: 'temporary-placement',
+      });
+    },
+  );
+
+  it.each([
+    'el destaque no me conviene, quiero reasignarme',
+    'no me conviene el destaque, prefiero la reasignación',
+    'necesito reasignarme, el destaque no me sirve',
+  ])(
+    'no confunde una preferencia negada con una comparación: «%s»',
+    (question) => {
+      // Quien descarta el destaque ya eligió: la reasignación conserva su
+      // intención y su compuerta.
+      expect(detectTopicIntent(question)).toMatchObject({
+        id: 'reassignment',
+      });
+    },
+  );
+
+  it('no elige el destaque cuando la persona lo rechaza', () => {
+    // «Quiero el destaque» dentro de «tampoco quiero el destaque» no es una
+    // elección. El rechazo con «tampoco» no lo corta la negación del propio
+    // proceso, que solo mira «no quiero»: la preferencia llega hasta aquí y sin
+    // descartarla se leería como una elección del destaque.
+    expect(
+      detectTopicIntent(
+        'tampoco quiero el destaque, y la reasignacion me da igual',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
+  it('conserva la reasignación cuando la persona pide los dos procesos', () => {
+    // Sin preferencia legible no se descarta ninguna compuerta: el turno no
+    // declara que el destaque sea el elegido y se mantiene el proceso que el
+    // sistema ya reconocía.
+    expect(
+      detectTopicIntent('quiero el destaque y tambien quiero reasignarme'),
+    ).toMatchObject({ id: 'reassignment' });
+    // Con la elección explícita, el mismo par de menciones sí decide.
+    expect(
+      detectTopicIntent('necesito el destaque, no quiero la reasignacion'),
+    ).toMatchObject({ id: 'temporary-placement' });
+  });
+
+  it('nombra los dos procesos sin compararlos: conserva la reasignación', () => {
+    // La comparación deja el tema abierto; una mención de ambos sin comparar
+    // conserva la intención que el sistema ya reconocía.
+    expect(
+      detectTopicIntent(
+        'quiero reasignarme a otra ugel y tambien me interesa el destaque',
+      ),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
+  it('conserva la compuerta médica en un turno que menciona el destaque', () => {
+    // La licencia aplica una comprobación clínica que el destaque no tiene:
+    // elegir el destaque desactivaría esa compuerta en un turno mixto.
+    expect(
+      detectTopicIntent('tengo descanso medico, puedo destacarme a otra ugel'),
+    ).toMatchObject({ id: 'medical-leave' });
+    // La causal médica de la reasignación sigue siendo reasignación.
+    expect(
+      detectTopicIntent('quiero reasignarme por descanso medico a otra ugel'),
+    ).toMatchObject({ id: 'reassignment' });
+  });
+
+  it.each([
+    // La cifra manda sobre el nombre del proceso, también en el destaque.
+    '¿Me siguen pagando si me destaco en otra UGEL?',
+    '¿Cuánto me pagan por un destaque?',
+    // Negar el trámite no lo abre.
+    'No quiero un destaque, quiero renunciar',
+    // Un auxiliar no se rige por el destaque de profesores.
+    'Soy auxiliar y quiero destacarme en otra IE',
+    // El verbo figurado no abre el proceso.
+    'Quiero destacar en mi evaluación de desempeño',
+  ])('no fuerza el destaque en «%s»', (question) => {
+    expect(detectTopicIntent(question)).toBeNull();
+  });
+
+  it.each([
+    // C05 del arnés de aceptación: consulta de un directivo sobre reemplazo.
+    '¿Quién reemplaza al director cuando se encuentra de licencia?',
+    // C18: tabla de incrementos de remuneración (tabla comparativa).
+    'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
+    // O03: monto por jornada de un contratado.
+    'Soy docente contratado de secundaria con jornada de 30 horas. ¿Cuánto debería ganar en 2025? Muéstralo en una tabla y cita el documento y la página.',
+  ])(
+    'no atribuye una intención de proceso a la consulta de aceptación «%s»',
+    (question) => {
+      expect(detectTopicIntent(question)?.id).not.toBe('temporary-placement');
+      // Y no gasta una búsqueda canónica del destaque en un tema ajeno.
+      expect(temporaryPlacementQueries(question)).toEqual([]);
+    },
+  );
 
   it('reconoce la expulsión del cargo como tema propio, no como seguimiento', () => {
     // Antes del arreglo, «cuándo es expulsado un docente» no nombraba ningún

@@ -33,6 +33,10 @@ import {
 } from './remuneration-retrieval';
 import { normalizeSpanishText } from './text-normalization';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
+import {
+  isDirectTemporaryPlacementEvidence,
+  isTemporaryPlacementQuestion,
+} from './temporary-placement-retrieval';
 
 /**
  * Intención temática principal de una consulta en el chat general. No decide el
@@ -48,6 +52,7 @@ import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 
 export type TopicIntentId =
   | 'reassignment'
+  | 'temporary-placement'
   | 'medical-leave'
   | 'career-progression'
   | 'rural-allocation'
@@ -66,10 +71,97 @@ export interface TopicIntent {
   moduleName: string;
 }
 
+/**
+ * Señales de comparación entre el destaque y la reasignación. Las dos normas
+ * responden la comparación, así que la intención no elige una sola: «vs»,
+ * «comparame», «es lo mismo», «cuál me recomiendas», «en qué se distinguen» y
+ * las diferencias pedidas de cualquier forma.
+ */
+const COMPARISON_CUE =
+  /\b(?:compar\p{L}*|diferencia(?:s|n|rse)?|en lugar de|en vez de|versus|vs|me conviene|conviene mas|mejor opcion|(?:es|son) lo mismo|compatibles?)\b|\bcual(?:es)?\b[^.?]{0,25}\b(?:conviene|es mejor|solicito|elijo|primero)\b/u;
+
+/** Preferencia negada: elige un proceso en lugar de compararlos. */
+const NEGATED_PREFERENCE =
+  /\b(?:no|nunca)\s+(?:me\s+)?(?:conviene|interesa|sirve)\b/u;
+
+/**
+ * Comparaciones que también se preguntan con otras palabras: «cuál es más
+ * conveniente», «cuál me recomiendas», «en qué se distinguen», «cuál tiene más
+ * ventajas». El alternante de «cuál» exige dos procesos nombrados en la misma
+ * pregunta, así que no se dispara en una consulta de un solo tema.
+ */
+const COMPARISON_CUE_EXTENDED =
+  /\b(?:recomiend\p{L}*|distingu\p{L}*|distingan|ventajas?|convenient\p{L}*)\b|\bcual(?:es)?\b[^.?]{0,40}\b(?:conviene|es mejor|recomiendas|ventajas|distinguen|solicito|elijo|primero)\b/u;
+
+/**
+ * Negación de la equivalencia («no es lo mismo X que Y»). Compara, salvo que el
+ * turno además exprese una preferencia: ahí la persona ya eligió.
+ */
+const NEGATED_EQUIVALENCE = /\bno\s+(?:es|son)\s+(?:lo mismo|compatibles?)\b/u;
+
+const PREFERENCE_CUE =
+  /\b(?:prefiero|preferiria|me quedo con|voy a solicitar|voy por|elijo)\b|\b(?:quiero|quisiera|necesito)\s+(?:la\s+)?(?:reasignacion|reasignarme|el\s+destaque|destaque|destacarme)\b/u;
+
+/** Verbos con los que la persona elige uno de los dos procesos. */
+const PREFERENCE_VERB =
+  '(?:quiero|quisiera|prefiero|preferiria|elijo|necesito|me quedo con|voy por|voy a solicitar)';
+
+const DESTAQUE_PREFERENCE = new RegExp(
+  `\\b${PREFERENCE_VERB}\\s+(?:el\\s+|un\\s+)?(?:destaque|destacarme)\\b`,
+  'u',
+);
+const REASSIGNMENT_PREFERENCE = new RegExp(
+  `\\b${PREFERENCE_VERB}\\s+(?:la\\s+|una\\s+)?(?:reasignacion|reasignarme)\\b`,
+  'u',
+);
+
+/** Verbos y objetos con los que la persona rechaza un proceso. */
+const REJECTION_VERB =
+  '(?:no|nunca|tampoco|ni)\\s+(?:me\\s+)?(?:quiero|quisiera|prefiero|preferiria|elijo|necesito|me\\s+interesa|deseo|solicito|pido|me\\s+quedo\\s+con|voy\\s+(?:por|a\\s+solicitar))';
+
+const REJECTED_DESTAQUE = new RegExp(
+  `\\b${REJECTION_VERB}\\s+(?:el\\s+|un\\s+)?(?:destaque|destacarme)\\b`,
+  'gu',
+);
+const REJECTED_REASSIGNMENT = new RegExp(
+  `\\b${REJECTION_VERB}\\s+(?:la\\s+|una\\s+)?(?:reasignacion|reasignarme)\\b`,
+  'gu',
+);
+
+/**
+ * Quita la mención del proceso cuando la persona la rechaza: «no quiero la
+ * reasignación» no es elegirla. El rechazo puede ir antes o después de la
+ * elección, así que se descarta del texto antes de leer la preferencia.
+ */
+function withoutRejectedProcess(text: string, rejected: RegExp): string {
+  return text.replace(rejected, ' ');
+}
+
+/**
+ * Proceso que la persona elige cuando nombra los dos. Devuelve `null` si no hay
+ * preferencia clara, incluida la que se niega o se contrapone.
+ */
+function processPreference(text: string): 'destaque' | 'reassignment' | null {
+  const destaque = DESTAQUE_PREFERENCE.test(
+    withoutRejectedProcess(text, REJECTED_DESTAQUE),
+  );
+  const reassignment = REASSIGNMENT_PREFERENCE.test(
+    withoutRejectedProcess(text, REJECTED_REASSIGNMENT),
+  );
+  if (destaque && !reassignment) return 'destaque';
+  if (reassignment && !destaque) return 'reassignment';
+  return null;
+}
+
 const INTENTS: Record<TopicIntentId, TopicIntent> = {
   reassignment: {
     id: 'reassignment',
     label: 'la reasignación docente',
+    moduleName: 'Contratación y desplazamientos',
+  },
+  'temporary-placement': {
+    id: 'temporary-placement',
+    label: 'el destaque docente',
     moduleName: 'Contratación y desplazamientos',
   },
   'medical-leave': {
@@ -151,7 +243,40 @@ export function detectTopicIntent(question: string): TopicIntent | null {
     return null;
   }
   if (isDisciplinaryQuestion(question)) return INTENTS.disciplinary;
-  if (isReassignmentQuestion(question)) {
+  // El destaque y la reasignación son procesos distintos del mismo módulo. Si
+  // la consulta nombra ambos, se trata de una comparación: la intención no
+  // elige uno y el enrutamiento normal decide con la evidencia.
+  const temporaryPlacement = isTemporaryPlacementQuestion(question);
+  const reassignment = isReassignmentQuestion(question);
+  // Una consulta que nombra el destaque y además una figura médica conserva la
+  // intención de licencia: es la ruta que aplica la comprobación clínica
+  // (régimen, CITT, cobertura) y puede negarse a responder. Elegir el destaque
+  // desactivaría esa compuerta en un turno mixto.
+  if (temporaryPlacement && isMedicalLeaveQuestion(question)) {
+    return INTENTS['medical-leave'];
+  }
+  if (temporaryPlacement && reassignment) {
+    // La comparación explícita deja el tema abierto para que se responda con
+    // las dos normas. Sin señal de comparación se conserva la reasignación,
+    // que es lo que el sistema resolvía antes de reconocer el destaque.
+    //
+    // La preferencia negada no compara: «el destaque no me conviene, quiero
+    // reasignarme» elige la reasignación y conserva su compuerta. Tampoco
+    // compara negar la equivalencia cuando el turno ya expresa una preferencia.
+    const compares =
+      (COMPARISON_CUE.test(text) || COMPARISON_CUE_EXTENDED.test(text)) &&
+      !NEGATED_PREFERENCE.test(text) &&
+      !(NEGATED_EQUIVALENCE.test(text) && PREFERENCE_CUE.test(text));
+    if (compares) return null;
+    // Quien elige el destaque no recibe la norma de reasignación: la preferencia
+    // por uno de los dos procesos decide, y solo su ausencia conserva la
+    // reasignación que el sistema resolvía antes de reconocer el destaque.
+    return processPreference(text) === 'destaque'
+      ? INTENTS['temporary-placement']
+      : INTENTS.reassignment;
+  }
+  if (temporaryPlacement) return INTENTS['temporary-placement'];
+  if (reassignment) {
     // El auxiliar tiene su propio procedimiento de reasignación; la etiqueta y
     // el módulo deben decirlo para no atribuirle la norma de profesores.
     const role = reassignmentRole(question);
@@ -207,6 +332,8 @@ export function isTopicIntentEvidence(
   switch (intent.id) {
     case 'reassignment':
       return isDirectReassignmentEvidence(question, source);
+    case 'temporary-placement':
+      return isDirectTemporaryPlacementEvidence(question, source);
     case 'medical-leave':
     case 'disciplinary':
       return isDirectAdministrativeEvidence(question, source);
