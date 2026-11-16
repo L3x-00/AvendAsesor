@@ -1639,6 +1639,7 @@ describe('contexto de proceso del hilo', () => {
         // locución de marco no se limita a «conforme a».
         'De acuerdo con la norma el plazo del destaque y la permuta es de quince días hábiles.',
         'Las normas establecen que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Las normas indican que el plazo del destaque y la permuta es de quince días hábiles.',
         'Cabe precisar que el plazo del destaque y la permuta es de quince días hábiles.',
       ]) {
         expect(

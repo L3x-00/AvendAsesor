@@ -641,12 +641,12 @@ const NOMINAL_FRAME =
  * Verbos de anuncio que abren una subordinada enunciativa —«cabe señalar que»,
  * «es preciso indicar que», «se precisa», «se establece», «las normas establecen
  * que», «la norma estipula que»—: el trámite coordinado vive en la subordinada y
- * el anuncio no es su sujeto. Se marcan por lema en las formas que aparecen en
+ * el anuncio no es su sujeto. Se marcan por lema, en las formas que aparecen en
  * las normas —singular, plural y el infinitivo del anuncio—, no la conjugación
  * entera.
  */
 const ANNOUNCING_FRAME =
-  /^(?:cabe|es|se|preciso|precisa|precisar|necesario|necesaria|importante|indicar|indica|senalar|senala|establece|establecen|establecer|dispone|disponen|disponer|determina|determinan|determinar|estipula|estipulan|agrega|agregan|dice|dicen|refiere|refieren|tener|tenerse|presente|cuenta|considerar|recordar|mencionar|advertir|agregar|anotar)$/u;
+  /^(?:cabe|es|se|preciso|precisa|precisar|necesario|necesaria|importante|indicar|indica|indican|senalar|senala|senalan|establece|establecen|establecer|dispone|disponen|disponer|determina|determinan|determinar|estipula|estipulan|agrega|agregan|dice|dicen|refiere|refieren|tener|tenerse|presente|cuenta|considerar|recordar|mencionar|advertir|agregar|anotar)$/u;
 
 /**
  * El tramo que precede al nombre del propio es un sintagma nominal y no un
@@ -762,7 +762,8 @@ function nominalTokens(segment: string): string[] {
  * de la cláusula antepuesta amplía la superficie del límite, porque el predicado
  * que sigue a la coma se mide como tramo —«cuando se publica el cronograma, la
  * UGEL autoriza para el destaque»—; es el coste de admitir la subordinada
- * antepuesta, y se acusa en cuanto el predicado encabeza el tramo.
+ * antepuesta, y solo se acusa cuando el verbo que encabeza el tramo está en
+ * `CONJUGATED_VERB`.
  */
 function linkedNominalChain(segment: string): boolean {
   const tokens = nominalTokens(segment);
