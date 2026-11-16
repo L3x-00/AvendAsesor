@@ -431,6 +431,49 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  it('no entrega el plazo enmarcado en la permuta aunque puntúe más alto', async () => {
+    const { service, gateway } = buildSearchable();
+    // El enmarque del hermano no necesita sección propia: «si se trata de una
+    // permuta» dentro del plazo basta, y con la marca en la subordinada la
+    // oración principal no la contiene. Antes de reconocer la marca, la
+    // consolidación por versión citaba solo ese fragmento.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'Para postular al destaque se requiere nombramiento vigente y tres años de servicio oficial.',
+      chunkId: 'destaque-requisitos',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'Requisitos del destaque',
+      semanticScore: 0.66,
+    };
+    const plazoPermuta = {
+      ...requisitos,
+      chunkContent:
+        'El plazo para presentar la solicitud es de quince días si se trata de una permuta.',
+      chunkId: 'permuta-enmarcada',
+      sectionTitle: 'Del plazo',
+      semanticScore: 0.78,
+    };
+    gateway.search.mockImplementation(() =>
+      Promise.resolve([plazoPermuta, requisitos]),
+    );
+
+    const result = await service.retrieve(
+      'que requisitos tiene el destaque docente',
+      null,
+      [],
+      { topicIntent: destaqueIntent },
+    );
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('destaque-requisitos');
+      expect(ids).not.toContain('permuta-enmarcada');
+    }
+  });
+
   it('entrega el anexo de la versión admitida aunque no nombre el trámite', async () => {
     const { service, gateway } = buildSearchable();
     // El cuadro de plazos del mismo documento no repite «destaque» ni proviene

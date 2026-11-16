@@ -1,5 +1,6 @@
 import {
   belongsToAdmittedProcedure,
+  belongsToAdmittedVersion,
   inheritedTopicIntent,
   isProcessDependentTurn,
   processCanonicalQuery,
@@ -902,46 +903,41 @@ describe('contexto de proceso del hilo', () => {
 
     it('acusa el enmarque del trámite en la subordinada', () => {
       // «Cuando se trata de» no describe una condición: dice de qué trámite
-      // habla el fragmento.
-      expect(
-        treatsInheritedProcess(
-          destaque,
-          {
-            chunkContent:
-              'El plazo es de quince días cuando se trata de una permuta.',
-            documentTitle: 'RSG N.° 326-2017-MINEDU',
-            sectionTitle: 'Del plazo',
-          },
-          true,
-        ),
-      ).toBe(false);
-      expect(
-        treatsInheritedProcess(
-          destaque,
-          {
-            chunkContent:
-              'El plazo es de quince días en el caso de la permuta.',
-            documentTitle: 'RSG N.° 326-2017-MINEDU',
-            sectionTitle: 'Del plazo',
-          },
-          true,
-        ),
-      ).toBe(false);
+      // habla el fragmento. La marca también aparece con «si» y con la solicitud
+      // como sujeto, y las tres formas se reconocen.
+      for (const chunkContent of [
+        'El plazo es de quince días cuando se trata de una permuta.',
+        'El plazo es de quince días en el caso de la permuta.',
+        'El plazo es de quince días si se trata de una permuta.',
+        'El plazo es de quince días cuando la solicitud es por permuta.',
+        'El plazo es de quince días en el marco de la permuta.',
+      ])
+        expect(
+          treatsInheritedProcess(
+            destaque,
+            {
+              chunkContent,
+              documentTitle: 'RSG N.° 326-2017-MINEDU',
+              sectionTitle: 'Del plazo',
+            },
+            true,
+          ),
+        ).toBe(false);
     });
 
     it('evalúa el trámite enmarcado con el patrón del proceso consultado', () => {
       // El enmarque de la causal propia no es otro trámite: en un hilo de
       // licencia, «en el caso de la licencia por enfermedad» nombra la licencia
-      // que se consulta. La compuerta explícita no tiene la salida por nombre
-      // propio del hilo heredado, así que aquí se ve el efecto del enmarque.
+      // que se consulta. Se evalúa por la ampliación de la versión, que no tiene
+      // la salida por nombre propio del hilo heredado.
       const licencias = 'Norma técnica de licencias, permisos y vacaciones';
       for (const chunkContent of [
         'En el caso de la licencia por enfermedad, se otorga por el plazo del certificado médico.',
         'Cuando se trata de la licencia por incapacidad temporal, se requiere CITT.',
-        'Tratándose de la licencia por salud, el plazo lo fija el certificado.',
+        'Si se trata de la licencia por salud, el plazo lo fija el certificado.',
       ])
         expect(
-          belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+          belongsToAdmittedVersion(intent('necesito descanso medico'), {
             chunkContent,
             documentTitle: licencias,
             sectionTitle: 'Del plazo',
@@ -949,13 +945,46 @@ describe('contexto de proceso del hilo', () => {
         ).toBe(true);
       // La causal ajena enmarcada sí es otro trámite.
       expect(
-        belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+        belongsToAdmittedVersion(intent('necesito descanso medico'), {
           chunkContent:
             'En el caso de la licencia por paternidad, se otorgan diez días.',
           documentTitle: licencias,
           sectionTitle: 'Del plazo',
         }),
       ).toBe(false);
+    });
+
+    it('admite el fragmento propio cuando el hermano se menciona de paso', () => {
+      // La norma conjunta se titula por los dos trámites y el requisito del
+      // propio puede nombrar el cese o la renuncia: nada de eso lo convierte en
+      // otro trámite. La salida por nombre propio es la misma del hilo heredado.
+      const conjunta = 'Norma técnica de reasignación, permuta y destaque';
+      for (const source of [
+        {
+          chunkContent:
+            'Para el destaque se requiere nombramiento vigente y tres años de servicio oficial.',
+          documentTitle: conjunta,
+          sectionTitle: 'Requisitos del destaque',
+        },
+        {
+          chunkContent:
+            'Los requisitos y el plazo se detallan en el anexo de la presente norma.',
+          documentTitle: conjunta,
+          sectionTitle: 'Requisitos del destaque y la permuta',
+        },
+        {
+          chunkContent:
+            'La plaza del destaque se genera por cese, jubilación o renuncia del titular.',
+          documentTitle: conjunta,
+          sectionTitle: 'De las plazas',
+        },
+      ])
+        expect(
+          belongsToAdmittedProcedure(
+            intent('quiero destacarme en otro colegio'),
+            source,
+          ),
+        ).toBe(true);
     });
 
     it('no exime la causal de licencia ajena aunque se enuncie como requisito', () => {
@@ -984,6 +1013,34 @@ describe('contexto de proceso del hilo', () => {
           true,
         ),
       ).toBe(false);
+      // La causal del familiar con posesivo es la misma causal ajena, también
+      // cuando el fragmento la enuncia como requisito: el posesivo no la
+      // convierte en la enfermedad de la persona.
+      for (const chunkContent of [
+        'No encontrarse en uso de licencia por enfermedad de mi hijo al momento de la solicitud.',
+        'No encontrarse en uso de licencia por enfermedad de su hijo.',
+        'No encontrarse en uso de licencia por enfermedad de mis padres.',
+      ]) {
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle:
+                'Norma técnica de licencias, permisos y vacaciones',
+              sectionTitle: 'Requisitos',
+            },
+            true,
+          ),
+        ).toBe(false);
+        expect(
+          belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'Requisitos',
+          }),
+        ).toBe(false);
+      }
       // El requisito del propio trámite con la licencia por duración sigue
       // admitiéndose.
       expect(

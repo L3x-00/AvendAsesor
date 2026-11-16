@@ -233,7 +233,7 @@ export function processQueriesForIntent(
  * causal y su plazo no responde el descanso médico de la persona.
  */
 const OWN_ILLNESS =
-  'enfermedad(?!\\s+(?:de|del|de\\s+un|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus)\\s+(?:familiar|hij[oa]s?|padre|madre|conyuge|pariente))';
+  'enfermedad(?!\\s+(?:de|del|de\\s+un|de\\s+mi|de\\s+su|de\\s+mis|de\\s+sus)\\s+(?:familiar|hij[oa]s?|padres?|madres?|conyugues?|parientes?))';
 
 /**
  * Señal textual con la que el corpus nombra cada proceso. La herencia aporta el
@@ -361,10 +361,11 @@ function mainClause(text: string): string {
 /**
  * Causales de licencia o permiso que no son la del proceso consultado. Se
  * nombran una por una para el hilo de licencia: la causal propia es solo la
- * clínica.
+ * clínica. El posesivo cuenta igual que el artículo: «enfermedad de mi hijo» es
+ * la misma causal ajena que «enfermedad de un familiar».
  */
 const FOREIGN_LEAVE_CAUSAL =
-  'licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|enfermedad (?:de|del|de un) (?:familiar|familiar directo|hij[oa]|padre|madre|conyuge))|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)';
+  'licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|enfermedad (?:de|del|de un|de mi|de su|de mis|de sus) (?:familiar(?: directo)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?))|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)';
 
 const FOREIGN_LEAVE_CAUSAL_PATTERN = new RegExp(
   `\\b(?:${FOREIGN_LEAVE_CAUSAL})\\b`,
@@ -404,11 +405,12 @@ const OTHER_PROCEDURE = new RegExp(
 
 /**
  * La subordinada que enmarca el trámite del fragmento y no una condición del
- * propio: «cuando se trata de una permuta», «en el caso de la licencia por
- * paternidad», «tratándose de un encargo».
+ * propio: «cuando se trata de una permuta», «si se trata de una permuta», «en el
+ * caso de la licencia por paternidad», «cuando la solicitud es por permuta»,
+ * «tratándose de un encargo».
  */
 const PROCEDURE_FRAMING_CUE =
-  /\b(?:cuando\s+se\s+(?:trata|trate|refiere|refiera)\s+de|en\s+(?:el\s+)?caso\s+de|tratandose\s+de|en\s+supuesto\s+de)\s+/u;
+  /\b(?:(?:cuando|si)\s+se\s+(?:trata|trate|refiere|refiera)\s+de|en\s+(?:el\s+)?(?:caso|supuesto|marco)\s+de|tratandose\s+de|(?:cuando|si)\s+(?:la|el)\s+(?:solicitud|peticion|pedido|tramite|consulta|postulacion|requerimiento)\s+(?:es|sea|fuera|fuese|corresponde|corresponda)\s+(?:a|de|por|para))\s+/u;
 
 /**
  * El trámite enmarcado en la subordinada se evalúa con el patrón del proceso
@@ -571,6 +573,12 @@ export function belongsToAdmittedVersion(
  * aplica también cuando la pregunta nombra el proceso: el título de una norma
  * conjunta —«Norma técnica de reasignación, permuta y destaque»— no convierte en
  * destaque la sección que desarrolla la permuta.
+ *
+ * La salida por nombre propio es la misma del hilo heredado: si la sección o el
+ * cuerpo nombran el proceso consultado, la mención del hermano en el título de la
+ * norma conjunta o en un requisito del propio trámite —«se genera por cese,
+ * jubilación o renuncia»— no lo descarta. Sin ella, una pregunta explícita de
+ * destaque quedaba sin evidencia por la simple mención incidental del hermano.
  */
 export function belongsToAdmittedProcedure(
   intent: TopicIntent,
@@ -578,9 +586,15 @@ export function belongsToAdmittedProcedure(
     sectionTitle?: string | null;
   },
 ): boolean {
-  return (
-    matchesRegime(intent, source) && !mentionsOtherProcedure(intent, source)
-  );
+  if (!matchesRegime(intent, source)) return false;
+  if (namesOwnProcess(intent, source)) {
+    // La sección exclusiva de la permuta desarrolla otra figura aunque la norma
+    // de la reasignación las regule juntas.
+    return !(
+      intent.id === 'reassignment' && isExclusiveExchangeSection(source)
+    );
+  }
+  return !mentionsOtherProcedure(intent, source);
 }
 
 /**
