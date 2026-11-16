@@ -711,6 +711,108 @@ describe('contexto de proceso del hilo', () => {
           true,
         ),
       ).toBe(true);
+      // «Licencia por» y «cese temporal» también pueden ser una condición o una
+      // sanción del propio requisito, no otro trámite.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'No encontrarse en uso de licencia por más de treinta (30) días.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'No haber sido sancionado con cese temporal en los últimos tres años.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Requisitos',
+          },
+          true,
+        ),
+      ).toBe(true);
+      // La licencia aparece en la subordinada del propio plazo, no como el
+      // trámite del fragmento.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo se suspende si el docente tiene licencia por enfermedad.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(true);
+      // Si el fragmento abre con el otro trámite, la subordinada no lo salva.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Si el docente solicita permuta, debe presentar el acuerdo entre las partes.',
+            documentTitle: 'RSG N.° 326-2017-MINEDU',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('no admite la licencia de la causal de un familiar en un hilo de salud', () => {
+      // «Enfermedad» no basta: la licencia por la enfermedad de un familiar es
+      // otra causal, y su plazo no responde el descanso médico propio.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'La licencia por enfermedad de familiar directo se otorga por tres días hábiles.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'De la licencia por enfermedad de familiar',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('descarta la sección de permuta aunque el cuerpo nombre la reasignación', () => {
+      const reassignment = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'Disposiciones específicas de la permuta. La permuta y la reasignación se solicitan ante la UGEL de destino.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Disposiciones específicas de la permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+      // La guarda no depende de la búsqueda que trajo el fragmento: aunque no
+      // provenga de la consulta del proceso, la sección exclusiva de la permuta
+      // no desarrolla la reasignación.
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'Disposiciones específicas de la permuta. La permuta exige acuerdo entre las partes.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Disposiciones específicas de la permuta',
+          },
+          false,
+        ),
+      ).toBe(false);
     });
 
     it('descarta la sección de permuta aunque el cuerpo nombre la reasignación', () => {
@@ -793,6 +895,11 @@ describe('contexto de proceso del hilo', () => {
       'y si mi hijo esta enfermo',
       'y si mi esposo consigue trabajo en otra region',
       'y si mi hijo no aprende en la ie',
+      // Una persona del centro de trabajo no convierte en trámite propio la
+      // condicional sobre lo que a ella le pasa: la solicitud o el plazo sí.
+      'y si el director no me acepta en el aula',
+      'y si la directora no me acepta el cambio de seccion',
+      'y si mi colega no me acepta en el aula',
     ])('no hereda el proceso en «%s»', (question) => {
       expect(
         inheritedTopicIntent(question, [
@@ -828,8 +935,10 @@ describe('contexto de proceso del hilo', () => {
       'y por mi familia',
       'y por razones familiares',
       'y por motivo familiar',
+      'y por razón de familia',
       // Condicional sobre el trámite en la que interviene un tercero.
       'y si el director no firma mi solicitud',
+      'y si el director no firma la resolucion',
     ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
       expect(
         inheritedTopicIntent(question, ['como destacarme en otro colegio']),

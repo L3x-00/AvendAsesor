@@ -333,6 +333,51 @@ describe('RagService - contexto de proceso del hilo', () => {
     });
   });
 
+  it('no cita el fragmento de la misma versión que la compuerta rechazó', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // La norma regula todas las causales en la misma versión: la búsqueda del
+    // proceso devuelve la licencia propia y la de la pregunta devuelve la de
+    // paternidad. La versión admitida no puede arrastrar al hermano rechazado
+    // hasta la cita de la respuesta.
+    const salud = {
+      ...plazoChunk,
+      chunkContent:
+        'La licencia por salud se otorga por el plazo que indique el certificado médico o CITT.',
+      chunkId: 'licencia-salud',
+      documentId: 'licencias',
+      documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+      documentVersionId: 'licencias-version',
+      sectionTitle: 'De la licencia por salud',
+    };
+    const paternidad = {
+      ...salud,
+      chunkContent:
+        'La licencia por paternidad se otorga por diez días calendario con goce de remuneraciones.',
+      chunkId: 'licencia-paternidad',
+      sectionTitle: 'De la licencia por paternidad',
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) => {
+        const query = queryFor(embedding);
+        // La pregunta actual trae la licencia de paternidad; la consulta
+        // canónica del proceso trae la propia.
+        return Promise.resolve(
+          /Pregunta actual/.test(query) ? [paternidad] : [salud],
+        );
+      },
+    );
+
+    const result = await service.retrieve('y los requisitos', null, [
+      'necesito descanso medico',
+    ]);
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('licencia-salud');
+      expect(ids).not.toContain('licencia-paternidad');
+    }
+  });
+
   it('no entrega otra licencia en un hilo de licencia', async () => {
     const { service, gateway, queryFor } = buildSearchable();
     const paternidad = {

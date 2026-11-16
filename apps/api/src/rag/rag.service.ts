@@ -2298,23 +2298,28 @@ export class RagService {
         topicIntent.id !== 'rural-allocation'
       )
     ) {
-      const intentSources = globalRoutingSources.filter((source) =>
+      const admits = (source: RetrievedChunk) =>
         inheritedScope
           ? treatsInheritedProcess(
               topicIntent,
               source,
               inheritedProcessChunkIds.has(source.chunkId),
             )
-          : isTopicIntentEvidence(topicIntent, question, source),
-      );
+          : isTopicIntentEvidence(topicIntent, question, source);
+      const intentSources = globalRoutingSources.filter(admits);
       if (!intentSources.length) {
         return { kind: 'no_evidence', topRelevanceScore: null };
       }
       const versions = new Set(
         intentSources.map((source) => source.documentVersionId),
       );
-      const evidence = globalRoutingSources.filter((source) =>
-        versions.has(source.documentVersionId),
+      // La versión admitida no basta: el resto de sus fragmentos pasa por la
+      // misma compuerta. La consolidación por documento elige un representante
+      // por versión, así que sin este filtro la cita de la respuesta podía ser
+      // justo el fragmento que la compuerta acababa de rechazar (la licencia de
+      // otra causal, la sección de la permuta).
+      const evidence = globalRoutingSources.filter(
+        (source) => versions.has(source.documentVersionId) && admits(source),
       );
       let sources = relevantSources(evidence, matchCount, salaryQuestion);
       if (topicIntent.id === 'reassignment') {
