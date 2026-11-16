@@ -624,20 +624,43 @@ function ownProcessPattern(intent: TopicIntent): RegExp {
 }
 
 /**
+ * Posición en la que termina la primera mención del proceso consultado, o `null`
+ * si el tramo no lo nombra. Sirve para saber si el nombre llega hasta el conector
+ * o si después de él hay un predicado: la primera mención abre el sintagma del
+ * trámite, y una repetición posterior —el propio trámite nombrado dentro del
+ * complemento del predicado, como el «CITT» en «el descanso médico se acredita
+ * con el CITT»— no lo convierte en coordinación.
+ */
+function ownProcessEnd(intent: TopicIntent, text: string): number | null {
+  const match = ownProcessPattern(intent).exec(text);
+  return match ? match.index + match[0].length : null;
+}
+
+/**
  * El hermano es el sujeto de su propia cláusula coordinada —«… y la licencia por
  * paternidad se otorga por diez días»—, no de un sujeto conjunto con el proceso
  * consultado. Devuelve `false` cuando los dos trámites comparten el sujeto.
  *
- * El sujeto conjunto se reconoce por la concordancia: el verbo que sigue al
- * hermano va en plural y el nombre del propio está en el tramo anterior —«el
- * descanso médico y la licencia por paternidad se acreditan», «el plazo del
- * destaque y la permuta se fijan»—. Si el tramo no nombra el proceso consultado
- * —«según el reglamento, la licencia por paternidad se otorga»— o el hermano va
- * en plural —«las licencias por paternidad se otorgan»—, el sujeto es solo el
- * hermano. Un verbo en singular también lo es, aunque el propio aparezca antes:
- * «el descanso médico se acredita con el CITT y la licencia por paternidad se
- * otorga» enuncia el régimen del hermano. Lo que precede al nombre del propio es
- * indiferente: un lead-in o un relativo del propio no cambian la concordancia.
+ * Lo que decide no es un inventario de verbos sino la forma del tramo que va del
+ * inicio de la oración al conector:
+ *
+ * - El nombre del propio llega hasta el conector —«el descanso médico y la
+ *   licencia por paternidad», «el plazo para el destaque y la permuta», «el plazo
+ *   del destaque y la permuta»—: los dos nombres se coordinan y el verbo que
+ *   sigue concuerda con el conjunto en plural o con el núcleo del sintagma en
+ *   singular. En ambos casos la cláusula enuncia el régimen compartido.
+ * - Entre el nombre del propio y el conector hay un predicado —«el descanso
+ *   médico se acredita con el CITT y la licencia por paternidad», «el descanso
+ *   médico cubre siete días y la licencia por paternidad», «el plazo para el
+ *   destaque es de quince días y la permuta»—: el propio ya enunció lo suyo y el
+ *   hermano abre su propia cláusula.
+ * - El tramo no nombra el proceso consultado —«según el reglamento, la licencia
+ *   por paternidad se otorga»—: el sujeto es solo el hermano.
+ *
+ * Un relativo del propio —«el descanso médico, que se otorga por siete días, y la
+ * licencia por paternidad se acreditan»— no cambia el sujeto, y el verbo plural
+ * lo confirma. El hermano en plural —«las licencias por paternidad se otorgan»—
+ * concuerda con su propio verbo.
  */
 function developsSiblingClause(
   intent: TopicIntent,
@@ -648,7 +671,9 @@ function developsSiblingClause(
   const coordination = SIBLING_COORDINATED_SUBJECT.exec(before);
   if (!coordination) return false;
   const prefix = before.slice(0, coordination.index).trim();
-  if (!ownProcessPattern(intent).test(prefix)) return true;
+  const own = ownProcessEnd(intent, prefix);
+  if (own === null) return true;
+  if (prefix.slice(own).trim() === '') return false;
   if (PLURAL_SIBLING.test(sibling)) return true;
   return !PLURAL_VERB.test(after);
 }

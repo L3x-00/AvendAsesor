@@ -1539,8 +1539,9 @@ describe('contexto de proceso del hilo', () => {
       // El sujeto conjunto no depende de lo que precede al nombre del propio ni
       // de la forma en que lo nombra: un lead-in, un complemento o el participio
       // del destaque dejan la cláusula tratando los dos trámites. El criterio
-      // mira el tramo que va del inicio de la oración al conector: sin verbo, los
-      // nombres comparten el sujeto.
+      // mira el tramo que va del inicio de la oración al conector: si el nombre
+      // del propio llega hasta el conector, los nombres se coordinan y el verbo
+      // concuerda con el conjunto o con el núcleo del sintagma.
       const licencias = 'Norma técnica de licencias, permisos y vacaciones';
       for (const chunkContent of [
         'Asimismo, el descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
@@ -1548,6 +1549,11 @@ describe('contexto de proceso del hilo', () => {
         // El relativo del propio no cambia el sujeto: la concordancia sigue
         // siendo plural.
         'El descanso médico, que se otorga por siete días, y la licencia por paternidad se acreditan con el mismo certificado.',
+        // El pretérito plural concuerda con el conjunto, y el hermano en plural
+        // concuerda con su verbo plural: ninguna de las dos formas es una
+        // cláusula propia del hermano.
+        'El descanso médico y la licencia por paternidad se otorgaron por diez días calendario.',
+        'El descanso médico y las licencias por paternidad se otorgan por diez días calendario.',
       ]) {
         expect(
           belongsToAdmittedProcedure(intent('necesito descanso medico'), {
@@ -1571,6 +1577,15 @@ describe('contexto de proceso del hilo', () => {
       for (const chunkContent of [
         'El plazo del destaque y la permuta se fijan por la UGEL de destino.',
         'El docente destacado en otra UGEL y la permuta se rigen por el mismo plazo.',
+        // El par coordinado es el complemento del núcleo —«el plazo para el
+        // destaque y la permuta»— y el verbo singular concuerda con «el plazo»:
+        // el fragmento enuncia el plazo compartido y no el del hermano.
+        'El plazo para el destaque y la permuta es de quince días hábiles.',
+        'El plazo para el destaque y la permuta se fija en quince días hábiles.',
+        'El plazo fijado por la UGEL para el destaque y la permuta es de quince días hábiles.',
+        'El plazo del destaque y la permuta es de quince días hábiles.',
+        'El plazo del destaque y la permuta se fijaron por la UGEL de destino.',
+        'El plazo del destaque y las permutas se fijan por la UGEL de destino.',
       ]) {
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1580,19 +1595,34 @@ describe('contexto de proceso del hilo', () => {
           }),
         ).toBe(true);
       }
-      // Contramuestra: el verbo antes del conector deja al hermano solo en su
-      // cláusula, aunque el proceso consultado se nombre primero.
+      // Contramuestra: el propio enunció su predicado antes del conector, así que
+      // el hermano abre su propia cláusula aunque el proceso consultado se nombre
+      // primero.
+      for (const chunkContent of [
+        'El descanso médico se acredita con el CITT y la licencia por paternidad se otorga por diez días calendario.',
+        'El descanso médico se acredita con el CITT y las licencias por paternidad se otorgan por diez días calendario.',
+        // El par coordinado que sigue al sujeto es una licencia ajena: el
+        // fragmento desarrolla la otra licencia y el propio aparece al final.
+        'En la UGEL, la licencia por paternidad y la licencia por maternidad se otorgan por diez días y el descanso médico se acredita con el CITT.',
+      ])
+        expect(
+          treatsInheritedProcess(
+            intent('necesito descanso medico'),
+            {
+              chunkContent,
+              documentTitle: licencias,
+              sectionTitle: 'Del plazo',
+            },
+            true,
+          ),
+        ).toBe(false);
       expect(
-        treatsInheritedProcess(
-          intent('necesito descanso medico'),
-          {
-            chunkContent:
-              'El descanso médico se acredita con el CITT y la licencia por paternidad se otorga por diez días calendario.',
-            documentTitle: licencias,
-            sectionTitle: 'Del plazo',
-          },
-          true,
-        ),
+        belongsToAdmittedProcedure(destaque, {
+          chunkContent:
+            'El plazo para el destaque es de quince días hábiles y la permuta se solicita ante la UGEL de destino.',
+          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+          sectionTitle: 'Del plazo',
+        }),
       ).toBe(false);
     });
 

@@ -617,6 +617,35 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  it('entrega el plazo compartido por el destaque y la permuta', async () => {
+    const { service, gateway } = buildSearchable();
+    // El par coordinado es el complemento de «el plazo» —«el plazo para el
+    // destaque y la permuta»— y el verbo singular concuerda con el núcleo, no con
+    // el hermano: el fragmento enuncia el plazo de los dos trámites. Leerlo como
+    // la cláusula de la permuta dejaba sin evidencia la pregunta de destaque.
+    const compartido = {
+      ...plazoChunk,
+      chunkContent:
+        'El plazo para el destaque y la permuta es de quince días hábiles contados desde la publicación del cronograma.',
+      chunkId: 'plazo-compartido',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'Del plazo',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(() => Promise.resolve([compartido]));
+
+    await expect(
+      service.retrieve('que plazo tiene el destaque docente', null, [], {
+        topicIntent: destaqueIntent,
+      }),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'plazo-compartido' }],
+    });
+  });
+
   it('entrega el anexo de la versión admitida aunque no nombre el trámite', async () => {
     const { service, gateway } = buildSearchable();
     // El cuadro de plazos de la norma conjunta no repite «destaque» ni proviene
