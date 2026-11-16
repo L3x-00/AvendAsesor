@@ -242,6 +242,22 @@ describe('teaching-position-retrieval', () => {
         ),
       ).toEqual([]);
     });
+
+    it('produce consultas para las cinco preguntas del Product Owner', () => {
+      // Ninguna de ellas es una pregunta de cifra: el filtro salarial no debe
+      // dejarlas sin expansiones.
+      for (const question of [
+        hoursQuestion,
+        decisionQuestion,
+        surplusQuestion,
+        conditionQuestion,
+        classifierQuestion,
+      ]) {
+        expect(
+          teachingPositionEvidenceQueries(question).length,
+        ).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe('isDirectTeachingPositionEvidence', () => {
