@@ -47,7 +47,7 @@ function setup() {
   const service = new RagService(embeddings, gateway, {
     get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
   } as never);
-  return { gateway, service };
+  return { embeddings, gateway, service };
 }
 
 const reassignmentSource = {
@@ -358,6 +358,77 @@ describe('RagService — intención temática del chat general', () => {
     expect(result.sources.map((source) => source.chunkId)).toEqual([
       'destaque-chunk',
     ]);
+  });
+
+  it('no responde el tema con una norma de encargatura aunque su sección nombre la plaza', async () => {
+    const { gateway, service } = setup();
+    const encargaturaSource = {
+      ...baseSource,
+      chunkContent:
+        'La plaza orgánica es la plaza de origen que el profesor encargado conserva mientras dura la encargatura.',
+      chunkId: 'encargatura-chunk',
+      documentId: 'encargatura-document',
+      documentTitle: 'Norma técnica de encargatura de cargos directivos',
+      documentVersionId: 'encargatura-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      sectionTitle: 'De la plaza orgánica',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([encargaturaSource]);
+    const question = 'diferencia entre plaza organica y eventual';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no responde el cuadro de horas con la carga horaria de un contrato', async () => {
+    const { gateway, service } = setup();
+    const contractSource = {
+      ...baseSource,
+      chunkContent:
+        'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales que se aprueba por resolución de la dirección.',
+      chunkId: 'contract-section',
+      documentId: 'contract-section-document',
+      documentTitle: 'Norma del proceso de contratación docente',
+      documentVersionId: 'contract-section-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      sectionTitle: 'Carga horaria y jornada del contrato',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([contractSource]);
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no añade consultas del cuadro de horas a la respuesta elíptica de una cifra', async () => {
+    const { embeddings, gateway, service } = setup();
+    gateway.search.mockResolvedValue([]);
+    const prior = 'cuanto gana un docente nombrado de secundaria';
+
+    await service.retrieve('30 horas pedagogicas', null, [prior], {
+      salaryContextQuestions: [prior],
+    });
+
+    const embedded = embeddings.embed.mock.calls.flatMap(
+      (call: unknown[]) => call[0] as string[],
+    );
+    // La carga horaria es un factor del monto: el turno sigue siendo salarial.
+    expect(
+      embedded.some((query) =>
+        query.includes('cuadro de distribución de horas'),
+      ),
+    ).toBe(false);
   });
 
   it('sin evidencia del ascenso no ofrece los módulos que solo comparten palabras', async () => {

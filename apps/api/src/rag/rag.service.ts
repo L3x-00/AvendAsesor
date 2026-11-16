@@ -1873,7 +1873,7 @@ export class RagService {
             ...reassignmentEvidenceQueries(question),
             ...temporaryPlacementQueries(question),
             ...rationalizationEvidenceQueries(question),
-            ...teachingPositionEvidenceQueries(question),
+            ...teachingPositionEvidenceQueries(salaryQuestion),
             ...legalEvidenceQueries(
               question,
               Boolean(options.legalModule || options.legalCrossModule),
@@ -2153,7 +2153,7 @@ export class RagService {
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
         ...rationalizationEvidenceQueries(question),
-        ...teachingPositionEvidenceQueries(question),
+        ...teachingPositionEvidenceQueries(salaryQuestion),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);

@@ -13,8 +13,9 @@ function source(
   chunkContent: string,
   documentTitle = 'Norma sobre cargos y plazas',
   moduleNames: readonly string[] = ['Cargos y plazas'],
+  sectionTitle: string | null = null,
 ) {
-  return { chunkContent, documentTitle, moduleNames };
+  return { chunkContent, documentTitle, moduleNames, sectionTitle };
 }
 
 /**
@@ -188,6 +189,23 @@ describe('teaching-position-retrieval', () => {
           'Si asciendo de escala, ¿cambia mi plaza orgánica?',
         ),
       ).toBe(false);
+    });
+
+    it('no toma un «qué significa» que rige al proceso y no a la plaza', () => {
+      // El verbo de definición tiene que regir al término consultado.
+      expect(
+        isPositionConditionQuestion(
+          'Qué significa que durante el destaque mantenga mi plaza orgánica',
+        ),
+      ).toBe(false);
+      expect(
+        isPositionConditionQuestion(
+          'Qué significa que me cesen y quede mi plaza orgánica',
+        ),
+      ).toBe(false);
+      expect(
+        isPositionConditionQuestion('Qué significa una plaza orgánica'),
+      ).toBe(true);
     });
   });
 
@@ -403,6 +421,188 @@ describe('teaching-position-retrieval', () => {
           'soy nombrado y mi colegio entró a racionalización, ¿me pueden mandar a otra escuela?',
           source(
             'El clasificador de cargos de la institución educativa describe los niveles y requisitos.',
+          ),
+        ),
+      ).toBe(false);
+    });
+
+    it('no admite una sección homónima en una norma de otro proceso', () => {
+      // El encabezado no basta: la sección «De la plaza orgánica» existe en la
+      // encargatura y «Carga horaria» en la contratación. Aunque el fragmento
+      // defina el término, la norma regula otro proceso y la catalogación lo
+      // dice.
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'La plaza orgánica es la plaza de origen que el profesor encargado conserva mientras dura la encargatura.',
+            'Norma técnica de encargatura de cargos directivos',
+            ['Contratación y desplazamientos'],
+            'De la plaza orgánica',
+          ),
+        ),
+      ).toBe(false);
+      const contractHours =
+        'El profesor contratado cumple una carga horaria de treinta horas cronológicas semanales que se aprueba por resolución de la dirección.';
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            contractHours,
+            'Norma del proceso de contratación docente',
+            ['Contratación y desplazamientos'],
+            'Carga horaria y jornada del contrato',
+          ),
+        ),
+      ).toBe(false);
+      // Ni siquiera la catalogación en el módulo del tema convierte una jornada
+      // contractual en el cuadro de distribución de horas.
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(contractHours, 'Norma de cargos y plazas', [
+            'Cargos y plazas',
+          ]),
+        ),
+      ).toBe(false);
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'La jornada laboral del docente comprende treinta horas cronológicas semanales y se distribuye en horas pedagógicas.',
+            'Norma de cargos y plazas',
+            ['Cargos y plazas'],
+          ),
+        ),
+      ).toBe(false);
+    });
+
+    it('admite la sección que nombra el aspecto en un reglamento', () => {
+      // La ley y su reglamento pueden estar en «Ley y reglamento»: el encabezado
+      // «De las plazas» con la definición en el texto identifica la fuente.
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato mientras exista la necesidad de servicio.',
+            'Reglamento de la Ley de Reforma Magisterial',
+            ['Ley y reglamento'],
+            'De las plazas',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('admite el fragmento que distribuye horas del colegio bajo esa sección', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'Las horas se distribuyen entre las secciones según el plan de estudios aprobado para el año escolar.',
+            'Norma sobre cargos y plazas',
+            ['Cargos y plazas'],
+            'Distribución de horas',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('admite la clasificación de las plazas en orgánicas y eventuales', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'Las plazas se clasifican en orgánicas y eventuales según su forma de creación.',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('identifica el cuadro de horas por su título aunque esté en otro módulo', () => {
+      // La denominación completa del proceso en el título identifica la fuente
+      // sin depender de la catalogación.
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'La carga horaria se distribuye entre las secciones de la institución educativa según el plan de estudios.',
+            'Norma técnica del cuadro de distribución de horas',
+            ['Ley y reglamento'],
+            'Jornada del personal docente',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('identifica la sección de distribución de horas cuando el cuerpo la distribuye', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'Las horas se distribuyen entre las secciones según el plan de estudios aprobado para el año escolar.',
+            'Reglamento de la Ley de Reforma Magisterial',
+            ['Ley y reglamento'],
+            'Distribución de horas',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('no acepta la sección homónima si el cuerpo no distribuye las horas', () => {
+      // «Distribución de horas» como sección de un listado de instrumentos no
+      // convierte la norma en el cuadro de distribución de horas del colegio.
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'El cuadro de distribución de horas es un instrumento de gestión de la institución educativa.',
+            'Norma sobre instrumentos de gestión',
+            ['Ley y reglamento'],
+            'Distribución de horas',
+          ),
+        ),
+      ).toBe(false);
+    });
+
+    it('identifica el clasificador de cargos por su título y por su sección', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El instrumento ordena los puestos de trabajo y los grupos ocupacionales de la entidad.',
+            'Ley de reforma magisterial',
+            ['Ley y reglamento'],
+            'Clasificador de cargos de la institución educativa',
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'La clasificación de cargos agrupa los puestos según sus funciones y responsabilidades.',
+            'Ley de reforma magisterial',
+            ['Ley y reglamento'],
+            'Clasificación de cargos',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('admite el clasificador descrito por lo que ordena', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El clasificador de cargos es el instrumento que ordena los puestos de trabajo de la institución educativa.',
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'La institución cuenta con el PEI, el MOF, el CAP y el clasificador de cargos como instrumentos de gestión.',
           ),
         ),
       ).toBe(false);

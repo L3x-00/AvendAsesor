@@ -46,29 +46,35 @@ const CLASSIFICATION_SIGNAL = /\bclasificacion\s+de\s+cargos?\b/u;
  * evidencia, la respuesta pasaría de sustentada a «sin evidencia».
  *
  * Las raíces cubren la conjugación real: `desta(?:c|qu)` porque «destaque» se
- * escribe con «qu»; `ces(?:e|es|an|aron|ado)` porque «cesan» no es «cese»;
- * `asciend` porque «asciendo» no es «asciende». «Contratado» es la condición
- * del consultante, no el proceso de contratación, y por eso queda fuera de la
- * guarda; «encargado» sí pertenece a la encargatura y se excluye salvo que la
- * consulta pida la definición del tema.
+ * escribe con «qu»; `ces(?:e|es|en|an|aron|ado)` porque «cesan» y «cesen» no
+ * son «cese»; `asciend` porque «asciendo» no es «asciende». «Contratado» es la
+ * condición del consultante, no el proceso de contratación, y por eso queda
+ * fuera de la guarda; «encargado» sí pertenece a la encargatura y se excluye
+ * salvo que la consulta pida la definición del tema.
  */
 const COMPETING_PROCESS =
-  /\b(?:desta(?:c|qu)\p{L}*|encarg\p{L}*|reasign\p{L}*|permut\p{L}*|racionaliz\p{L}*|contratacion|contratos?|contrat(?:ar|aron|an|arme)|ascens\p{L}*|ascend\p{L}*|asciend\p{L}*|licencias?|descanso medico|ces(?:e|es|an|aron|ado)|jubil\p{L}*)\b/u;
+  /\b(?:desta(?:c|qu)\p{L}*|encarg\p{L}*|reasign\p{L}*|permut\p{L}*|racionaliz\p{L}*|contratacion|contratos?|contrat(?:ar|aron|an|arme)|ascens\p{L}*|ascend\p{L}*|asciend\p{L}*|licencias?|descanso medico|ces(?:e|es|en|an|aron|ado)|jubil\p{L}*)\b/u;
 
 /**
- * La consulta pide qué es o en qué se diferencia el tema. Cuando la persona
- * menciona otro proceso como circunstancia («la diferencia … porque me van a
- * encargar»), la pregunta sigue siendo del tema; cuando lo menciona como el
- * hecho que la motiva («durante el destaque conservo mi plaza»), manda el
- * proceso nombrado.
+ * La consulta pide qué es o en qué se diferencia el tema. El verbo tiene que
+ * regir al término: «qué significa que durante el destaque mantenga mi plaza»
+ * no pregunta por la plaza, pregunta por el destaque. Por eso el término debe
+ * aparecer a continuación del verbo, no en cualquier lugar de la frase.
  */
 const DEFINITION_REQUEST =
-  /\b(?:diferencias?|que es|que son|que significa|que significan|en que consiste|se diferencia|se diferencian|concepto de|definicion)\b/u;
+  /\b(?:que (?:es|son|significa|significan)|en que consiste|concepto de|definicion de|diferencias? (?:entre|de))[^.]{0,20}\bplazas?\b|\bplazas?\b[^.]{0,20}\b(?:que (?:es|son|significa)|en que consiste)/u;
 
 function evidenceText(
-  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
 ): string {
-  return normalizeSpanishText(`${source.documentTitle} ${source.chunkContent}`);
+  // La sección forma parte del fragmento: un cuadro de distribución de horas
+  // puede estar bajo el título «Distribución de horas» sin repetirlo en cada
+  // párrafo.
+  return normalizeSpanishText(
+    `${source.documentTitle} ${source.sectionTitle ?? ''} ${source.chunkContent}`,
+  );
 }
 
 /**
@@ -152,14 +158,20 @@ const HOURS_PROCESS_DENOMINATION =
 /** Términos que, sin contexto, también aparecen en otros trámites. */
 const HOURS_SHORT_TERM =
   /\b(?:carga horaria|carga academica|horas pedagogicas|distribucion de horas)\b/u;
+/**
+ * La distribución tiene que regir a las horas: «la carga horaria se distribuye»
+ * sí; «la jornada comprende treinta horas y se distribuye en horas pedagógicas»
+ * no. Aprobar o elaborar una jornada no es distribuirla, así que esos verbos no
+ * cuentan aquí (la denominación del cuadro sí los admite por su nombre).
+ */
 const HOURS_ASSIGNMENT_FRAME =
-  /\b(?:se asigna|se asignan|se distribuye|se distribuyen|se elabora|se elaboran|se aprueba|se aprueban|se determina|se determinan|comprende|comprenden|corresponde|corresponden)\b/u;
+  /\b(?:se asigna|se asignan|se distribuye|se distribuyen|se determinan?)\b/u;
 /** El módulo regula plazas y horas de la carrera docente, no del personal administrativo. */
 const TEACHING_SCOPE =
   /\b(?:docentes?|profesor(?:a|es)?|maestr[oa]s?|horas? de clase|pedagogic\p{L}*|institucion(?:es)? educativas?|aulas?|seccion(?:es)?|inicial|primaria|secundaria)\b/u;
 /** El aspecto de la plaza: uno de sus tres estados. */
 const PLACE_CONDITION_TERM =
-  /\bplazas?\s+(?:organicas?|eventual(?:es)?|excedent(?:e|es))\b|\b(?:organicas?|eventual(?:es)?)\s+plazas?\b/u;
+  /\bplazas?\s+(?:organicas?|eventual(?:es)?|excedent(?:e|es))\b|\b(?:organicas?|eventual(?:es)?)\s+plazas?\b|\bplazas?\s+se\s+clasifican?\s+en\b/u;
 /**
  * Una norma regula la condición de la plaza cuando clasifica las dos formas
  * —orgánica y eventual— o cuando define el término. Una mención suelta de
@@ -169,27 +181,37 @@ const PLACE_CONDITION_TERM =
  */
 const PLACE_CONDITION_PAIR =
   /\bplazas?\s+organicas?[\s\S]{0,200}\bplazas?\s+eventual(?:es)?\b|\bplazas?\s+eventual(?:es)?[\s\S]{0,200}\bplazas?\s+organicas?\b/u;
-const PLACE_DEFINITION_FRAME =
-  /\b(?:se entiende|se entienden|se define|se definen|se denominan?|se consideran?|se clasifican?|definicion|denominad[oa]s?|es aquel(?:la|los|las)?|son aquell[oa]s|se crean? por|corresponde[n]? a|tiene[n]? (?:la )?condicion de)\b|\bplazas?\s+(?:organicas?|eventual(?:es)?)\s*:/u;
-/** El clasificador se describe por lo que contiene, no por aparecer en una lista. */
+/**
+ * La definición tiene que regir al término. «Se considera que mantiene su
+ * vínculo laboral» no define la plaza; «se considera plaza excedente aquella
+ * que…» sí. Por eso el verbo va pegado al término (o a «plaza»), no suelto en
+ * el fragmento.
+ */
+const PLACE_TERM_DEFINITION =
+  /\bplazas?\s+(?:organicas?|eventual(?:es)?|excedent(?:e|es))\s*(?:,|:)?\s*(?:es|son|se consideran?|se entiende|se denominan?|se define|se crean?|tiene[n]? (?:la )?condicion de|corresponde[n]? a)\b|\bse\s+(?:entiende|denomina|define|considera)\s+(?:por\s+|como\s+)?(?:una\s+|la\s+)?plazas?\b|\bplazas?\s+(?:organicas?|eventual(?:es)?)\s*:|\bdenominad[oa]s?\s+plazas?\b|\bplazas?\s+se\s+clasifican?\s+en\b/u;
+/**
+ * El clasificador se describe por lo que contiene, no por aparecer en una
+ * lista: «cuenta con el PEI, el MOF y el clasificador de cargos» no explica el
+ * clasificador.
+ */
 const CLASSIFIER_EVIDENCE =
-  /\b(?:clasificador|clasificacion)\s+de\s+cargos?\b[\s\S]{0,240}\b(?:describe|describen|contiene|contienen|niveles?|requisitos?|grupos? ocupacionales?|funciones)\b|\b(?:describe|describen|contiene|contienen|niveles?|requisitos?|grupos? ocupacionales?)\b[\s\S]{0,240}\b(?:clasificador|clasificacion)\s+de\s+cargos?\b/u;
+  /\b(?:clasificador|clasificacion)\s+de\s+cargos?\b[\s\S]{0,300}\b(?:describe|describen|contiene|contienen|niveles?|requisitos?|grupos? ocupacionales?|funciones|ordena|ordenan|agrupa|agrupan|enumera|enumeran|define|definen)\b|\b(?:describe|describen|contiene|contienen|niveles?|requisitos?|grupos? ocupacionales?|funciones|ordena|ordenan|agrupa|agrupan|enumera|enumeran|define|definen)\b[\s\S]{0,300}\b(?:clasificador|clasificacion)\s+de\s+cargos?\b/u;
 
 /** El fragmento trata las horas del colegio, no una jornada cualquiera. */
 function isHoursDistributionEvidence(evidence: string): boolean {
   if (HOURS_PROCESS_DENOMINATION.test(evidence)) return true;
-  return (
-    HOURS_SHORT_TERM.test(evidence) &&
-    HOURS_ASSIGNMENT_FRAME.test(evidence) &&
-    TEACHING_SCOPE.test(evidence)
-  );
+  if (!HOURS_SHORT_TERM.test(evidence)) return false;
+  // El marco tiene que regir al término, en ese orden.
+  const termThenFrame =
+    /\b(?:carga horaria|carga academica|horas pedagogicas|distribucion de horas)\b[^.;]{0,60}\b(?:se asigna|se asignan|se distribuye|se distribuyen|se determinan?)\b/u;
+  return termThenFrame.test(evidence) && TEACHING_SCOPE.test(evidence);
 }
 
 /** El fragmento trata la condición de la plaza, no solo la menciona. */
 function isPlaceConditionEvidence(evidence: string): boolean {
   if (!PLACE_CONDITION_TERM.test(evidence)) return false;
   return (
-    PLACE_CONDITION_PAIR.test(evidence) || PLACE_DEFINITION_FRAME.test(evidence)
+    PLACE_CONDITION_PAIR.test(evidence) || PLACE_TERM_DEFINITION.test(evidence)
   );
 }
 
@@ -222,37 +244,64 @@ function belongsToPositionModule(source: PositionEvidenceSource): boolean {
   );
 }
 
+/** El encabezado nombra el objeto del tema sin calificarlo. */
+const OBJECT_HEADING = /\b(?:plazas?(?: docentes?)?|carga horaria)\b/u;
+
+/**
+ * Un módulo que nombra otro proceso. Si el catálogo asocia la norma a uno de
+ * ellos, el encabezado no puede reclamarla para este tema: la sección «De la
+ * plaza orgánica» de la encargatura define el término para explicar la
+ * encargatura, no para regular los cargos y las plazas. Cuando el catálogo no
+ * contradice —está vacío o la norma vive en «Ley y reglamento»— el encabezado
+ * sigue siendo la identidad disponible.
+ */
+const COMPETING_MODULE =
+  /\b(?:contratacion|desplazamientos?|remuneracion(?:es)?|licencias?|evaluacion|auxiliares?|destaque|encargatura|reasignacion|racionalizacion|ascensos?|ceses?|jubilacion|asistencia|permutas?|monitoreo)\b/u;
+
 /**
  * La titularidad del aspecto en el propio documento también identifica la
  * fuente: una norma titulada «Normas sobre plazas orgánicas y eventuales»
  * regula el tema aunque el catálogo la asocie a otro módulo (por ejemplo, «Ley
- * y reglamento»). Sin esto, la compuerta dependería solo de la catalogación.
+ * y reglamento»). No basta un término suelto en el encabezado: una sección
+ * «De la plaza orgánica» aparece en las normas de encargatura y de
+ * reasignación. Por eso el encabezado tiene que nombrar el aspecto con la
+ * fuerza con que lo nombra el cuerpo, o nombrar el objeto y estar acompañado de
+ * la definición en el texto —y el catálogo no puede atribuir la norma a otro
+ * proceso—.
  */
 function namesAspectInHeading(
   question: string,
   source: PositionEvidenceSource,
+  evidence: string,
 ): boolean {
+  const declared = source.moduleNames ?? [];
+  if (
+    declared.length &&
+    declared.every((name) => COMPETING_MODULE.test(normalizeSpanishText(name)))
+  ) {
+    return false;
+  }
   const heading = normalizeSpanishText(
     `${source.documentTitle} ${source.sectionTitle ?? ''}`,
   );
   if (isHoursDistributionQuestion(question)) {
+    if (HOURS_PROCESS_DENOMINATION.test(heading)) return true;
+    // Una sección «Distribución de horas» de una norma que efectivamente
+    // distribuye las horas del colegio en el cuerpo.
     return (
-      HOURS_PROCESS_DENOMINATION.test(heading) ||
-      /\b(?:carga horaria|horas pedagogicas|carga academica)\b/u.test(heading)
+      /\bdistribucion de horas\b/u.test(heading) &&
+      HOURS_ASSIGNMENT_FRAME.test(evidence) &&
+      TEACHING_SCOPE.test(evidence)
     );
   }
   if (isPositionConditionQuestion(question)) {
     return (
       PLACE_CONDITION_PAIR.test(heading) ||
-      /\bplazas?\s+(?:organicas?|eventual(?:es)?|excedent(?:e|es))\b/u.test(
-        heading,
-      )
+      /\bplazas?\s+(?:organicas?|eventual(?:es)?)\s*:/u.test(heading) ||
+      (OBJECT_HEADING.test(heading) && PLACE_TERM_DEFINITION.test(evidence))
     );
   }
-  return (
-    isPositionClassifierQuestion(question) &&
-    /\b(?:clasificador|clasificacion)\s+de\s+cargos?\b/u.test(heading)
-  );
+  return CLASSIFIER_SIGNAL.test(heading) || CLASSIFICATION_SIGNAL.test(heading);
 }
 
 /**
@@ -276,6 +325,7 @@ export function isDirectTeachingPositionEvidence(
       CLASSIFIER_EVIDENCE.test(evidence));
   if (!aspect) return false;
   return (
-    belongsToPositionModule(source) || namesAspectInHeading(question, source)
+    belongsToPositionModule(source) ||
+    namesAspectInHeading(question, source, evidence)
   );
 }
