@@ -217,6 +217,149 @@ describe('RagService — intención temática del chat general', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  it('responde la condición de la plaza con su norma y no con una mención del destaque', async () => {
+    const { gateway, service } = setup();
+    const positionSource = {
+      ...baseSource,
+      chunkContent:
+        'La plaza orgánica se crea por resolución de creación de la institución educativa; la plaza eventual se atiende con contrato mientras exista la necesidad de servicio.',
+      chunkId: 'position-chunk',
+      documentId: 'position-document',
+      documentTitle: 'Norma sobre plazas orgánicas y eventuales',
+      documentVersionId: 'position-version',
+      moduleIds: ['cargos'],
+      moduleNames: ['Cargos y plazas'],
+      semanticScore: 0.78,
+    };
+    const destaqueMention = {
+      ...baseSource,
+      chunkContent:
+        'El destaque se autoriza al profesor nombrado sin que pierda la plaza de origen en su institución educativa.',
+      chunkId: 'destaque-mention',
+      documentId: 'destaque-document',
+      documentTitle: 'Norma técnica del destaque docente',
+      documentVersionId: 'destaque-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.9,
+    };
+    const question = 'diferencia entre plaza organica y eventual';
+
+    gateway.search.mockResolvedValue([destaqueMention]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+
+    gateway.search.mockResolvedValue([destaqueMention, positionSource]);
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'position-chunk',
+    ]);
+
+    // Una norma del mismo módulo que solo menciona «plazas excedentes» regula la
+    // racionalización, no la diferencia entre plaza orgánica y eventual.
+    const rationalizationMention = {
+      ...positionSource,
+      chunkContent:
+        'Las plazas excedentes se determinan al cierre del proceso de matrícula y se comunican a la UGEL.',
+      chunkId: 'excedente-mention',
+      documentId: 'excedente-document',
+      documentTitle: 'Norma técnica de racionalización de plazas',
+      documentVersionId: 'excedente-version',
+      semanticScore: 0.95,
+    };
+    gateway.search.mockResolvedValue([rationalizationMention]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
+  it('no responde el cuadro de distribución de horas con la jornada de un contrato', async () => {
+    const { gateway, service } = setup();
+    const hoursSource = {
+      ...baseSource,
+      chunkContent:
+        'El cuadro de distribución de horas de clase se elabora antes del inicio del año escolar y lo aprueba la dirección de la institución educativa.',
+      chunkId: 'hours-chunk',
+      documentId: 'hours-document',
+      documentTitle: 'Orientaciones para el cuadro de distribución de horas',
+      documentVersionId: 'hours-version',
+      moduleIds: ['cargos'],
+      moduleNames: ['Cargos y plazas'],
+      semanticScore: 0.76,
+    };
+    const contractHours = {
+      ...baseSource,
+      chunkContent:
+        'El profesor contratado percibe una remuneración mensual de acuerdo con la jornada laboral de treinta horas establecida para la modalidad.',
+      chunkId: 'contract-hours',
+      documentId: 'contract-document',
+      documentTitle: 'Norma del proceso de contratación docente',
+      documentVersionId: 'contract-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.88,
+    };
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    gateway.search.mockResolvedValue([contractHours]);
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+
+    gateway.search.mockResolvedValue([contractHours, hoursSource]);
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'hours-chunk',
+    ]);
+  });
+
+  it('una pregunta de destaque conserva su respuesta aunque nombre la plaza orgánica', async () => {
+    const { gateway, service } = setup();
+    const destaqueSource = {
+      ...baseSource,
+      chunkContent:
+        'El destaque se autoriza al profesor nombrado para desempeñar funciones en otra institución educativa; durante el destaque conserva su plaza orgánica de origen.',
+      chunkId: 'destaque-chunk',
+      documentId: 'destaque-document',
+      documentTitle: 'Norma técnica del destaque docente',
+      documentVersionId: 'destaque-version',
+      moduleIds: ['contratacion'],
+      moduleNames: ['Contratación y desplazamientos'],
+      semanticScore: 0.85,
+    };
+    gateway.search.mockResolvedValue([destaqueSource]);
+    const question = 'durante el destaque sigo ocupando mi plaza organica';
+
+    // El proceso nombrado manda: sin intención de «Cargos y plazas», la
+    // respuesta sigue siendo la del destaque y no se convierte en ausencia.
+    expect(detectTopicIntent(question)).toBeNull();
+    const result = await service.retrieve(question, null, [], {
+      topicIntent: detectTopicIntent(question),
+    });
+
+    expect(result.kind).toBe('evidence');
+    if (result.kind !== 'evidence') return;
+    expect(result.sources.map((source) => source.chunkId)).toEqual([
+      'destaque-chunk',
+    ]);
+  });
+
   it('sin evidencia del ascenso no ofrece los módulos que solo comparten palabras', async () => {
     const { gateway, service } = setup();
     gateway.search.mockResolvedValue([ruralDecoy]);

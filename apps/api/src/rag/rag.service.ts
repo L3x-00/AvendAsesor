@@ -100,6 +100,10 @@ import {
   isDirectRationalizationEvidence,
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
+import {
+  isDirectTeachingPositionEvidence,
+  teachingPositionEvidenceQueries,
+} from './teaching-position-retrieval';
 import { isTopicIntentEvidence, type TopicIntent } from './topic-intent';
 import { temporaryPlacementQueries } from './temporary-placement-retrieval';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
@@ -1869,6 +1873,7 @@ export class RagService {
             ...reassignmentEvidenceQueries(question),
             ...temporaryPlacementQueries(question),
             ...rationalizationEvidenceQueries(question),
+            ...teachingPositionEvidenceQueries(question),
             ...legalEvidenceQueries(
               question,
               Boolean(options.legalModule || options.legalCrossModule),
@@ -2148,6 +2153,7 @@ export class RagService {
         ...auxiliaryEvidenceQueries(question),
         ...reassignmentEvidenceQueries(question),
         ...rationalizationEvidenceQueries(question),
+        ...teachingPositionEvidenceQueries(question),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);
@@ -2185,7 +2191,8 @@ export class RagService {
                   isDirectAuxiliaryEvidence(question, candidate) ||
                   isDirectRemunerationEvidence(question, candidate) ||
                   isDirectReassignmentEvidence(question, candidate) ||
-                  isDirectRationalizationEvidence(question, candidate)),
+                  isDirectRationalizationEvidence(question, candidate) ||
+                  isDirectTeachingPositionEvidence(question, candidate)),
             ),
         );
       }
