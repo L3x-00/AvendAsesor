@@ -1549,9 +1549,9 @@ describe('contexto de proceso del hilo', () => {
         // El relativo del propio no cambia el sujeto: la concordancia sigue
         // siendo plural.
         'El descanso médico, que se otorga por siete días, y la licencia por paternidad se acreditan con el mismo certificado.',
-        // El pretérito plural concuerda con el conjunto, y el hermano en plural
-        // concuerda con su verbo plural: ninguna de las dos formas es una
-        // cláusula propia del hermano.
+        // El pretérito plural y el hermano en plural quedan admitidos por la
+        // misma rama: el nombre del propio llega hasta el conector, así que los
+        // dos nombres se coordinan y la cláusula no es del hermano.
         'El descanso médico y la licencia por paternidad se otorgaron por diez días calendario.',
         'El descanso médico y las licencias por paternidad se otorgan por diez días calendario.',
       ]) {
@@ -1620,6 +1620,45 @@ describe('contexto de proceso del hilo', () => {
         belongsToAdmittedProcedure(destaque, {
           chunkContent:
             'El plazo para el destaque es de quince días hábiles y la permuta se solicita ante la UGEL de destino.',
+          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(false);
+    });
+
+    it('acusa cuando el predicado abre el tramo y el propio queda dentro', () => {
+      // La coordinación de nombres admite el fragmento cuando los dos nombres son
+      // el sujeto o el complemento de un núcleo compartido. Si el tramo abre con
+      // el predicado —«se fija el plazo del destaque»—, el nombre del propio ya
+      // está dentro de ese predicado y la cláusula que sigue es del hermano.
+      for (const chunkContent of [
+        'Se fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Se establece el plazo del destaque y la permuta se solicita con acuerdo entre las partes.',
+        'Fija la UGEL el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+      ])
+        expect(
+          belongsToAdmittedProcedure(destaque, {
+            chunkContent,
+            documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(false);
+      // El lead-in con coma no impide reconocer el arranque nominal.
+      expect(
+        belongsToAdmittedProcedure(destaque, {
+          chunkContent:
+            'Según la norma, el plazo para el destaque y la permuta es de quince días hábiles.',
+          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(true);
+      // La palabra que abre el complemento del hermano —«la permuta joven del
+      // concurso»— termina como un verbo plural pero no concuerda con el
+      // conjunto: no desactiva la acusación.
+      expect(
+        belongsToAdmittedProcedure(destaque, {
+          chunkContent:
+            'El plazo del destaque es de quince días hábiles y la permuta joven del concurso se resuelve en la UGEL.',
           documentTitle: 'Norma técnica de reasignación, permuta y destaque',
           sectionTitle: 'Del plazo',
         }),

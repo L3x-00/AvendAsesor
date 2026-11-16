@@ -598,8 +598,40 @@ const SIBLING_COORDINATED_SUBJECT =
  * hermano —«la licencia por paternidad se otorga»—. Se mide la terminación y no
  * un inventario de verbos: en negativo, una lista cerrada convierte cualquier
  * predicado que no esté en ella en un sujeto conjunto.
+ *
+ * Los nombres y adjetivos que terminan igual que un verbo plural —«la permuta
+ * joven del concurso», «el examen de expediente»— no concuerdan con el conjunto y
+ * se descartan: sin esto, la palabra que abre el complemento del hermano
+ * desactivaba la acusación.
  */
-const PLURAL_VERB = /^\s*(?:se\s+)?(?:\p{L}+(?:an|en|án|én)\b|son\b)/u;
+const NON_VERB_PLURAL_LIKE =
+  'joven(?:es)?|examen(?:es)?|orden|margen(?:es)?|volumen(?:es)?|origen(?:es)?|imagen(?:es)?|crimen(?:es)?|dictamen(?:es)?|resumen|regimen(?:es)?|certamen(?:es)?';
+
+const PLURAL_VERB = new RegExp(
+  `^\\s*(?:se\\s+)?(?:son\\b|(?!(?:${NON_VERB_PLURAL_LIKE})\\b)\\p{L}+(?:an|en|án|én)\\b)`,
+  'u',
+);
+
+/**
+ * El tramo abre con un sintagma nominal —«el descanso médico», «el plazo para el
+ * destaque», «Asimismo, el plazo del destaque»—, que es la única forma en que el
+ * nombre del propio puede regir al hermano desde el sujeto o desde el complemento
+ * de un núcleo compartido. Si abre con un predicado —«se fija el plazo del
+ * destaque y la permuta se solicita»—, el nombre del propio ya está dentro de ese
+ * predicado y el hermano abre su propia oración.
+ *
+ * Es una señal positiva: cuando no se reconoce el arranque nominal, el fragmento
+ * no se admite por esta vía y deciden las demás compuertas, así que la falla cae
+ * del lado seguro.
+ */
+const NOMINAL_OPENING =
+  /^(?:(?:asimismo|ademas|tambien|igualmente|ahora bien|sin embargo|por ello|por su parte|en ese sentido|en tal sentido|finalmente|luego|entonces|del mismo modo|de igual manera)[,;:]?\s+)*(?:el|la|los|las|un|una|unos|unas|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|aquellos|aquellas|su|sus|mi|mis|nuestro|nuestra|nuestros|nuestras|del|al)\b/u;
+
+/** El tramo abre con un sintagma nominal; se descarta el lead-in con coma. */
+function opensWithNominalPhrase(prefix: string): boolean {
+  const segment = prefix.slice(prefix.lastIndexOf(',') + 1).trim();
+  return NOMINAL_OPENING.test(segment);
+}
 
 /**
  * El hermano en plural —«las permutas», «las licencias por paternidad»—: el verbo
@@ -644,16 +676,19 @@ function ownProcessEnd(intent: TopicIntent, text: string): number | null {
  * Lo que decide no es un inventario de verbos sino la forma del tramo que va del
  * inicio de la oración al conector:
  *
- * - El nombre del propio llega hasta el conector —«el descanso médico y la
- *   licencia por paternidad», «el plazo para el destaque y la permuta», «el plazo
- *   del destaque y la permuta»—: los dos nombres se coordinan y el verbo que
- *   sigue concuerda con el conjunto en plural o con el núcleo del sintagma en
- *   singular. En ambos casos la cláusula enuncia el régimen compartido.
+ * - El nombre del propio llega hasta el conector y el tramo abre con un sintagma
+ *   nominal —«el descanso médico y la licencia por paternidad», «el plazo para el
+ *   destaque y la permuta», «el plazo del destaque y la permuta»—: los dos
+ *   nombres se coordinan y el verbo que sigue concuerda con el conjunto en plural
+ *   o con el núcleo del sintagma en singular. En ambos casos la cláusula enuncia
+ *   el régimen compartido.
  * - Entre el nombre del propio y el conector hay un predicado —«el descanso
  *   médico se acredita con el CITT y la licencia por paternidad», «el descanso
  *   médico cubre siete días y la licencia por paternidad», «el plazo para el
  *   destaque es de quince días y la permuta»—: el propio ya enunció lo suyo y el
- *   hermano abre su propia cláusula.
+ *   hermano abre su propia cláusula. Lo mismo cuando el tramo abre con el
+ *   predicado y el nombre del propio queda dentro de él —«se fija el plazo del
+ *   destaque y la permuta se solicita con acuerdo de partes»—.
  * - El tramo no nombra el proceso consultado —«según el reglamento, la licencia
  *   por paternidad se otorga»—: el sujeto es solo el hermano.
  *
@@ -673,7 +708,8 @@ function developsSiblingClause(
   const prefix = before.slice(0, coordination.index).trim();
   const own = ownProcessEnd(intent, prefix);
   if (own === null) return true;
-  if (prefix.slice(own).trim() === '') return false;
+  if (prefix.slice(own).trim() === '' && opensWithNominalPhrase(prefix))
+    return false;
   if (PLURAL_SIBLING.test(sibling)) return true;
   return !PLURAL_VERB.test(after);
 }
