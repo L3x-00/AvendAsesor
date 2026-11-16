@@ -593,11 +593,12 @@ const SIBLING_COORDINATED_SUBJECT =
 
 /**
  * Concordancia del verbo que sigue al hermano en la cláusula coordinada: en
- * tercera persona del plural concuerda con los dos nombres —«el descanso médico y
- * la licencia por paternidad se acreditan»—, y en singular concuerda solo con el
- * hermano —«la licencia por paternidad se otorga»—. Se mide la terminación y no
- * un inventario de verbos: en negativo, una lista cerrada convierte cualquier
- * predicado que no esté en ella en un sujeto conjunto.
+ * tercera persona del plural —presente, pretérito o futuro— concuerda con los dos
+ * nombres —«el descanso médico y la licencia por paternidad se acreditan», «… se
+ * otorgaron»—, y en singular concuerda solo con el hermano —«la licencia por
+ * paternidad se otorga»—. Se mide la terminación y no un inventario de verbos: en
+ * negativo, una lista cerrada convierte cualquier predicado que no esté en ella en
+ * un sujeto conjunto.
  *
  * Los nombres y adjetivos que terminan igual que un verbo plural —«la permuta
  * joven del concurso», «el examen de expediente»— no concuerdan con el conjunto y
@@ -605,32 +606,113 @@ const SIBLING_COORDINATED_SUBJECT =
  * desactivaba la acusación.
  */
 const NON_VERB_PLURAL_LIKE =
-  'joven(?:es)?|examen(?:es)?|orden|margen(?:es)?|volumen(?:es)?|origen(?:es)?|imagen(?:es)?|crimen(?:es)?|dictamen(?:es)?|resumen|regimen(?:es)?|certamen(?:es)?';
+  'joven(?:es)?|examen(?:es)?|orden|margen(?:es)?|volumen(?:es)?|origen(?:es)?|imagen(?:es)?|crimen(?:es)?|dictamen(?:es)?|regimen(?:es)?|certamen(?:es)?';
 
 const PLURAL_VERB = new RegExp(
-  `^\\s*(?:se\\s+)?(?:son\\b|(?!(?:${NON_VERB_PLURAL_LIKE})\\b)\\p{L}+(?:an|en|án|én)\\b)`,
+  `^\\s*(?:se\\s+)?(?:son\\b|(?!(?:${NON_VERB_PLURAL_LIKE})\\b)\\p{L}+(?:an|en|án|én|aron|ieron|eron)\\b)`,
   'u',
 );
 
 /**
- * El tramo abre con un sintagma nominal —«el descanso médico», «el plazo para el
- * destaque», «Asimismo, el plazo del destaque»—, que es la única forma en que el
- * nombre del propio puede regir al hermano desde el sujeto o desde el complemento
- * de un núcleo compartido. Si abre con un predicado —«se fija el plazo del
- * destaque y la permuta se solicita»—, el nombre del propio ya está dentro de ese
- * predicado y el hermano abre su propia oración.
- *
- * Es una señal positiva: cuando no se reconoce el arranque nominal, el fragmento
- * no se admite por esta vía y deciden las demás compuertas, así que la falla cae
- * del lado seguro.
+ * Determinantes que pueden encabezar el sintagma que rige al hermano: artículo,
+ * demostrativo, posesivo, cuantificador y el anafórico «dicho». Las contracciones
+ * «del» y «al» también abren el sintagma —«del plazo del destaque»— y, cuando ya
+ * está abierto, son su complemento y no un sujeto nuevo.
  */
-const NOMINAL_OPENING =
-  /^(?:(?:asimismo|ademas|tambien|igualmente|ahora bien|sin embargo|por ello|por su parte|en ese sentido|en tal sentido|finalmente|luego|entonces|del mismo modo|de igual manera)[,;:]?\s+)*(?:el|la|los|las|un|una|unos|unas|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|aquellos|aquellas|su|sus|mi|mis|nuestro|nuestra|nuestros|nuestras|del|al)\b/u;
+const DETERMINER =
+  /^(?:el|la|los|las|un|una|unos|unas|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|aquellos|aquellas|mi|mis|tu|tus|su|sus|nuestro|nuestra|nuestros|nuestras|dicho|dicha|dichos|dichas|todo|toda|todos|todas|cada|otro|otra|otros|otras|ambos|ambas|cualquier|ningun|ninguna|algun|alguna|algunos|algunas|del|al)\b/u;
 
-/** El tramo abre con un sintagma nominal; se descarta el lead-in con coma. */
-function opensWithNominalPhrase(prefix: string): boolean {
-  const segment = prefix.slice(prefix.lastIndexOf(',') + 1).trim();
-  return NOMINAL_OPENING.test(segment);
+/** Partículas que enlazan los sintagmas de un mismo tramo nominal. */
+const NOMINAL_LINK =
+  /^(?:,|;|a|al|ante|bajo|con|contra|de|del|desde|durante|en|entre|hacia|hasta|para|por|segun|sin|sobre|tras)$/u;
+
+/**
+ * Marcas que pueden preceder al primer sintagma nominal sin ser su sujeto:
+ * adverbios de enlace, preposiciones de marco y las piezas de las locuciones
+ * —«Asimismo, el plazo», «Según la norma, el plazo», «Conforme a la norma, el
+ * plazo», «De acuerdo con la norma, el plazo»—. Cualquier otra palabra delante del
+ * primer determinante se lee como predicado —«determina la UGEL el plazo»— y el
+ * fragmento se acusa.
+ */
+const NOMINAL_FRAME =
+  /^(?:,|;|asimismo|ademas|tambien|igualmente|finalmente|luego|entonces|ahora|bien|sin|embargo|por|ello|su|parte|en|ese|tal|sentido|del|mismo|modo|de|igual|manera|conforme|segun|durante|respecto|partir|acuerdo|relacion|a|ante|bajo|con|contra|desde|entre|hacia|hasta|para|pese|salvo|sobre|tras)$/u;
+
+/**
+ * Verbos de anuncio que abren una subordinada enunciativa —«cabe señalar que»,
+ * «es preciso indicar que», «se precisa», «se establece»—: el trámite coordinado
+ * vive en la subordinada y el anuncio no es su sujeto.
+ */
+const ANNOUNCING_FRAME =
+  /^(?:cabe|es|se|preciso|precisa|necesario|necesaria|importante|indicar|indica|senalar|senala|establece|establecer|dispone|disponer|determina|determinar|tener|tenerse|presente|cuenta|considerar|recordar|mencionar|advertir|agregar|anotar)$/u;
+
+/**
+ * El tramo que precede al nombre del propio es un sintagma nominal y no un
+ * predicado: solo así los dos nombres comparten el sujeto.
+ *
+ * Se descarta primero el marco discursivo —«cabe señalar que», «se precisa que»,
+ * «se establece que»—, porque la oración que decide es la subordinada. Después se
+ * mide el sintagma: los determinantes se enlazan con preposiciones o comas —«el
+ * plazo para el destaque», «Según la norma, el plazo del destaque»—, y un
+ * determinante que aparece tras una palabra sin enlace abre otro sintagma, es
+ * decir, hay un predicado en medio —«la UGEL fija el plazo del destaque», «el
+ * artículo 12 fija el plazo del destaque»—. La marca de verbo conjugado cierra el
+ * caso en que el predicado encabeza el tramo —«se fija, según la norma, el plazo
+ * del destaque»—.
+ */
+function sharesSubjectWithSibling(beforeOwn: string): boolean {
+  const segment = afterLastFrame(beforeOwn);
+  if (segment === '') return true;
+  if (CONJUGATED_VERB.test(segment)) return false;
+  return linkedNominalChain(segment);
+}
+
+/**
+ * El marco discursivo se descarta solo cuando lo que lo precede son sus propias
+ * marcas —«cabe señalar que», «es preciso indicar que», «se establece que»—. Un
+ * relativo —«el plazo que fija la UGEL»— no es marco: su antecedente rige al
+ * sintagma y el tramo se mide completo.
+ */
+function afterLastFrame(text: string): string {
+  const frame = /\b(?:que|como|si)\b/gu;
+  let start = 0;
+  for (let match = frame.exec(text); match; match = frame.exec(text)) {
+    const leading = nominalTokens(text.slice(0, match.index));
+    if (leading.every(isFrameToken)) start = match.index + match[0].length;
+  }
+  return text.slice(start).trim();
+}
+
+function isFrameToken(token: string): boolean {
+  return NOMINAL_FRAME.test(token) || ANNOUNCING_FRAME.test(token);
+}
+
+function nominalTokens(segment: string): string[] {
+  return segment
+    .split(/(\s+|,|;)/u)
+    .filter((token) => token !== '' && !/^\s+$/u.test(token));
+}
+
+/**
+ * El tramo es una cadena nominal: abre con un determinante y cada determinante
+ * posterior está enlazado con el anterior. Devuelve `false` —se acusa el
+ * fragmento— cuando el tramo no abre con un sintagma nominal reconocible.
+ */
+function linkedNominalChain(segment: string): boolean {
+  const tokens = nominalTokens(segment);
+  let opened = false;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!DETERMINER.test(token)) continue;
+    if (!opened) {
+      const leading = tokens.slice(0, index);
+      if (!leading.every((each) => NOMINAL_FRAME.test(each))) return false;
+      opened = true;
+      continue;
+    }
+    if (/^(?:del|al)$/u.test(token)) continue;
+    if (!NOMINAL_LINK.test(tokens[index - 1])) return false;
+  }
+  return opened;
 }
 
 /**
@@ -656,19 +738,6 @@ function ownProcessPattern(intent: TopicIntent): RegExp {
 }
 
 /**
- * Posición en la que termina la primera mención del proceso consultado, o `null`
- * si el tramo no lo nombra. Sirve para saber si el nombre llega hasta el conector
- * o si después de él hay un predicado: la primera mención abre el sintagma del
- * trámite, y una repetición posterior —el propio trámite nombrado dentro del
- * complemento del predicado, como el «CITT» en «el descanso médico se acredita
- * con el CITT»— no lo convierte en coordinación.
- */
-function ownProcessEnd(intent: TopicIntent, text: string): number | null {
-  const match = ownProcessPattern(intent).exec(text);
-  return match ? match.index + match[0].length : null;
-}
-
-/**
  * El hermano es el sujeto de su propia cláusula coordinada —«… y la licencia por
  * paternidad se otorga por diez días»—, no de un sujeto conjunto con el proceso
  * consultado. Devuelve `false` cuando los dos trámites comparten el sujeto.
@@ -676,19 +745,22 @@ function ownProcessEnd(intent: TopicIntent, text: string): number | null {
  * Lo que decide no es un inventario de verbos sino la forma del tramo que va del
  * inicio de la oración al conector:
  *
- * - El nombre del propio llega hasta el conector y el tramo abre con un sintagma
- *   nominal —«el descanso médico y la licencia por paternidad», «el plazo para el
- *   destaque y la permuta», «el plazo del destaque y la permuta»—: los dos
- *   nombres se coordinan y el verbo que sigue concuerda con el conjunto en plural
- *   o con el núcleo del sintagma en singular. En ambos casos la cláusula enuncia
- *   el régimen compartido.
+ * - El nombre del propio llega hasta el conector y el tramo es una cadena nominal
+ *   —«el descanso médico y la licencia por paternidad», «el plazo para el destaque
+ *   y la permuta», «el plazo del destaque y la permuta», «cabe señalar que el
+ *   plazo del destaque y la permuta», «dicho plazo del destaque y la permuta»—:
+ *   los dos nombres se coordinan y el verbo que sigue concuerda con el conjunto en
+ *   plural o con el núcleo del sintagma en singular. En ambos casos la cláusula
+ *   enuncia el régimen compartido.
  * - Entre el nombre del propio y el conector hay un predicado —«el descanso
  *   médico se acredita con el CITT y la licencia por paternidad», «el descanso
  *   médico cubre siete días y la licencia por paternidad», «el plazo para el
  *   destaque es de quince días y la permuta»—: el propio ya enunció lo suyo y el
- *   hermano abre su propia cláusula. Lo mismo cuando el tramo abre con el
- *   predicado y el nombre del propio queda dentro de él —«se fija el plazo del
- *   destaque y la permuta se solicita con acuerdo de partes»—.
+ *   hermano abre su propia cláusula.
+ * - El tramo abre con el predicado, aunque el nombre del propio quede dentro de
+ *   él —«se fija el plazo del destaque y la permuta se solicita», «la UGEL fija el
+ *   plazo del destaque y la permuta se solicita»—: la cláusula que sigue es del
+ *   hermano.
  * - El tramo no nombra el proceso consultado —«según el reglamento, la licencia
  *   por paternidad se otorga»—: el sujeto es solo el hermano.
  *
@@ -706,9 +778,13 @@ function developsSiblingClause(
   const coordination = SIBLING_COORDINATED_SUBJECT.exec(before);
   if (!coordination) return false;
   const prefix = before.slice(0, coordination.index).trim();
-  const own = ownProcessEnd(intent, prefix);
-  if (own === null) return true;
-  if (prefix.slice(own).trim() === '' && opensWithNominalPhrase(prefix))
+  const own = ownProcessPattern(intent).exec(prefix);
+  if (!own) return true;
+  const ownEnd = own.index + own[0].length;
+  if (
+    prefix.slice(ownEnd).trim() === '' &&
+    sharesSubjectWithSibling(prefix.slice(0, own.index))
+  )
     return false;
   if (PLURAL_SIBLING.test(sibling)) return true;
   return !PLURAL_VERB.test(after);

@@ -646,6 +646,49 @@ describe('RagService - contexto de proceso del hilo', () => {
     });
   });
 
+  it('no entrega el plazo del hermano cuando el sujeto y su verbo abren el tramo', async () => {
+    const { service, gateway } = buildSearchable();
+    // «La UGEL fija el plazo del destaque»: el nombre del propio llega hasta el
+    // conector, pero no comparte sujeto con la permuta, porque antes del
+    // sintagma hay un sujeto y su predicado. Con solo mirar el arranque nominal
+    // el fragmento se entregaba con citas válidas y su puntaje mayor (0.86)
+    // desplazaba al plazo compartido.
+    const fuga = {
+      ...plazoChunk,
+      chunkContent:
+        'La UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+      chunkId: 'plazo-ugel',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'Del plazo',
+      semanticScore: 0.86,
+    };
+    const compartido = {
+      ...fuga,
+      chunkContent:
+        'El plazo para el destaque y la permuta es de quince días hábiles contados desde la publicación del cronograma.',
+      chunkId: 'plazo-compartido',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(() =>
+      Promise.resolve([fuga, compartido]),
+    );
+
+    const result = await service.retrieve(
+      'que plazo tiene el destaque docente',
+      null,
+      [],
+      { topicIntent: destaqueIntent },
+    );
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('plazo-compartido');
+      expect(ids).not.toContain('plazo-ugel');
+    }
+  });
+
   it('entrega el anexo de la versión admitida aunque no nombre el trámite', async () => {
     const { service, gateway } = buildSearchable();
     // El cuadro de plazos de la norma conjunta no repite «destaque» ni proviene

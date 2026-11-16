@@ -1540,8 +1540,9 @@ describe('contexto de proceso del hilo', () => {
       // de la forma en que lo nombra: un lead-in, un complemento o el participio
       // del destaque dejan la cláusula tratando los dos trámites. El criterio
       // mira el tramo que va del inicio de la oración al conector: si el nombre
-      // del propio llega hasta el conector, los nombres se coordinan y el verbo
-      // concuerda con el conjunto o con el núcleo del sintagma.
+      // del propio llega hasta el conector y el tramo es una cadena nominal, los
+      // nombres se coordinan y el verbo concuerda con el conjunto o con el núcleo
+      // del sintagma.
       const licencias = 'Norma técnica de licencias, permisos y vacaciones';
       for (const chunkContent of [
         'Asimismo, el descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
@@ -1554,6 +1555,13 @@ describe('contexto de proceso del hilo', () => {
         // dos nombres se coordinan y la cláusula no es del hermano.
         'El descanso médico y la licencia por paternidad se otorgaron por diez días calendario.',
         'El descanso médico y las licencias por paternidad se otorgan por diez días calendario.',
+        // El relativo del propio con pretérito plural concuerda igual con el
+        // conjunto: la cláusula sigue siendo de los dos trámites.
+        'El descanso médico, que se otorga por siete días, y la licencia por paternidad se otorgaron por diez días calendario.',
+        // El tramo puede abrir con el propio trámite: no hay nada antes de su
+        // nombre y los dos siguen compartiendo el sujeto de la cláusula.
+        'Descanso médico y la licencia por paternidad se otorgan por diez días calendario.',
+        'Descanso médico y la licencia por paternidad se acreditan con el mismo certificado.',
       ]) {
         expect(
           belongsToAdmittedProcedure(intent('necesito descanso medico'), {
@@ -1586,6 +1594,15 @@ describe('contexto de proceso del hilo', () => {
         'El plazo del destaque y la permuta es de quince días hábiles.',
         'El plazo del destaque y la permuta se fijaron por la UGEL de destino.',
         'El plazo del destaque y las permutas se fijan por la UGEL de destino.',
+        // El marco discursivo, el anafórico y el cuantificador no son un
+        // predicado: el sintagma que rige al hermano empieza después de ellos.
+        'Cabe señalar que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Es preciso indicar que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Se precisa que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Se establece que el plazo del destaque y la permuta es de quince días hábiles.',
+        'Dicho plazo del destaque y la permuta es de quince días hábiles.',
+        'Todo plazo del destaque y la permuta se fija por la UGEL de destino.',
+        'Conforme a la norma, el plazo del destaque y la permuta es de quince días hábiles.',
       ]) {
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1629,12 +1646,38 @@ describe('contexto de proceso del hilo', () => {
     it('acusa cuando el predicado abre el tramo y el propio queda dentro', () => {
       // La coordinación de nombres admite el fragmento cuando los dos nombres son
       // el sujeto o el complemento de un núcleo compartido. Si el tramo abre con
-      // el predicado —«se fija el plazo del destaque»—, el nombre del propio ya
-      // está dentro de ese predicado y la cláusula que sigue es del hermano.
+      // el predicado —«se fija el plazo del destaque»—, o si entre el inicio de la
+      // oración y el nombre del propio hay un sujeto y su verbo —«la UGEL fija el
+      // plazo del destaque»—, el nombre del propio ya está dentro de ese predicado
+      // y la cláusula que sigue es del hermano.
       for (const chunkContent of [
         'Se fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
         'Se establece el plazo del destaque y la permuta se solicita con acuerdo entre las partes.',
         'Fija la UGEL el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'La UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'El artículo 12 fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // El verbo no está en el inventario de marcas y aun así hay un sujeto y
+        // su predicado antes del sintagma del trámite.
+        'La UGEL determina el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // Sin sujeto expreso, el verbo de anuncio antes del sintagma sigue siendo
+        // predicado: el tramo no abre con el sintagma nominal.
+        'Se determina el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // El verbo del predicado no está en el inventario de marcas: el tramo
+        // tampoco abre con el sintagma nominal.
+        'Determina el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Se fija, según la norma, el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        'Se fija, luego, el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // El determinante enlazado después del predicado no lo vuelve nominal: la
+        // cadena se corta con la marca de verbo conjugado del tramo.
+        'El plazo se fija con la norma del destaque y la permuta se solicita con acuerdo de partes.',
+        // El verbo de anuncio no protege al predicado que lo sigue: la subordinada
+        // vuelve a medirse y el sujeto con su verbo siguen dentro del tramo.
+        'Se establece que la UGEL fija el plazo del destaque y la permuta se solicita con acuerdo de partes.',
+        // El relativo no es un marco discursivo: el tramo se mide completo y el
+        // predicado del relativo deja el nombre del propio dentro de él. Se acusa
+        // del lado seguro, porque la oración admite las dos lecturas.
+        'El plazo que la UGEL fija para el destaque y la permuta es de quince días hábiles.',
       ])
         expect(
           belongsToAdmittedProcedure(destaque, {
@@ -1663,6 +1706,20 @@ describe('contexto de proceso del hilo', () => {
           sectionTitle: 'Del plazo',
         }),
       ).toBe(false);
+    });
+
+    it('admite la concordancia plural cuando la palabra parece un nombre', () => {
+      // «Resumen» termina como un verbo plural y concuerda con los dos nombres:
+      // el fragmento trata los dos trámites y no se pierde por parecer un nombre
+      // como «joven» o «examen», que sí abren el complemento del hermano.
+      expect(
+        belongsToAdmittedProcedure(intent('necesito descanso medico'), {
+          chunkContent:
+            'El descanso médico, que se otorga por siete días, y la licencia por paternidad resumen los requisitos.',
+          documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          sectionTitle: 'Del plazo',
+        }),
+      ).toBe(true);
     });
 
     it('admite la licencia por enfermedad del propio docente', () => {
