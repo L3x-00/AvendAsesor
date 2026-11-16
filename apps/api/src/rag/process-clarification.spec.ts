@@ -109,6 +109,61 @@ describe('causalClarificationFor', () => {
     ).toBeNull();
   });
 
+  it('no pregunta cuando la consulta pide la norma del proceso', () => {
+    // «¿Cuál es la norma técnica de la reasignación?» se responde con la norma
+    // que el corpus identifica; pedir la causal dejaría sin contestar la
+    // identidad pedida.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica para la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
+    expect(
+      causalClarificationFor('¿Qué norma regula la reasignación docente?', [
+        SALUD,
+      ]),
+    ).toBeNull();
+    expect(
+      causalClarificationFor('¿Cuál es la base legal de la reasignación?', [
+        SALUD,
+      ]),
+    ).toBeNull();
+  });
+
+  it('conserva la aclaración cuando la norma solo se menciona como fuente', () => {
+    // «Qué requisitos pide la norma» no pregunta por la identidad de la norma:
+    // sigue dependiendo de la causal.
+    expect(
+      causalClarificationFor(
+        '¿Qué requisitos pide la norma para la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).not.toBeNull();
+    expect(
+      causalClarificationFor('¿Qué plazo fija la norma para la reasignación?', [
+        SALUD,
+        EMERGENCIA,
+      ]),
+    ).not.toBeNull();
+    // «Procedimiento» forma parte del nombre de la norma: preguntar por la
+    // norma del procedimiento sigue siendo preguntar cuál es la norma.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica del procedimiento de reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
+    // Las etapas son parte del nombre de la norma, no un dato que cambie con la
+    // causal: la identidad de la norma se responde con la norma.
+    expect(
+      causalClarificationFor(
+        '¿Cuál es la norma técnica de las etapas de la reasignación?',
+        [SALUD, EMERGENCIA],
+      ),
+    ).toBeNull();
+  });
+
   it('conserva la aclaración para un pedido de requisitos sin causal', () => {
     expect(
       causalClarificationFor('¿Qué debo solicitar para la reasignación?', [

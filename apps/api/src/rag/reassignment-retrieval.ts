@@ -46,15 +46,30 @@ export function isExclusiveExchangeSectionForReassignment(
     )
   )
     return false;
+  return isExclusiveExchangeSection(source);
+}
+
+const EXCLUSIVE_EXCHANGE_HEADING =
+  /^disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+const EXCLUSIVE_EXCHANGE_HEADING_AFTER_PAGE =
+  /^pagina\s+\d+\s+de\s+\d+\s+disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+
+/**
+ * La sección del fragmento está dedicada solo a la permuta. No depende de la
+ * pregunta: sirve también cuando el proceso se heredó del hilo y el turno
+ * actual no repite «reasignación».
+ */
+export function isExclusiveExchangeSection(
+  source: Pick<RetrievedChunk, 'chunkContent'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
   const heading = normalizeSpanishText(source.sectionTitle ?? '');
   const content = normalizeSpanishText(source.chunkContent);
-  const exclusiveHeading =
-    /^disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
-  const headingAfterPageLabel =
-    /^pagina\s+\d+\s+de\s+\d+\s+disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
   return (
-    exclusiveHeading.test(heading) &&
-    (exclusiveHeading.test(content) || headingAfterPageLabel.test(content)) &&
+    EXCLUSIVE_EXCHANGE_HEADING.test(heading) &&
+    (EXCLUSIVE_EXCHANGE_HEADING.test(content) ||
+      EXCLUSIVE_EXCHANGE_HEADING_AFTER_PAGE.test(content)) &&
     !/\bdisposiciones\s+especificas\s+de\s+la\s+reasignacion\b/u.test(content)
   );
 }
@@ -175,6 +190,55 @@ export function isReassignmentCausalEvidence(
 }
 
 /**
+ * El texto presenta la reasignación como el trámite que regula, no como una
+ * mención incidental. Muchos títulos del corpus son solo la identidad de la
+ * norma («RSG N.° 326-2017-MINEDU»), así que la ausencia de la palabra en el
+ * título no impide reconocer un fragmento que trata el proceso.
+ */
+const REASSIGNMENT_PROCESS_FRAMING =
+  /\b(?:proceso|procedimiento|solicitud|tramite|norma tecnica|etapas?|cronograma|causales?|requisitos|plazas?)\b[\s\S]{0,60}\breasignacion(?:es)?\b|\breasignacion(?:es)?\b[\s\S]{0,60}\b(?:docentes?|profesor(?:es)?|proceso|procedimiento|solicitud|etapas?|causales?|requisitos|norma tecnica|plazas?)\b/u;
+
+/**
+ * El fragmento trata el régimen de auxiliares y no el docente. Se compara el
+ * régimen en el propio texto: un título que es solo la identidad de la norma
+ * («RSG N.° 326-2017-MINEDU») no dice a quién rige, así que la palabra
+ * «auxiliares» en el cuerpo es la que decide. Lo usan también los procesos que
+ * ambos regímenes comparten (reasignación, licencias), en los dos sentidos.
+ *
+ * Se exige la población del proceso («auxiliares de educación»), no la palabra
+ * suelta: «los auxiliares de la UGEL» o «los auxiliares administrativos» son
+ * funciones de oficina que aparecen en normas de cualquier régimen. Un
+ * fragmento mixto se atribuye al régimen que nombra primero: «requisitos de
+ * reasignación para docentes y auxiliares» trata de docentes.
+ */
+const AUXILIARY_POPULATION = /\bauxiliares?\s+de\s+educaci[oó]n\b/u;
+
+/** Docencia propiamente dicha: no incluye el vínculo («nombrado», «contratado»). */
+const TEACHING_POPULATION =
+  /\b(?:docentes?|profesor(?:a|es|as)?|maestr[oa]s?)\b/u;
+
+export function onlyAuxiliaryRegime(evidence: string): boolean {
+  const auxiliary = AUXILIARY_POPULATION.exec(evidence);
+  if (!auxiliary) return false;
+  const teaching = TEACHING_ROLE_SIGNAL.exec(evidence);
+  if (!teaching) return true;
+  return teaching.index > auxiliary.index;
+}
+
+/**
+ * El texto nombra a alguno de los dos regímenes. Lo usa la compuerta del
+ * proceso heredado para decidir si el régimen se lee del desarrollo del
+ * fragmento o, cuando el cuerpo no lo repite (un plazo no dice a quién rige),
+ * del título de la norma. «Nombrado» y «contratado» describen el vínculo, no el
+ * régimen: un requisito del «personal nombrado» rige a los dos.
+ */
+export function namesStaffRegime(evidence: string): boolean {
+  return (
+    AUXILIARY_POPULATION.test(evidence) || TEACHING_POPULATION.test(evidence)
+  );
+}
+
+/**
  * Fuente que trata el proceso de reasignación, no una mención incidental de la
  * palabra en un listado de supuestos de otro régimen.
  */
@@ -189,18 +253,22 @@ export function isDirectReassignmentEvidence(
   const role = reassignmentRole(question);
   if (role === 'auxiliar') {
     // El auxiliar se rige por su propio procedimiento, no por la norma de
-    // reasignación y permuta de profesores.
+    // reasignación y permuta de profesores. «Auxiliares» aislado puede aludir a
+    // otro cargo, así que se exige el régimen de educación.
     return /\bauxiliar(?:es)?\s+de\s+educacion\b/u.test(evidence);
   }
-  // La norma que regula el proceso lo anuncia en su título. Una mención de
-  // «reasignación» dentro de un procedimiento de otro régimen (por ejemplo,
-  // situaciones administrativas de auxiliares) no responde la consulta de un
-  // profesor y no debe desplazar a la norma propia.
+  // Una mención de «reasignación» dentro de un procedimiento de otro régimen
+  // (por ejemplo, situaciones administrativas de auxiliares) no responde la
+  // consulta de un profesor y no debe desplazar a la norma propia.
+  if (onlyAuxiliaryRegime(evidence)) return false;
+  // La norma que regula el proceso lo anuncia en su título.
   if (/\breasignacion\b/u.test(title)) return true;
-  return (
+  if (
     role === 'docente' &&
     /\bprofesor(?:es)?\b[\s\S]{0,80}\breasignacion\b|\breasignacion\b[\s\S]{0,80}\bprofesor(?:es)?\b/u.test(
       evidence,
     )
-  );
+  )
+    return true;
+  return REASSIGNMENT_PROCESS_FRAMING.test(evidence);
 }
