@@ -411,6 +411,32 @@ describe('RagService — intención temática del chat general', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  it('no responde el cuadro de horas con la jornada de los auxiliares', async () => {
+    const { gateway, service } = setup();
+    const auxiliarySource = {
+      ...baseSource,
+      chunkContent:
+        'La carga horaria de los auxiliares se distribuye en la institución educativa según el turno asignado.',
+      chunkId: 'auxiliar-hours-chunk',
+      documentId: 'auxiliar-hours-document',
+      documentTitle: 'Norma sobre el trabajo de los auxiliares de educación',
+      documentVersionId: 'auxiliar-hours-version',
+      moduleIds: ['auxiliares'],
+      moduleNames: ['Auxiliar de educación'],
+      sectionTitle: 'Distribución de horas',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockResolvedValue([auxiliarySource]);
+    const question =
+      'que es el cuadro de distribucion de horas y para que lo usan';
+
+    await expect(
+      service.retrieve(question, null, [], {
+        topicIntent: detectTopicIntent(question),
+      }),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
   it('no añade consultas del cuadro de horas a la respuesta elíptica de una cifra', async () => {
     const { embeddings, gateway, service } = setup();
     gateway.search.mockResolvedValue([]);

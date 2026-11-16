@@ -477,6 +477,56 @@ describe('teaching-position-retrieval', () => {
       ).toBe(false);
     });
 
+    it('no abre la puerta desde los demás módulos del catálogo', () => {
+      // Los módulos raíz reales incluyen «Auxiliar de educación» y
+      // «Situaciones administrativas»; una norma catalogada en ellos regula su
+      // proceso aunque la sección nombre el tema.
+      expect(
+        isDirectTeachingPositionEvidence(
+          hoursQuestion,
+          source(
+            'La carga horaria de los auxiliares se distribuye en la institución educativa según el turno asignado.',
+            'Norma sobre el trabajo de los auxiliares de educación',
+            ['Auxiliar de educación'],
+            'Distribución de horas',
+          ),
+        ),
+      ).toBe(false);
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'La plaza orgánica es la plaza de origen que conserva el servidor mientras se encuentre en situación administrativa.',
+            'Norma de situaciones administrativas',
+            ['Situaciones administrativas'],
+            'De la plaza orgánica',
+          ),
+        ),
+      ).toBe(false);
+      // Un módulo genérico no lava la asociación con otro proceso.
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato.',
+            'Normas sobre plazas orgánicas y eventuales',
+            ['Remuneraciones', 'Ley y reglamento'],
+          ),
+        ),
+      ).toBe(false);
+      // La doble asociación con el módulo del tema conserva la respuesta.
+      expect(
+        isDirectTeachingPositionEvidence(
+          conditionQuestion,
+          source(
+            'La plaza orgánica se crea por resolución y la plaza eventual se atiende con contrato.',
+            'Norma sobre cargos y plazas',
+            ['Cargos y plazas', 'Contratación y desplazamientos'],
+          ),
+        ),
+      ).toBe(true);
+    });
+
     it('admite la sección que nombra el aspecto en un reglamento', () => {
       // La ley y su reglamento pueden estar en «Ley y reglamento»: el encabezado
       // «De las plazas» con la definición en el texto identifica la fuente.

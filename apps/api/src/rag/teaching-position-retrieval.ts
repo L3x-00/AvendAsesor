@@ -162,10 +162,11 @@ const HOURS_SHORT_TERM =
  * La distribución tiene que regir a las horas: «la carga horaria se distribuye»
  * sí; «la jornada comprende treinta horas y se distribuye en horas pedagógicas»
  * no. Aprobar o elaborar una jornada no es distribuirla, así que esos verbos no
- * cuentan aquí (la denominación del cuadro sí los admite por su nombre).
+ * cuentan. El término puede estar en el título, la sección o el cuerpo; el marco
+ * tiene que seguirlo.
  */
 const HOURS_ASSIGNMENT_FRAME =
-  /\b(?:se asigna|se asignan|se distribuye|se distribuyen|se determinan?)\b/u;
+  /\b(?:carga horaria|carga academica|horas pedagogicas|distribucion de horas)\b[^.;]{0,60}\b(?:se asigna|se asignan|se distribuye|se distribuyen|se determinan?)\b/u;
 /** El módulo regula plazas y horas de la carrera docente, no del personal administrativo. */
 const TEACHING_SCOPE =
   /\b(?:docentes?|profesor(?:a|es)?|maestr[oa]s?|horas? de clase|pedagogic\p{L}*|institucion(?:es)? educativas?|aulas?|seccion(?:es)?|inicial|primaria|secundaria)\b/u;
@@ -201,10 +202,7 @@ const CLASSIFIER_EVIDENCE =
 function isHoursDistributionEvidence(evidence: string): boolean {
   if (HOURS_PROCESS_DENOMINATION.test(evidence)) return true;
   if (!HOURS_SHORT_TERM.test(evidence)) return false;
-  // El marco tiene que regir al término, en ese orden.
-  const termThenFrame =
-    /\b(?:carga horaria|carga academica|horas pedagogicas|distribucion de horas)\b[^.;]{0,60}\b(?:se asigna|se asignan|se distribuye|se distribuyen|se determinan?)\b/u;
-  return termThenFrame.test(evidence) && TEACHING_SCOPE.test(evidence);
+  return HOURS_ASSIGNMENT_FRAME.test(evidence) && TEACHING_SCOPE.test(evidence);
 }
 
 /** El fragmento trata la condición de la plaza, no solo la menciona. */
@@ -254,9 +252,14 @@ const OBJECT_HEADING = /\b(?:plazas?(?: docentes?)?|carga horaria)\b/u;
  * encargatura, no para regular los cargos y las plazas. Cuando el catálogo no
  * contradice —está vacío o la norma vive en «Ley y reglamento»— el encabezado
  * sigue siendo la identidad disponible.
+ *
+ * Los nombres corresponden a los módulos raíz del catálogo real: «Auxiliar de
+ * educación» en singular y «Situaciones administrativas», que agrupa licencias,
+ * cese, jubilación y asistencia. Un módulo nuevo que nombre otro proceso debe
+ * añadirse aquí: el fallo por omisión es responder de más, no de menos.
  */
 const COMPETING_MODULE =
-  /\b(?:contratacion|desplazamientos?|remuneracion(?:es)?|licencias?|evaluacion|auxiliares?|destaque|encargatura|reasignacion|racionalizacion|ascensos?|ceses?|jubilacion|asistencia|permutas?|monitoreo)\b/u;
+  /\b(?:contratacion|desplazamientos?|remuneracion(?:es)?|licencias?|situaciones administrativas|evaluacion|auxiliar(?:es)?|destaque|encargatura|reasignacion|racionalizacion|ascensos?|ceses?|jubilacion|asistencia|permutas?|monitoreo)\b/u;
 
 /**
  * La titularidad del aspecto en el propio documento también identifica la
@@ -275,9 +278,12 @@ function namesAspectInHeading(
   evidence: string,
 ): boolean {
   const declared = source.moduleNames ?? [];
+  // `some`, no `every`: una norma catalogada en «Remuneraciones» **y** en «Ley y
+  // reglamento» sigue perteneciendo a otro proceso. La guarda solo se consulta
+  // cuando la fuente no está asociada a «Cargos y plazas».
   if (
     declared.length &&
-    declared.every((name) => COMPETING_MODULE.test(normalizeSpanishText(name)))
+    declared.some((name) => COMPETING_MODULE.test(normalizeSpanishText(name)))
   ) {
     return false;
   }
