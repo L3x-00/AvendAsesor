@@ -168,7 +168,6 @@ describe('RagService — intención temática del chat general', () => {
     // Aunque el gateway devolviera el fragmento genérico también en la búsqueda
     // del proceso (un vecino léxico del corpus), no responde una reasignación:
     // trata la contratación de auxiliares, no el proceso heredado.
-    gateway.search.mockResolvedValue([administrative]);
     await expect(
       service.retrieve(question, null, [
         '¿Cómo pido reasignación como auxiliar de educación?',

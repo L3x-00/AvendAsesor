@@ -6,6 +6,8 @@ import {
 } from './process-clarification';
 import type { RetrievedChunk } from './retrieval.gateway';
 import {
+  isExclusiveExchangeSection,
+  namesStaffRegime,
   onlyAuxiliaryRegime,
   reassignmentRole,
 } from './reassignment-retrieval';
@@ -14,6 +16,7 @@ import {
   type TopicIntent,
   type TopicIntentId,
 } from './topic-intent';
+import { namesTemporaryPlacementProcess } from './temporary-placement-retrieval';
 import { normalizeSpanishText } from './text-normalization';
 
 /**
@@ -56,21 +59,22 @@ const NORMATIVE_ASPECT =
 
 /**
  * Condicional que continúa el trámite abierto («¿y si la UGEL no me
- * responde?»). Exige un elemento del procedimiento: «¿y si mi hijo está
- * enfermo?» es otra consulta y no hereda el proceso.
+ * responde?»). Exige un elemento del procedimiento —la autoridad que tramita,
+ * la solicitud, el plazo o su rechazo—: «¿y si mi hijo no aprende en la IE?» es
+ * otra consulta y no hereda el proceso.
  */
 const PROCEDURAL_CONDITIONAL =
-  /\by si\b[\s\S]{0,80}\b(?:ugel|dre|institucion educativa|\bie\b|no me (?:responde|contesta|firma|acepta|atiende)|no (?:me )?(?:firma|acepta|responde)|rechaz\p{L}*|vence|plazo|solicitud|expediente|cronograma)\b/u;
+  /\by si\b[\s\S]{0,80}\b(?:ugel|dre|(?:no\s+)?me\s+(?:respond|contest|firm|acept|atend|rechaz)\p{L}*|rechaz\p{L}*|vencid\p{L}*|vence|plazo|solicitud|expediente|cronograma)\b/u;
 
 /**
- * Causal declarada como motivo del trámite. Las palabras con que la persona
- * describe su situación («mi familia», «mis hijos», «mi esposo») sirven para
- * ampliar la búsqueda cuando el proceso ya está abierto, pero no acreditan por
- * sí solas que el turno dependa de él: «¿y si mi hijo está enfermo?» describe
- * un problema ajeno al trámite y no hereda el proceso.
+ * Causal declarada como motivo del trámite. Se acepta el nombre técnico
+ * («causal», «unidad familiar», «salud») y la forma coloquial introducida como
+ * motivo («por mi familia», «por salud», «debido a mi esposo»). Una simple
+ * descripción de la situación —«mi esposo vive allá»— no ata el turno al
+ * proceso: es una afirmación autónoma que puede ser otra consulta.
  */
 const DECLARED_CAUSAL =
-  /\bcausal(?:es)?\b|\bunidad familiar\b|\binteres personal\b|\bmotivos? personales\b|\bsalud\b|\benfermedad\b|\bdiscapacidad\b|\bemergencia\b|\bviolencia\b|\btratamiento medico\b/u;
+  /\bcausal(?:es)?\b|\bunidad familiar\b|\binteres personal\b|\bmotivos? personales\b|\bsalud\b|\benfermedad\b|\bdiscapacidad\b|\bemergencia\b|\bviolencia\b|\btratamiento medico\b|\b(?:por|debido a|a causa de|por motivo de|por razon de)\s+(?:mi\s+|su\s+|la\s+|el\s+)?(?:familia(?:r|res)?|hij[oa]s?|conyuge|espos[oa]|pareja)\b/u;
 
 /** La persona descarta el tema: no hay trámite que completar. */
 const REJECTS_TOPIC =
@@ -217,9 +221,9 @@ export function processQueriesForIntent(
  */
 const PROCESS_EVIDENCE: Record<TopicIntentId, RegExp> = {
   reassignment: /\breasignacion(?:es)?\b/u,
-  'temporary-placement': /\bdestaques?\b|\bdestacad[oa]s?\b/u,
+  'temporary-placement': /\bdestaques?\b/u,
   'medical-leave':
-    /\b(?:descanso medic[oa]|incapacidad temporal|citt|licencia por enfermedad)\b/u,
+    /\b(?:descanso medic[oa]|incapacidad temporal|citt|licencias? por (?:enfermedad|salud|incapacidad|emergencia|unidad familiar)|permisos? por (?:salud|enfermedad))\b/u,
   'career-progression':
     /\b(?:ascenso|escala magisterial|concurso de ascenso)\b/u,
   'rural-allocation':
@@ -257,16 +261,26 @@ function bodyText(
 /**
  * El fragmento corresponde al régimen de la persona. Se evalúa en los dos
  * sentidos: un auxiliar no recibe la norma de profesores y un docente no recibe
- * un fragmento que solo rige el régimen de auxiliares.
+ * un fragmento que solo rige el régimen de auxiliares. El régimen se lee del
+ * desarrollo del fragmento; el título solo cuenta cuando el cuerpo no lo repite
+ * (un plazo no dice a quién rige), porque hay normas tituladas «para auxiliares
+ * de educación» cuyos fragmentos desarrollan el procedimiento de profesores.
  */
-function matchesRegime(intent: TopicIntent, text: string): boolean {
+function matchesRegime(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const body = bodyText(source);
+  const evidence = namesStaffRegime(body) ? body : sourceText(source);
   if (intent.moduleName === AUXILIARY_MODULE)
-    return AUXILIARY_REGIME.test(text);
+    return AUXILIARY_REGIME.test(evidence);
   // Solo reasignación y licencias se comparten entre regímenes; los demás
   // procesos ya se distinguen por su propio nombre.
   if (intent.id !== 'reassignment' && intent.id !== 'medical-leave')
     return true;
-  return !onlyAuxiliaryRegime(text);
+  return !onlyAuxiliaryRegime(evidence);
 }
 
 /**
@@ -304,24 +318,36 @@ function mentionsOtherProcess(
 /**
  * Trámites hermanos que el corpus distingue del proceso consultado y que no
  * forman parte de las ocho intenciones: permuta, encargo, cese, jubilación,
- * contratación docente, licencias y permisos de otro motivo. Se evalúan sobre el
- * mismo encuadre: el desarrollo del propio proceso suele mencionarlos de pasada.
+ * nombramiento, designación, contratación docente, licencias y permisos. Se
+ * evalúan sobre el encuadre: el desarrollo del propio proceso suele mencionarlos
+ * de pasada.
  */
 const OTHER_PROCEDURE =
-  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|licencias? por|permisos? por|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos)\b/u;
+  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|licencias?|permisos?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos|nombramientos?|designacion(?:es)?|contratos? de servicio)\b/u;
+
+/**
+ * En un hilo de licencia, la licencia y el permiso son el propio proceso: la
+ * norma que los desarrolla se llama por su causal («licencia por salud») y
+ * rechazarla dejaría el turno sin evidencia.
+ */
+const OTHER_PROCEDURE_WITHOUT_LEAVE =
+  /\b(?:permutas?|permutar(?:se)?|encargos?(?: de (?:funciones|cargo))?|encargaturas?|ceses?|cese temporal|jubilacion(?:es)?|renuncias?|contratacion(?:es)? de docentes?|contratacion docente|postulacion(?:es)? a (?:plazas?|cargos?)|concurso publico de meritos|nombramientos?|designacion(?:es)?|contratos? de servicio)\b/u;
 
 function mentionsOtherProcedure(
-  _intent: TopicIntent,
+  intent: TopicIntent,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
     sectionTitle?: string | null;
   },
 ): boolean {
+  const pattern =
+    intent.id === 'medical-leave'
+      ? OTHER_PROCEDURE_WITHOUT_LEAVE
+      : OTHER_PROCEDURE;
   const framing = normalizeSpanishText(
     `${source.documentTitle} ${source.sectionTitle ?? ''}`,
   );
   return (
-    OTHER_PROCEDURE.test(framing) ||
-    OTHER_PROCEDURE.test(openingSentence(bodyText(source)))
+    pattern.test(framing) || pattern.test(openingSentence(bodyText(source)))
   );
 }
 
@@ -353,8 +379,9 @@ export function treatsProcessIntent(
  * El fragmento puede responder un turno que hereda el proceso del hilo. Dos
  * vías, ambas sujetas al régimen de la persona:
  *
- *  1. El fragmento trata el proceso: lo nombra en el título, la sección o el
- *     cuerpo.
+ *  1. El fragmento trata el proceso en su desarrollo: lo nombra en la sección o
+ *     en el cuerpo. El título de la norma no basta —una norma se titula por su
+ *     ámbito y puede desarrollar dentro otro trámite—.
  *  2. El fragmento no lo repite (el corpus desarrolla el plazo o el requisito
  *     sin volver a nombrar el trámite), pero la búsqueda del proceso lo devolvió
  *     con el umbral general y su encuadre no es de otro trámite.
@@ -371,12 +398,35 @@ export function treatsInheritedProcess(
   },
   fromProcessQuery: boolean,
 ): boolean {
-  const text = sourceText(source);
-  if (!matchesRegime(intent, text)) return false;
-  if (PROCESS_EVIDENCE[intent.id].test(text)) return true;
+  if (!matchesRegime(intent, source)) return false;
+  if (namesOwnProcess(intent, source)) {
+    // La sección dedicada a la permuta desarrolla otra figura aunque el proceso
+    // heredado sea la reasignación, cuya norma las regula juntas.
+    return !(
+      intent.id === 'reassignment' && isExclusiveExchangeSection(source)
+    );
+  }
   return (
     fromProcessQuery &&
     !mentionsOtherProcess(intent, source) &&
     !mentionsOtherProcedure(intent, source)
   );
+}
+
+/**
+ * El fragmento desarrolla el proceso heredado. Se evalúa sobre la sección y el
+ * cuerpo: es lo que el chunk trata, no el nombre del documento. El destaque
+ * tiene su propia comprobación porque el participio («docentes destacados»)
+ * aparece en textos de otros trámites.
+ */
+function namesOwnProcess(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  if (intent.id === 'temporary-placement') {
+    return namesTemporaryPlacementProcess(source);
+  }
+  return PROCESS_EVIDENCE[intent.id].test(bodyText(source));
 }

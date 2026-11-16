@@ -303,4 +303,37 @@ describe('RagService - contexto de proceso del hilo', () => {
       );
     }
   });
+
+  it('admite la licencia nombrada por su causal', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // El corpus titula la sección con la causal; ese fragmento es el propio
+    // proceso, no un trámite hermano, y debe responder el seguimiento.
+    const licenciaSalud = {
+      ...plazoChunk,
+      chunkContent:
+        'La licencia por salud se otorga por el plazo que indique el certificado médico o CITT.',
+      chunkId: 'licencia-salud',
+      documentId: 'licencias',
+      documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+      documentVersionId: 'licencias-version',
+      sectionTitle: 'De la licencia por salud',
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /incapacidad temporal|descanso médico|descanso medico|citt/.test(
+            queryFor(embedding),
+          )
+            ? [licenciaSalud]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve('y los requisitos', null, ['necesito descanso medico']),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'licencia-salud' }],
+    });
+  });
 });

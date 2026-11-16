@@ -501,6 +501,149 @@ describe('contexto de proceso del hilo', () => {
         ),
       ).toBe(true);
     });
+
+    it('no admite un fragmento porque su título nombre el proceso', () => {
+      // El título de la norma identifica el ámbito, no el trámite del
+      // fragmento: el cuerpo es el que dice qué se está regulando.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'La permuta entre profesores se solicita dentro del plazo de la norma técnica.',
+            documentTitle: 'Norma técnica de destaque docente',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(false);
+      // «Destacados» fuera del trámite tampoco acredita el proceso.
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'Los postulantes destacados en el concurso de contratación docente aprueban la prueba nacional.',
+            documentTitle: 'Norma de contratación docente 2026',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('no admite la sección dedicada a la permuta en un hilo de reasignación', () => {
+      const reassignment = intent(
+        'soy docente nombrado y quiero reasignarme a otra ugel',
+      );
+      // La norma regula los dos trámites, pero esta sección solo desarrolla la
+      // permuta: sus requisitos no responden la reasignación.
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'Disposiciones específicas de la permuta. La permuta entre profesores se solicita ante la UGEL de destino.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'Disposiciones específicas de la permuta',
+          },
+          true,
+        ),
+      ).toBe(false);
+      // La misma norma, en su propia sección, sí responde el seguimiento.
+      expect(
+        treatsInheritedProcess(
+          reassignment,
+          {
+            chunkContent:
+              'La reasignación del profesor nombrado se solicita ante la UGEL de destino.',
+            documentTitle: 'Norma técnica de reasignación y permuta',
+            sectionTitle: 'De la reasignación',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('admite la licencia nombrada por su causal', () => {
+      // El corpus titula las secciones con la causal («De la licencia por
+      // salud»): es el propio proceso, no un trámite hermano.
+      expect(
+        treatsInheritedProcess(
+          intent('necesito descanso medico'),
+          {
+            chunkContent:
+              'La licencia por salud se otorga por el plazo que indique el certificado médico o CITT.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'De la licencia por salud',
+          },
+          true,
+        ),
+      ).toBe(true);
+    });
+
+    it('no confunde una licencia con otro trámite en un hilo de licencia', () => {
+      const licencia = intent('necesito descanso medico');
+      // El plazo de la licencia no repite el proceso, pero proviene de su
+      // búsqueda: la licencia y el permiso son el propio trámite, no otro.
+      expect(
+        treatsInheritedProcess(
+          licencia,
+          {
+            chunkContent:
+              'El plazo para presentar la solicitud de licencia es de cinco días hábiles.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'Del plazo',
+          },
+          true,
+        ),
+      ).toBe(true);
+      // La permuta sigue siendo otro trámite aunque comparta la norma.
+      expect(
+        treatsInheritedProcess(
+          licencia,
+          {
+            chunkContent:
+              'La permuta entre profesores se solicita ante la UGEL de destino.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('no admite el plazo de otra licencia en un hilo de destaque', () => {
+      expect(
+        treatsInheritedProcess(
+          destaque,
+          {
+            chunkContent:
+              'El plazo para solicitar licencia es de cinco días hábiles y se presenta ante la UGEL.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
+
+    it('no atribuye el régimen por el título del documento', () => {
+      const auxiliar = intent('soy auxiliar y quiero reasignarme');
+      // Un documento titulado «para auxiliares de educación» puede tener
+      // fragmentos que desarrollan el procedimiento de profesores: el cuerpo
+      // manda.
+      expect(
+        treatsInheritedProcess(
+          auxiliar,
+          {
+            chunkContent:
+              'El profesor presenta su solicitud de licencia por incapacidad temporal con el certificado médico.',
+            documentTitle:
+              'Norma técnica de licencias para auxiliares de educación',
+            sectionTitle: 'De la licencia',
+          },
+          true,
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('turnos que no heredan', () => {
@@ -519,6 +662,7 @@ describe('contexto de proceso del hilo', () => {
       // tercero es otra consulta, no un seguimiento del trámite.
       'y si mi hijo esta enfermo',
       'y si mi esposo consigue trabajo en otra region',
+      'y si mi hijo no aprende en la ie',
     ])('no hereda el proceso en «%s»', (question) => {
       expect(
         inheritedTopicIntent(question, [
@@ -546,10 +690,12 @@ describe('contexto de proceso del hilo', () => {
       // Condicional que continúa el proceso abierto sin nombrarlo.
       'y si la ugel no me responde',
       'y si no me firma la solicitud',
+      'y si no me aceptan',
       // La causal nombrada como tal sí ata el turno al proceso abierto, aunque
       // el motivo sea la salud o la familia.
       'y si tengo una enfermedad, que causal invoco',
       'y por causal de unidad familiar',
+      'y por mi familia',
     ])('reconoce «%s» como dependiente del proceso abierto', (question) => {
       expect(
         inheritedTopicIntent(question, ['como destacarme en otro colegio']),

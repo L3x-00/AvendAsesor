@@ -46,15 +46,30 @@ export function isExclusiveExchangeSectionForReassignment(
     )
   )
     return false;
+  return isExclusiveExchangeSection(source);
+}
+
+const EXCLUSIVE_EXCHANGE_HEADING =
+  /^disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+const EXCLUSIVE_EXCHANGE_HEADING_AFTER_PAGE =
+  /^pagina\s+\d+\s+de\s+\d+\s+disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
+
+/**
+ * La sección del fragmento está dedicada solo a la permuta. No depende de la
+ * pregunta: sirve también cuando el proceso se heredó del hilo y el turno
+ * actual no repite «reasignación».
+ */
+export function isExclusiveExchangeSection(
+  source: Pick<RetrievedChunk, 'chunkContent'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
   const heading = normalizeSpanishText(source.sectionTitle ?? '');
   const content = normalizeSpanishText(source.chunkContent);
-  const exclusiveHeading =
-    /^disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
-  const headingAfterPageLabel =
-    /^pagina\s+\d+\s+de\s+\d+\s+disposiciones\s+especificas\s+de\s+la\s+permuta\b(?!\s+(?:y|o)\s+reasignacion)/u;
   return (
-    exclusiveHeading.test(heading) &&
-    (exclusiveHeading.test(content) || headingAfterPageLabel.test(content)) &&
+    EXCLUSIVE_EXCHANGE_HEADING.test(heading) &&
+    (EXCLUSIVE_EXCHANGE_HEADING.test(content) ||
+      EXCLUSIVE_EXCHANGE_HEADING_AFTER_PAGE.test(content)) &&
     !/\bdisposiciones\s+especificas\s+de\s+la\s+reasignacion\b/u.test(content)
   );
 }
@@ -204,6 +219,18 @@ export function onlyAuxiliaryRegime(evidence: string): boolean {
   const teaching = TEACHING_ROLE_SIGNAL.exec(evidence);
   if (!teaching) return true;
   return teaching.index > auxiliary.index;
+}
+
+/**
+ * El texto nombra a alguno de los dos regímenes. Lo usa la compuerta del
+ * proceso heredado para decidir si el régimen se lee del desarrollo del
+ * fragmento o, cuando el cuerpo no lo repite (un plazo no dice a quién rige),
+ * del título de la norma.
+ */
+export function namesStaffRegime(evidence: string): boolean {
+  return (
+    AUXILIARY_POPULATION.test(evidence) || TEACHING_ROLE_SIGNAL.test(evidence)
+  );
 }
 
 /**

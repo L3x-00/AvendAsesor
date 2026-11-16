@@ -191,6 +191,18 @@ describe('detectTopicIntent', () => {
   });
 
   it.each([
+    'no es lo mismo el destaque que la reasignacion, quiero saber la diferencia',
+    'no es lo mismo el destaque que la reasignacion, necesito entender',
+  ])(
+    'compara aunque el turno pida entender la diferencia: «%s»',
+    (question) => {
+      // «Quiero» y «necesito» no eligen un proceso: la pregunta sigue siendo
+      // cuál es la diferencia.
+      expect(detectTopicIntent(question)).toBeNull();
+    },
+  );
+
+  it.each([
     'el destaque no me conviene, quiero reasignarme',
     'no me conviene el destaque, prefiero la reasignación',
   ])(

@@ -91,7 +91,7 @@ const COMPARISON_CUE_EXTENDED =
 const NEGATED_EQUIVALENCE = /\bno\s+(?:es|son)\s+(?:lo mismo|compatibles?)\b/u;
 
 const PREFERENCE_CUE =
-  /\b(?:quiero|quisiera|prefiero|preferiria|elijo|necesito|me quedo con|voy a solicitar|voy por)\b/u;
+  /\b(?:prefiero|preferiria|me quedo con|voy a solicitar|voy por|elijo)\b|\b(?:quiero|quisiera|necesito)\s+(?:la\s+)?(?:reasignacion|reasignarme|el\s+destaque|destaque|destacarme)\b/u;
 
 const INTENTS: Record<TopicIntentId, TopicIntent> = {
   reassignment: {

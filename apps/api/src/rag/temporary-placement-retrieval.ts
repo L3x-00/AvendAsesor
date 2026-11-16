@@ -100,6 +100,26 @@ export function treatsTemporaryPlacement(
   return DESTAQUE_NOUN.test(text) || DESTAQUE_PARTICIPLE.test(text);
 }
 
+/**
+ * El fragmento desarrolla el trámite del destaque en su sección o su cuerpo. El
+ * título de la norma no basta: se titula por su ámbito y puede desarrollar otro
+ * trámite. El participio exige contexto de traslado, porque «los postulantes
+ * destacados en el concurso» es un uso del verbo y no el proceso.
+ */
+export function namesTemporaryPlacementProcess(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const text = normalizeSpanishText(
+    `${source.sectionTitle ?? ''} ${source.chunkContent}`,
+  );
+  return (
+    DESTAQUE_NOUN.test(text) ||
+    (DESTAQUE_PARTICIPLE.test(text) && TRANSFER_CONTEXT.test(text))
+  );
+}
+
 /** Evidencia que trata directamente el destaque consultado. */
 export function isDirectTemporaryPlacementEvidence(
   question: string,
