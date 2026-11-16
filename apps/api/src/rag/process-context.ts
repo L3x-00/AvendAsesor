@@ -6,7 +6,6 @@ import {
 } from './process-clarification';
 import type { RetrievedChunk } from './retrieval.gateway';
 import {
-  isExclusiveExchangeSection,
   namesStaffRegime,
   onlyAuxiliaryRegime,
   reassignmentRole,
@@ -326,11 +325,17 @@ function mentionsOtherProcess(
     sectionTitle?: string | null;
   },
 ): boolean {
+  const title = normalizeSpanishText(source.documentTitle);
+  // Una norma conjunta —«Norma técnica de reasignación, permuta y destaque»—
+  // nombra el propio proceso junto con los demás. Ese título no identifica el
+  // trámite del fragmento: el anexo de plazas del destaque no desarrolla la
+  // reasignación por el solo hecho de compartir la norma.
+  const titleNamesOwnProcess = PROCESS_EVIDENCE[intent.id].test(title);
   // El encuadre (título y sección) identifica el trámite del fragmento. Una
   // mención incidental en el cuerpo —«la plaza se genera por cese o
   // jubilación»— no convierte en otro trámite el plazo del destaque.
   const framing = normalizeSpanishText(
-    `${source.documentTitle} ${source.sectionTitle ?? ''}`,
+    `${titleNamesOwnProcess ? '' : title} ${source.sectionTitle ?? ''}`,
   );
   const opening = mainClause(openingSentence(bodyText(source)));
   return (Object.keys(PROCESS_EVIDENCE) as TopicIntentId[]).some((id) => {
@@ -359,13 +364,20 @@ function mainClause(text: string): string {
 }
 
 /**
+ * La enfermedad del familiar, con o sin «licencia por» delante: la norma la
+ * enuncia de las dos formas («licencia por enfermedad de un familiar», «cuando
+ * la solicitud es por enfermedad de mi hijo»). El posesivo cuenta igual que el
+ * artículo.
+ */
+const FAMILY_ILLNESS =
+  'enfermedad (?:de|del|de un|de mi|de su|de mis|de sus) (?:familiar(?: directo)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?)';
+
+/**
  * Causales de licencia o permiso que no son la del proceso consultado. Se
  * nombran una por una para el hilo de licencia: la causal propia es solo la
- * clínica. El posesivo cuenta igual que el artículo: «enfermedad de mi hijo» es
- * la misma causal ajena que «enfermedad de un familiar».
+ * clínica.
  */
-const FOREIGN_LEAVE_CAUSAL =
-  'licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|enfermedad (?:de|del|de un|de mi|de su|de mis|de sus) (?:familiar(?: directo)?|hij[oa]s?|padres?|madres?|conyugues?|parientes?))|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)';
+const FOREIGN_LEAVE_CAUSAL = `licencias? por (?:paternidad|maternidad|duelo|fallecimiento|matrimonio|estudios|comision(?: de servicios)?|${FAMILY_ILLNESS})|permisos? por (?:paternidad|matrimonio|duelo|fallecimiento|estudios|comision(?: de servicios)?)|${FAMILY_ILLNESS}`;
 
 const FOREIGN_LEAVE_CAUSAL_PATTERN = new RegExp(
   `\\b(?:${FOREIGN_LEAVE_CAUSAL})\\b`,
@@ -448,24 +460,69 @@ const OTHER_PROCEDURE_WITHOUT_OWN_LEAVE = new RegExp(
 const PROCEDURE_AS_CONDITION =
   /\b(?:no\s+(?:haber\s+sido\s+sancionad|haber\s+incurrid|estar\s+(?:sancionad|incurrid|incurso|comprendid|en\s+uso)|encontrarse\s+(?:sancionad|incurrid|incurso|comprendid|en\s+uso)|registrar\s+(?:sancion|cese)|tener\s+(?:sancion|cese))\p{L}*|sancionad\p{L}*\s+con\s+(?:cese|suspension|destitucion|amonestacion)|sin\s+(?:hacer\s+uso|estar\s+en\s+uso|encontrarse\s+en\s+uso))\b/u;
 
+/**
+ * Trámites ajenos al proceso consultado. El hilo de licencia tiene su propia
+ * enumeración porque la causal clínica es el propio proceso.
+ */
+function otherProcedurePattern(intent: TopicIntent): RegExp {
+  return intent.id === 'medical-leave'
+    ? OTHER_PROCEDURE_WITHOUT_OWN_LEAVE
+    : OTHER_PROCEDURE;
+}
+
+/**
+ * La sección nombra un trámite hermano y no el proceso consultado. Es el
+ * encuadre del fragmento: una sección dedicada a la permuta no desarrolla la
+ * reasignación aunque la norma las regule juntas, y una sección que nombra los
+ * dos —«Requisitos del destaque y la permuta»— no acusa, porque el encabezado
+ * conjunto no dice cuál desarrolla el cuerpo.
+ */
+function sectionNamesOtherProcedure(
+  intent: TopicIntent,
+  pattern: RegExp,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const section = normalizeSpanishText(source.sectionTitle ?? '');
+  return pattern.test(section) && !PROCESS_EVIDENCE[intent.id].test(section);
+}
+
+/**
+ * El cuerpo desarrolla otro trámite: el hermano es el sujeto de la oración («los
+ * docentes pueden acogerse a la permuta») y no una mención de paso en el
+ * complemento («la plaza del destaque se genera por cese»). El requisito o la
+ * sanción del propio trámite se exceptúa, salvo que dentro de él se enuncie una
+ * causal de licencia ajena: «no encontrarse en uso de licencia por paternidad»
+ * sigue siendo la licencia por paternidad.
+ */
+function bodyNamesOtherProcedure(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const development = mainClause(bodySentence(source));
+  if (
+    PROCEDURE_AS_CONDITION.test(development) &&
+    !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
+  )
+    return false;
+  return otherProcedurePattern(intent).test(development);
+}
+
 function mentionsOtherProcedure(
   intent: TopicIntent,
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
     sectionTitle?: string | null;
   },
 ): boolean {
-  const pattern =
-    intent.id === 'medical-leave'
-      ? OTHER_PROCEDURE_WITHOUT_OWN_LEAVE
-      : OTHER_PROCEDURE;
+  const pattern = otherProcedurePattern(intent);
   const title = normalizeSpanishText(source.documentTitle);
-  const section = normalizeSpanishText(source.sectionTitle ?? '');
-  const sentence = openingSentence(bodyText(source));
-  const development = mainClause(sentence);
   // La sección es el encuadre del fragmento: si ella nombra otro trámite, la
   // condición de la primera oración no lo desmiente («De la licencia por
   // paternidad» + «el docente en uso de licencia por paternidad»).
-  if (pattern.test(section)) return true;
+  if (sectionNamesOtherProcedure(intent, pattern, source)) return true;
   // El título de una norma conjunta —«Norma técnica de reasignación y
   // permuta»— nombra los dos trámites: el hermano que el mismo título enuncia no
   // es indicio de otro trámite, y el fragmento debe decidirse por su sección y su
@@ -474,29 +531,65 @@ function mentionsOtherProcedure(
   if (!titleNamesOwnProcess && pattern.test(title)) return true;
   // La subordinada puede enmarcar el trámite («el plazo es de quince días cuando
   // se trata de una permuta») en lugar de describir una condición del propio.
-  if (framesOtherProcedure(sentence, pattern)) return true;
-  // El requisito o la sanción del propio trámite no lo convierte en otro
-  // trámite, salvo que dentro del requisito se enuncie una causal de licencia
-  // ajena: «no encontrarse en uso de licencia por paternidad» sigue siendo la
-  // licencia por paternidad.
-  if (
-    PROCEDURE_AS_CONDITION.test(development) &&
-    !FOREIGN_LEAVE_CAUSAL_PATTERN.test(development)
-  )
-    return false;
-  return pattern.test(development);
+  if (framesOtherProcedure(bodySentence(source), pattern)) return true;
+  return bodyNamesOtherProcedure(intent, source);
 }
 
 /**
- * Primera oración del cuerpo (sección y contenido, sin el título de la norma):
- * el trámite que el fragmento desarrolla se anuncia ahí. Sirve para distinguir
- * «La permuta entre profesores se solicita dentro del plazo» de un plazo del
- * destaque que menciona la permuta al final. El título queda fuera porque la
- * identidad de la norma («RSG N.° 326-2017-MINEDU») trae puntos y códigos que
- * cortarían la oración antes de su verbo.
+ * El rótulo del anexo —«Anexo 2:», «Anexo II.-»— no es una oración. Sin quitarlo,
+ * la primera oración del fragmento se reduce al rótulo y el contenido del anexo
+ * queda fuera de la comprobación del trámite: el cuadro de plazas se leía como
+ * «anexo 2» y la sección del hermano no llegaba a evaluarse.
+ */
+const ANNEX_LABEL = /^anexos?\s+(?:\d+|[ivxlcdm]+)\s*[:.\-–]?\s*/u;
+
+/**
+ * Primera oración del cuerpo (solo el contenido, sin la sección ni el título de
+ * la norma): el trámite que el fragmento desarrolla se anuncia ahí. Sirve para
+ * distinguir «La permuta entre profesores se solicita dentro del plazo» de un
+ * plazo del destaque que menciona la permuta al final. La sección se evalúa
+ * aparte y el título queda fuera porque la identidad de la norma («RSG N.°
+ * 326-2017-MINEDU») trae puntos y códigos que cortarían la oración antes de su
+ * verbo.
  */
 function openingSentence(text: string): string {
-  return text.split(/[.;:]/u)[0] ?? text;
+  return text.replace(ANNEX_LABEL, '').split(/[.;:]/u)[0] ?? text;
+}
+
+function bodySentence(
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): string {
+  return openingSentence(normalizeSpanishText(source.chunkContent));
+}
+
+/**
+ * El fragmento desarrolla el proceso consultado y no el hermano. El propio
+ * proceso tiene que estar en el cuerpo para tolerar la mención de paso del
+ * hermano: «la plaza del destaque se genera por cese» es del destaque. Una
+ * sección que nombra los dos trámites —«Requisitos del destaque y la
+ * permuta»— no basta por sí sola, porque el cuerpo puede desarrollar solo el
+ * hermano, y la sección dedicada al hermano no se rescata porque el cuerpo
+ * nombre de paso el propio. El enmarque del hermano acusa aunque el propio
+ * trámite se nombre: «el plazo del destaque es de quince días si se trata de una
+ * permuta» sigue siendo el plazo de la permuta.
+ */
+function admitsOwnProcedure(
+  intent: TopicIntent,
+  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
+    sectionTitle?: string | null;
+  },
+): boolean {
+  const pattern = otherProcedurePattern(intent);
+  if (sectionNamesOtherProcedure(intent, pattern, source)) return false;
+  if (framesOtherProcedure(bodySentence(source), pattern)) return false;
+  if (namesOwnProcess(intent, { ...source, sectionTitle: null })) return true;
+  // El proceso se identificó solo por la sección: el cuerpo decide, porque puede
+  // desarrollar el hermano («los docentes pueden acogerse a la permuta»).
+  return (
+    namesOwnProcess(intent, source) && !bodyNamesOtherProcedure(intent, source)
+  );
 }
 
 /**
@@ -535,13 +628,7 @@ export function treatsInheritedProcess(
   fromProcessQuery: boolean,
 ): boolean {
   if (!matchesRegime(intent, source)) return false;
-  if (namesOwnProcess(intent, source)) {
-    // La sección dedicada a la permuta desarrolla otra figura aunque el proceso
-    // heredado sea la reasignación, cuya norma las regula juntas.
-    return !(
-      intent.id === 'reassignment' && isExclusiveExchangeSection(source)
-    );
-  }
+  if (admitsOwnProcedure(intent, source)) return true;
   return (
     fromProcessQuery &&
     !mentionsOtherProcess(intent, source) &&
@@ -574,11 +661,11 @@ export function belongsToAdmittedVersion(
  * conjunta —«Norma técnica de reasignación, permuta y destaque»— no convierte en
  * destaque la sección que desarrolla la permuta.
  *
- * La salida por nombre propio es la misma del hilo heredado: si la sección o el
- * cuerpo nombran el proceso consultado, la mención del hermano en el título de la
- * norma conjunta o en un requisito del propio trámite —«se genera por cese,
- * jubilación o renuncia»— no lo descarta. Sin ella, una pregunta explícita de
- * destaque quedaba sin evidencia por la simple mención incidental del hermano.
+ * La salida por nombre propio es la misma del hilo heredado: si el cuerpo nombra
+ * el proceso consultado, la mención del hermano en el título de la norma conjunta
+ * o en un requisito del propio trámite —«se genera por cese, jubilación o
+ * renuncia»— no lo descarta. Sin ella, una pregunta explícita de destaque quedaba
+ * sin evidencia por la simple mención incidental del hermano.
  */
 export function belongsToAdmittedProcedure(
   intent: TopicIntent,
@@ -587,14 +674,10 @@ export function belongsToAdmittedProcedure(
   },
 ): boolean {
   if (!matchesRegime(intent, source)) return false;
-  if (namesOwnProcess(intent, source)) {
-    // La sección exclusiva de la permuta desarrolla otra figura aunque la norma
-    // de la reasignación las regule juntas.
-    return !(
-      intent.id === 'reassignment' && isExclusiveExchangeSection(source)
-    );
-  }
-  return !mentionsOtherProcedure(intent, source);
+  return (
+    admitsOwnProcedure(intent, source) ||
+    !mentionsOtherProcedure(intent, source)
+  );
 }
 
 /**

@@ -431,6 +431,121 @@ describe('RagService - contexto de proceso del hilo', () => {
     }
   });
 
+  const reassignmentIntent = {
+    id: 'reassignment' as const,
+    label: 'la reasignación',
+    moduleName: 'Contratación y desplazamientos',
+  };
+
+  it('no responde la reasignación con la sección dedicada a la permuta', async () => {
+    const { service, gateway } = buildSearchable();
+    // La sección de la permuta comparte la norma con la reasignación y su cuerpo
+    // nombra los dos trámites. Sin la sección como encuadre, la salida por nombre
+    // propio del cuerpo la admitía y quedaba como única cita de la respuesta.
+    const permuta = {
+      ...plazoChunk,
+      chunkContent:
+        'La permuta y la reasignación se solicitan ante la UGEL de destino.',
+      chunkId: 'permuta-exclusiva',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'Disposiciones específicas de la permuta',
+      semanticScore: 0.78,
+    };
+    gateway.search.mockImplementation(() => Promise.resolve([permuta]));
+
+    await expect(
+      service.retrieve('quiero reasignarme a otra ugel', null, [], {
+        topicIntent: reassignmentIntent,
+      }),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+  });
+
+  it('entrega la reasignación y no la sección de la permuta de la misma versión', async () => {
+    const { service, gateway } = buildSearchable();
+    // Contramuestra de la anterior: el fragmento propio de la reasignación se
+    // entrega, y la sección de la permuta de la misma versión no se arrastra
+    // hasta la cita aunque puntúe más alto.
+    const requisitos = {
+      ...plazoChunk,
+      chunkContent:
+        'La reasignación se solicita ante la UGEL de origen y se resuelve en la de destino.',
+      chunkId: 'reasignacion-requisitos',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'De la reasignación',
+      semanticScore: 0.66,
+    };
+    const permuta = {
+      ...requisitos,
+      chunkContent:
+        'La permuta y la reasignación se solicitan ante la UGEL de destino.',
+      chunkId: 'permuta-exclusiva',
+      sectionTitle: 'Disposiciones específicas de la permuta',
+      semanticScore: 0.78,
+    };
+    gateway.search.mockImplementation(() =>
+      Promise.resolve([permuta, requisitos]),
+    );
+
+    const result = await service.retrieve(
+      'quiero reasignarme a otra ugel',
+      null,
+      [],
+      { topicIntent: reassignmentIntent },
+    );
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('reasignacion-requisitos');
+      expect(ids).not.toContain('permuta-exclusiva');
+    }
+  });
+
+  it('entrega el anexo de plazas de la norma conjunta en un hilo de destaque', async () => {
+    const { service, gateway, queryFor } = buildSearchable();
+    // El anexo de la norma conjunta no repite «destaque» y su título nombra la
+    // reasignación y la permuta: la ampliación por versión lo perdía y la
+    // respuesta se quedaba sin el cuadro de plazas que el seguimiento pedía.
+    const plazas = {
+      ...plazoChunk,
+      chunkContent:
+        'El destaque solo se otorga sobre las plazas vacantes de la UGEL de destino.',
+      chunkId: 'destaque-plazas',
+      documentId: 'desplazamientos',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+      documentVersionId: 'desplazamientos-version',
+      sectionTitle: 'De las plazas del destaque',
+      semanticScore: 0.68,
+    };
+    const anexo = {
+      ...plazas,
+      chunkContent:
+        'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+      chunkId: 'destaque-anexo',
+      sectionTitle: 'Anexo 2',
+      semanticScore: 0.72,
+    };
+    gateway.search.mockImplementation(
+      ({ embedding }: { embedding: number[] }) =>
+        Promise.resolve(
+          /destaque docente/.test(queryFor(embedding)) ? [plazas, anexo] : [],
+        ),
+    );
+
+    const result = await service.retrieve('y el cuadro del anexo?', null, [
+      'como destacarme en otro colegio',
+    ]);
+    expect(result).toMatchObject({ kind: 'evidence' });
+    if (result.kind === 'evidence') {
+      const ids = result.sources.map((source) => source.chunkId);
+      expect(ids).toContain('destaque-plazas');
+      expect(ids).toContain('destaque-anexo');
+    }
+  });
+
   it('no entrega el plazo enmarcado en la permuta aunque puntúe más alto', async () => {
     const { service, gateway } = buildSearchable();
     // El enmarque del hermano no necesita sección propia: «si se trata de una
@@ -476,9 +591,11 @@ describe('RagService - contexto de proceso del hilo', () => {
 
   it('entrega el anexo de la versión admitida aunque no nombre el trámite', async () => {
     const { service, gateway } = buildSearchable();
-    // El cuadro de plazos del mismo documento no repite «destaque» ni proviene
+    // El cuadro de plazos de la norma conjunta no repite «destaque» ni proviene
     // de una consulta propia, y aun así completa la respuesta: lo que no puede
-    // entrar es el fragmento que trata otro trámite.
+    // entrar es el fragmento que trata otro trámite. El título de la norma
+    // nombra la reasignación y la permuta, y eso no convierte el anexo en otro
+    // proceso.
     const requisitos = {
       ...plazoChunk,
       chunkContent:
@@ -493,6 +610,7 @@ describe('RagService - contexto de proceso del hilo', () => {
       chunkContent:
         'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana y 45 para Arequipa.',
       chunkId: 'destaque-anexo',
+      documentTitle: 'Norma técnica de reasignación, permuta y destaque',
       sectionTitle: 'Anexo 2',
       semanticScore: 0.72,
     };

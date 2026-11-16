@@ -952,6 +952,19 @@ describe('contexto de proceso del hilo', () => {
           sectionTitle: 'Del plazo',
         }),
       ).toBe(false);
+      // La enfermedad del familiar tampoco necesita «licencia por» delante: tras
+      // la marca, «enfermedad de mi hijo» ya es la causal ajena.
+      for (const chunkContent of [
+        'Cuando la solicitud es por enfermedad de mi hijo, se otorgan tres días.',
+        'Si se trata de enfermedad de un familiar directo, se otorgan cinco días.',
+      ])
+        expect(
+          belongsToAdmittedVersion(intent('necesito descanso medico'), {
+            chunkContent,
+            documentTitle: licencias,
+            sectionTitle: 'Del plazo',
+          }),
+        ).toBe(false);
     });
 
     it('admite el fragmento propio cuando el hermano se menciona de paso', () => {
@@ -985,6 +998,91 @@ describe('contexto de proceso del hilo', () => {
             source,
           ),
         ).toBe(true);
+    });
+
+    it('lee el anexo de la norma conjunta como fragmento del proceso', () => {
+      // El título de la norma conjunta nombra la reasignación y la permuta, y el
+      // anexo de plazas no repite el trámite: si el título contara como
+      // encuadre, el cuadro de plazas del destaque se leería como reasignación y
+      // la ampliación por versión lo perdería.
+      expect(
+        belongsToAdmittedVersion(intent('quiero destacarme en otro colegio'), {
+          chunkContent:
+            'Anexo 2: el cuadro de plazas por región consigna 120 plazas para Lima Metropolitana.',
+          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+          sectionTitle: 'Anexo 2',
+        }),
+      ).toBe(true);
+      // Contramuestra: el anexo que sí desarrolla el hermano sigue fuera.
+      expect(
+        belongsToAdmittedVersion(intent('quiero destacarme en otro colegio'), {
+          chunkContent:
+            'Anexo 3: la permuta se solicita ante la UGEL de destino con acuerdo de las partes.',
+          documentTitle: 'Norma técnica de reasignación, permuta y destaque',
+          sectionTitle: 'Anexo 3',
+        }),
+      ).toBe(false);
+    });
+
+    it('acusa la sección dedicada al hermano aunque el cuerpo nombre el propio', () => {
+      // La sección es el encuadre: la permuta se solicita ante la UGEL de
+      // destino, y que la oración nombre también la reasignación no convierte el
+      // fragmento en el trámite consultado. La salida por nombre propio mira el
+      // cuerpo, no la sección que encabeza el fragmento.
+      const conjunta = 'Norma técnica de reasignación, permuta y destaque';
+      const casos = [
+        {
+          intent: intent('quiero reasignarme a otra ugel'),
+          source: {
+            chunkContent:
+              'La permuta y la reasignación se solicitan ante la UGEL de destino.',
+            documentTitle: conjunta,
+            sectionTitle: 'Disposiciones específicas de la permuta',
+          },
+        },
+        {
+          intent: intent('necesito descanso medico'),
+          source: {
+            chunkContent:
+              'La licencia por paternidad y el descanso médico se acreditan con el certificado correspondiente.',
+            documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+            sectionTitle: 'De la licencia por paternidad',
+          },
+        },
+        {
+          // El encabezado conjunto nombra los dos, y el cuerpo desarrolla solo
+          // al hermano: tampoco es el trámite consultado.
+          intent: intent('quiero reasignarme a otra ugel'),
+          source: {
+            chunkContent:
+              'Los docentes pueden acogerse a la permuta cuando exista acuerdo entre las partes.',
+            documentTitle: conjunta,
+            sectionTitle: 'Requisitos de la reasignación y la permuta',
+          },
+        },
+      ];
+      for (const { intent: topicIntent, source } of casos) {
+        expect(belongsToAdmittedProcedure(topicIntent, source)).toBe(false);
+        expect(treatsInheritedProcess(topicIntent, source, true)).toBe(false);
+      }
+      // El encabezado que nombra los dos trámites no acusa: el cuerpo decide.
+      expect(
+        belongsToAdmittedProcedure(intent('quiero reasignarme a otra ugel'), {
+          chunkContent:
+            'La reasignación se solicita ante la UGEL de origen y se resuelve en la de destino.',
+          documentTitle: conjunta,
+          sectionTitle: 'Requisitos de la reasignación y la permuta',
+        }),
+      ).toBe(true);
+      // Un fragmento que solo se identifica por su sección sigue siendo del
+      // proceso: el cuerpo desarrolla el plazo sin repetir el trámite.
+      expect(
+        treatsProcessIntent(intent('necesito descanso medico'), {
+          chunkContent: 'El plazo lo fija el certificado médico.',
+          documentTitle: 'Norma técnica de licencias, permisos y vacaciones',
+          sectionTitle: 'De la licencia por enfermedad',
+        }),
+      ).toBe(true);
     });
 
     it('no exime la causal de licencia ajena aunque se enuncie como requisito', () => {
