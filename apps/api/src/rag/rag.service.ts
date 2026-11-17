@@ -1347,11 +1347,8 @@ export class RagService {
       retrievalScope: '',
     };
     void this.persistDiagnostic({
-      kind: `measurement_turn_start`,
-      question_hash: createHash('sha256')
-        .update(question)
-        .digest('hex')
-        .slice(0, 12),
+      kind: 'measurement_turn_start',
+      question_hash: createHash('sha256').update(question).digest('hex').slice(0, 12),
       searches: 0,
       search_ms: 0,
       errors: 'none',
@@ -1362,21 +1359,6 @@ export class RagService {
       priorUserQuestions,
       options,
     );
-    void this.persistDiagnostic({
-      kind: `measurement_end_${result.kind}`,
-      question_hash: createHash('sha256')
-        .update(question)
-        .digest('hex')
-        .slice(0, 12),
-      searches: this.retrievalDiag.searches,
-      search_ms: this.retrievalDiag.ms,
-      errors: this.retrievalDiag.errors.join('|') || 'none',
-      raw_global: this.retrievalDiag.rawGlobal,
-      routing_global: this.retrievalDiag.routingGlobal,
-      raw_selected: this.retrievalDiag.rawSelected,
-      routing_selected: this.retrievalDiag.routingSelected,
-      retrieval_scope: this.retrievalDiag.retrievalScope,
-    });
     options.abortSignal?.throwIfAborted();
     if (
       result.kind === 'no_evidence' &&
