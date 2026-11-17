@@ -511,6 +511,27 @@ describe('RagService', () => {
     global.fetch = previousFetch;
   });
 
+  it('no rompe el turno si el RPC de diagnóstico falla', async () => {
+    const previousFetch = global.fetch;
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('rpc down'));
+    const localService = new RagService(embeddings, gateway, {
+      get: jest.fn((key: string) =>
+        key === 'SUPABASE_URL'
+          ? 'https://example.supabase.co'
+          : key === 'SUPABASE_SERVICE_ROLE_KEY'
+            ? 'test-key'
+            : 0.5,
+      ),
+    } as never);
+    gateway.search.mockResolvedValue([]);
+
+    await expect(
+      localService.retrieve('¿Cuánto gana un docente?', null),
+    ).resolves.toMatchObject({ kind: 'no_evidence' });
+    jest.restoreAllMocks();
+    global.fetch = previousFetch;
+  });
+
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
     const cancellation = new AbortController();
     embeddings.embed.mockImplementation(
