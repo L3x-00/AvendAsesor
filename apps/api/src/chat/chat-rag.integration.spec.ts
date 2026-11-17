@@ -28,6 +28,7 @@ const LICENSES_MODULE_ID = '00000000-0000-0000-0000-000000000101';
 const CONTRACTS_MODULE_ID = '00000000-0000-0000-0000-000000000102';
 const AUXILIARIES_MODULE_ID = '00000000-0000-0000-0000-000000000103';
 const REMUNERATIONS_MODULE_ID = '00000000-0000-0000-0000-000000000104';
+const REASSIGNMENT_MODULE_ID = '00000000-0000-0000-0000-000000000105';
 
 function source(input: {
   articleReference?: string | null;
@@ -226,6 +227,34 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
     );
   }
 
+  /**
+   * Lectura de la página física pedida dentro de una versión ya recuperada. El
+   * doble devuelve el fragmento del corpus que cubre esa página; si ninguno la
+   * cubre, la lista queda vacía.
+   */
+  chunksAtPage(input: { page: number; versionId: string }) {
+    return Promise.resolve(
+      this.sources
+        .filter(
+          (item) =>
+            item.documentVersionId === input.versionId &&
+            item.pageStart <= input.page &&
+            input.page <= item.pageEnd,
+        )
+        .map((item) => ({
+          articleReference: item.articleReference,
+          chunkContent: item.chunkContent,
+          chunkId: item.chunkId,
+          chunkIndex: item.chunkIndex ?? 0,
+          documentVersionId: item.documentVersionId,
+          numeralReference: item.numeralReference,
+          pageEnd: item.pageEnd,
+          pageStart: item.pageStart,
+          sectionTitle: item.sectionTitle,
+        })),
+    );
+  }
+
   initialChunksOfVersions(input: {
     versionIds: string[];
     limitPerVersion: number;
@@ -292,6 +321,15 @@ class InMemoryRetrievalGateway implements RetrievalGateway {
     if (query.includes('licencia') || query.includes('salud')) {
       return Promise.resolve(
         ranked.filter((item) => item.moduleIds.includes(LICENSES_MODULE_ID)),
+      );
+    }
+    // Reasignación por emergencia: la consulta canónica del proceso heredado
+    // llega con su denominación completa.
+    if (query.includes('reasignacion') || query.includes('reasignación')) {
+      return Promise.resolve(
+        ranked.filter((item) =>
+          item.moduleIds.includes(REASSIGNMENT_MODULE_ID),
+        ),
       );
     }
     return Promise.resolve([]);
@@ -1624,6 +1662,109 @@ describe('ChatService + RagService integration', () => {
       data: { provider: 'rule' },
       type: 'done',
     });
+  });
+
+  // Amnesia conversacional: «página 24 de la RVM» llega después de hablar de la
+  // reasignación por emergencia. Sin heredar el tema, la consulta se buscaba sola
+  // y no había documento que ubicar.
+  it('responde la página pedida del documento que abrió el hilo', async () => {
+    const rvmVersionId = '00000000-0000-0000-0000-000000000601';
+    const rvmInicio = source({
+      chunkId: '00000000-0000-0000-0000-000000000501',
+      content:
+        'La reasignación docente por emergencia se solicita ante la UGEL de origen con la documentación que acredite el hecho invocado.',
+      documentId: '00000000-0000-0000-0000-000000000602',
+      documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+      documentType: 'RESOLUCION_VICEMINISTERIAL',
+      moduleId: REASSIGNMENT_MODULE_ID,
+      moduleName: 'Contratación y desplazamientos',
+      pageEnd: 2,
+      pageStart: 2,
+      score: 0.95,
+      versionId: rvmVersionId,
+      versionNumber: 1,
+    });
+    retrieval.add(rvmInicio);
+    retrieval.add({
+      ...rvmInicio,
+      chunkContent:
+        'Son situaciones de emergencia el sismo, el huaico, la inundación y el incendio que afecten la vivienda o la salud de la persona o de su familia directa.',
+      chunkId: '00000000-0000-0000-0000-000000000502',
+      pageEnd: 24,
+      pageStart: 24,
+      semanticScore: 0.5,
+    });
+
+    const first = await collect(service, {
+      question: 'quiero saber sobre la reasignacion docente por emergencia',
+    });
+    const conversationId = first.find((event) => event.type === 'conversation')
+      ?.data.conversationId;
+    const providerCalls = answers.inputs.length;
+    const events = await collect(service, {
+      conversationId,
+      question: 'pagina 24 de la rvm',
+    });
+
+    const message = events
+      .filter((event) => event.type === 'token')
+      .map((event) => event.data.text)
+      .join('');
+    expect(message).toContain('la página 24');
+    expect(message).toContain('«Ver»');
+    // El carril determinista no consulta al proveedor de IA.
+    expect(answers.inputs).toHaveLength(providerCalls);
+
+    const sources = events.find((event) => event.type === 'sources')?.data
+      .sources;
+    expect(sources).toEqual([
+      expect.objectContaining({ pageEnd: 24, pageStart: 24, rank: 1 }),
+    ]);
+  });
+
+  // Amnesia conversacional (segunda cara): «háblame más sobre las situaciones»
+  // después de abrir el hilo por emergencia. Debe responder con los supuestos
+  // del proceso, no pedir una aclaración de tema.
+  it('responde el pedido de situaciones con el tema del hilo', async () => {
+    const rvmInicio = source({
+      chunkId: '00000000-0000-0000-0000-000000000511',
+      content:
+        'La reasignación docente por emergencia se solicita ante la UGEL de origen con la documentación que acredite el hecho invocado.',
+      documentId: '00000000-0000-0000-0000-000000000612',
+      documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+      documentType: 'RESOLUCION_VICEMINISTERIAL',
+      moduleId: REASSIGNMENT_MODULE_ID,
+      moduleName: 'Contratación y desplazamientos',
+      pageEnd: 2,
+      pageStart: 2,
+      score: 0.95,
+      versionId: '00000000-0000-0000-0000-000000000611',
+      versionNumber: 1,
+    });
+    retrieval.add(rvmInicio);
+
+    const first = await collect(service, {
+      question: 'quiero saber sobre la reasignacion docente por emergencia',
+    });
+    const conversationId = first.find((event) => event.type === 'conversation')
+      ?.data.conversationId;
+    const events = await collect(service, {
+      conversationId,
+      question: 'hablame mas sobre las situaciones',
+    });
+
+    expect(events.map((event) => event.type)).not.toContain('no_evidence');
+    // La respuesta se apoyó en la norma del proceso heredado.
+    expect(
+      events.find((event) => event.type === 'sources')?.data.sources,
+    ).toEqual([
+      expect.objectContaining({
+        documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+        pageStart: 2,
+        rank: 1,
+      }),
+    ]);
+    expect(answers.inputs.length).toBeGreaterThan(0);
   });
 
   // CR-08 / OBS-012: la unidad disponible de un PDF es la página; la respuesta

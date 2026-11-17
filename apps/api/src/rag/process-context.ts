@@ -1,5 +1,6 @@
-import { refersBack } from './anaphora';
+import { refersToThreadTopic } from './anaphora';
 import { hasTopicTerm } from './domain-lexicon';
+import { pageReferenceIn } from './page-reference';
 import {
   causalLabelsInQuestion,
   causalsInQuestion,
@@ -162,10 +163,13 @@ export function isProcessDependentTurn(question: string): boolean {
     PROCEDURAL_CONDITIONAL.test(text) && OWN_EXPEDIENT.test(text);
   if (!ownExpedientConditional && OTHER_SUBJECT_OR_MATTER.test(text))
     return false;
-  // Una causal solo ata el turno al proceso cuando el turno la nombra como
-  // causal; describir la situación de un tercero no es preguntar por el trámite.
+  // Una causal solo ata el turno al proceso cuando se declara como tal («por
+  // emergencia», «causal de salud»); «casos de violencia escolar» describe un
+  // asunto propio, no pide los supuestos del trámite abierto.
   const causalDependency =
-    causalsInQuestion(question).length > 0 && DECLARED_CAUSAL.test(text);
+    causalsInQuestion(question).length > 0 &&
+    DECLARED_CAUSAL.test(text) &&
+    (DECLARED_CAUSAL_FRAME.test(text) || ELLIPTICAL_CAUSAL.test(text));
   const explicitRequest =
     causalDependency ||
     PROCEDURE_VERB.test(text) ||
@@ -174,8 +178,15 @@ export function isProcessDependentTurn(question: string): boolean {
   // quiero eso, y el plazo» sigue pidiendo el plazo del proceso abierto.
   if (!explicitRequest && REJECTS_TOPIC.test(text)) return false;
   // «¿Y si la UGEL no me responde?» continúa el proceso abierto sin nombrarlo.
+  // La elipsis de tema («háblame más sobre las situaciones», «situación de lo
+  // que estábamos hablando») y la referencia a una página del documento del hilo
+  // («página 24 de la RVM») también lo continúan: sin ellas, la consulta se
+  // buscaba sola y terminaba en aclaración o sin evidencia.
   return (
-    explicitRequest || refersBack(question) || PROCEDURAL_CONDITIONAL.test(text)
+    explicitRequest ||
+    refersToThreadTopic(question) ||
+    PROCEDURAL_CONDITIONAL.test(text) ||
+    pageReferenceIn(question) !== null
   );
 }
 
@@ -212,20 +223,91 @@ export function inheritedTopicIntent(
 }
 
 /**
+ * El turno pide los casos o situaciones del proceso, no un aspecto concreto
+ * («los requisitos», «el plazo»). Es la forma habitual de pedir las causales.
+ */
+const PROCESS_CASES =
+  /\b(?:casos?|situaciones?|supuestos?|ejemplos?|escenarios?)\b/u;
+
+/** Vocabulario con el que el corpus enumera los supuestos del proceso. */
+const CASES_QUERY = 'casos supuestos ejemplos causales';
+
+function asksForProcessCases(question: string): boolean {
+  return PROCESS_CASES.test(normalizeSpanishText(question));
+}
+
+/**
+ * Marco declarativo de una causal: «por emergencia», «debido a mi salud»,
+ * «causal de violencia». Sin él, una palabra técnica en una frase descriptiva
+ * («mi esposo tiene una enfermedad») no es el motivo del trámite.
+ */
+const DECLARED_CAUSAL_FRAME =
+  /\b(?:causal(?:es)?|por|debido\s+a|a\s+causa\s+de|motivos?|razones?)\b/u;
+
+/**
+ * Elipsis de causal: «y emergencia?», «los casos de salud». Es la continuación
+ * natural del hilo, así que se admite aunque no haya «por/causal» delante. El
+ * patrón exige que la causal cierre el turno: «casos de violencia escolar» sigue
+ * siendo un asunto propio, y «mi esposo tiene una enfermedad» una descripción.
+ */
+const ELLIPTICAL_CAUSAL =
+  /^(?:(?:muestrame|muestra|hablame|habla|dame|cuentame)\s+)?(?:(?:y|e|o|pero|entonces)\s+)?(?:(?:los|las|el|la)\s+)?(?:(?:casos?|situaciones?|supuestos?|ejemplos?|escenarios?)\s+)?(?:de\s+)?(?:emergencia|salud|unidad familiar|interes personal|violencia|enfermedad|discapacidad|tratamiento medico)\s*[?¿!.]*$/u;
+
+/**
+ * Causal declarada del hilo para el pedido de casos. Recorre los turnos previos
+ * desde el más reciente y se detiene al cambiar de proceso: que un turno repita
+ * el nombre del proceso abierto no borra la causal, pero sí la borra un tema
+ * distinto interpuesto.
+ */
+function latestDeclaredCausal(
+  intent: TopicIntent,
+  priorUserQuestions: readonly string[],
+): string[] {
+  for (let index = priorUserQuestions.length - 1; index >= 0; index -= 1) {
+    const prior = priorUserQuestions[index];
+    if (!prior || SYNTHETIC_CONTEXT.test(prior)) continue;
+    const text = normalizeSpanishText(prior);
+    const priorIntent = detectTopicIntent(prior);
+    if (priorIntent && priorIntent.id !== intent.id) return [];
+    const topicChanged = hasTopicTerm(text) && !priorIntent;
+    if (
+      !DECLARED_CAUSAL.test(text) ||
+      (!DECLARED_CAUSAL_FRAME.test(text) && !ELLIPTICAL_CAUSAL.test(text))
+    ) {
+      if (topicChanged) return [];
+      continue;
+    }
+    const labels = causalLabelsInQuestion(prior);
+    if (labels.length) return labels;
+    if (topicChanged) return [];
+  }
+  return [];
+}
+
+/**
  * Consulta canónica del proceso, completada con la causal que la persona
  * declaró cuando corresponde: la norma dedica secciones distintas a salud,
- * emergencia, violencia, unidad familiar e interés personal.
+ * emergencia, violencia, unidad familiar e interés personal. Un pedido de casos
+ * hereda el motivo del hilo cuando el turno actual no lo repite.
  */
 export function processCanonicalQuery(
   intent: TopicIntent,
   question: string,
+  priorUserQuestions: readonly string[] = [],
 ): string {
   const base =
     (intent.moduleName === AUXILIARY_MODULE
       ? AUXILIARY_PROCESS_QUERIES[intent.id]
       : undefined) ?? PROCESS_CANONICAL_QUERIES[intent.id];
-  const causals = causalLabelsInQuestion(question);
-  return causals.length ? `${base} ${causals.join(' ')}` : base;
+  const cases = asksForProcessCases(question);
+  const declared = causalLabelsInQuestion(question);
+  const labels =
+    declared.length || !cases
+      ? declared
+      : latestDeclaredCausal(intent, priorUserQuestions);
+  return [base, labels.join(' '), cases ? CASES_QUERY : '']
+    .filter((part) => part.length > 0)
+    .join(' ');
 }
 
 /**
@@ -235,8 +317,11 @@ export function processCanonicalQuery(
 export function processQueriesForIntent(
   intent: TopicIntent | null,
   question: string,
+  priorUserQuestions: readonly string[] = [],
 ): string[] {
-  return intent ? [processCanonicalQuery(intent, question)] : [];
+  return intent
+    ? [processCanonicalQuery(intent, question, priorUserQuestions)]
+    : [];
 }
 
 /**

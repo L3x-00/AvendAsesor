@@ -36,7 +36,7 @@ describe('RagService - contexto de proceso del hilo', () => {
    * consulta que la originó (como en el corpus real). El gateway recibe el
    * vector, así que cada vector se registra junto a su texto.
    */
-  function buildSearchable() {
+  function buildSearchable(extraGateway: Record<string, unknown> = {}) {
     const queryByVector = new Map<number, string>();
     const embeddings = {
       embed: jest.fn().mockImplementation((queries: string[]) =>
@@ -49,7 +49,10 @@ describe('RagService - contexto de proceso del hilo', () => {
         ),
       ),
     };
-    const gateway = { search: jest.fn().mockResolvedValue([]) };
+    const gateway = {
+      search: jest.fn().mockResolvedValue([]),
+      ...extraGateway,
+    };
     const service = new RagService(embeddings, gateway, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.5)),
     } as never);
@@ -1087,6 +1090,208 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({
       kind: 'evidence',
       sources: [{ chunkId: 'requisitos-destaque' }],
+    });
+  });
+
+  // Amnesia conversacional: «háblame más sobre las situaciones» no nombra el
+  // proceso, pero el hilo sí. La búsqueda tiene que llevar la denominación y el
+  // motivo que abrió el hilo, no una consulta vacía que terminaba en aclaración.
+  it('busca las situaciones con el proceso y la causal del hilo', async () => {
+    const { service, embeddings } = build();
+
+    await service.retrieve('hablame mas sobre las situaciones', null, [
+      'quiero saber sobre la reasignacion docente por emergencia',
+    ]);
+
+    const inherited = embeddedQueries(embeddings).filter((query) =>
+      query.includes('reasignación docente'),
+    );
+    expect(inherited.length).toBeGreaterThan(0);
+    expect(inherited.every((query) => query.includes('emergencia'))).toBe(true);
+    expect(inherited.some((query) => query.includes('casos'))).toBe(true);
+  });
+
+  const rvmChunk = {
+    ...plazoChunk,
+    chunkContent:
+      'La reasignación docente por emergencia se solicita ante la UGRE de origen con la documentación que acredite el hecho.',
+    chunkId: 'rvm-inicio',
+    documentId: 'rvm-document',
+    documentTitle: 'Resolución Viceministerial N.° 158-2025-MINEDU',
+    documentType: 'RESOLUCION_VICEMINISTERIAL',
+    documentVersionId: 'rvm-version',
+    pageEnd: 2,
+    pageStart: 2,
+    sectionTitle: 'Del objeto',
+  };
+
+  const rvmPage24 = {
+    articleReference: 'Artículo 7',
+    chunkContent:
+      'Son situaciones de emergencia el sismo, el huaico, la inundación y el incendio que afecten la vivienda o la salud de la persona.',
+    chunkId: 'rvm-page-24',
+    chunkIndex: 40,
+    documentVersionId: 'rvm-version',
+    numeralReference: null,
+    pageEnd: 24,
+    pageStart: 24,
+    sectionTitle: 'De las situaciones de emergencia',
+  };
+
+  it('lee la página pedida del documento que la búsqueda ya recuperó', async () => {
+    const chunksAtPage = jest.fn().mockResolvedValue([rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [
+        {
+          chunkContent: rvmPage24.chunkContent,
+          chunkId: 'rvm-page-24',
+          pageEnd: 24,
+          pageStart: 24,
+        },
+      ],
+    });
+    expect(chunksAtPage).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 24, versionId: 'rvm-version' }),
+    );
+  });
+
+  it('no inventa la página cuando el gateway no puede leerla', async () => {
+    const { service, gateway } = buildSearchable();
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    // Sin capacidad de lectura de página, la consulta sigue el flujo normal: se
+    // responde con el fragmento recuperado, nunca con una página estimada.
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'rvm-inicio', pageStart: 2 }],
+    });
+  });
+
+  it('descarta el fragmento de otra página y sigue el flujo normal', async () => {
+    const chunksAtPage = jest
+      .fn()
+      .mockResolvedValue([{ ...rvmPage24, pageEnd: 22, pageStart: 22 }]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'rvm-inicio' }],
+    });
+  });
+
+  it('prueba el siguiente fragmento cuando el primero no es evidencia', async () => {
+    // El primer fragmento de la página llegó sin texto (extracción de una página
+    // con solo sellos) y la sanitización lo descarta; la página sigue siendo
+    // ubicable con el siguiente.
+    const signature = {
+      ...rvmPage24,
+      chunkContent: '',
+      chunkId: 'rvm-page-24-firma',
+    };
+    const chunksAtPage = jest.fn().mockResolvedValue([signature, rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ]),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'rvm-page-24' }],
+    });
+  });
+
+  // Fail-closed del documento: una página solo se resuelve cuando el turno
+  // identifica el documento (hilo previo o referencia exacta). «Página 12 del
+  // documento» en un chat nuevo no señala ningún archivo.
+  it('no resuelve una página sin documento identificado', async () => {
+    const chunksAtPage = jest.fn().mockResolvedValue([rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await service.retrieve('página 12 del documento', null, []);
+
+    expect(chunksAtPage).not.toHaveBeenCalled();
+  });
+
+  it('no habilita la lectura de página con solo un saludo previo', async () => {
+    const chunksAtPage = jest.fn().mockResolvedValue([rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await service.retrieve('pagina 12 del documento', null, ['hola']);
+
+    expect(chunksAtPage).not.toHaveBeenCalled();
+  });
+
+  // La sigla identifica el tipo documental incluso en un chat nuevo: la compuerta
+  // del carril página no depende solo del hilo.
+  it('resuelve la página por la sigla sin turnos previos', async () => {
+    const chunksAtPage = jest.fn().mockResolvedValue([rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, []),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'rvm-page-24', pageStart: 24 }],
+    });
+  });
+
+  it('elige el ancla del tipo nombrado entre dos normas recuperadas', async () => {
+    const rm = {
+      ...rvmChunk,
+      chunkId: 'rm-inicio',
+      documentTitle: 'Resolución Ministerial N.° 049-2025-MINEDU',
+      documentType: 'RESOLUCION_MINISTERIAL',
+      documentVersionId: 'rm-version',
+      semanticScore: 0.99,
+    };
+    const chunksAtPage = jest.fn().mockResolvedValue([rvmPage24]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rm, rvmChunk]);
+
+    await service.retrieve('pagina 24 de la rvm', null, []);
+
+    expect(chunksAtPage).toHaveBeenCalledWith(
+      expect.objectContaining({ versionId: 'rvm-version' }),
+    );
+  });
+
+  it('descarta filas de otra versión aunque cubran la página', async () => {
+    const chunksAtPage = jest
+      .fn()
+      .mockResolvedValue([
+        { ...rvmPage24, documentVersionId: 'otra-version' },
+        rvmPage24,
+      ]);
+    const { service, gateway } = buildSearchable({ chunksAtPage });
+    gateway.search.mockResolvedValue([rvmChunk]);
+
+    await expect(
+      service.retrieve('pagina 24 de la rvm', null, []),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [{ chunkId: 'rvm-page-24' }],
     });
   });
 });

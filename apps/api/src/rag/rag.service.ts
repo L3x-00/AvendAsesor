@@ -120,6 +120,12 @@ import {
 } from './process-context';
 import type { MedicalLeaveApplicability } from './medical-leave-applicability';
 import {
+  coversPage,
+  documentTypeMatches,
+  pageReferenceIn,
+  type PageReference,
+} from './page-reference';
+import {
   medicalLeaveContextRequests,
   validatedMedicalLeaveEvidence,
 } from './medical-leave-evidence';
@@ -1672,6 +1678,98 @@ export class RagService {
       : [found];
   }
 
+  /**
+   * Fragmento real de la página pedida dentro de un documento que la consulta
+   * ya recuperó. La versión ancla tiene que pertenecer al tipo documental
+   * nombrado y, cuando el turno hereda el proceso, tratarlo: la página no
+   * autoriza a salir del documento ni del tema. Devuelve null —fail closed—
+   * cuando la página no está en el corpus recuperado o el documento no acredita
+   * el proceso, y entonces la consulta sigue su flujo normal.
+   */
+  private async pageEvidenceForRequest(input: {
+    abortSignal?: AbortSignal;
+    inheritedIntent: TopicIntent | null;
+    inheritedProcessChunkIds: ReadonlySet<string>;
+    pageReference: PageReference;
+    question: string;
+    retrievalScope: RetrievalScope;
+    sources: RetrievedChunk[];
+  }): Promise<RetrievedChunk | null> {
+    const fetch = this.gateway.chunksAtPage?.bind(this.gateway);
+    if (!fetch) return null;
+    const { page, documentType } = input.pageReference;
+    const eligible = input.sources
+      .map(sanitizeRetrievedEvidence)
+      .filter((source): source is RetrievedChunk => Boolean(source))
+      .filter(
+        (source) =>
+          sourcesEligibleForQuestion(
+            [source],
+            input.question,
+            input.retrievalScope,
+          ).length > 0,
+      )
+      .filter((source) =>
+        documentType ? documentTypeMatches(source, documentType) : true,
+      )
+      .filter((source) =>
+        input.inheritedIntent
+          ? treatsInheritedProcess(
+              input.inheritedIntent,
+              source,
+              input.inheritedProcessChunkIds.has(source.chunkId),
+            )
+          : true,
+      );
+    // Entre varios documentos que acreditan el tipo y el proceso, se prefiere el
+    // vigente y el más reciente: «página 24 de la RVM» sin número de norma no
+    // identifica un archivo concreto y la versión más nueva es la que la persona
+    // está consultando. El desempate restante es determinista.
+    const anchor = [...eligible].sort(
+      (left, right) =>
+        Number(right.documentSituation === 'current') -
+          Number(left.documentSituation === 'current') ||
+        (right.issuanceYear ?? 0) - (left.issuanceYear ?? 0) ||
+        right.semanticScore - left.semanticScore ||
+        right.lexicalScore - left.lexicalScore ||
+        left.chunkId.localeCompare(right.chunkId),
+    )[0];
+    if (!anchor) return null;
+    let rows: VersionChunk[];
+    try {
+      rows = await fetch({
+        abortSignal: input.abortSignal,
+        page,
+        versionId: anchor.documentVersionId,
+      });
+      input.abortSignal?.throwIfAborted();
+    } catch (error) {
+      if (input.abortSignal?.aborted) throw error;
+      return null;
+    }
+    // El primer fragmento que cubre la página puede ser un pie de firma o un
+    // membrete que la sanitización descarta; se prueban los siguientes antes de
+    // renunciar a la página.
+    for (const row of rows) {
+      if (
+        row.documentVersionId !== anchor.documentVersionId ||
+        !coversPage(row, page)
+      ) {
+        continue;
+      }
+      // El fragmento de la página hereda la identidad del documento ancla
+      // (`chunkFromDeliveredVersion`): la página pertenece al mismo archivo que ya
+      // acreditó el tipo y el proceso. Volver a exigir que el texto de la página
+      // repita el nombre del trámite descartaría justo las páginas que desarrollan
+      // los supuestos sin repetir el título.
+      const evidence = sanitizeRetrievedEvidence(
+        chunkFromDeliveredVersion(anchor, row),
+      );
+      if (evidence) return evidence;
+    }
+    return null;
+  }
+
   private async retrieveEvidence(
     question: string,
     selectedModuleId: string | null,
@@ -1700,7 +1798,11 @@ export class RagService {
      * el umbral general, es la atribución que se le puede exigir.
      */
     const inheritedProcessQuery =
-      processQueriesForIntent(inheritedIntent, question)[0] ?? null;
+      processQueriesForIntent(
+        inheritedIntent,
+        question,
+        priorUserQuestions,
+      )[0] ?? null;
     let inheritedProcessChunkIds = new Set<string>();
     const auxiliaryHiringDocuments =
       !options.legalCrossModule &&
@@ -1915,7 +2017,11 @@ export class RagService {
             // Un seguimiento que no repite el proceso («¿y por causal de
             // salud?», «¿cómo postulo?») recupera con la denominación del
             // proceso que el hilo ya abrió. Aporta vocabulario, no hechos.
-            ...processQueriesForIntent(inheritedIntent, question),
+            ...processQueriesForIntent(
+              inheritedIntent,
+              question,
+              priorUserQuestions,
+            ),
           ].filter((value, index, values) => values.indexOf(value) === index);
       if (canonicalQueries.length) {
         const canonicalEmbeddings = await this.embed(
@@ -2069,6 +2175,41 @@ export class RagService {
           }
         : { kind: 'no_evidence', topRelevanceScore: null };
     }
+    // «Página 24 de la RVM»: la búsqueda vectorial no puede apuntar a una
+    // página. El documento se toma de las fuentes que esta misma consulta ya
+    // recuperó —y, si el hilo lo abrió, del proceso heredado— y la página se lee
+    // del fragmento real de esa versión. Sin documento identificado no se
+    // resuelve la página: basta con el hilo, una referencia exacta o un tipo
+    // documental nombrado («RVM»). «Página 12 del documento» en un chat nuevo no
+    // señala ningún archivo. Sin fragmento para esa página, el turno sigue el
+    // flujo normal.
+    const pageReference = pageReferenceIn(question);
+    const canResolvePage =
+      pageReference !== null &&
+      (inheritedIntent !== null ||
+        directReferences.length > 0 ||
+        pageReference.documentType !== null);
+    if (pageReference && canResolvePage) {
+      const pageEvidence = await this.pageEvidenceForRequest({
+        abortSignal: options.abortSignal,
+        inheritedIntent: inheritedIntent ?? options.topicIntent ?? null,
+        inheritedProcessChunkIds,
+        pageReference,
+        question,
+        retrievalScope,
+        sources: [...rawGlobalSources, ...rawSelectedSources],
+      });
+      if (pageEvidence) {
+        return {
+          kind: 'evidence',
+          resolvedModule: selectedModuleId
+            ? resolveSelectedRootModule([pageEvidence], selectedModuleId)
+            : null,
+          sources: [pageEvidence],
+          topRelevanceScore: pageEvidence.semanticScore,
+        };
+      }
+    }
     // La ruta conserva las asociaciones de todos los documentos pertinentes.
     // La deduplicación interdocumental ocurre solo al armar las fuentes que se
     // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
@@ -2203,7 +2344,11 @@ export class RagService {
         ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
         ...teachingPositionEvidenceQueries(salaryQuestion),
-        ...processQueriesForIntent(inheritedIntent, question),
+        ...processQueriesForIntent(
+          inheritedIntent,
+          question,
+          priorUserQuestions,
+        ),
       ]
         .filter((value, index, values) => values.indexOf(value) === index)
         .slice(0, 8);

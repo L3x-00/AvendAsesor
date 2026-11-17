@@ -319,6 +319,94 @@ describe('SupabaseRetrievalGatewayAdapter', () => {
     });
   });
 
+  describe('chunksAtPage', () => {
+    function pageClient(result: { data: unknown; error: unknown }) {
+      const query = {
+        eq: jest.fn(),
+        gte: jest.fn(),
+        limit: jest.fn().mockResolvedValue(result),
+        lte: jest.fn(),
+        order: jest.fn(),
+        select: jest.fn(),
+      };
+      query.select.mockReturnValue(query);
+      query.eq.mockReturnValue(query);
+      query.lte.mockReturnValue(query);
+      query.gte.mockReturnValue(query);
+      query.order.mockReturnValue(query);
+      const from = jest.fn().mockReturnValue(query);
+      return { from, query };
+    }
+
+    it('lee hasta tres fragmentos de la versión que cubren la página', async () => {
+      // Un pie de firma puede ocupar el primer fragmento de la página: se piden
+      // hasta tres candidatos y la sanitización decide cuál es evidencia.
+      const { from, query } = pageClient({
+        data: [
+          {
+            article_reference: 'Artículo 7',
+            chunk_content: 'Texto de la página 24.',
+            id: 'chunk-24',
+            chunk_index: 40,
+            document_version_id: 'version',
+            numeral_reference: null,
+            page_end: 24,
+            page_start: 24,
+            section_title: 'De las situaciones',
+          },
+        ],
+        error: null,
+      });
+
+      const rows = await new SupabaseRetrievalGatewayAdapter({
+        from,
+      } as unknown as SupabaseServerClient).chunksAtPage({
+        page: 24,
+        versionId: 'version',
+      });
+
+      expect(from).toHaveBeenCalledWith('document_chunks');
+      expect(query.eq).toHaveBeenCalledWith('document_version_id', 'version');
+      expect(query.lte).toHaveBeenCalledWith('page_start', 24);
+      expect(query.gte).toHaveBeenCalledWith('page_end', 24);
+      expect(query.limit).toHaveBeenCalledWith(3);
+      expect(rows).toEqual([
+        expect.objectContaining({
+          chunkContent: 'Texto de la página 24.',
+          chunkId: 'chunk-24',
+          documentVersionId: 'version',
+          pageEnd: 24,
+          pageStart: 24,
+        }),
+      ]);
+    });
+
+    it('oculta el error de la base detrás de un error de servicio', async () => {
+      const { from } = pageClient({
+        data: null,
+        error: { message: 'unavailable' },
+      });
+
+      await expect(
+        new SupabaseRetrievalGatewayAdapter({
+          from,
+        } as unknown as SupabaseServerClient).chunksAtPage({
+          page: 24,
+          versionId: 'version',
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('falla cerrado sin cliente configurado', async () => {
+      await expect(
+        new SupabaseRetrievalGatewayAdapter(null).chunksAtPage({
+          page: 24,
+          versionId: 'version',
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+  });
+
   it('hides database errors behind a service error', async () => {
     const rpc = jest
       .fn()
