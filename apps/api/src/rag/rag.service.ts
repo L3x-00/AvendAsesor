@@ -2398,7 +2398,18 @@ export class RagService {
         options.abortSignal,
       );
       options.abortSignal?.throwIfAborted();
+      const asksSalaryComparison =
+        prefersCanonicalSalarySources(question) && !exactReferences.length;
       if (salaryEmbedding?.length === 1536) {
+        // Una comparación usa una consulta canónica fija: se admite el piso de
+        // similitud de las escalas porque la búsqueda libre suele premiar
+        // decretos administrativos que solo mencionan "remuneración".
+        const canonicalThreshold = asksSalaryComparison
+          ? Math.min(
+              searchBase.matchThreshold,
+              this.config.get<number>('RAG_SCHEDULE_SEMANTIC_FLOOR') ?? 0.3,
+            )
+          : searchBase.matchThreshold;
         const salarySources = (
           (await this.gateway.search({
             abortSignal: options.abortSignal,
@@ -2407,19 +2418,12 @@ export class RagService {
             query: salaryQuery,
             selectedModuleId: null,
           })) ?? []
-        ).filter(
-          (candidate) => candidate.semanticScore >= searchBase.matchThreshold,
-        );
+        ).filter((candidate) => candidate.semanticScore >= canonicalThreshold);
         options.abortSignal?.throwIfAborted();
-        // En una comparación explícita de incrementos, los decretos administrativos
-        // que solo mencionan "remuneración" desplazan a las escalas con cifras.
-        // La consulta canónica manda cuando la persona pidió comparar el monto.
-        const asksSalaryComparison = prefersCanonicalSalarySources(question);
+        const canonicalRouting = routingSources(salarySources);
         globalRoutingSources =
-          asksSalaryComparison &&
-          !exactReferences.length &&
-          salarySources.length
-            ? routingSources(salarySources)
+          asksSalaryComparison && canonicalRouting.length
+            ? canonicalRouting
             : routingSources([...rawGlobalSources, ...salarySources]);
       }
     }

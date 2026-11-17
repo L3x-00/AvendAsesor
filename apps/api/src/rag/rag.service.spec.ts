@@ -401,14 +401,16 @@ describe('RagService', () => {
     const escala = {
       ...source,
       chunkId: 'escala-2025',
+      documentVersionId: 'version-escala',
       documentTitle: 'Año 2025: Incremento de remuneraciones DS 049-2025-EF',
       chunkContent:
         'La remuneración mensual del docente con jornada de 30 horas es de S/ 3 300,60.',
-      semanticScore: 0.7,
+      semanticScore: 0.3,
     };
     const planilla = {
       ...source,
       chunkId: 'planilla-2018',
+      documentVersionId: 'version-planilla',
       documentTitle: 'Remuneraciones: instructivo de planilla de pagos',
       chunkContent: 'La remuneración del docente se paga mediante la planilla.',
       semanticScore: 0.95,
@@ -419,7 +421,16 @@ describe('RagService', () => {
       ),
     );
 
-    const result = await service.retrieve(
+    const comparisonService = new RagService(embeddings, gateway, {
+      get: jest.fn((key: string) =>
+        key === 'RAG_MATCH_COUNT'
+          ? 5
+          : key === 'RAG_SCHEDULE_SEMANTIC_FLOOR'
+            ? 0.3
+            : 0.5,
+      ),
+    } as never);
+    const result = await comparisonService.retrieve(
       'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
       null,
     );
