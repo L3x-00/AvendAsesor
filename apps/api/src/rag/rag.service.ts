@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { INTERACTIVE_AI_LIMITS } from '../config/ai-gateway';
@@ -1235,6 +1236,24 @@ interface RetrieveOptions {
 export class RagService {
   private readonly logger = new Logger(RagService.name);
 
+  /** Diagnóstico por turno: se reinicia en `retrieve` y solo alimenta logs. */
+  private retrievalDiag = { searches: 0, ms: 0, errors: [] as string[] };
+
+  private async searchTraced(input: Parameters<RetrievalGateway['search']>[0]) {
+    const started = Date.now();
+    this.retrievalDiag.searches += 1;
+    try {
+      return await this.gateway.search(input);
+    } catch (error) {
+      this.retrievalDiag.errors.push(
+        error instanceof Error ? error.name : 'unknown',
+      );
+      throw error;
+    } finally {
+      this.retrievalDiag.ms += Date.now() - started;
+    }
+  }
+
   constructor(
     @Inject(EMBEDDINGS_GATEWAY) private readonly embeddings: EmbeddingsGateway,
     @Inject(SUPABASE_RETRIEVAL_GATEWAY)
@@ -1265,6 +1284,7 @@ export class RagService {
     options: RetrieveOptions = {},
   ): Promise<RetrievalResult> {
     options.abortSignal?.throwIfAborted();
+    this.retrievalDiag = { searches: 0, ms: 0, errors: [] };
     let result = await this.retrieveEvidence(
       question,
       selectedModuleId,
@@ -1272,6 +1292,19 @@ export class RagService {
       options,
     );
     options.abortSignal?.throwIfAborted();
+    if (
+      result.kind === 'no_evidence' &&
+      !options.medicalApplicability &&
+      isBroadSalaryQuestion(question)
+    ) {
+      const hash = createHash('sha256')
+        .update(question)
+        .digest('hex')
+        .slice(0, 12);
+      this.logger.warn(
+        `RAG_NO_EVIDENCE_DIAG hash=${hash} searches=${this.retrievalDiag.searches} searchMs=${this.retrievalDiag.ms} errors=${this.retrievalDiag.errors.join('|') || 'none'}`,
+      );
+    }
     if (options.medicalApplicability) return result;
     if (
       (result.kind === 'evidence' || result.kind === 'topic_change') &&
@@ -1676,7 +1709,7 @@ export class RagService {
     const deliveredChunks = new Set(delivered.map((source) => source.chunkId));
     const found = sourcesEligibleForQuestion(
       (
-        (await this.gateway.search({
+        (await this.searchTraced({
           abortSignal,
           embedding,
           matchCount: 10,
@@ -1836,7 +1869,7 @@ export class RagService {
     if (!embedding || embedding.length !== 1536) return [];
     let sources: RetrievedChunk[];
     try {
-      sources = await this.gateway.search({
+      sources = await this.searchTraced({
         abortSignal: input.abortSignal,
         ...input.searchBase,
         embedding,
@@ -2065,7 +2098,7 @@ export class RagService {
           )
         : [];
     } else {
-      const globalSearch = this.gateway.search({
+      const globalSearch = this.searchTraced({
         abortSignal: options.abortSignal,
         ...searchBase,
         embedding: globalEmbedding,
@@ -2073,7 +2106,7 @@ export class RagService {
         selectedModuleId: null,
       });
       const selectedSearch = selectedModuleId
-        ? this.gateway.search({
+        ? this.searchTraced({
             abortSignal: options.abortSignal,
             ...searchBase,
             embedding: selectedEmbedding,
@@ -2138,7 +2171,7 @@ export class RagService {
             // y esa asociación no debe ocultar una fuente que trata de forma
             // directa la pregunta seleccionada.
             return Promise.all([
-              this.gateway.search({
+              this.searchTraced({
                 abortSignal: options.abortSignal,
                 ...searchBase,
                 embedding,
@@ -2146,7 +2179,7 @@ export class RagService {
                 selectedModuleId: null,
               }),
               selectedModuleId
-                ? this.gateway.search({
+                ? this.searchTraced({
                     abortSignal: options.abortSignal,
                     ...searchBase,
                     embedding,
@@ -2411,7 +2444,7 @@ export class RagService {
             )
           : searchBase.matchThreshold;
         const salarySources = (
-          (await this.gateway.search({
+          (await this.searchTraced({
             abortSignal: options.abortSignal,
             ...searchBase,
             embedding: salaryEmbedding,
@@ -2515,7 +2548,7 @@ export class RagService {
             if (!embedding || embedding.length !== 1536) {
               return Promise.resolve<RetrievedChunk[]>([]);
             }
-            return this.gateway.search({
+            return this.searchTraced({
               abortSignal: options.abortSignal,
               ...searchBase,
               embedding,
@@ -2996,6 +3029,15 @@ export class RagService {
       };
     }
 
+    if (isBroadSalaryQuestion(question)) {
+      const hash = createHash('sha256')
+        .update(question)
+        .digest('hex')
+        .slice(0, 12);
+      this.logger.warn(
+        `RAG_NO_EVIDENCE_DIAG hash=${hash} scope=${retrievalScope} searches=${this.retrievalDiag.searches} searchMs=${this.retrievalDiag.ms} errors=${this.retrievalDiag.errors.join('|') || 'none'} rawGlobal=${rawGlobalSources.length} routingGlobal=${globalRoutingSources.length} rawSelected=${rawSelectedSources.length} routingSelected=${selectedRoutingSources.length}`,
+      );
+    }
     return { kind: 'no_evidence', topRelevanceScore: null };
   }
 }
