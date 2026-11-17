@@ -1,6 +1,7 @@
 import {
   administrativeEvidenceQueries,
   isDirectAdministrativeEvidence,
+  isForeignContractRegimeSource,
 } from './administrative-retrieval';
 
 function source(
@@ -89,6 +90,11 @@ describe('administrativeEvidenceQueries', () => {
     'cuando te sacan de tu contrato?',
     'me pueden despedir de mi contrato?',
     'no me renuevan el contrato, que pasa?',
+    'que pasa si me saquen de mi contrato',
+    'me pueden quitar del contrato',
+    'me dan de baja del contrato',
+    'ya no me contratan, que pasa con mi contrato',
+    'mi contrato es hasta diciembre y luego que',
   ])(
     'traduce el término coloquial del contrato a la denominación del corpus: %s',
     (question) => {
@@ -99,7 +105,7 @@ describe('administrativeEvidenceQueries', () => {
   );
 
   it.each([
-    // Funciona hoy con la consulta literal: no se le añade otra expansión.
+    // Responde con la consulta literal: la expansión no le aporta nada.
     '¿Cómo renuncio a mi contrato docente?',
     // Sin «contrato» puede ser un cese, un destaque o una reasignación.
     'me botan de mi plaza',
@@ -108,6 +114,11 @@ describe('administrativeEvidenceQueries', () => {
     // «sacar» no es «sacar de»: obtener el contrato no es terminarlo.
     '¿dónde saco el contrato de trabajo?',
     '¿cuándo termina el año escolar?',
+    // Un contrato que no es el vínculo docente no pertenece al corpus.
+    'me sacan de mi contrato de alquiler',
+    'me despiden de mi contrato de trabajo en la empresa',
+    'cuando vence el contrato de luz',
+    'termina mi contrato de alquiler',
   ])(
     'no inventa un término de contrato donde la consulta no lo pide: %s',
     (question) => {
@@ -230,6 +241,28 @@ describe('isDirectAdministrativeEvidence', () => {
         }),
       ),
     ).toBe(false);
+    // Las asociaciones del catálogo son el metadato que entrega el RPC.
+    expect(
+      isDirectAdministrativeEvidence('cuando te pueden botar de mi contrato?', {
+        chunkContent: 'Causales de conclusión del contrato: término del plazo.',
+        documentTitle: 'Norma técnica de contratación',
+        moduleAssociations: [
+          {
+            rootModuleName: 'Auxiliar de educación',
+            submoduleName: 'Contratación de auxiliares de educación',
+          },
+        ],
+      }),
+    ).toBe(false);
+    // El título abreviado del corpus («aux educacion») también identifica.
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando te pueden botar de mi contrato?',
+        source('Causales de conclusión del contrato: término del plazo.', {
+          documentTitle: 'Faq contratatcion aux educacion 2026',
+        }),
+      ),
+    ).toBe(false);
     // La pregunta del auxiliar conserva su propia norma.
     expect(
       isDirectAdministrativeEvidence(
@@ -237,5 +270,69 @@ describe('isDirectAdministrativeEvidence', () => {
         auxiliarNorm,
       ),
     ).toBe(true);
+  });
+});
+
+describe('isForeignContractRegimeSource', () => {
+  const docenteNorm = {
+    chunkContent:
+      'La conclusión del contrato docente se produce por el término del plazo.',
+    documentTitle: 'Norma del proceso de contratación docente 2026',
+    moduleNames: ['Contratación y desplazamientos'],
+  };
+  const auxiliarNorm = {
+    chunkContent:
+      'Son causales de conclusión del contrato el término del plazo.',
+    documentTitle: 'Rvm 158 2025 minedu contratación auxiliares 2026',
+    moduleNames: ['Auxiliares de educación'],
+  };
+
+  it('descarta la norma del otro régimen en cualquier vía de admisión', () => {
+    expect(
+      isForeignContractRegimeSource(
+        'cuando te pueden botar de tu plaza de contrato?',
+        auxiliarNorm,
+      ),
+    ).toBe(true);
+    // El espejo: una pregunta del auxiliar no se respalda con la norma docente.
+    expect(
+      isForeignContractRegimeSource(
+        'cuando te sacan de tu contrato como auxiliar de educacion?',
+        docenteNorm,
+      ),
+    ).toBe(true);
+    expect(
+      isForeignContractRegimeSource(
+        'cuando te pueden botar de tu plaza de contrato?',
+        docenteNorm,
+      ),
+    ).toBe(false);
+    expect(
+      isForeignContractRegimeSource(
+        'cuando te sacan de tu contrato como auxiliar de educacion?',
+        auxiliarNorm,
+      ),
+    ).toBe(false);
+  });
+
+  it('solo descarta el fragmento que regula el término del contrato', () => {
+    // Una pregunta ajena al término del contrato no activa el filtro.
+    expect(
+      isForeignContractRegimeSource(
+        '¿Cómo renuncio a mi contrato docente?',
+        auxiliarNorm,
+      ),
+    ).toBe(false);
+    // La norma de auxiliares que no regula el término del contrato no se toca.
+    expect(
+      isForeignContractRegimeSource(
+        'cuando te pueden botar de tu plaza de contrato?',
+        {
+          ...auxiliarNorm,
+          chunkContent:
+            'Requisitos de formación académica para el auxiliar de educación.',
+        },
+      ),
+    ).toBe(false);
   });
 });

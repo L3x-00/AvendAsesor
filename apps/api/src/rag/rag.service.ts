@@ -68,6 +68,7 @@ import {
 import {
   administrativeEvidenceQueries,
   isDirectAdministrativeEvidence,
+  isForeignContractRegimeSource,
 } from './administrative-retrieval';
 import {
   evaluationEvidenceQueries,
@@ -442,7 +443,10 @@ function sourcesEligibleForQuestion(
     return (
       isSalarySourceCompatible(question, source) &&
       isEvaluationSourceCompatible(question, source) &&
-      isAuxiliarySourceCompatible(question, source)
+      isAuxiliarySourceCompatible(question, source) &&
+      // La norma del otro régimen no respalda una pregunta sobre el término del
+      // contrato, aunque use la misma denominación.
+      !isForeignContractRegimeSource(question, source)
     );
   });
 }

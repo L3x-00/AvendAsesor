@@ -48,10 +48,17 @@ const SCHOOL_LEVEL_SIGNAL =
  * propio camino. Las reglas no agregan hechos ni relajan el umbral.
  */
 const CONTRACT_WORD = /\bcontratos?\b/u;
+/**
+ * Un contrato que no es el vínculo docente: arrendamiento, suministros o empleo
+ * en una empresa privada. La pregunta no pertenece al corpus, así que no se
+ * traduce a la norma del profesorado.
+ */
+const NON_EDUCATION_CONTRACT =
+  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|servicios?|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b|\ben\s+(?:la|una)\s+empresa\b/u;
 const CONTRACT_EXIT_FROM_POSITION =
-  /\b(?:bot|sac|separ|retir|ech)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
+  /\b(?:bot|sac|saqu|separ|retir|ech|quit)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
 const CONTRACT_TERMINATION_EVENT =
-  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\bno\s+(?:me\s+)?renuev(?:an|en|a)\b[\s\S]{0,20}\bcontrato\b/u;
+  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
 /** El despido se nombra directamente, con el clítico pospuesto o antepuesto. */
 const CONTRACT_DISMISSAL =
   /\b(?:desped(?:ir(?:me|te|se|nos|los|las|lo|la|le)?|ido|ida|e|en|o)|despid(?:e|en|an|o|ieron|a|as))\b/u;
@@ -70,53 +77,6 @@ const CONTRACT_TERMINATION_QUERY =
 const CONTRACT_TERMINATION_EVIDENCE =
   /\b(?:conclusion|termino|terminacion|culminacion|extincion)\s+(?:de(?:l)?\s+)?(?:contrato|vinculo(?:\s+laboral)?|relacion\s+laboral)\b|\bcausales?\s+de\s+(?:conclusion|termino|terminacion|culminacion)\b|\bno\s+renovacion\s+(?:de(?:l)?\s+)?contrato\b/u;
 
-/**
- * El régimen del vínculo manda: la norma de auxiliares de educación también
- * enumera «causales de conclusión del contrato». Una pregunta de docente no se
- * responde con esa norma, y una del auxiliar conserva la suya. El catálogo es la
- * identidad disponible; si no informa módulos, se usa el título de la norma.
- */
-function belongsToAuxiliaryRegime(source: {
-  documentTitle: string;
-  moduleNames?: readonly string[];
-  moduleAssociations?: readonly {
-    rootModuleName?: string | null;
-    submoduleName?: string | null;
-  }[];
-}): boolean {
-  const declared = [
-    ...(source.moduleNames ?? []),
-    ...(source.moduleAssociations ?? []).flatMap((association) => [
-      association.rootModuleName ?? '',
-      association.submoduleName ?? '',
-    ]),
-  ];
-  if (
-    declared.some((name) =>
-      /\bauxiliar(?:es)?(?:\s+de\s+educacion)?\b/u.test(
-        normalizeSpanishText(name),
-      ),
-    )
-  ) {
-    return true;
-  }
-  return /\bauxiliar(?:es)?\b/u.test(
-    normalizeSpanishText(source.documentTitle),
-  );
-}
-
-/** La pregunta se declara del régimen de auxiliares de educación. */
-const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b/u;
-
-function hasContractTerminationSignal(text: string): boolean {
-  if (!CONTRACT_WORD.test(text)) return false;
-  return (
-    CONTRACT_EXIT_FROM_POSITION.test(text) ||
-    CONTRACT_TERMINATION_EVENT.test(text) ||
-    CONTRACT_DISMISSAL.test(text)
-  );
-}
-
 type AdministrativeEvidenceSource = Pick<
   RetrievedChunk,
   'chunkContent' | 'documentTitle'
@@ -127,6 +87,74 @@ type AdministrativeEvidenceSource = Pick<
     submoduleName?: string | null;
   }[];
 };
+
+/**
+ * El régimen se nombra «auxiliar» o su abreviatura del catálogo («aux»), como
+ * en el título «Faq contratatcion aux educacion 2026».
+ */
+const AUXILIARY_REGIME_SIGNAL = /\bauxiliar(?:es)?\b|\baux\b/u;
+
+/** La pregunta se declara del régimen de auxiliares de educación. */
+const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b/u;
+
+/**
+ * El régimen del vínculo manda: la norma de auxiliares de educación también
+ * enumera «causales de conclusión del contrato». Una pregunta de docente no se
+ * responde con esa norma, y una del auxiliar conserva la suya. El catálogo es la
+ * identidad disponible; si no informa módulos, se usa el título de la norma.
+ */
+function belongsToAuxiliaryRegime(
+  source: Pick<
+    AdministrativeEvidenceSource,
+    'documentTitle' | 'moduleNames' | 'moduleAssociations'
+  >,
+): boolean {
+  const declared = [
+    ...(source.moduleNames ?? []),
+    ...(source.moduleAssociations ?? []).flatMap((association) => [
+      association.rootModuleName ?? '',
+      association.submoduleName ?? '',
+    ]),
+  ];
+  if (
+    declared.some((name) =>
+      AUXILIARY_REGIME_SIGNAL.test(normalizeSpanishText(name)),
+    )
+  ) {
+    return true;
+  }
+  return AUXILIARY_REGIME_SIGNAL.test(
+    normalizeSpanishText(source.documentTitle),
+  );
+}
+
+function hasContractTerminationSignal(text: string): boolean {
+  if (!CONTRACT_WORD.test(text)) return false;
+  if (NON_EDUCATION_CONTRACT.test(text)) return false;
+  return (
+    CONTRACT_EXIT_FROM_POSITION.test(text) ||
+    CONTRACT_TERMINATION_EVENT.test(text) ||
+    CONTRACT_DISMISSAL.test(text)
+  );
+}
+
+/**
+ * Una pregunta sobre el término del contrato se respalda solo con la norma de su
+ * régimen. Se descarta únicamente el fragmento que regula la conclusión del
+ * contrato del otro régimen; el resto de la ruta documental no cambia.
+ */
+export function isForeignContractRegimeSource(
+  question: string,
+  source: AdministrativeEvidenceSource,
+): boolean {
+  const requested = normalizeSpanishText(question);
+  if (!hasContractTerminationSignal(requested)) return false;
+  if (!CONTRACT_TERMINATION_EVIDENCE.test(evidenceText(source))) return false;
+  return (
+    belongsToAuxiliaryRegime(source) !==
+    AUXILIARY_REGIME_IN_QUESTION.test(requested)
+  );
+}
 
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,

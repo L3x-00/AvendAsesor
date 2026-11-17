@@ -521,10 +521,13 @@ describe('RagService', () => {
 
   it('traduce el término coloquial del contrato a la consulta canónica', async () => {
     // El buscar real filtra por el umbral semántico: la pregunta coloquial no
-    // deja candidatos y solo la consulta canónica recupera la norma.
+    // deja candidatos y solo la consulta canónica recupera la norma. La
+    // expansión devuelve las dos normas con la misma denominación.
     gateway.search.mockImplementation(({ query }: { query: string }) =>
       Promise.resolve(
-        query.includes('conclusión del contrato') ? [contractConclusion] : [],
+        query.includes('conclusión del contrato')
+          ? [auxiliaryConclusion, contractConclusion]
+          : [],
       ),
     );
 
@@ -535,13 +538,12 @@ describe('RagService', () => {
       const result = await service.retrieve(question, null);
       expect(result.kind).toBe('evidence');
       if (result.kind !== 'evidence') throw new Error('Se esperaba evidencia');
-      expect(result.sources).toContainEqual(
-        expect.objectContaining({
-          chunkId: 'contract-conclusion',
-          pageEnd: 41,
-          pageStart: 39,
-        }),
-      );
+      // La norma del otro régimen no respalda la pregunta aunque use la misma
+      // denominación; se descarta en la admisión común, no solo en el rescate.
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'contract-conclusion',
+      ]);
+      expect(result.sources[0]).toMatchObject({ pageStart: 39, pageEnd: 41 });
     }
   });
 
