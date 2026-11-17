@@ -43,6 +43,15 @@ describe('SupabaseDocumentRelationsGatewayAdapter', () => {
     ]);
   });
 
+  it('devuelve lista vacía cuando el RPC no trae filas', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    await expect(
+      new SupabaseDocumentRelationsGatewayAdapter({
+        rpc,
+      } as unknown as SupabaseServerClient).relatedDocuments(documentId),
+    ).resolves.toEqual([]);
+  });
+
   it('oculta el error de base detrás de error de servicio', async () => {
     const rpc = jest
       .fn()
