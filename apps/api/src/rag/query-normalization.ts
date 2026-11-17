@@ -71,6 +71,8 @@ const COMMON_WORD_TYPOS: ReadonlyMap<string, string> = new Map([
   ['encargatur', 'encargatura'],
   ['encargaturaz', 'encargatura'],
   ['encargaturz', 'encargatura'],
+  ['pagian', 'página'],
+  ['pajina', 'página'],
 ]);
 
 /**

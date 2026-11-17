@@ -119,6 +119,7 @@ import type {
 } from './chat-history.gateway';
 import { jornadaClarificationExplanation } from './clarification-explanation';
 import { refersBack } from '../rag/anaphora';
+import { coversPage } from '../rag/page-reference';
 import {
   buildDeterministicConversationSummary,
   groundedConversationSummary,
@@ -1963,16 +1964,28 @@ export class ChatService {
       const locationRequest = sourceLocationRequestIn(effectiveQuestion, {
         inConversation: continuesConversation,
       });
-      if (locationRequest) {
+      // «Página 24 de la RVM»: se responden solo los fragmentos que cubren esa
+      // página. Si la recuperación no trajo ninguno, la consulta sigue su flujo
+      // normal: no se promete una ubicación que no se pudo verificar.
+      const locationSources =
+        locationRequest?.page !== undefined
+          ? retrieval.sources.filter((source) =>
+              coversPage(source, locationRequest.page!),
+            )
+          : retrieval.sources;
+      if (locationRequest && locationSources.length) {
         const citations = toCitationBundle(
-          retrieval.sources,
+          locationSources,
           selectedModuleId,
           relatedModule,
           relatedSubmodule,
         );
         const message = sourceLocationMessage({
           asksMinute: locationRequest.asksMinute,
-          sources: retrieval.sources,
+          ...(locationRequest.page !== undefined
+            ? { page: locationRequest.page }
+            : {}),
+          sources: locationSources,
         });
         if (message) {
           if (input.abortSignal?.aborted) return;

@@ -270,6 +270,53 @@ export class SupabaseRetrievalGatewayAdapter implements RetrievalGateway {
   }
 
   /**
+   * Fragmento que cubre una página física de la versión. Solo se consulta para
+   * versiones que la búsqueda del mismo turno ya devolvió: no amplía el corpus.
+   */
+  async chunksAtPage(input: {
+    abortSignal?: AbortSignal;
+    page: number;
+    versionId: string;
+  }): Promise<VersionChunk[]> {
+    input.abortSignal?.throwIfAborted();
+    const client = this.client;
+    if (!client) {
+      throw new ServiceUnavailableException(
+        'Document retrieval is not configured.',
+      );
+    }
+    const request = client
+      .from('document_chunks')
+      .select(
+        'id, document_version_id, chunk_index, page_start, page_end, section_title, article_reference, numeral_reference, chunk_content',
+      )
+      .eq('document_version_id', input.versionId)
+      .lte('page_start', input.page)
+      .gte('page_end', input.page)
+      .order('chunk_index', { ascending: true })
+      .limit(3);
+    const { data, error } = await (input.abortSignal
+      ? request.abortSignal(input.abortSignal)
+      : request);
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Document page evidence is temporarily unavailable.',
+      );
+    }
+    return (data ?? []).map((row) => ({
+      articleReference: row.article_reference,
+      chunkContent: row.chunk_content,
+      chunkId: row.id,
+      chunkIndex: row.chunk_index,
+      documentVersionId: row.document_version_id,
+      numeralReference: row.numeral_reference,
+      pageEnd: row.page_end,
+      pageStart: row.page_start,
+      sectionTitle: row.section_title,
+    }));
+  }
+
+  /**
    * Lee el inicio de versiones que la búsqueda del mismo turno ya admitió.
    * La cabecera suele contener el tipo y número de la norma, necesarios para
    * no presentar en una cita el título equivocado de una carga histórica.

@@ -1,4 +1,5 @@
 import { documentTypePromptLabel } from '../../rag/document-type';
+import { pageReferenceIn } from '../../rag/page-reference';
 import type { RetrievedChunk } from '../../rag/retrieval.gateway';
 import { normalizeSpanishText } from '../../rag/text-normalization';
 import { OFFICIAL_RESOURCE_NOUN, officialSitesIn } from './official-sites';
@@ -24,6 +25,8 @@ import { OFFICIAL_RESOURCE_NOUN, officialSitesIn } from './official-sites';
 export interface SourceLocationRequest {
   /** Pidió una marca de minuto: unidad de audio/video, no de un PDF. */
   asksMinute: boolean;
+  /** Página física pedida («página 24 de la RVM»), si la nombró. */
+  page?: number;
 }
 
 export interface SourceLocationRequestOptions {
@@ -36,6 +39,8 @@ export interface SourceLocationRequestOptions {
 
 export interface SourceLocationMessageInput {
   asksMinute: boolean;
+  /** Página pedida: la ubicación se enuncia con esa página, no con el rango. */
+  page?: number;
   sources: RetrievedChunk[];
 }
 
@@ -45,6 +50,13 @@ const DOCUMENT_NOUN =
 
 /** Código de norma («049-2025-EF», «326-2017»): también identifica documento. */
 const NORM_CODE = /\b\d{2,5}\s*-\s*(?:19|20)\d{2}\b/u;
+
+/**
+ * Sigla de norma («RVM», «RM», «DS»): identifica la clase de documento aunque
+ * todavía no se haya expandido a su nombre completo. Sin ella, «página 24 de la
+ * RVM» no se reconocía como ubicación y caía en la aclaración.
+ */
+const NORM_ACRONYM = /\b(?:rvm|rsg|rm|rd|ds|dl)\b/u;
 
 /** Lo que se pide: el enlace, la descarga o la ubicación del archivo. */
 const LOCATION_NOUN =
@@ -110,7 +122,12 @@ function asksMinuteUnit(normalized: string, inConversation: boolean): boolean {
   if (WEB_PLACE_NOUN.test(normalized)) return false;
   // Anclado al documento («…del documento se menciona el incremento?») sí es la
   // marca de ubicación; sin ancla, un sujeto de contenido la descarta.
-  if (DOCUMENT_NOUN.test(normalized) || NORM_CODE.test(normalized)) return true;
+  if (
+    DOCUMENT_NOUN.test(normalized) ||
+    NORM_CODE.test(normalized) ||
+    NORM_ACRONYM.test(normalized)
+  )
+    return true;
   return inConversation && !CONTENT_SUBJECT.test(normalized);
 }
 
@@ -158,7 +175,9 @@ export function sourceLocationRequestIn(
   }
 
   const mentionsDocument =
-    DOCUMENT_NOUN.test(normalized) || NORM_CODE.test(normalized);
+    DOCUMENT_NOUN.test(normalized) ||
+    NORM_CODE.test(normalized) ||
+    NORM_ACRONYM.test(normalized);
   // Un seguimiento de la conversación no vuelve a nombrar el documento, pero
   // tampoco puede traer su propio tema: «¿dónde veo la sección de trámites?» o
   // «¿en qué página está el requisito?» piden contenido o navegación web.
@@ -175,6 +194,20 @@ export function sourceLocationRequestIn(
     refersToDocument &&
     OPEN_ASK.test(normalized) &&
     DEFINITE_DOCUMENT.test(normalized);
+  // «Página 24 de la RVM», «pág. 12»: una página física concreta del documento
+  // del hilo. No es una pregunta de contenido —«¿qué dice la página 3?» sale
+  // arriba por CONTENT_ASK— ni una página web. En un chat nuevo se exige que la
+  // norma esté identificada: «página 12 del documento» no señala ningún archivo
+  // y afirmar una página sería adivinar.
+  const pageReference = pageReferenceIn(question);
+  const page = pageReference?.page ?? null;
+  const identifiesDocument =
+    inConversation ||
+    NORM_CODE.test(normalized) ||
+    NORM_ACRONYM.test(normalized);
+  if (refersToDocument && page !== null && identifiesDocument) {
+    return { asksMinute: false, page };
+  }
 
   if (asksLink || asksPlace || asksToOpen) return { asksMinute: false };
   return null;
@@ -258,7 +291,10 @@ function pageRange(
  * Ubicación con la unidad real del archivo: página física del PDF (con el total
  * cuando se conoce) o fragmento interno si la versión no tiene paginación PDF.
  */
-function locationPhrase(source: RetrievedChunk): string {
+function locationPhrase(
+  source: RetrievedChunk,
+  requestedPage?: number,
+): string {
   if (!isPdf(source)) return 'un fragmento interno, sin paginación PDF';
 
   const range = pageRange(source);
@@ -267,21 +303,42 @@ function locationPhrase(source: RetrievedChunk): string {
       ? `un fragmento del PDF de ${source.pdfPageCount} páginas, sin página declarada`
       : 'un fragmento del PDF, sin página declarada';
   }
+  // La persona pidió una página concreta y el fragmento la cubre: se enuncia esa
+  // página, que es la que el enlace abrirá. Si el fragmento no la cubre, se dice
+  // el rango real de la fuente y no se promete otra ubicación.
+  const requested =
+    requestedPage !== undefined &&
+    requestedPage >= range.from &&
+    requestedPage <= range.to
+      ? requestedPage
+      : null;
   const pages =
-    range.from === range.to
-      ? `la página ${range.from}`
-      : `las páginas ${range.from}–${range.to}`;
+    requested !== null
+      ? `la página ${requested}`
+      : range.from === range.to
+        ? `la página ${range.from}`
+        : `las páginas ${range.from}–${range.to}`;
   return source.pdfPageCount
     ? `${pages} de ${source.pdfPageCount}`
     : `${pages} del PDF`;
 }
 
-function singleOpenInstruction(source: RetrievedChunk): string {
+function singleOpenInstruction(
+  source: RetrievedChunk,
+  requestedPage?: number,
+): string {
   if (!isPdf(source)) return 'Ábrela con el enlace «Ver» de tus referencias.';
 
   const range = pageRange(source);
-  return range
-    ? `Ábrela con el enlace «Ver» de tus referencias: se abrirá en la página ${range.from}.`
+  const target =
+    requestedPage !== undefined &&
+    range &&
+    requestedPage >= range.from &&
+    requestedPage <= range.to
+      ? requestedPage
+      : range?.from;
+  return target
+    ? `Ábrela con el enlace «Ver» de tus referencias: se abrirá en la página ${target}.`
     : 'Ábrela con el enlace «Ver» de tus referencias: se abrirá al inicio del PDF.';
 }
 
@@ -310,8 +367,8 @@ export function sourceLocationMessage(
     const source = listed[0];
     return (
       `${notice}La fuente [1] corresponde a ${documentIdentity(source)}` +
-      `${situationNote(source)} y su ubicación es ${locationPhrase(source)}` +
-      `${articleNote(source)} [1]. ${singleOpenInstruction(source)}`
+      `${situationNote(source)} y su ubicación es ${locationPhrase(source, input.page)}` +
+      `${articleNote(source)} [1]. ${singleOpenInstruction(source, input.page)}`
     );
   }
 
@@ -319,7 +376,7 @@ export function sourceLocationMessage(
     const rank = index + 1;
     return (
       `[${rank}] ${documentIdentity(source)}${situationNote(source)}, ` +
-      `${locationPhrase(source)}${articleNote(source)}`
+      `${locationPhrase(source, input.page)}${articleNote(source)}`
     );
   });
   const tail = remaining

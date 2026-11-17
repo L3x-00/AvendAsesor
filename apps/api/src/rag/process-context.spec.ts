@@ -32,6 +32,9 @@ describe('contexto de proceso del hilo', () => {
       'que plazo tengo',
       'y como lo presento',
       'cuanto dura ese tramite',
+      'y emergencia?',
+      'los casos de salud',
+      'y unidad familiar?',
     ])('reconoce que «%s» depende del proceso abierto', (question) => {
       expect(isProcessDependentTurn(question)).toBe(true);
     });
@@ -43,6 +46,58 @@ describe('contexto de proceso del hilo', () => {
       'cuando empieza el ano escolar',
     ])('no ata «%s» a ningún proceso', (question) => {
       expect(isProcessDependentTurn(question)).toBe(false);
+    });
+
+    // Amnesia conversacional: sin esto, el seguimiento se buscaba solo y
+    // terminaba en aclaración o «sin evidencia».
+    it.each([
+      'hablame mas sobre las situaciones',
+      'situacion de lo que estabamos hablando',
+      'no quiero saber el procedimiento sino los casos',
+      'dame mas detalles de lo que hablabamos',
+      'y los casos?',
+      'mas sobre los casos',
+      'háblame más sobre las situaciones actuales',
+      'cuéntame los casos nuevos',
+    ])('reconoce la elipsis de tema en «%s»', (question) => {
+      expect(isProcessDependentTurn(question)).toBe(true);
+    });
+
+    it('reconoce que el turno apunta a una página del documento del hilo', () => {
+      expect(isProcessDependentTurn('pagina 24 de la rvm')).toBe(true);
+      expect(isProcessDependentTurn('página 7 del documento')).toBe(true);
+    });
+
+    it('no ata un pedido de casos con tema propio al proceso abierto', () => {
+      expect(
+        isProcessDependentTurn('los casos de despido en el magisterio'),
+      ).toBe(false);
+      expect(isProcessDependentTurn('casos de racionalizacion de plazas')).toBe(
+        false,
+      );
+      // El verbo de la petición no convierte en elipsis un complemento que nombra
+      // su propio asunto: sin esto, la consulta se respondía con el proceso
+      // anterior («explicame las situaciones del destaque» heredaba la
+      // reasignación). «El anexo 2» no sirve de contramuestra: «anexo» es un
+      // aspecto procedimental y ata el turno por su cuenta.
+      expect(
+        isProcessDependentTurn('explicame las situaciones del destaque'),
+      ).toBe(false);
+      expect(isProcessDependentTurn('muestrame los casos de mi region')).toBe(
+        false,
+      );
+      // Tampoco con adjetivos de por medio: la preposición posterior abre un
+      // complemento con tema propio aunque el genérico no vaya justo delante.
+      expect(
+        isProcessDependentTurn('muestrame los casos nuevos de mi region'),
+      ).toBe(false);
+      // Aunque la palabra «violencia» figure en el léxico de causales, «violencia
+      // escolar» es el asunto de la consulta, no el motivo declarado del trámite.
+      expect(
+        isProcessDependentTurn(
+          'muestrame los casos nuevos de violencia escolar',
+        ),
+      ).toBe(false);
     });
   });
 
@@ -206,6 +261,62 @@ describe('contexto de proceso del hilo', () => {
         id: 'temporary-placement',
       });
     });
+
+    // Amnesia conversacional: el seguimiento elíptico hereda el tema, no pide
+    // una aclaración sobre qué trámite se estaba tratando.
+    it.each([
+      'hablame mas sobre las situaciones',
+      'situacion de lo que estabamos hablando',
+      'no quiero saber el procedimiento sino los casos',
+      'y los casos?',
+    ])('hereda el proceso abierto en el seguimiento «%s»', (question) => {
+      expect(
+        inheritedTopicIntent(question, [
+          'hola',
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).toMatchObject({ id: 'reassignment' });
+    });
+
+    it('hereda el proceso cuando el turno pide una página del documento', () => {
+      expect(
+        inheritedTopicIntent('pagina 24 de la rvm', [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).toMatchObject({ id: 'reassignment' });
+    });
+
+    // El genérico con complemento propio («las situaciones del destaque») no es
+    // una elipsis: nombra su asunto y no debe heredar el proceso del hilo.
+    it('no hereda cuando el pedido de casos nombra otro tema', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ];
+      expect(
+        inheritedTopicIntent('explicame las situaciones del destaque', history),
+      ).toBeNull();
+      expect(
+        inheritedTopicIntent(
+          'muestrame los casos nuevos de violencia escolar',
+          history,
+        ),
+      ).toBeNull();
+      expect(
+        inheritedTopicIntent(
+          'muestrame los casos de racionalizacion de plazas',
+          ['quiero saber sobre la reasignacion docente por emergencia'],
+        ),
+      ).toBeNull();
+    });
+
+    it('no hereda del hilo cuando la elipsis no tiene tema previo', () => {
+      expect(
+        inheritedTopicIntent('hablame mas sobre las situaciones', [
+          'hola, soy docente',
+          'cuanto gana un docente contratado',
+        ]),
+      ).toBeNull();
+    });
   });
 
   describe('processCanonicalQuery', () => {
@@ -248,6 +359,134 @@ describe('contexto de proceso del hilo', () => {
       );
       expect(query).toContain('auxiliares de educación');
       expect(query).not.toContain('docente');
+    });
+
+    // El pedido de casos hereda el motivo que abrió el hilo: la norma separa
+    // los supuestos por causal y sin ella la búsqueda devolvía el trámite
+    // general en lugar de las situaciones de emergencia.
+    it('completa el pedido de casos con la causal declarada en el hilo', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+        'cuales son los requisitos',
+      ];
+      const question = 'hablame mas sobre las situaciones';
+      const inherited = inheritedTopicIntent(question, history);
+      const query = processCanonicalQuery(inherited!, question, history);
+      expect(query).toContain('reasignación docente');
+      expect(query).toContain('emergencia');
+      expect(query).toContain('casos');
+    });
+
+    it('no arrastra la causal heredada a un aspecto concreto', () => {
+      // «¿cuál es el procedimiento?» ya heredaba el proceso y debe seguir
+      // igual: la causal solo completa los pedidos de casos o situaciones.
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+        'cuales son los requisitos',
+      ];
+      const query = processCanonicalQuery(
+        inheritedTopicIntent('cual es el procedimiento', history)!,
+        'cual es el procedimiento',
+        history,
+      );
+      expect(query).toContain('reasignación docente');
+      expect(query).not.toContain('emergencia');
+      expect(query).not.toContain('casos');
+    });
+
+    it('prefiere la causal que el propio turno declara', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+      ];
+      const query = processCanonicalQuery(
+        intent('quiero reasignarme'),
+        'dame los casos por unidad familiar',
+        history,
+      );
+      expect(query).toContain('unidad familiar');
+      expect(query).not.toContain('emergencia');
+    });
+
+    // Una mención incidental no es una declaración de la causal: «mi familia
+    // vive lejos» no convierte el pedido de casos en un caso por unidad familiar.
+    it('no toma una causal mencionada de pasada en el hilo', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente',
+        'mi familia vive lejos, gracias',
+      ];
+      const question = 'hablame de los casos';
+      const query = processCanonicalQuery(
+        inheritedTopicIntent(question, history)!,
+        question,
+        history,
+      );
+      expect(query).toContain('reasignación docente');
+      expect(query).not.toContain('unidad familiar');
+      expect(query).toContain('casos');
+    });
+
+    it('no toma una enfermedad descrita de pasada como causal declarada', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente',
+        'mi esposo tiene una enfermedad, gracias',
+      ];
+      const question = 'hablame de los casos';
+      const query = processCanonicalQuery(
+        inheritedTopicIntent(question, history)!,
+        question,
+        history,
+      );
+      expect(query).not.toContain('salud');
+      expect(query).not.toContain('unidad familiar');
+    });
+
+    it('hereda la causal cuando el turno la nombra sin marco explícito', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente',
+        'y emergencia?',
+      ];
+      const question = 'hablame de los casos';
+      const query = processCanonicalQuery(
+        inheritedTopicIntent(question, history)!,
+        question,
+        history,
+      );
+      expect(query).toContain('reasignación docente');
+      expect(query).toContain('emergencia');
+    });
+
+    it('conserva la causal si un turno vuelve a nombrar el mismo proceso', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+        'que dice la norma de la reasignacion',
+      ];
+      const question = 'hablame de los casos';
+      const query = processCanonicalQuery(
+        inheritedTopicIntent(question, history)!,
+        question,
+        history,
+      );
+      expect(query).toContain('reasignación docente');
+      expect(query).toContain('emergencia');
+    });
+
+    // La causal pertenece al proceso que abrió el hilo, no al hilo entero: si un
+    // turno intermedio cambia de tema, la causal anterior no describe el nuevo
+    // trámite.
+    it('no arrastra la causal de un proceso anterior del mismo hilo', () => {
+      const history = [
+        'quiero saber sobre la reasignacion docente por emergencia',
+        'que es el destaque docente',
+        'hablame de los casos',
+      ];
+      const question = 'hablame de los casos';
+      const query = processCanonicalQuery(
+        inheritedTopicIntent(question, history)!,
+        question,
+        history,
+      );
+      expect(query).toContain('destaque docente');
+      expect(query).not.toContain('emergencia');
     });
   });
 

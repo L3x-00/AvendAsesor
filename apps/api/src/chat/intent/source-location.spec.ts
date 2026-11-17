@@ -219,6 +219,44 @@ describe('sourceLocationRequestIn', () => {
       ),
     ).toEqual({ asksMinute: true });
   });
+
+  // Seguimiento real: «página 24 de la RVM» tras hablar de la reasignación. Es
+  // una ubicación del documento del hilo, no una consulta de contenido.
+  it('reconoce la página pedida del documento del hilo', () => {
+    expect(
+      sourceLocationRequestIn('pagina 24 de la RVM', { inConversation: true }),
+    ).toEqual({
+      asksMinute: false,
+      page: 24,
+    });
+    expect(
+      sourceLocationRequestIn('página 7 del documento', {
+        inConversation: true,
+      }),
+    ).toEqual({ asksMinute: false, page: 7 });
+  });
+
+  it('no interpreta una página sin documento en un chat nuevo', () => {
+    expect(sourceLocationRequestIn('página 7')).toBeNull();
+    // Un «documento» genérico no identifica archivo: sin hilo ni norma concreta
+    // no hay página que prometer.
+    expect(sourceLocationRequestIn('página 7 del documento')).toBeNull();
+  });
+
+  it('reconoce la página cuando la norma está identificada', () => {
+    expect(sourceLocationRequestIn('página 12 del DS 049-2025-EF')).toEqual({
+      asksMinute: false,
+      page: 12,
+    });
+  });
+
+  it('no intercepta la pregunta por el contenido de una página', () => {
+    expect(
+      sourceLocationRequestIn('¿Qué dice la página 24 de la RVM?', {
+        inConversation: true,
+      }),
+    ).toBeNull();
+  });
 });
 
 describe('sourceLocationMessage', () => {

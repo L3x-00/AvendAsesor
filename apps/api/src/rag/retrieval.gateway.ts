@@ -104,4 +104,16 @@ export interface RetrievalGateway {
     limitPerVersion: number;
     versionIds: string[];
   }): Promise<VersionChunk[]>;
+  /**
+   * Fragmento que cubre una página física concreta de una versión ya recuperada
+   * en este turno. La búsqueda vectorial no puede apuntar a una página, y «página
+   * 24 de la RVM» es una ubicación verificable, no una consulta de contenido.
+   * Opcional: sin esta lectura, la consulta sigue el flujo normal y declara lo
+   * que no puede ubicar.
+   */
+  chunksAtPage?(input: {
+    abortSignal?: AbortSignal;
+    page: number;
+    versionId: string;
+  }): Promise<VersionChunk[]>;
 }

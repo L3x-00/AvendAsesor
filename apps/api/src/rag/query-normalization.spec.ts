@@ -38,6 +38,8 @@ describe('normalizeDomainQuery', () => {
     ['tengo una licensia por salud', 'tengo una licencia por salud'],
     ['mi nombramineto salió', 'mi nombramiento salió'],
     ['la ratificasion del director', 'la ratificación del director'],
+    ['pagian 24 de la rvm', 'página 24 de la resolución viceministerial'],
+    ['pajina 7 del documento', 'página 7 del documento'],
   ])('corrige el error frecuente en "%s"', (input, expected) => {
     expect(normalizeDomainQuery(input)).toBe(expected);
   });
