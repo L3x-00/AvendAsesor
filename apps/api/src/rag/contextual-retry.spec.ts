@@ -51,11 +51,19 @@ describe('reintento contextual determinista', () => {
     ).toBe('reasignación docente y los requisitos');
   });
 
+  it('acepta valores vacíos sin componer una consulta inválida', () => {
+    expect(buildContextualRetryQuery('pregunta', '')).toBe('pregunta');
+    expect(buildContextualRetryQuery('', 'tema')).toBe('tema');
+  });
+
   it('acota la longitud del texto del segundo intento', () => {
-    const question = 'casos '.repeat(200);
     expect(
-      buildContextualRetryQuery(question, 'reasignación docente').length,
+      buildContextualRetryQuery('casos '.repeat(200), 'reasignación docente')
+        .length,
     ).toBeLessThanOrEqual(RAG_QUERY_TEXT_MAX_CHARS);
+    expect(
+      buildContextualRetryQuery('casos '.repeat(1400), 'reasignación docente'),
+    ).toHaveLength(RAG_QUERY_TEXT_MAX_CHARS);
   });
 
   it('no fuerza la herencia si el segundo intento trae otro tema con ventaja', () => {
@@ -114,6 +122,18 @@ describe('reintento contextual determinista', () => {
         margin: 0.08,
         question: 'hablame mas sobre las situaciones',
         sources: [withoutProcessName],
+      }),
+    ).toBe(false);
+  });
+
+  it('no declara cambio de tema cuando el reintento no devolvió nada', () => {
+    const intent = detectTopicIntent('quiero reasignarme')!;
+    expect(
+      retryIndicatesTopicSwitch({
+        inheritedIntent: intent,
+        margin: 0.08,
+        question: 'hablame mas sobre las situaciones',
+        sources: [],
       }),
     ).toBe(false);
   });
