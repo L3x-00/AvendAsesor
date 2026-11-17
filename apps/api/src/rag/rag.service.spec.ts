@@ -5,9 +5,59 @@ import {
   isEllipticalFollowUp,
   RagService,
   resolveDetectedSubmodule,
+  searchableSalaryQuestion,
 } from './rag.service';
 import type { RetrievedChunk, RetrievalGateway } from './retrieval.gateway';
 import medicalFixture from './fixtures/medical-leave.json';
+
+describe('searchableSalaryQuestion', () => {
+  const c18 =
+    'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.';
+
+  it('quita las instrucciones de formato de una comparación salarial (C18)', () => {
+    const query = searchableSalaryQuestion(c18);
+    expect(query).not.toContain('figuran en los documentos');
+    expect(query).not.toContain('ordenados');
+    expect(query).toContain('incrementos de remuneración de los profesores');
+  });
+
+  it('reconoce la variante femenina de la instrucción de orden', () => {
+    const question =
+      'Muéstrame las escalas de remuneración de los profesores, ordenadas del más reciente al más antiguo.';
+    expect(searchableSalaryQuestion(question)).not.toContain('ordenadas');
+  });
+
+  it('no altera una pregunta salarial sin esas instrucciones', () => {
+    const question = '¿Cuánto gana un docente?';
+    expect(searchableSalaryQuestion(question)).toBe(question);
+  });
+
+  it('no altera una pregunta que no es salarial', () => {
+    const question =
+      '¿Qué documentos figuran en el expediente, ordenados del más reciente al más antiguo?';
+    expect(searchableSalaryQuestion(question)).toBe(question);
+  });
+});
+
+describe('búsqueda de comparaciones salariales', () => {
+  it('usa la pregunta sin instrucciones de formato al buscar (C18)', async () => {
+    const embeddings = {
+      embed: jest.fn().mockResolvedValue([new Array(1536).fill(0.01)]),
+    };
+    const gateway = { search: jest.fn().mockResolvedValue([]) };
+    const service = new RagService(embeddings, gateway, {
+      get: jest.fn(() => 0.5),
+    } as never);
+
+    await service.retrieve(
+      'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
+      null,
+    );
+
+    const calls = gateway.search.mock.calls as Array<[{ query: string }]>;
+    expect(calls[0]?.[0].query).not.toContain('figuran en los documentos');
+  });
+});
 
 describe('inheritedFactorQuestions', () => {
   const salary = '¿Cuánto gana un docente de 30 horas?';

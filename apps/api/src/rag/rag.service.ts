@@ -507,6 +507,22 @@ function withinScoreMargin(
 }
 
 /**
+ * C18: una comparación de escalas («muéstrame en una tabla los incrementos…
+ * que figuran en los documentos, ordenados del más reciente al más antiguo»)
+ * pierde el ancla salarial al combinar instrucciones de formato y orden. Estas
+ * frases no añaden sustento: se retiran solo de la consulta de búsqueda, y la
+ * pregunta original sigue guiando el prompt y las compuertas.
+ */
+export function searchableSalaryQuestion(question: string): string {
+  if (!isBroadSalaryQuestion(question)) return question;
+  return question
+    .replace(/,?\s*que figuran en los documentos/giu, ' ')
+    .replace(/,?\s*ordenad[oa]s? del m[áa]s reciente al m[áa]s antiguo/giu, ' ')
+    .replace(/\s{2,}/gu, ' ')
+    .trim();
+}
+
+/**
  * Consolida la evidencia por documento y la ordena con precedencia temporal
  * determinista. Un documento no debe ocupar varias referencias por fragmentos
  * contiguos y la situación documental pesa más que el año.
@@ -1946,12 +1962,13 @@ export class RagService {
         : null;
     if (medical?.intent === 'unsupported')
       return { kind: 'no_evidence', topRelevanceScore: null };
+    const globalQueryBase = searchableSalaryQuestion(question);
     const globalQuery =
       inheritedFactors.length && !documentReferences.length
-        ? salaryQuestion
+        ? searchableSalaryQuestion(salaryQuestion)
         : globalUsesContext
           ? contextual
-          : question;
+          : globalQueryBase;
     // Si la pregunta tiene tema propio y no remite al turno anterior, la
     // búsqueda del módulo también usa la pregunta sola. Así un tema nuevo no
     // recibe evidencia del tema anterior solo porque el módulo esté fijado.
