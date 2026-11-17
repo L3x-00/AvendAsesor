@@ -102,6 +102,8 @@ describe('administrativeEvidenceQueries', () => {
     'trabajo en una empresa particular de educacion y me botan de mi contrato',
     'me sacan de mi contrato de trabajo',
     'cuando termina mi contrato como docente',
+    'mi contrato acaba de terminar, que hago',
+    'mi contrato acaba de vencer, que pasa',
   ])(
     'traduce el término coloquial del contrato a la denominación del corpus: %s',
     (question) => {
@@ -125,6 +127,8 @@ describe('administrativeEvidenceQueries', () => {
     'me sacan de mi contrato de alquiler',
     'me despiden de mi contrato de trabajo en la empresa',
     'trabajo en una empresa privada y me botan de mi contrato',
+    'trabajo en una empresa privada no educativa y me botan de mi contrato',
+    'trabajo en una empresa privada sin fines educativos y me botan de mi contrato',
     'cuando vence el contrato de luz',
     'termina mi contrato de alquiler',
     // El verbo seguido de infinitivo no anuncia el término del vínculo.

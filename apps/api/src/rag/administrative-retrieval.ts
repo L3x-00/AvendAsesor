@@ -54,11 +54,11 @@ const CONTRACT_WORD = /\bcontratos?\b/u;
  * traduce a la norma del profesorado.
  */
 const NON_EDUCATION_CONTRACT =
-  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b(?!\s+(?:\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))|\ben\s+(?:la|una)\s+empresa\b(?!\s+(?:\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))/u;
+  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b(?!\s+(?:(?!\b(?:no|sin)\b)\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))|\ben\s+(?:la|una)\s+empresa\b(?!\s+(?:(?!\b(?:no|sin)\b)\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))/u;
 const CONTRACT_EXIT_FROM_POSITION =
   /\b(?:bot|sac|saqu|separ|retir|ech|quit)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
 const CONTRACT_TERMINATION_EVENT =
-  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\b(?:mi|el|tu|su)\s+contrato\s+(?:vence|termina|acaba|concluye|finaliza)\b(?!\s+de\s+\p{L}{2,}(?:ar|er|ir)(?:se|me|te|lo|la|le|nos|los|las)?\b)|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
+  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\b(?:mi|el|tu|su)\s+contrato\s+(?:vence|termina|acaba|concluye|finaliza)\b(?!\s+de\s+(?:empezar|iniciar|comenzar|pagar|devengar|suscribir|firmar|pactar)(?:se|me|te|lo|la|le|nos|los|las)?\b)|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
 /** El despido se nombra directamente, con el clítico pospuesto o antepuesto. */
 const CONTRACT_DISMISSAL =
   /\b(?:desped(?:ir(?:me|te|se|nos|los|las|lo|la|le)?|ido|ida|e|en|o)|despid(?:e|en|an|o|ieron|a|as))\b/u;
