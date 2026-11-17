@@ -479,6 +479,38 @@ describe('RagService', () => {
     warn.mockRestore();
   });
 
+  it('persiste el diagnóstico sin enviar la pregunta al proveedor de datos', async () => {
+    const previousFetch = global.fetch;
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const localService = new RagService(embeddings, gateway, {
+      get: jest.fn((key: string) =>
+        key === 'SUPABASE_URL'
+          ? 'https://example.supabase.co'
+          : key === 'SUPABASE_SERVICE_ROLE_KEY'
+            ? 'test-key'
+            : key === 'RAG_MATCH_COUNT'
+              ? 5
+              : 0.5,
+      ),
+    } as never);
+    gateway.search.mockResolvedValue([]);
+
+    await localService.retrieve('¿Cuánto gana un docente?', null);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.supabase.co/rest/v1/rpc/record_rag_diagnostic',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const init = fetchSpy.mock.calls[0]?.[1];
+    const body = typeof init?.body === 'string' ? init.body : '';
+    expect(body).toContain('question_hash');
+    expect(body).not.toContain('¿Cuánto gana');
+    fetchSpy.mockRestore();
+    global.fetch = previousFetch;
+  });
+
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
     const cancellation = new AbortController();
     embeddings.embed.mockImplementation(
