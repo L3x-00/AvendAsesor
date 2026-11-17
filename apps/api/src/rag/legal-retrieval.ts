@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import { normalizeSpanishText } from './text-normalization';
 
 /**
@@ -5,10 +6,8 @@ import { normalizeSpanishText } from './text-normalization';
  * Estas señales solo amplían la recuperación y conservan el módulo elegido; no
  * agregan hechos ni artículos que las fuentes no contengan.
  */
-const LEGAL_NORM_SIGNAL =
-  /\b(?:ley|reglamento|norma|articulo|numeral|decreto supremo|disposicion|transitori|derog|modificatori|carrera publica magisterial|29944|004-2013)\b/u;
-const LEGAL_CONCEPT_SIGNAL =
-  /\b(?:derechos?|deberes?|obligaciones?|sancion(?:es)?|destitucion|falta(?:s)?|licencia(?:s)?|permiso(?:s)?|pierde|perdida|nombramiento)\b/u;
+const LEGAL_NORM_SIGNAL = INTENT_TRIGGERS.LEGAL_NORM_SIGNAL;
+const LEGAL_CONCEPT_SIGNAL = INTENT_TRIGGERS.LEGAL_CONCEPT_SIGNAL;
 
 /** Módulo cuyo ámbito es la ley y su reglamento, no un trámite concreto. */
 export function isLegalModuleName(name: string | null | undefined): boolean {
@@ -41,23 +40,19 @@ export type LegalTopic =
 /** Materia jurídica concreta de la consulta, para orientar la evidencia. */
 export function legalTopic(question: string): LegalTopic | null {
   const text = normalizeSpanishText(question);
-  if (/\bderechos?\b/u.test(text)) return 'rights';
-  if (/\bdeberes?\b|\bobligaciones?\b/u.test(text)) return 'duties';
-  if (
-    /\bsancion|\bdestitucion|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u.test(
-      text,
-    )
-  ) {
+  if (INTENT_TRIGGERS.LEGAL_RIGHTS_TRIGGER.test(text)) return 'rights';
+  if (INTENT_TRIGGERS.LEGAL_DUTIES_TRIGGER.test(text)) return 'duties';
+  if (INTENT_TRIGGERS.LEGAL_SANCTIONS_TRIGGER.test(text)) {
     return 'sanctions';
   }
-  if (/\breglamento\b|\b004-2013\b|\bdecreto supremo\b/u.test(text)) {
+  if (INTENT_TRIGGERS.LEGAL_REGULATION_TRIGGER.test(text)) {
     return 'regulation';
   }
-  if (/\bmodific|\bderog|\btransitori|\bvigencia|\barticulo\b/u.test(text)) {
+  if (INTENT_TRIGGERS.LEGAL_MODIFICATIONS_TRIGGER.test(text)) {
     return 'modification';
   }
-  if (/\blicencia|\bpermiso/u.test(text)) return 'licenses';
-  if (/\bley\b|\b29944\b|\breforma magisterial\b/u.test(text)) return 'law';
+  if (INTENT_TRIGGERS.LEGAL_LICENSES_TRIGGER.test(text)) return 'licenses';
+  if (INTENT_TRIGGERS.LEGAL_LAW_NAME_TRIGGER.test(text)) return 'law';
   if (LEGAL_NORM_SIGNAL.test(text)) return 'generic';
   return null;
 }
@@ -189,52 +184,35 @@ export function legalEvidenceQueries(
   // en el enrutado de otro módulo.
   if (!force) return [];
   const queries: string[] = [];
-  if (/\breglamento\b|\b004-2013\b|\bdecreto supremo\b/u.test(text)) {
-    queries.push(
-      'Decreto Supremo 004-2013-ED Reglamento de la Ley de Reforma Magisterial disposiciones',
-    );
+  if (INTENT_TRIGGERS.LEGAL_REGULATION_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_REGULATION);
   }
-  if (/\bderechos?\b/u.test(text)) {
-    queries.push(
-      'derechos de los profesores Carrera Pública Magisterial Ley de Reforma Magisterial',
-    );
+  if (INTENT_TRIGGERS.LEGAL_RIGHTS_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_RIGHTS);
   }
-  if (/\bdeberes?\b|\bobligaciones?\b/u.test(text)) {
-    queries.push(
-      'deberes de los profesores Carrera Pública Magisterial Ley de Reforma Magisterial',
-    );
+  if (INTENT_TRIGGERS.LEGAL_DUTIES_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_DUTIES);
   }
-  if (
-    /\bsancion|\bdestitucion|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u.test(
-      text,
-    )
-  ) {
-    queries.push(
-      'sanción destitución cese temporal profesor proceso administrativo disciplinario Ley 29944',
-    );
+  if (INTENT_TRIGGERS.LEGAL_SANCTIONS_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_SANCTIONS);
   }
-  if (/\blicencia|\bpermiso/u.test(text)) {
-    queries.push(
-      'licencia por motivos particulares profesores requisitos norma técnica licencias permisos vacaciones',
-    );
-    if (/motivos particulares/u.test(text)) {
-      queries.push(
-        '5.20 licencia por motivos particulares dos años continuos o discontinuos período cinco años docente nombrado',
-      );
+  if (INTENT_TRIGGERS.LEGAL_LICENSES_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_LICENSES);
+    if (INTENT_TRIGGERS.LEGAL_PERSONAL_LEAVE_TRIGGER.test(text)) {
+      queries.push(INTENT_EXPANSIONS.LEGAL_PERSONAL_LEAVE);
     }
   }
-  if (/\bmodific|\bderog|\btransitori|\bvigencia|\barticulo\b/u.test(text)) {
-    queries.push(
-      'modificación derogación disposiciones transitorias Ley 29944 vigencia artículo',
-    );
+  if (INTENT_TRIGGERS.LEGAL_MODIFICATIONS_TRIGGER.test(text)) {
+    queries.push(INTENT_EXPANSIONS.LEGAL_MODIFICATIONS);
   }
   // La consulta general solo se añade si no hay un concepto específico o si la
   // persona nombró expresamente la ley, su número o un artículo. Evita que una
   // pregunta por licencias se responda con cualquier norma que cite la ley.
-  if (!queries.length || /\bley\b|\b29944\b|\barticulo\b/u.test(text)) {
-    queries.unshift(
-      'Ley 29944 Ley de Reforma Magisterial reglamento Decreto Supremo 004-2013-ED artículos vigencia',
-    );
+  if (
+    !queries.length ||
+    INTENT_TRIGGERS.LEGAL_EXPLICIT_LAW_TRIGGER.test(text)
+  ) {
+    queries.unshift(INTENT_EXPANSIONS.LEGAL_GENERAL);
   }
   return [...new Set(queries)].slice(0, 4);
 }

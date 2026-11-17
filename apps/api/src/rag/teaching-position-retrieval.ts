@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { salaryQuestionProfile } from './salary-applicability';
 import { normalizeSpanishText } from './text-normalization';
@@ -13,31 +14,27 @@ import { normalizeSpanishText } from './text-normalization';
  * afirman requisitos, montos ni plazos.
  */
 
-const PLACE_SIGNAL = /\bplazas?\b/u;
-const HOURS_SIGNAL = /\bhoras?\b/u;
+const PLACE_SIGNAL = INTENT_TRIGGERS.PLACE_SIGNAL;
+const HOURS_SIGNAL = INTENT_TRIGGERS.HOURS_SIGNAL;
 /** Jornada extraordinaria: es un pago, no la distribución de horas del colegio. */
-const OVERTIME_SIGNAL = /\bhoras?\s+extras?\b/u;
-const HOURS_DISTRIBUTION =
-  /\b(?:cuadro de distribucion de horas|distribucion de horas|carga horaria|horas pedagogicas|carga academica)\b/u;
+const OVERTIME_SIGNAL = INTENT_TRIGGERS.OVERTIME_SIGNAL;
+const HOURS_DISTRIBUTION = INTENT_TRIGGERS.HOURS_DISTRIBUTION;
 /**
  * La asignación de la carga horaria se reconoce por su propio vocabulario
  * («me asignan», «me tocan», «se reparten») o por la decisión explícita
  * («quién decide/determina/asigna»). Un «quién» suelto pertenece a la
  * asistencia («quién me autoriza a faltar»), no a este módulo.
  */
-const HOUR_ASSIGNMENT =
-  /\b(?:asignacion(?:es)?|asignan|asigna|distribuyen|distribuye|reparten|reparte|tocan|toca|determina|determinan|dicto|dicta|dictan)\b/u;
-const HOUR_DECISION =
-  /\bquien\s+(?:decide|deciden|determina|determinan|asigna|asignan|reparte|reparten|define|definen|controla|controlan|elabora|elaboran|organiza|organizan)\b/u;
-const SURPLUS_SIGNAL = /\bexcedent(?:e|es)\b/u;
+const HOUR_ASSIGNMENT = INTENT_TRIGGERS.HOUR_ASSIGNMENT;
+const HOUR_DECISION = INTENT_TRIGGERS.HOUR_DECISION;
+const SURPLUS_SIGNAL = INTENT_TRIGGERS.SURPLUS_SIGNAL;
 /**
  * La condición de la plaza se nombra con el adjetivo junto al sustantivo:
  * «plaza orgánica», «plaza eventual», «mi plaza es eventual».
  */
-const QUALIFIED_PLACE =
-  /\bplazas?\b[\s\S]{0,20}?\b(?:organicas?|eventual(?:es)?)\b|\b(?:organicas?|eventual(?:es)?)\s+plazas?\b/u;
-const CLASSIFIER_SIGNAL = /\bclasificador(?:es)?\s+de\s+cargos?\b/u;
-const CLASSIFICATION_SIGNAL = /\bclasificacion\s+de\s+cargos?\b/u;
+const QUALIFIED_PLACE = INTENT_TRIGGERS.QUALIFIED_PLACE;
+const CLASSIFIER_SIGNAL = INTENT_TRIGGERS.CLASSIFIER_SIGNAL;
+const CLASSIFICATION_SIGNAL = INTENT_TRIGGERS.CLASSIFICATION_SIGNAL;
 
 /**
  * Un proceso que la consulta ya nombró manda sobre la condición de la plaza: en
@@ -52,8 +49,7 @@ const CLASSIFICATION_SIGNAL = /\bclasificacion\s+de\s+cargos?\b/u;
  * fuera de la guarda; «encargado» sí pertenece a la encargatura y se excluye
  * salvo que la consulta pida la definición del tema.
  */
-const COMPETING_PROCESS =
-  /\b(?:desta(?:c|qu)\p{L}*|encarg\p{L}*|reasign\p{L}*|permut\p{L}*|racionaliz\p{L}*|contratacion|contratos?|contrat(?:ar|aron|an|arme)|ascens\p{L}*|ascend\p{L}*|asciend\p{L}*|licencias?|descanso medico|ces(?:e|es|en|an|aron|ado)|jubil\p{L}*)\b/u;
+const COMPETING_PROCESS = INTENT_TRIGGERS.COMPETING_PROCESS;
 
 /**
  * La consulta pide qué es o en qué se diferencia el tema. El verbo tiene que
@@ -61,8 +57,7 @@ const COMPETING_PROCESS =
  * no pregunta por la plaza, pregunta por el destaque. Por eso el término debe
  * aparecer a continuación del verbo, no en cualquier lugar de la frase.
  */
-const DEFINITION_REQUEST =
-  /\b(?:que (?:es|son|significa|significan)|en que consiste|concepto de|definicion de|diferencias? (?:entre|de))[^.]{0,20}\bplazas?\b|\bplazas?\b[^.]{0,20}\b(?:que (?:es|son|significa)|en que consiste)/u;
+const DEFINITION_REQUEST = INTENT_TRIGGERS.DEFINITION_REQUEST;
 
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> & {
@@ -126,20 +121,18 @@ export function teachingPositionEvidenceQueries(question: string): string[] {
   const queries: string[] = [];
   if (isHoursDistributionQuestion(question)) {
     queries.push(
-      'cuadro de distribución de horas de clase jornada laboral docente institución educativa',
-      'asignación de horas pedagógicas carga horaria docente nivel inicial primaria secundaria',
+      INTENT_EXPANSIONS.TEACHING_HOURS_TABLE,
+      INTENT_EXPANSIONS.TEACHING_HOURS_ASSIGNMENT,
     );
   }
   if (isPositionConditionQuestion(question)) {
     queries.push(
-      'plaza orgánica plaza eventual docente nombramiento cuadro de plazas',
-      'plazas excedentes reducción de plazas reubicación del personal docente',
+      INTENT_EXPANSIONS.POSITION_CONDITION_PROCESS,
+      INTENT_EXPANSIONS.POSITION_SURPLUS,
     );
   }
   if (isPositionClassifierQuestion(question)) {
-    queries.push(
-      'clasificador de cargos niveles de cargo manual de organización y funciones institución educativa',
-    );
+    queries.push(INTENT_EXPANSIONS.POSITION_CLASSIFIER_DETAIL);
   }
   return queries;
 }

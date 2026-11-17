@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { medicalRequestConcernsAnotherTopic } from './medical-leave-applicability';
 import { normalizeSpanishText } from './text-normalization';
@@ -8,33 +9,24 @@ import { normalizeSpanishText } from './text-normalization';
  * emplean los nombres técnicos del propio corpus para recuperar la fuente que
  * deberá respaldar la respuesta.
  */
-const MEDICAL_LEAVE_SIGNAL =
-  /\b(?:descanso\s+medic(?:o|a)|incapacidad\s+temporal|enferm(?:o|a|edad).{0,64}\b(?:dia|dias|faltar|ausen|licencia)|(?:dia|dias|faltar|ausen).{0,64}\benferm(?:o|a|edad))\b/u;
+const MEDICAL_LEAVE_SIGNAL = INTENT_TRIGGERS.MEDICAL_LEAVE_SIGNAL;
 /**
  * Un descanso prescrito por un profesional de la salud es una licencia por
  * incapacidad temporal aunque la persona no use el término técnico. Se exige
  * una señal médica (profesional o reposo) junto con una duración o un
  * certificado; un descanso vacacional no entra aquí.
  */
-const PRESCRIBED_REST_SIGNAL =
-  /\b(?:doctor(?:a)?|medic(?:o|a)|profesional de la salud)\b.{0,80}\b(?:descanso|reposo|incapacidad)\b|\b(?:descanso|reposo)\b.{0,40}\b(?:por|de)\s+\d{1,3}\s+(?:dias?|semanas?)\b/u;
-const PERSONAL_ABSENCE_SIGNAL =
-  /\b(?:motivos?|asuntos?)\s+particulares?\b|\bfaltar.{0,48}\b(?:dia|dias)\b/u;
-const VACATION_SIGNAL = /\bvacacion(?:es)?\b/u;
-const EMPLOYMENT_STATUS_SIGNAL = /\b(?:nombrad[oa]s?|contratad[oa]s?)\b/u;
-const ESCALAFON_SIGNAL = /\b(?:escalafon(?:ario)?|informe\s+escalafonario)\b/u;
-const TARDINESS_SIGNAL =
-  /\b(?:tardanz(?:a|as)|lleg(?:ar|ue|o)\s+tarde|retras(?:o|os))\b/u;
-const DISCIPLINARY_PROCESS_SIGNAL =
-  /\b(?:procedimiento\s+(?:administrativo\s+)?disciplinario|proceso\s+(?:administrativo\s+)?disciplinario|pad)\b/u;
-const DISCIPLINARY_SUBJECT_SIGNAL =
-  /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?|destitu(?:i|y)\p{L}*|destitucion)\b/u;
-const DISCIPLINARY_CONTEXT_SIGNAL =
-  /\b(?:docent(?:e|es)?|profesor(?:a|es|as)?|derecho|notificaci[oó]n|procedimiento)\b/u;
-const WORKDAY_SIGNAL =
-  /\b(?:jornada|horas?|carga\s+horaria|horas?\s+de\s+clase|pedagogic[ao]s?|complementarias?)\b/u;
-const SCHOOL_LEVEL_SIGNAL =
-  /\b(?:secundaria|inicial|primaria|eb[rae]|cetpro)\b/u;
+const PRESCRIBED_REST_SIGNAL = INTENT_TRIGGERS.PRESCRIBED_REST_SIGNAL;
+const PERSONAL_ABSENCE_SIGNAL = INTENT_TRIGGERS.PERSONAL_ABSENCE_SIGNAL;
+const VACATION_SIGNAL = INTENT_TRIGGERS.ADMINISTRATIVE_VACATION_SIGNAL;
+const EMPLOYMENT_STATUS_SIGNAL = INTENT_TRIGGERS.EMPLOYMENT_STATUS_SIGNAL;
+const ESCALAFON_SIGNAL = INTENT_TRIGGERS.ESCALAFON_SIGNAL;
+const TARDINESS_SIGNAL = INTENT_TRIGGERS.TARDINESS_SIGNAL;
+const DISCIPLINARY_PROCESS_SIGNAL = INTENT_TRIGGERS.DISCIPLINARY_PROCESS_SIGNAL;
+const DISCIPLINARY_SUBJECT_SIGNAL = INTENT_TRIGGERS.DISCIPLINARY_SUBJECT_SIGNAL;
+const DISCIPLINARY_CONTEXT_SIGNAL = INTENT_TRIGGERS.DISCIPLINARY_CONTEXT_SIGNAL;
+const WORKDAY_SIGNAL = INTENT_TRIGGERS.WORKDAY_SIGNAL;
+const SCHOOL_LEVEL_SIGNAL = INTENT_TRIGGERS.SCHOOL_LEVEL_SIGNAL;
 
 /**
  * Término del contrato docente. La persona lo describe con verbos de la vida
@@ -47,28 +39,23 @@ const SCHOOL_LEVEL_SIGNAL =
  * puede ser un cese, un destaque o una reasignación, y esos trámites ya tienen su
  * propio camino. Las reglas no agregan hechos ni relajan el umbral.
  */
-const CONTRACT_WORD = /\bcontratos?\b/u;
+const CONTRACT_WORD = INTENT_TRIGGERS.CONTRACT_WORD;
 /**
  * Un contrato que no es el vínculo docente: arrendamiento, suministros o empleo
  * en una empresa privada. La pregunta no pertenece al corpus, así que no se
  * traduce a la norma del profesorado.
  */
-const NON_EDUCATION_CONTRACT =
-  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b(?!\s+(?:(?!\b(?:no|sin)\b)\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))|\ben\s+(?:la|una)\s+empresa\b(?!\s+(?:(?!\b(?:no|sin)\b)\p{L}+\s+){0,3}(?:educativ|de educacion|del sector educativo))/u;
-const CONTRACT_EXIT_FROM_POSITION =
-  /\b(?:bot|sac|saqu|separ|retir|ech|quit)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
-const CONTRACT_TERMINATION_EVENT =
-  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\b(?:mi|el|tu|su)\s+contrato\s+(?:vence|termina|acaba|concluye|finaliza)\b(?!\s+de\s+(?:empezar|iniciar|comenzar|pagar|devengar|suscribir|firmar|pactar)(?:se|me|te|lo|la|le|nos|los|las)?\b)|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
+const NON_EDUCATION_CONTRACT = INTENT_TRIGGERS.NON_EDUCATION_CONTRACT;
+const CONTRACT_EXIT_FROM_POSITION = INTENT_TRIGGERS.CONTRACT_EXIT_FROM_POSITION;
+const CONTRACT_TERMINATION_EVENT = INTENT_TRIGGERS.CONTRACT_TERMINATION_EVENT;
 /** El despido se nombra directamente, con el clítico pospuesto o antepuesto. */
-const CONTRACT_DISMISSAL =
-  /\b(?:desped(?:ir(?:me|te|se|nos|los|las|lo|la|le)?|ido|ida|e|en|o)|despid(?:e|en|an|o|ieron|a|as))\b/u;
+const CONTRACT_DISMISSAL = INTENT_TRIGGERS.CONTRACT_DISMISSAL;
 
 /**
  * Consulta canónica: usa la denominación con la que el corpus regula el final
  * del contrato. Solo se habilita por la señal anterior.
  */
-const CONTRACT_TERMINATION_QUERY =
-  'conclusión del contrato docente causales de conclusión del contrato término del contrato no renovación del contrato';
+const CONTRACT_TERMINATION_QUERY = INTENT_EXPANSIONS.CONTRACT_TERMINATION;
 
 /**
  * El fragmento regula el término del contrato, no solo lo menciona: la norma de
@@ -92,10 +79,11 @@ type AdministrativeEvidenceSource = Pick<
  * El régimen se nombra «auxiliar» o su abreviatura del catálogo («aux»), como
  * en el título «Faq contratatcion aux educacion 2026».
  */
-const AUXILIARY_REGIME_SIGNAL = /\bauxiliar(?:es)?\b|\baux\b/u;
+const AUXILIARY_REGIME_SIGNAL = INTENT_TRIGGERS.AUXILIARY_REGIME_SIGNAL;
 
 /** La pregunta se declara del régimen de auxiliares de educación. */
-const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b|\baux\b/u;
+const AUXILIARY_REGIME_IN_QUESTION =
+  INTENT_TRIGGERS.AUXILIARY_REGIME_IN_QUESTION;
 
 /**
  * El régimen del vínculo manda: la norma de auxiliares de educación también
@@ -206,34 +194,26 @@ export function administrativeEvidenceQueries(question: string): string[] {
     // The medical signal establishes the topic, not the affected person's role.
     // In particular P15 and questions about third parties must not gain a
     // teacher-only search expansion. Existing role-specific queries stay separate.
-    queries.push(
-      'licencia por incapacidad temporal descanso médico CITT certificado médico',
-    );
+    queries.push(INTENT_EXPANSIONS.ADMIN_MEDICAL_LEAVE);
   }
 
   if (PERSONAL_ABSENCE_SIGNAL.test(text)) {
     queries.push(
-      'permiso por motivos particulares profesor nombrado ausencia por horas requisitos',
-      'licencia por motivos particulares profesor nombrado requisitos solicitud',
+      INTENT_EXPANSIONS.PERSONAL_ABSENCE_HOURS,
+      INTENT_EXPANSIONS.PERSONAL_ABSENCE_LICENSE,
     );
   }
 
   if (VACATION_SIGNAL.test(text) && EMPLOYMENT_STATUS_SIGNAL.test(text)) {
-    queries.push(
-      'vacaciones profesores nombrados contratados Carrera Pública Magisterial',
-    );
+    queries.push(INTENT_EXPANSIONS.ADMIN_VACATION);
   }
 
   if (TARDINESS_SIGNAL.test(text)) {
-    queries.push(
-      'tardanza descuento asistencia tercera tardanza factor minuto jornada laboral profesor',
-    );
+    queries.push(INTENT_EXPANSIONS.TARDINESS);
   }
 
   if (hasDisciplinarySignal(text)) {
-    queries.push(
-      'proceso administrativo disciplinario docente derecho de defensa descargos notificación',
-    );
+    queries.push(INTENT_EXPANSIONS.ADMIN_DISCIPLINARY);
   }
 
   if (hasContractTerminationSignal(text)) {
@@ -241,9 +221,7 @@ export function administrativeEvidenceQueries(question: string): string[] {
   }
 
   if (WORKDAY_SIGNAL.test(text) && SCHOOL_LEVEL_SIGNAL.test(text)) {
-    queries.push(
-      'jornada de trabajo profesor secundaria horas pedagógicas horas lectivas',
-    );
+    queries.push(INTENT_EXPANSIONS.ADMIN_WORKDAY);
   }
 
   return [...new Set(queries)].slice(0, 4);
