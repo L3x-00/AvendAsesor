@@ -1346,13 +1346,6 @@ export class RagService {
       routingSelected: 0,
       retrievalScope: '',
     };
-    void this.persistDiagnostic({
-      kind: 'measurement_turn_start',
-      question_hash: createHash('sha256').update(question).digest('hex').slice(0, 12),
-      searches: 0,
-      search_ms: 0,
-      errors: 'none',
-    });
     let result = await this.retrieveEvidence(
       question,
       selectedModuleId,
