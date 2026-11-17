@@ -1237,7 +1237,59 @@ export class RagService {
   private readonly logger = new Logger(RagService.name);
 
   /** Diagnóstico por turno: se reinicia en `retrieve` y solo alimenta logs. */
-  private retrievalDiag = { searches: 0, ms: 0, errors: [] as string[] };
+  private retrievalDiag: {
+    searches: number;
+    ms: number;
+    errors: string[];
+    rawGlobal: number;
+    routingGlobal: number;
+    rawSelected: number;
+    routingSelected: number;
+    retrievalScope: string;
+  } = {
+    searches: 0,
+    ms: 0,
+    errors: [],
+    rawGlobal: 0,
+    routingGlobal: 0,
+    rawSelected: 0,
+    routingSelected: 0,
+    retrievalScope: '',
+  };
+
+  /** Escritura best-effort: un fallo de diagnóstico nunca rompe el turno. */
+  private async persistDiagnostic(
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const url = this.config.get<string>('SUPABASE_URL');
+    const key = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    if (
+      typeof url !== 'string' ||
+      !url.startsWith('http') ||
+      typeof key !== 'string' ||
+      !key
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2_000);
+    try {
+      await fetch(`${url}/rest/v1/rpc/record_rag_diagnostic`, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ p_payload: payload }),
+        signal: controller.signal,
+      });
+    } catch {
+      //Observabilidad no crítica.
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
   private async searchTraced(input: Parameters<RetrievalGateway['search']>[0]) {
     const started = Date.now();
@@ -1284,7 +1336,16 @@ export class RagService {
     options: RetrieveOptions = {},
   ): Promise<RetrievalResult> {
     options.abortSignal?.throwIfAborted();
-    this.retrievalDiag = { searches: 0, ms: 0, errors: [] };
+    this.retrievalDiag = {
+      searches: 0,
+      ms: 0,
+      errors: [],
+      rawGlobal: 0,
+      routingGlobal: 0,
+      rawSelected: 0,
+      routingSelected: 0,
+      retrievalScope: '',
+    };
     let result = await this.retrieveEvidence(
       question,
       selectedModuleId,
@@ -1301,9 +1362,22 @@ export class RagService {
         .update(question)
         .digest('hex')
         .slice(0, 12);
+      const diagnostic = {
+        kind: 'no_evidence_salary',
+        question_hash: hash,
+        searches: this.retrievalDiag.searches,
+        search_ms: this.retrievalDiag.ms,
+        errors: this.retrievalDiag.errors.join('|') || 'none',
+        raw_global: this.retrievalDiag.rawGlobal,
+        routing_global: this.retrievalDiag.routingGlobal,
+        raw_selected: this.retrievalDiag.rawSelected,
+        routing_selected: this.retrievalDiag.routingSelected,
+        retrieval_scope: this.retrievalDiag.retrievalScope,
+      };
       this.logger.warn(
-        `RAG_NO_EVIDENCE_DIAG hash=${hash} searches=${this.retrievalDiag.searches} searchMs=${this.retrievalDiag.ms} errors=${this.retrievalDiag.errors.join('|') || 'none'}`,
+        `RAG_NO_EVIDENCE_DIAG hash=${hash} searches=${diagnostic.searches} searchMs=${diagnostic.search_ms} errors=${diagnostic.errors}`,
       );
+      void this.persistDiagnostic(diagnostic);
     }
     if (options.medicalApplicability) return result;
     if (
@@ -3030,6 +3104,11 @@ export class RagService {
     }
 
     if (isBroadSalaryQuestion(question)) {
+      this.retrievalDiag.rawGlobal = rawGlobalSources.length;
+      this.retrievalDiag.routingGlobal = globalRoutingSources.length;
+      this.retrievalDiag.rawSelected = rawSelectedSources.length;
+      this.retrievalDiag.routingSelected = selectedRoutingSources.length;
+      this.retrievalDiag.retrievalScope = retrievalScope;
       const hash = createHash('sha256')
         .update(question)
         .digest('hex')
