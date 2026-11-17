@@ -1615,6 +1615,35 @@ describe('ChatService', () => {
     ).toEqual([]);
   });
 
+  it('construye la tabla salarial desde la fuente con cita por fila (O03)', async () => {
+    const scheduleSource = {
+      ...source,
+      chunkContent:
+        'La remuneración mensual del profesor contratado, conforme al siguiente detalle: Modalidad / Forma Nivel / Ciclo Jornada laboral Remuneración mensual S/ Educación Básica Regular - EBR Inicial 30 3 300,60 Primaria 30 3 300,60',
+      documentTitle: 'DS 049-2025-EF',
+      resolutionNumber: '049-2025-EF',
+      issuanceYear: 2025,
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [scheduleSource],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      question: '¿Cuánto gano como profesor contratado de 30 horas?',
+    });
+    const answer = events.find((event) => event.type === 'token');
+
+    expect(events.some((event) => event.type === 'clarification')).toBe(false);
+    expect(answer?.data.text).toContain(
+      '| Educación Básica Regular – EBR | Inicial | 30 horas | S/ 3 300,60 | [1] |',
+    );
+    // La tabla se deriva del fragmento verificado: el modelo no la reescribe.
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
   it('no muestra una tabla salarial si el importe no coincide con su fila', async () => {
     const tableSource = {
       ...source,

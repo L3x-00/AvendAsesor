@@ -2279,17 +2279,30 @@ export class ChatService {
       }
     }
 
-    const useExtractiveSalary =
-      broadSalaryAnswerTurn ||
-      deterministicFirstScaleSalary ||
-      deterministicRemunerationTopic;
-    const extractiveSalary = useExtractiveSalary
+    // O03: cuando la recuperación trae una escala salarial verificable, la tabla
+    // se construye desde la fuente —no se le pide al modelo que la reescriba—.
+    // El renderizador extractivo ya pone `[n]` en cada fila; conviene por igual
+    // a preguntas generales y personales. Si no puede atribuir la cifra, se
+    // devuelve `null` y el turno sigue su ruta generativa normal.
+    const extractiveSalary = salaryProfileForTurn.isSalaryQuestion
       ? buildExtractiveSalaryAnswer(
           retrieval.sources,
           salaryQuestion,
           retrievalScope,
         )
       : null;
+    // Solo se adelanta el renderizador extractivo cuando produjo una tabla con
+    // filas citadas: es el caso O03 (escalas tabuladas). Una respuesta extractiva
+    // en prosa no debe saltarse la precisión ni la validación del flujo normal.
+    const extractiveHasVerifiedTable = Boolean(
+      extractiveSalary?.answer.includes('| --- |') &&
+      /\[\d+\]/u.test(extractiveSalary.answer),
+    );
+    const useExtractiveSalary =
+      extractiveHasVerifiedTable ||
+      broadSalaryAnswerTurn ||
+      deterministicFirstScaleSalary ||
+      deterministicRemunerationTopic;
     const responseSources = useExtractiveSalary
       ? (extractiveSalary?.sources ?? [])
       : retrieval.sources;
