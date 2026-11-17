@@ -592,7 +592,9 @@ describe('RagService', () => {
       'cuando te pueden botar de tu plaza de contrato?',
       'contratacion',
     );
-    expect(result.kind).not.toBe('evidence');
+    // Ni evidencia directa ni ambigua: la única norma recuperada es del otro
+    // régimen.
+    expect(result.kind).toBe('no_evidence');
   });
 
   it('conserva el módulo legal y responde con la norma relacionada que regula la materia', async () => {

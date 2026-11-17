@@ -98,6 +98,8 @@ describe('administrativeEvidenceQueries', () => {
     'mi contrato vence en diciembre, que pasa',
     'me sacan de mi contrato de servicios',
     'trabajo en una empresa educativa y me botan de mi contrato',
+    'trabajo en una empresa privada educativa y me botan de mi contrato',
+    'trabajo en una empresa particular de educacion y me botan de mi contrato',
     'me sacan de mi contrato de trabajo',
     'cuando termina mi contrato como docente',
   ])(
@@ -122,8 +124,12 @@ describe('administrativeEvidenceQueries', () => {
     // Un contrato que no es el vínculo docente no pertenece al corpus.
     'me sacan de mi contrato de alquiler',
     'me despiden de mi contrato de trabajo en la empresa',
+    'trabajo en una empresa privada y me botan de mi contrato',
     'cuando vence el contrato de luz',
     'termina mi contrato de alquiler',
+    // El verbo seguido de infinitivo no anuncia el término del vínculo.
+    'mi contrato acaba de empezar',
+    'el contrato termina de pagarse en marzo',
   ])(
     'no inventa un término de contrato donde la consulta no lo pide: %s',
     (question) => {
