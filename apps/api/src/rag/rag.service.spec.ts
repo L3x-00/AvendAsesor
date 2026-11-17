@@ -417,7 +417,7 @@ describe('RagService', () => {
     };
     gateway.search.mockImplementation((input: { query: string }) =>
       Promise.resolve(
-        /RIM docente/iu.test(input.query) ? [escala] : [planilla],
+        /años recientes/iu.test(input.query) ? [escala] : [planilla],
       ),
     );
 
@@ -448,7 +448,7 @@ describe('RagService', () => {
       semanticScore: 0.9,
     };
     gateway.search.mockImplementation((input: { query: string }) =>
-      Promise.resolve(/RIM docente/iu.test(input.query) ? [] : [planilla]),
+      Promise.resolve(/años recientes/iu.test(input.query) ? [] : [planilla]),
     );
 
     const result = await service.retrieve(

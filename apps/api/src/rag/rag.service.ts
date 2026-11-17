@@ -2391,15 +2391,16 @@ export class RagService {
       (broadSalaryProfile.role === null ||
         broadSalaryProfile.role === 'docente')
     ) {
-      const salaryQuery =
-        'remuneración íntegra mensual RIM docente escala magisterial nivel inicial primaria secundaria EBR EBE EBA ETP';
+      const asksSalaryComparison =
+        prefersCanonicalSalarySources(question) && !exactReferences.length;
+      const salaryQuery = asksSalaryComparison
+        ? 'incrementos de remuneraciones docentes años recientes tabla escala por año'
+        : 'remuneración íntegra mensual RIM docente escala magisterial nivel inicial primaria secundaria EBR EBE EBA ETP';
       const [salaryEmbedding] = await this.embed(
         [salaryQuery],
         options.abortSignal,
       );
       options.abortSignal?.throwIfAborted();
-      const asksSalaryComparison =
-        prefersCanonicalSalarySources(question) && !exactReferences.length;
       if (salaryEmbedding?.length === 1536) {
         // Una comparación usa una consulta canónica fija: se admite el piso de
         // similitud de las escalas porque la búsqueda libre suele premiar
