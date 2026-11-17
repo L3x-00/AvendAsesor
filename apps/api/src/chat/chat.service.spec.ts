@@ -1644,6 +1644,45 @@ describe('ChatService', () => {
     expect(answerGateway.generate).not.toHaveBeenCalled();
   });
 
+  it('mantiene el chat general aunque la evidencia salarial venga de otro módulo', async () => {
+    const remuneraciones = {
+      ...source,
+      moduleIds: ['rem'],
+      moduleNames: ['Remuneraciones'],
+      chunkContent:
+        'La remuneración mensual del profesor contratado con jornada de 30 horas es de S/ 2 000,00.',
+    };
+    const otraNorma = {
+      ...source,
+      chunkId: 'c8b56af-6d0c-4fef-881e-7c00907540dd',
+      moduleIds: ['ley'],
+      moduleNames: ['Ley y reglamento'],
+      chunkContent: 'La Ley 29944 regula la carrera pública magisterial.',
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: 'rem', name: 'Remuneraciones' },
+      sources: [remuneraciones, otraNorma],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La remuneración mensual del profesor contratado con jornada de 30 horas es de S/ 2 000,00. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gana un profesor contratado de 30 horas?',
+    });
+    const conversation = events.find((event) => event.type === 'conversation');
+    const answer = events.find((event) => event.type === 'token');
+
+    expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
+    expect(answer?.data.text).toContain('[1]');
+    expect(conversation?.data.moduleId).toBeNull();
+  });
+
   it('no muestra una tabla salarial si el importe no coincide con su fila', async () => {
     const tableSource = {
       ...source,
@@ -3952,19 +3991,24 @@ describe('ChatService', () => {
       ],
       topRelevanceScore: 0.9,
     });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La licencia se solicita ante la institución educativa. [1]';
+      })(),
+    );
     const events = await collect(service, {
       question: '¿Cómo solicito una licencia?',
       selectedModuleId: null,
     });
-    expect(events.map((event) => event.type)).toEqual([
-      'conversation',
-      'no_evidence',
-      'done',
-    ]);
-    expect(answerGateway.generate).not.toHaveBeenCalled();
-    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ sources: [], replyRole: 'no_evidence' }),
-    );
+    const conversation = events.find((event) => event.type === 'conversation');
+
+    // Antes se adoptaba el módulo y la compuerta cerraba la respuesta. Ahora
+    // un chat general con evidencia mixta sigue siendo general y responde.
+    expect(events.some((event) => event.type === 'no_evidence')).toBe(false);
+    expect(events.some((event) => event.type === 'token')).toBe(true);
+    expect(conversation?.data.moduleId).toBeNull();
+    expect(answerGateway.generate).toHaveBeenCalled();
   });
 
   it('preserves the selected-module conversation for an ambiguous topic', async () => {
