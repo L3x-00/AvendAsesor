@@ -36,6 +36,98 @@ const WORKDAY_SIGNAL =
 const SCHOOL_LEVEL_SIGNAL =
   /\b(?:secundaria|inicial|primaria|eb[rae]|cetpro)\b/u;
 
+/**
+ * Término del contrato docente. La persona lo describe con verbos de la vida
+ * real («me botan», «me sacan», «no me renuevan») y la norma lo nombra
+ * «conclusión del contrato» o «término del vínculo laboral».
+ *
+ * El módulo de contratación no tiene un `TopicIntent` propio, así que la
+ * traducción se registra aquí, con las demás situaciones administrativas del
+ * vínculo. La señal exige la palabra «contrato»: «me botan de mi plaza» sin más
+ * puede ser un cese, un destaque o una reasignación, y esos trámites ya tienen su
+ * propio camino. Las reglas no agregan hechos ni relajan el umbral.
+ */
+const CONTRACT_WORD = /\bcontratos?\b/u;
+const CONTRACT_EXIT_FROM_POSITION =
+  /\b(?:bot|sac|separ|retir|ech)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
+const CONTRACT_TERMINATION_EVENT =
+  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\bno\s+(?:me\s+)?renuev(?:an|en|a)\b[\s\S]{0,20}\bcontrato\b/u;
+/** El despido se nombra directamente, con el clítico pospuesto o antepuesto. */
+const CONTRACT_DISMISSAL =
+  /\b(?:desped(?:ir(?:me|te|se|nos|los|las|lo|la|le)?|ido|ida|e|en|o)|despid(?:e|en|an|o|ieron|a|as))\b/u;
+
+/**
+ * Consulta canónica: usa la denominación con la que el corpus regula el final
+ * del contrato. Solo se habilita por la señal anterior.
+ */
+const CONTRACT_TERMINATION_QUERY =
+  'conclusión del contrato docente causales de conclusión del contrato término del contrato no renovación del contrato';
+
+/**
+ * El fragmento regula el término del contrato, no solo lo menciona: la norma de
+ * renovación enumera condiciones para continuar y no responde cuándo termina.
+ */
+const CONTRACT_TERMINATION_EVIDENCE =
+  /\b(?:conclusion|termino|terminacion|culminacion|extincion)\s+(?:de(?:l)?\s+)?(?:contrato|vinculo(?:\s+laboral)?|relacion\s+laboral)\b|\bcausales?\s+de\s+(?:conclusion|termino|terminacion|culminacion)\b|\bno\s+renovacion\s+(?:de(?:l)?\s+)?contrato\b/u;
+
+/**
+ * El régimen del vínculo manda: la norma de auxiliares de educación también
+ * enumera «causales de conclusión del contrato». Una pregunta de docente no se
+ * responde con esa norma, y una del auxiliar conserva la suya. El catálogo es la
+ * identidad disponible; si no informa módulos, se usa el título de la norma.
+ */
+function belongsToAuxiliaryRegime(source: {
+  documentTitle: string;
+  moduleNames?: readonly string[];
+  moduleAssociations?: readonly {
+    rootModuleName?: string | null;
+    submoduleName?: string | null;
+  }[];
+}): boolean {
+  const declared = [
+    ...(source.moduleNames ?? []),
+    ...(source.moduleAssociations ?? []).flatMap((association) => [
+      association.rootModuleName ?? '',
+      association.submoduleName ?? '',
+    ]),
+  ];
+  if (
+    declared.some((name) =>
+      /\bauxiliar(?:es)?(?:\s+de\s+educacion)?\b/u.test(
+        normalizeSpanishText(name),
+      ),
+    )
+  ) {
+    return true;
+  }
+  return /\bauxiliar(?:es)?\b/u.test(
+    normalizeSpanishText(source.documentTitle),
+  );
+}
+
+/** La pregunta se declara del régimen de auxiliares de educación. */
+const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b/u;
+
+function hasContractTerminationSignal(text: string): boolean {
+  if (!CONTRACT_WORD.test(text)) return false;
+  return (
+    CONTRACT_EXIT_FROM_POSITION.test(text) ||
+    CONTRACT_TERMINATION_EVENT.test(text) ||
+    CONTRACT_DISMISSAL.test(text)
+  );
+}
+
+type AdministrativeEvidenceSource = Pick<
+  RetrievedChunk,
+  'chunkContent' | 'documentTitle'
+> & {
+  moduleNames?: readonly string[];
+  moduleAssociations?: readonly {
+    rootModuleName?: string | null;
+    submoduleName?: string | null;
+  }[];
+};
+
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
 ): string {
@@ -116,6 +208,10 @@ export function administrativeEvidenceQueries(question: string): string[] {
     );
   }
 
+  if (hasContractTerminationSignal(text)) {
+    queries.push(CONTRACT_TERMINATION_QUERY);
+  }
+
   if (WORKDAY_SIGNAL.test(text) && SCHOOL_LEVEL_SIGNAL.test(text)) {
     queries.push(
       'jornada de trabajo profesor secundaria horas pedagógicas horas lectivas',
@@ -133,7 +229,7 @@ export function administrativeEvidenceQueries(question: string): string[] {
  */
 export function isDirectAdministrativeEvidence(
   question: string,
-  source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
+  source: AdministrativeEvidenceSource,
 ): boolean {
   const requested = normalizeSpanishText(question);
   const evidence = evidenceText(source);
@@ -179,6 +275,15 @@ export function isDirectAdministrativeEvidence(
     return (
       /\bjornada\s+de\s+trabajo\b/u.test(evidence) &&
       /\bhoras\s+pedagogicas\b/u.test(evidence)
+    );
+  }
+  if (hasContractTerminationSignal(requested)) {
+    return (
+      CONTRACT_TERMINATION_EVIDENCE.test(evidence) &&
+      // La norma de auxiliares usa la misma denominación; solo la respalda una
+      // pregunta del mismo régimen.
+      (!belongsToAuxiliaryRegime(source) ||
+        AUXILIARY_REGIME_IN_QUESTION.test(requested))
     );
   }
   return false;

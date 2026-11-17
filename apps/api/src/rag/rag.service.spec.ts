@@ -491,6 +491,92 @@ describe('RagService', () => {
     ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
   });
 
+  const contractConclusion = {
+    ...source,
+    chunkContent:
+      'La conclusión del contrato docente se produce por el término del plazo, la renuncia, el fallecimiento y las causales establecidas en la norma.',
+    chunkId: 'contract-conclusion',
+    documentTitle:
+      'Norma Técnica que regula el proceso de contratación docente',
+    moduleIds: ['contratacion'],
+    moduleNames: ['Contratación y desplazamientos'],
+    pageEnd: 41,
+    pageStart: 39,
+    semanticScore: 0.82,
+  };
+  // La norma de auxiliares usa la misma denominación y comparte módulo: el
+  // descarte tiene que decidirlo la compuerta por régimen, no la ruta del
+  // catálogo.
+  const auxiliaryConclusion = {
+    ...contractConclusion,
+    chunkContent:
+      'Son causales de conclusión del contrato del auxiliar de educación el término del plazo y la renuncia.',
+    chunkId: 'auxiliary-contract-conclusion',
+    documentId: 'document-auxiliary',
+    documentTitle: 'Norma que regula la contratación de auxiliares',
+    documentVersionId: 'version-auxiliary',
+    pageEnd: 12,
+    pageStart: 11,
+  };
+
+  it('traduce el término coloquial del contrato a la consulta canónica', async () => {
+    // El buscar real filtra por el umbral semántico: la pregunta coloquial no
+    // deja candidatos y solo la consulta canónica recupera la norma.
+    gateway.search.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve(
+        query.includes('conclusión del contrato') ? [contractConclusion] : [],
+      ),
+    );
+
+    for (const question of [
+      'cuando te pueden botar de tu plaza de contrato?',
+      'cuando te sacan de tu contrato?',
+    ]) {
+      const result = await service.retrieve(question, null);
+      expect(result.kind).toBe('evidence');
+      if (result.kind !== 'evidence') throw new Error('Se esperaba evidencia');
+      expect(result.sources).toContainEqual(
+        expect.objectContaining({
+          chunkId: 'contract-conclusion',
+          pageEnd: 41,
+          pageStart: 39,
+        }),
+      );
+    }
+  });
+
+  it('descarta por régimen la norma de auxiliares en el rescate canónico', async () => {
+    // La expansión no supera el umbral (paso previo al rescate); el rescate
+    // busca sin umbral y devuelve las dos normas con la misma denominación.
+    let served = false;
+    gateway.search.mockImplementation(({ query }: { query: string }) => {
+      if (!query.includes('conclusión del contrato')) {
+        return Promise.resolve([]);
+      }
+      if (!served) {
+        served = true;
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([auxiliaryConclusion, contractConclusion]);
+    });
+
+    for (const question of [
+      'cuando te pueden botar de tu plaza de contrato?',
+      'cuando te sacan de tu contrato?',
+    ]) {
+      served = false;
+      const result = await service.retrieve(question, null);
+      expect(result.kind).toBe('evidence');
+      if (result.kind !== 'evidence') throw new Error('Se esperaba evidencia');
+      // El fragmento del mismo tenor escrito para auxiliares no respalda una
+      // pregunta de docente, aunque mencione la conclusión del contrato.
+      expect(result.sources.map((item) => item.chunkId)).toEqual([
+        'contract-conclusion',
+      ]);
+      expect(result.sources[0]).toMatchObject({ pageStart: 39, pageEnd: 41 });
+    }
+  });
+
   it('conserva el módulo legal y responde con la norma relacionada que regula la materia', async () => {
     gateway.search.mockResolvedValue([
       {

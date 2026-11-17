@@ -1,4 +1,3 @@
-import type { RetrievedChunk } from './retrieval.gateway';
 import {
   administrativeEvidenceQueries,
   isDirectAdministrativeEvidence,
@@ -6,8 +5,13 @@ import {
 
 function source(
   chunkContent: string,
-): Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'> {
-  return { chunkContent, documentTitle: 'Norma administrativa' };
+  extra: { documentTitle?: string; moduleNames?: string[] } = {},
+) {
+  return {
+    chunkContent,
+    documentTitle: extra.documentTitle ?? 'Norma administrativa',
+    moduleNames: extra.moduleNames,
+  };
 }
 
 describe('administrativeEvidenceQueries', () => {
@@ -79,6 +83,39 @@ describe('administrativeEvidenceQueries', () => {
       expect(administrativeEvidenceQueries(question)).toEqual([]);
     },
   );
+
+  it.each([
+    'cuando te pueden botar de tu plaza de contrato?',
+    'cuando te sacan de tu contrato?',
+    'me pueden despedir de mi contrato?',
+    'no me renuevan el contrato, que pasa?',
+  ])(
+    'traduce el término coloquial del contrato a la denominación del corpus: %s',
+    (question) => {
+      expect(administrativeEvidenceQueries(question)).toContain(
+        'conclusión del contrato docente causales de conclusión del contrato término del contrato no renovación del contrato',
+      );
+    },
+  );
+
+  it.each([
+    // Funciona hoy con la consulta literal: no se le añade otra expansión.
+    '¿Cómo renuncio a mi contrato docente?',
+    // Sin «contrato» puede ser un cese, un destaque o una reasignación.
+    'me botan de mi plaza',
+    'me echaron de mi cargo',
+    'me separaron de mi puesto',
+    // «sacar» no es «sacar de»: obtener el contrato no es terminarlo.
+    '¿dónde saco el contrato de trabajo?',
+    '¿cuándo termina el año escolar?',
+  ])(
+    'no inventa un término de contrato donde la consulta no lo pide: %s',
+    (question) => {
+      expect(administrativeEvidenceQueries(question)).not.toContain(
+        'conclusión del contrato docente causales de conclusión del contrato término del contrato no renovación del contrato',
+      );
+    },
+  );
 });
 
 describe('isDirectAdministrativeEvidence', () => {
@@ -141,5 +178,64 @@ describe('isDirectAdministrativeEvidence', () => {
         source('Las sanciones se registran en el escalafón.'),
       ),
     ).toBe(false);
+  });
+
+  it.each([
+    'cuando te pueden botar de tu plaza de contrato?',
+    'cuando te sacan de tu contrato?',
+  ])(
+    'admite la norma que regula la conclusión del contrato: %s',
+    (question) => {
+      expect(
+        isDirectAdministrativeEvidence(
+          question,
+          source(
+            'La conclusión del contrato docente se produce por el término del plazo, la renuncia, el fallecimiento y las causales establecidas en la norma.',
+          ),
+        ),
+      ).toBe(true);
+      // La norma de renovación dice cómo continuar, no cuándo termina.
+      expect(
+        isDirectAdministrativeEvidence(
+          question,
+          source(
+            'Renovación del contrato docente 2026: condiciones para continuar en la plaza.',
+          ),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('decide el régimen de la conclusión del contrato por el catálogo y la pregunta', () => {
+    const auxiliarNorm = source(
+      'Son causales de conclusión del contrato el término del plazo y la renuncia.',
+      {
+        documentTitle: 'Norma que regula la contratación de auxiliares',
+        moduleNames: ['Auxiliares de educación'],
+      },
+    );
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando te pueden botar de tu plaza de contrato?',
+        auxiliarNorm,
+      ),
+    ).toBe(false);
+    // El catálogo identifica el régimen aunque el título no lo nombre.
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando te pueden botar de mi contrato?',
+        source('Causales de conclusión del contrato: término del plazo.', {
+          documentTitle: 'Norma técnica de contratación',
+          moduleNames: ['Auxiliares de educación'],
+        }),
+      ),
+    ).toBe(false);
+    // La pregunta del auxiliar conserva su propia norma.
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando te sacan de tu contrato como auxiliar de educacion?',
+        auxiliarNorm,
+      ),
+    ).toBe(true);
   });
 });
