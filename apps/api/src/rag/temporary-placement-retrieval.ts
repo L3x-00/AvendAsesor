@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import { causalLabelsInQuestion } from './process-clarification';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
@@ -19,46 +20,40 @@ import { normalizeSpanishText } from './text-normalization';
  */
 
 /** Negación del propio proceso: no se busca un trámite que la persona rechaza. */
-const NEGATED_TEMPORARY_PLACEMENT =
-  /\bno\s+(?:quiero|deseo|necesito|busco|me\s+interesa)\s+(?:(?:un|una|el|la)\s+)?(?:destaques?|destacarme|destacarse|destacar)\b/u;
+const NEGATED_TEMPORARY_PLACEMENT = INTENT_TRIGGERS.NEGATED_TEMPORARY_PLACEMENT;
 
 /** Negación del desplazamiento completo (se conserva la guarda original). */
-const NEGATED_MOVE =
-  /\bno\s+(?:quiero|deseo|necesito|busco)\s+(?:trabajar|irme|trasladarme|desplazarme|cambiarme)\b/u;
+const NEGATED_MOVE = INTENT_TRIGGERS.NEGATED_MOVE;
 
 /**
  * Otro régimen o un objeto físico: el auxiliar tiene su propio procedimiento y
  * un estacionamiento no es un destaque.
  */
-const OTHER_REGIME_OR_OBJECT =
-  /\b(?:auxiliar(?:es)?|estacionamiento|aparcamiento|parking|vehicul\p{L}*)\b/u;
+const OTHER_REGIME_OR_OBJECT = INTENT_TRIGGERS.OTHER_REGIME_OR_OBJECT;
 
-const DESTAQUE_NOUN = /\bdestaques?\b/u;
+const DESTAQUE_NOUN = INTENT_TRIGGERS.DESTAQUE_NOUN;
 /** «destacarme», «destacarse»: la persona se refiere a su propio traslado. */
-const DESTAQUE_SELF = /\bdestacar(?:me|se|nos|lo|la)\b/u;
+const DESTAQUE_SELF = INTENT_TRIGGERS.DESTAQUE_SELF;
 /** «me destaco», «me destacaría»: primera persona sin el infinitivo. */
-const DESTAQUE_FIRST_PERSON = /\bme\s+destac(?:o|are|aria|e)\b/u;
+const DESTAQUE_FIRST_PERSON = INTENT_TRIGGERS.DESTAQUE_FIRST_PERSON;
 /** Formas que también aparecen en sentido figurado: exigen contexto de traslado. */
-const DESTAQUE_CONJUGATED = /\bdestac(?:ar|o|a|an|amos|are|aria|aran)\b/u;
-const DESTAQUE_PARTICIPLE = /\bdestacad[oa]s?\b/u;
+const DESTAQUE_CONJUGATED = INTENT_TRIGGERS.DESTAQUE_CONJUGATED;
+const DESTAQUE_PARTICIPLE = INTENT_TRIGGERS.DESTAQUE_PARTICIPLE;
 /**
  * El sujeto es otra persona (un hijo, un alumno): «mi hijo fue destacado en otra
  * zona» describe un logro, no el trámite del personal nombrado.
  */
-const THIRD_PARTY_SUBJECT =
-  /\b(?:mi|su|nuestro|nuestra|el|la|los|las|un|una)\s+(?:hijos?|hijas?|alumnos?|alumnas?|estudiantes?|apoderados?)\b/u;
+const THIRD_PARTY_SUBJECT = INTENT_TRIGGERS.THIRD_PARTY_SUBJECT;
 /**
  * Indicio de traslado o de plaza, no de docencia: «destacar en el examen» y
  * «docente destacado del año» son lenguaje corriente en un colegio y no piden
  * el proceso. «Nombrado» sí lo pide: el destaque es del personal nombrado.
  */
-const TRANSFER_CONTEXT =
-  /\b(?:nombrad[oa]s?|plazas?|plaza de origen|colegios?|escuelas?|institucion educativa|\bie\b|ugel|dre|otr[oa]s?\s+(?:colegio|escuela|institucion educativa|ie|ugel|dre|plaza|region|provincia|zona|localidad|distrito))\b/u;
+const TRANSFER_CONTEXT = INTENT_TRIGGERS.TRANSFER_CONTEXT;
 
-const RENEWAL = /\b(?:renov\p{L}*|prorrog\p{L}*|ampliacion|vigencia)\b/u;
+const RENEWAL = INTENT_TRIGGERS.RENEWAL;
 
-const EXPLICIT_DESTAQUE_QUERY =
-  'destaque docente requisitos procedimiento solicitud plazo norma técnica';
+const EXPLICIT_DESTAQUE_QUERY = INTENT_EXPANSIONS.EXPLICIT_DESTAQUE_QUERY;
 
 /**
  * La consulta nombra el destaque con el término del corpus. No afirma que
@@ -140,9 +135,9 @@ function explicitQueries(question: string): string[] {
   // expansión existe para las formas verbales y coloquiales («cómo
   // destacarme»), que de otro modo no aportan el término del proceso.
   if (DESTAQUE_NOUN.test(text)) return [];
-  const queries = [EXPLICIT_DESTAQUE_QUERY];
+  const queries: string[] = [EXPLICIT_DESTAQUE_QUERY];
   if (RENEWAL.test(text)) {
-    queries.push('renovación de destaque plazo prórroga solicitud vigencia');
+    queries.push(INTENT_EXPANSIONS.DESTAQUE_RENEWAL);
   }
   const causals = causalLabelsInQuestion(question);
   if (causals.length) {
@@ -171,7 +166,7 @@ function descriptiveQueries(text: string): string[] {
       text,
     );
   return school && otherWorkplace && temporary && retainsPosition
-    ? ['destaque docente temporal plaza de origen requisitos solicitud']
+    ? [INTENT_EXPANSIONS.DESTAQUE_DESCRIPTIVE]
     : [];
 }
 

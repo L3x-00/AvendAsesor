@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -8,14 +9,11 @@ import { normalizeSpanishText } from './text-normalization';
  * trámites.
  */
 
-const EXPLICIT_SIGNAL = /\bracionalizacion(?:es)?\b/u;
-const PLACE_SIGNAL = /\bplazas?\b/u;
-const REDUCTION_SIGNAL =
-  /\b(?:reduc(?:ir|cion|cir|can|ca)|quitar(?:an|me)?|eliminar(?:an)?|suprim(?:ir|an|en)|recortar(?:an)?|disminu(?:ir|cion|yen|ye))\b/u;
-const ENROLLMENT_SIGNAL =
-  /\b(?:alumnos?|estudiantes?|matricula|secciones?|aulas?)\b/u;
-const DECLINE_SIGNAL =
-  /\b(?:bajando|bajan|bajo|disminuyendo|disminuyen|menos|descenso|reduccion|se estan quedando sin)\b/u;
+const EXPLICIT_SIGNAL = INTENT_TRIGGERS.RATIONALIZATION_EXPLICIT_SIGNAL;
+const PLACE_SIGNAL = INTENT_TRIGGERS.PLACE_SIGNAL;
+const REDUCTION_SIGNAL = INTENT_TRIGGERS.REDUCTION_SIGNAL;
+const ENROLLMENT_SIGNAL = INTENT_TRIGGERS.ENROLLMENT_SIGNAL;
+const DECLINE_SIGNAL = INTENT_TRIGGERS.DECLINE_SIGNAL;
 
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
@@ -42,8 +40,8 @@ export function isRationalizationQuestion(question: string): boolean {
 export function rationalizationEvidenceQueries(question: string): string[] {
   if (!isRationalizationQuestion(question)) return [];
   return [
-    'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
-    'proceso de racionalización de plazas instituciones educativas reducción secciones',
+    INTENT_EXPANSIONS.RATIONALIZATION_PLAZAS,
+    INTENT_EXPANSIONS.RATIONALIZATION_SECTIONS,
   ];
 }
 

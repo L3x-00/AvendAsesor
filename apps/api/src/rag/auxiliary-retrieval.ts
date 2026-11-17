@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -6,21 +7,17 @@ import { normalizeSpanishText } from './text-normalization';
  * solo traducen una pregunta cotidiana a la denominación del corpus; no
  * agregan requisitos, montos ni plazos que la fuente no contenga.
  */
-const AUXILIARY_SIGNAL = /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
-const AUXILIARY_EDUCATION_SIGNAL = /\bauxiliar(?:es)?\s+de\s+educaci[oó]n\b/u;
-const CONTRACT_SIGNAL =
-  /\b(?:trabajar|postular|contrataci[oó]n|contrato|requisitos?)\b/u;
-const SALARY_SIGNAL =
-  /\b(?:cu[aá]nto\s+gana|remuneraci[oó]n|sueldo|salario|percibe|paga)\b/u;
-const MEDICAL_LEAVE_SIGNAL =
-  /\b(?:licencia|enfermedad|incapacidad|descanso\s+m[eé]dico|citt)\b/u;
+const AUXILIARY_SIGNAL = INTENT_TRIGGERS.AUXILIARY_SIGNAL;
+const AUXILIARY_EDUCATION_SIGNAL = INTENT_TRIGGERS.AUXILIARY_EDUCATION_SIGNAL;
+const CONTRACT_SIGNAL = INTENT_TRIGGERS.AUXILIARY_CONTRACT_SIGNAL;
+const SALARY_SIGNAL = INTENT_TRIGGERS.AUXILIARY_SALARY_SIGNAL;
+const MEDICAL_LEAVE_SIGNAL = INTENT_TRIGGERS.AUXILIARY_MEDICAL_LEAVE_SIGNAL;
 // «Nombrado» describe el vínculo en una pregunta salarial; no equivale a
 // consultar el procedimiento de nombramiento.
-const APPOINTMENT_SIGNAL = /\b(?:nombramiento|nombrarme)\b/u;
-const REASSIGNMENT_SIGNAL = /\b(?:reasignaci[oó]n|reasignar)\b/u;
-const VACATION_SIGNAL = /\bvacaciones?|vacacional(?:es)?\b/u;
-const EXCHANGE_SIGNAL =
-  /\bpermuta(?:r)?\b|\b(?:intercambiar|intercambio|cambiar)\s+(?:mi|la|una|su)\s+plaza\b/u;
+const APPOINTMENT_SIGNAL = INTENT_TRIGGERS.APPOINTMENT_SIGNAL;
+const REASSIGNMENT_SIGNAL = INTENT_TRIGGERS.AUXILIARY_REASSIGNMENT_SIGNAL;
+const VACATION_SIGNAL = INTENT_TRIGGERS.AUXILIARY_VACATION_SIGNAL;
+const EXCHANGE_SIGNAL = INTENT_TRIGGERS.EXCHANGE_SIGNAL;
 
 function textOf(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
@@ -85,37 +82,25 @@ export function auxiliaryEvidenceQueries(question: string): string[] {
   const queries: string[] = [];
 
   if (CONTRACT_SIGNAL.test(text) && !APPOINTMENT_SIGNAL.test(text)) {
-    queries.push(
-      'contratación auxiliares educación requisitos por nivel modalidad capacitación edad documentos expediente 2026',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_HIRING);
   }
   if (SALARY_SIGNAL.test(text)) {
-    queries.push('remuneración auxiliar de educación nombrado contratado');
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_SALARY);
   }
   if (MEDICAL_LEAVE_SIGNAL.test(text)) {
-    queries.push(
-      'auxiliar de educación licencia incapacidad temporal enfermedad CITT contratado nombrado',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_MEDICAL_LEAVE);
   }
   if (APPOINTMENT_SIGNAL.test(text)) {
-    queries.push(
-      'concurso público nombramiento auxiliar de educación requisitos experiencia',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_APPOINTMENT);
   }
   if (REASSIGNMENT_SIGNAL.test(text)) {
-    queries.push(
-      'reasignación auxiliar de educación otra UGEL requisitos causales titular nombrado',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_REASSIGNMENT);
   }
   if (VACATION_SIGNAL.test(text)) {
-    queries.push(
-      'auxiliar de educación vacaciones remuneradas nombrado vacaciones truncas contratado',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_VACATION);
   }
   if (EXCHANGE_SIGNAL.test(text)) {
-    queries.push(
-      'permuta auxiliar de educación requisitos años servicio edad cronograma',
-    );
+    queries.push(INTENT_EXPANSIONS.AUXILIARY_EXCHANGE);
   }
   return [...new Set(queries)].slice(0, 4);
 }

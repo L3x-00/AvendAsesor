@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { normalizeSpanishText } from './text-normalization';
 
@@ -7,28 +8,20 @@ import { normalizeSpanishText } from './text-normalization';
  * que ya usa el propio corpus para que la búsqueda híbrida pueda llegar a la
  * evidencia normativa pertinente.
  */
-const RIM_SIGNAL =
-  /\b(?:rim|remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|gan(?:a|an|amos|ar|ar[ií]a|ar[ií]an)|percib(?:e|en|ir)|escala(?:s)?\s+magisterial(?:es)?)\b/u;
-const SCALE_SIGNAL =
-  /\b(?:primera|segunda|tercera|cuarta|quinta|sexta|s[eé]ptima|octava|escala(?:s)?|ascens[oa])\b/u;
-const CONTRACT_SIGNAL = /\b(?:nombrad[oa]s?|contratad[oa]s?)\b/u;
-const RURAL_SIGNAL =
-  /\b(?:rural(?:es|idad)?|zona\s+rural|[aá]mbito\s+rural)\b/u;
-const PADRON_SIGNAL = /\b(?:padr[oó]n(?:es)?|figura|incluid[oa]|listad[oa])\b/u;
-const PAYROLL_DETAIL_SIGNAL =
-  /\b(?:descuento(?:s)?|deducci[oó]n|diferencia(?:s)?\s+remunerativa(?:s)?|monto\s+menor)\b/u;
-const REINTEGRATION_SIGNAL = /\breintegro(?:s)?\b/u;
-const PAYROLL_DOCUMENT_SIGNAL = /\b(?:boleta|planilla)\b/u;
-const PAYROLL_DOCUMENT_CONTEXT =
-  /\b(?:remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|haberes|descuento(?:s)?|deducci[oó]n|reintegro(?:s)?)\b/u;
-const CLAIM_SIGNAL = /\b(?:reclamo|reclamar|revision|revisar)\b/u;
-const SALARY_REVIEW_CONTEXT =
-  /\b(?:remuneraci[oó]n(?:es)?|sueldo(?:s)?|salario(?:s)?|haberes)\b/u;
-const ASCENSO_SIGNAL =
-  /\b(?:ascenso|ascensos|ascend(?:er|ido|iendo)|asciend[oa])\b/u;
-const ALLOCATION_SIGNAL = /\b(?:asignaci[oó]n|bono|beneficio|pago)\b/u;
-const AMOUNT_REQUEST_SIGNAL =
-  /\b(?:cuanto|cu[aá]nto).{0,50}\b(?:corresponde|percibo|recibo)|\bme\s+corresponde\b/u;
+const RIM_SIGNAL = INTENT_TRIGGERS.RIM_SIGNAL;
+const SCALE_SIGNAL = INTENT_TRIGGERS.SCALE_SIGNAL;
+const CONTRACT_SIGNAL = INTENT_TRIGGERS.SALARY_CONTRACT_SIGNAL;
+const RURAL_SIGNAL = INTENT_TRIGGERS.RURAL_SIGNAL;
+const PADRON_SIGNAL = INTENT_TRIGGERS.PADRON_SIGNAL;
+const PAYROLL_DETAIL_SIGNAL = INTENT_TRIGGERS.PAYROLL_DETAIL_SIGNAL;
+const REINTEGRATION_SIGNAL = INTENT_TRIGGERS.REINTEGRATION_SIGNAL;
+const PAYROLL_DOCUMENT_SIGNAL = INTENT_TRIGGERS.PAYROLL_DOCUMENT_SIGNAL;
+const PAYROLL_DOCUMENT_CONTEXT = INTENT_TRIGGERS.PAYROLL_DOCUMENT_CONTEXT;
+const CLAIM_SIGNAL = INTENT_TRIGGERS.CLAIM_SIGNAL;
+const SALARY_REVIEW_CONTEXT = INTENT_TRIGGERS.SALARY_REVIEW_CONTEXT;
+const ASCENSO_SIGNAL = INTENT_TRIGGERS.SALARY_ASCENSO_SIGNAL;
+const ALLOCATION_SIGNAL = INTENT_TRIGGERS.ALLOCATION_SIGNAL;
+const AMOUNT_REQUEST_SIGNAL = INTENT_TRIGGERS.AMOUNT_REQUEST_SIGNAL;
 
 function evidenceText(
   source: Pick<RetrievedChunk, 'chunkContent' | 'documentTitle'>,
@@ -173,33 +166,25 @@ export function remunerationEvidenceQueries(question: string): string[] {
     (SCALE_SIGNAL.test(text) || CONTRACT_SIGNAL.test(text))
   ) {
     queries.push(
-      'monto de la remuneración íntegra mensual RIM primera escala magisterial',
-      'monto de la remuneración mensual del profesor contratado jornada laboral',
-      'incremento posterior de la remuneración íntegra mensual RIM primera escala magisterial',
+      INTENT_EXPANSIONS.RIM_SCALE_1,
+      INTENT_EXPANSIONS.RIM_CONTRACT,
+      INTENT_EXPANSIONS.RIM_INCREMENT,
     );
   }
 
   if (isRuralPadronQuestion(question) || isRuralAllocationQuestion(question)) {
-    queries.push(
-      'asignación por trabajo en ámbito rural padrón de instituciones educativas instrumento habilitante',
-    );
+    queries.push(INTENT_EXPANSIONS.RURAL_ASSIGNMENT);
     if (isRuralPadronQuestion(question)) {
-      queries.push(
-        'padrón de instituciones educativas públicas unidocentes y multigrado rural',
-      );
+      queries.push(INTENT_EXPANSIONS.RURAL_PADRON);
     }
   }
 
   if (isPayrollReviewQuestion(question)) {
-    queries.push(
-      'boleta de pago descuentos diferencias remunerativas planilla única de pagos reintegros actos administrativos',
-    );
+    queries.push(INTENT_EXPANSIONS.PAYROLL_REVIEW);
   }
 
   if (isAscensoRemunerationQuestion(question)) {
-    queries.push(
-      'ascenso de escala magisterial acto resolutivo pago planilla única de pagos',
-    );
+    queries.push(INTENT_EXPANSIONS.ASCENSO_PAYMENT);
   }
 
   return [...new Set(queries)].slice(0, 4);

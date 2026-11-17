@@ -1,3 +1,4 @@
+import { INTENT_EXPANSIONS, INTENT_TRIGGERS } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import { causalsInQuestion } from './process-clarification';
 import { normalizeSpanishText } from './text-normalization';
@@ -9,17 +10,12 @@ import { normalizeSpanishText } from './text-normalization';
  * regula el corpus para que la búsqueda y el prompt la traten como tal.
  */
 
-const REASSIGNMENT_SIGNAL =
-  /\b(?:reasignacion(?:es)?|reasignar(?:me|se|nos)?)\b/u;
-const AUXILIARY_ROLE_SIGNAL = /\bauxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
-const TEACHING_ROLE_SIGNAL =
-  /\b(?:nombrad[oa]s?|contratad[oa]s?|docentes?|profesor(?:a|es|as)?|maestr[oa]s?)\b/u;
-const FIRST_PERSON_AUXILIARY =
-  /\b(?:soy|trabajo como|me desempe[nñ]o como|estoy como)\s+(?:un |una |el |la )?auxiliar(?:es)?(?:\s+de\s+educaci[oó]n)?\b/u;
-const FIRST_PERSON_TEACHER =
-  /\b(?:soy|trabajo como|me desempe[nñ]o como|estoy como)\s+(?:un |una |el |la )?(?:docente|profesor(?:a)?|maestr[oa]|nombrad[oa]|contratad[oa])\b/u;
-const RELOCATION_SIGNAL =
-  /\b(?:quiero|quisiera|deseo|necesito|planeo|pienso)\s+(?:irme|mudarme|trasladarme|reubicarme|cambiarme)\b|\b(?:irme|mudarme|trasladarme|reubicarme)\s+(?:a|hacia|para)\b|\b(?:trasladar(?:me|se|nos)?|reubicar(?:me|nos)?|mudar(?:me|se|nos)?)\s+(?:a|hacia|de)\b|\bcambiar(?:me)?\s+de\s+(?:colegio|ie|institucion educativa|region|ciudad|departamento|ugel|dre|plaza|lugar)\b/u;
+const REASSIGNMENT_SIGNAL = INTENT_TRIGGERS.REASSIGNMENT_SIGNAL;
+const AUXILIARY_ROLE_SIGNAL = INTENT_TRIGGERS.AUXILIARY_ROLE_SIGNAL;
+const TEACHING_ROLE_SIGNAL = INTENT_TRIGGERS.TEACHING_ROLE_SIGNAL;
+const FIRST_PERSON_AUXILIARY = INTENT_TRIGGERS.FIRST_PERSON_AUXILIARY;
+const FIRST_PERSON_TEACHER = INTENT_TRIGGERS.FIRST_PERSON_TEACHER;
+const RELOCATION_SIGNAL = INTENT_TRIGGERS.RELOCATION_SIGNAL;
 
 /**
  * Excluye solo una sección explícitamente dedicada a otra figura: esto evita
@@ -137,22 +133,14 @@ export function reassignmentEvidenceQueries(question: string): string[] {
   const causals = causalsInQuestion(question);
   const queries: string[] = [];
   if (reassignmentRole(question) === 'auxiliar') {
-    queries.push(
-      'reasignación auxiliares de educación otra UGEL requisitos causales unidad familiar',
-    );
+    queries.push(INTENT_EXPANSIONS.REASSIGNMENT_AUXILIARY);
   }
   if (causals.includes('unidad-familiar')) {
-    queries.push(
-      'reasignación docente unidad familiar requisitos traslado otra región convivencia familiar',
-    );
+    queries.push(INTENT_EXPANSIONS.REASSIGNMENT_UNITY);
   }
-  queries.push(
-    'reasignación docente requisitos etapas proceso norma técnica de reasignación y permuta',
-  );
+  queries.push(INTENT_EXPANSIONS.REASSIGNMENT_GENERAL);
   if (causals.length) {
-    queries.push(
-      'causales de reasignación docente salud emergencia unidad familiar interés personal requisitos',
-    );
+    queries.push(INTENT_EXPANSIONS.REASSIGNMENT_CAUSALS);
   }
   return [...new Set(queries)].slice(0, 4);
 }

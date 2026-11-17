@@ -1,4 +1,9 @@
 import { refersToThreadTopic } from './anaphora';
+import {
+  AUXILIARY_MODULE_NAME,
+  INTENT_EXPANSIONS,
+  INTENT_TRIGGERS,
+} from './intent-routing.config';
 import { hasTopicTerm } from './domain-lexicon';
 import { pageReferenceIn } from './page-reference';
 import {
@@ -105,7 +110,7 @@ const OTHER_SUBJECT_OR_MATTER =
   /\b(?:colegas?|director(?:a)?|subdirector(?:a)?|alumnos?|alumnas?|estudiantes?|apoderados?|padres?|conflictos?|insultos?|agresion(?:es)?|agred(?:e|io|en)|horario|aula|seccion(?:es)?|notas?|matricula|evaluacion del desempeno)\b/u;
 
 /** Módulo cuyo régimen documental es propio y no se comparte con docentes. */
-const AUXILIARY_MODULE = 'Auxiliar de educación';
+const AUXILIARY_MODULE = AUXILIARY_MODULE_NAME;
 
 /**
  * Denominación con la que el corpus nombra cada proceso. Se usa solo cuando la
@@ -113,28 +118,17 @@ const AUXILIARY_MODULE = 'Auxiliar de educación';
  * correspondiente ya aporta su propio vocabulario y no se duplica.
  */
 const PROCESS_CANONICAL_QUERIES: Record<TopicIntentId, string> = {
-  reassignment:
-    'reasignación docente requisitos etapas proceso norma técnica de reasignación y permuta',
-  'temporary-placement':
-    'destaque docente requisitos procedimiento solicitud plazo norma técnica',
-  'medical-leave':
-    'licencia por incapacidad temporal descanso médico CITT certificado médico',
-  'career-progression':
-    'concurso de ascenso escala magisterial requisitos etapas prueba nacional trayectoria profesional',
-  'rural-allocation':
-    'asignación por trabajo en ámbito rural padrón de instituciones educativas instrumento habilitante',
-  'auxiliary-requirements':
-    'contratación auxiliares educación requisitos por nivel modalidad capacitación edad documentos expediente',
-  disciplinary:
-    'proceso administrativo disciplinario docente derecho de defensa descargos notificación',
-  rationalization:
-    'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
-  'teaching-hours':
-    'cuadro de distribución de horas de clase jornada laboral docente institución educativa',
-  'position-condition':
-    'plaza orgánica plaza eventual docente nombramiento cuadro de plazas',
-  'position-classifier':
-    'clasificador de cargos niveles de cargo manual de organización y funciones institución educativa',
+  reassignment: INTENT_EXPANSIONS.REASSIGNMENT_PROCESS,
+  'temporary-placement': INTENT_EXPANSIONS.TEMPORARY_PLACEMENT_PROCESS,
+  'medical-leave': INTENT_EXPANSIONS.MEDICAL_LEAVE_PROCESS,
+  'career-progression': INTENT_EXPANSIONS.CAREER_PROGRESSION_PROCESS,
+  'rural-allocation': INTENT_EXPANSIONS.RURAL_ALLOCATION_PROCESS,
+  'auxiliary-requirements': INTENT_EXPANSIONS.AUXILIARY_REQUIREMENTS_PROCESS,
+  disciplinary: INTENT_EXPANSIONS.DISCIPLINARY_PROCESS,
+  rationalization: INTENT_EXPANSIONS.RATIONALIZATION_PROCESS,
+  'teaching-hours': INTENT_EXPANSIONS.TEACHING_HOURS_PROCESS,
+  'position-condition': INTENT_EXPANSIONS.POSITION_CONDITION_PROCESS,
+  'position-classifier': INTENT_EXPANSIONS.POSITION_CLASSIFIER_PROCESS,
 };
 
 /**
@@ -143,10 +137,8 @@ const PROCESS_CANONICAL_QUERIES: Record<TopicIntentId, string> = {
  * equivocada, así que su consulta heredada nombra su régimen.
  */
 const AUXILIARY_PROCESS_QUERIES: Partial<Record<TopicIntentId, string>> = {
-  reassignment:
-    'reasignación de auxiliares de educación requisitos procedimiento solicitud',
-  'medical-leave':
-    'licencia por incapacidad temporal auxiliares de educación descanso médico CITT certificado',
+  reassignment: INTENT_EXPANSIONS.AUXILIARY_REASSIGNMENT_PROCESS,
+  'medical-leave': INTENT_EXPANSIONS.AUXILIARY_MEDICAL_LEAVE_PROCESS,
 };
 
 /**
@@ -226,11 +218,10 @@ export function inheritedTopicIntent(
  * El turno pide los casos o situaciones del proceso, no un aspecto concreto
  * («los requisitos», «el plazo»). Es la forma habitual de pedir las causales.
  */
-const PROCESS_CASES =
-  /\b(?:casos?|situaciones?|supuestos?|ejemplos?|escenarios?)\b/u;
+const PROCESS_CASES = INTENT_TRIGGERS.PROCESS_CASES;
 
 /** Vocabulario con el que el corpus enumera los supuestos del proceso. */
-const CASES_QUERY = 'casos supuestos ejemplos causales';
+const CASES_QUERY = INTENT_EXPANSIONS.PROCESS_CASES_QUERY;
 
 function asksForProcessCases(question: string): boolean {
   return PROCESS_CASES.test(normalizeSpanishText(question));

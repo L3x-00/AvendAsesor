@@ -1,3 +1,4 @@
+import { INTENT_ROUTING } from './intent-routing.config';
 import type { RetrievedChunk } from './retrieval.gateway';
 import {
   isDisciplinaryQuestion,
@@ -153,65 +154,16 @@ function processPreference(text: string): 'destaque' | 'reassignment' | null {
   return null;
 }
 
-const INTENTS: Record<TopicIntentId, TopicIntent> = {
-  reassignment: {
-    id: 'reassignment',
-    label: 'la reasignación docente',
-    moduleName: 'Contratación y desplazamientos',
-  },
-  'temporary-placement': {
-    id: 'temporary-placement',
-    label: 'el destaque docente',
-    moduleName: 'Contratación y desplazamientos',
-  },
-  'medical-leave': {
-    id: 'medical-leave',
-    label: 'la licencia por incapacidad temporal (descanso médico)',
-    moduleName: 'Situaciones Administrativas',
-  },
-  'career-progression': {
-    id: 'career-progression',
-    label: 'el ascenso de escala magisterial',
-    moduleName: 'Evaluación docente',
-  },
-  'rural-allocation': {
-    id: 'rural-allocation',
-    label: 'la asignación por trabajar en una institución educativa rural',
-    moduleName: 'Remuneraciones',
-  },
-  'auxiliary-requirements': {
-    id: 'auxiliary-requirements',
-    label: 'los requisitos para trabajar como auxiliar de educación',
-    moduleName: 'Auxiliar de educación',
-  },
-  disciplinary: {
-    id: 'disciplinary',
-    label:
-      'el procedimiento administrativo disciplinario y el derecho de defensa',
-    moduleName: 'Situaciones Administrativas',
-  },
-  rationalization: {
-    id: 'rationalization',
-    label: 'la racionalización de plazas',
-    moduleName: 'Cargos y plazas',
-  },
-  'teaching-hours': {
-    id: 'teaching-hours',
-    label:
-      'el cuadro de distribución de horas y la asignación de la carga horaria docente',
-    moduleName: 'Cargos y plazas',
-  },
-  'position-condition': {
-    id: 'position-condition',
-    label: 'la condición de la plaza (orgánica, eventual o excedente)',
-    moduleName: 'Cargos y plazas',
-  },
-  'position-classifier': {
-    id: 'position-classifier',
-    label: 'el clasificador de cargos',
-    moduleName: 'Cargos y plazas',
-  },
-};
+// La denominación y el módulo viven en la configuración declarativa; la
+// decisión de cuándo aplica cada intención sigue siendo exclusivamente del
+// árbol de decisión de esta función y de sus guardas, que no interpretan la
+// configuración.
+const INTENTS = Object.fromEntries(
+  INTENT_ROUTING.intents.map(({ id, label, moduleName }) => [
+    id,
+    { id, label, moduleName },
+  ]),
+) as Record<TopicIntentId, TopicIntent>;
 
 export function medicalLeaveTopicIntent(
   applicability: MedicalLeaveApplicability,
