@@ -95,6 +95,11 @@ describe('administrativeEvidenceQueries', () => {
     'me dan de baja del contrato',
     'ya no me contratan, que pasa con mi contrato',
     'mi contrato es hasta diciembre y luego que',
+    'mi contrato vence en diciembre, que pasa',
+    'me sacan de mi contrato de servicios',
+    'trabajo en una empresa educativa y me botan de mi contrato',
+    'me sacan de mi contrato de trabajo',
+    'cuando termina mi contrato como docente',
   ])(
     'traduce el término coloquial del contrato a la denominación del corpus: %s',
     (question) => {
@@ -270,6 +275,22 @@ describe('isDirectAdministrativeEvidence', () => {
         auxiliarNorm,
       ),
     ).toBe(true);
+    // El auxiliar también lo dice con la abreviatura del oficio.
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando me botan de mi contrato, soy aux',
+        auxiliarNorm,
+      ),
+    ).toBe(true);
+    expect(
+      isDirectAdministrativeEvidence(
+        'cuando me botan de mi contrato, soy aux',
+        source('La conclusión del contrato docente se produce por el plazo.', {
+          documentTitle: 'Norma del proceso de contratación docente 2026',
+          moduleNames: ['Contratación y desplazamientos'],
+        }),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -310,6 +331,19 @@ describe('isForeignContractRegimeSource', () => {
     expect(
       isForeignContractRegimeSource(
         'cuando te sacan de tu contrato como auxiliar de educacion?',
+        auxiliarNorm,
+      ),
+    ).toBe(false);
+    // La abreviatura del oficio en la pregunta también declara el régimen.
+    expect(
+      isForeignContractRegimeSource(
+        'cuando me botan de mi contrato, soy aux',
+        docenteNorm,
+      ),
+    ).toBe(true);
+    expect(
+      isForeignContractRegimeSource(
+        'cuando me botan de mi contrato, soy aux',
         auxiliarNorm,
       ),
     ).toBe(false);

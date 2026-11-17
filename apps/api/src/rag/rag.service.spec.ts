@@ -579,6 +579,22 @@ describe('RagService', () => {
     }
   });
 
+  it('descarta por régimen la norma de auxiliares con un módulo seleccionado', async () => {
+    // La ruta con módulo seleccionado tiene su propia búsqueda; el filtro de
+    // régimen es común a todas las vías de admisión.
+    gateway.search.mockImplementation(({ query }: { query: string }) =>
+      Promise.resolve(
+        query.includes('conclusión del contrato') ? [auxiliaryConclusion] : [],
+      ),
+    );
+
+    const result = await service.retrieve(
+      'cuando te pueden botar de tu plaza de contrato?',
+      'contratacion',
+    );
+    expect(result.kind).not.toBe('evidence');
+  });
+
   it('conserva el módulo legal y responde con la norma relacionada que regula la materia', async () => {
     gateway.search.mockResolvedValue([
       {

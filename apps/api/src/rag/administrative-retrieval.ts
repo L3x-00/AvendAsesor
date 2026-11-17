@@ -54,11 +54,11 @@ const CONTRACT_WORD = /\bcontratos?\b/u;
  * traduce a la norma del profesorado.
  */
 const NON_EDUCATION_CONTRACT =
-  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|servicios?|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b|\ben\s+(?:la|una)\s+empresa\b/u;
+  /\bcontratos?\s+(?:de|del)\s+(?:alquiler|arrendamiento|locacion|luz|agua|gas|telefono|internet|cable|tarjeta|credito|prestamo|compraventa|obra|seguro|alimentos?|matrimonio|franquicia)\b|\b(?:empresa|compania|negocio)\s+(?:privad[ao]s?|particular)\b(?!\s+(?:educativ|de educacion|del sector educativo))|\ben\s+(?:la|una)\s+empresa\b(?!\s+(?:educativ|de educacion|del sector educativo))/u;
 const CONTRACT_EXIT_FROM_POSITION =
   /\b(?:bot|sac|saqu|separ|retir|ech|quit)(?:ar|an|aron|ara|aran|en|e|o|a)(?:me|te|se|nos|los|las|lo|la|le)?\s+(?:de|del)\s+(?:mi|tu|su|sus|nuestros?|nuestras?|el|la|los|las|un|una)?\s*(?:plaza|contrato|cargo|puesto|trabajo)\b/u;
 const CONTRACT_TERMINATION_EVENT =
-  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
+  /\b(?:termin|acab|venc)(?:a|an|o|e|en|io|ara|aran)\b[\s\S]{0,30}\b(?:mi|el|tu|su)\s+contrato\b|\b(?:mi|el|tu|su)\s+contrato\s+(?:vence|termina|acaba|concluye|finaliza)\b|\bno\s+(?:me\s+)?(?:renuev(?:an|en|a)|contratan|contrataron)\b[\s\S]{0,20}\bcontrato\b|\b(?:dan|da|dieron|dio)\s+de\s+baja\s+(?:de(?:l)?\s+)?(?:mi\s+|su\s+)?contrato\b|\b(?:mi|el|su)\s+contrato\s+(?:es|va)\s+hasta\b/u;
 /** El despido se nombra directamente, con el clítico pospuesto o antepuesto. */
 const CONTRACT_DISMISSAL =
   /\b(?:desped(?:ir(?:me|te|se|nos|los|las|lo|la|le)?|ido|ida|e|en|o)|despid(?:e|en|an|o|ieron|a|as))\b/u;
@@ -95,7 +95,7 @@ type AdministrativeEvidenceSource = Pick<
 const AUXILIARY_REGIME_SIGNAL = /\bauxiliar(?:es)?\b|\baux\b/u;
 
 /** La pregunta se declara del régimen de auxiliares de educación. */
-const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b/u;
+const AUXILIARY_REGIME_IN_QUESTION = /\bauxiliar(?:es)?\b|\baux\b/u;
 
 /**
  * El régimen del vínculo manda: la norma de auxiliares de educación también
@@ -306,12 +306,12 @@ export function isDirectAdministrativeEvidence(
     );
   }
   if (hasContractTerminationSignal(requested)) {
+    // Una sola definición de régimen: la misma que filtra la admisión común del
+    // servicio. La norma de auxiliares usa la misma denominación y solo respalda
+    // una pregunta del mismo régimen.
     return (
       CONTRACT_TERMINATION_EVIDENCE.test(evidence) &&
-      // La norma de auxiliares usa la misma denominación; solo la respalda una
-      // pregunta del mismo régimen.
-      (!belongsToAuxiliaryRegime(source) ||
-        AUXILIARY_REGIME_IN_QUESTION.test(requested))
+      !isForeignContractRegimeSource(question, source)
     );
   }
   return false;
