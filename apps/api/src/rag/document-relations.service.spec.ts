@@ -112,6 +112,26 @@ describe('relaciones entre documentos', () => {
     });
   });
 
+  it('usa valores seguros cuando el RPC no trae título ni tipo del destino', async () => {
+    const incomplete = {
+      ...relationRow,
+      relationType: null,
+      targetTitle: null,
+      targetType: null,
+      targetYear: null,
+    };
+    await expect(
+      build([sourceRow, incomplete]).relatedDocuments(documentId),
+    ).resolves.toMatchObject({
+      relations: [
+        {
+          type: 'cita',
+          document: { title: 'Documento sin título', type: 'OTRO', year: null },
+        },
+      ],
+    });
+  });
+
   it('falla cerrado si el documento no existe', async () => {
     await expect(build([]).relatedDocuments(documentId)).rejects.toBeInstanceOf(
       NotFoundException,
@@ -150,5 +170,14 @@ describe('relaciones entre documentos', () => {
       relations: [],
       message: 'No hay relaciones registradas para este documento.',
     });
+    await expect(
+      controller.relatedDocuments(
+        documentId,
+        '¿qué normas están relacionadas con esta ley?',
+      ),
+    ).resolves.toMatchObject({ source: { id: documentId } });
+    await expect(
+      controller.relatedDocuments(documentId, '¿cuánto gana un docente?'),
+    ).rejects.toThrow('La pregunta no solicita relaciones entre documentos.');
   });
 });
