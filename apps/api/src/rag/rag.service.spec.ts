@@ -462,6 +462,23 @@ describe('RagService', () => {
     expect(delivered[0]?.chunkId).toBe('planilla-2018');
   });
 
+  it('registra diagnóstico sin exponer la pregunta cuando no hay evidencia salarial', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    gateway.search.mockResolvedValue([]);
+
+    const result = await service.retrieve('¿Cuánto gana un docente?', null);
+
+    expect(result.kind).toBe('no_evidence');
+    const line = warn.mock.calls
+      .map((call) => String(call[0]))
+      .find((message) => message.includes('RAG_NO_EVIDENCE_DIAG'));
+    expect(line).toContain('searches=');
+    expect(line).not.toContain('¿Cuánto gana');
+    warn.mockRestore();
+  });
+
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
     const cancellation = new AbortController();
     embeddings.embed.mockImplementation(
