@@ -18,6 +18,7 @@ import {
   SUPABASE_RAG_READINESS_GATEWAY,
   SUPABASE_RETRIEVAL_CONTRACT_GATEWAY,
   SUPABASE_RETRIEVAL_GATEWAY,
+  SUPABASE_DOCUMENT_RELATIONS_GATEWAY,
   SUPABASE_SERVER_CLIENT,
   SUPABASE_USER_ADMINISTRATION_GATEWAY,
 } from './supabase.constants';
@@ -27,6 +28,7 @@ import { SupabaseChatCatalogGatewayAdapter } from './supabase-chat-catalog.gatew
 import { SupabaseTeacherUpdatesGatewayAdapter } from './supabase-teacher-updates.gateway';
 import { SupabaseChatGatewayAdapter } from './supabase-chat.gateway';
 import { SupabaseConsultationCasesGatewayAdapter } from './supabase-consultation-cases.gateway';
+import { SupabaseDocumentRelationsGatewayAdapter } from './supabase-document-relations.gateway';
 import { SupabaseDocumentsGatewayAdapter } from './supabase-documents.gateway';
 import { SupabaseFaqMemoryGatewayAdapter } from './supabase-faq-memory.gateway';
 import { SupabaseHealthGatewayAdapter } from './supabase-health.gateway';
@@ -130,6 +132,12 @@ import {
         new SupabaseRetrievalGatewayAdapter(client),
     },
     {
+      provide: SUPABASE_DOCUMENT_RELATIONS_GATEWAY,
+      inject: [SUPABASE_SERVER_CLIENT],
+      useFactory: (client: SupabaseServerClient | null) =>
+        new SupabaseDocumentRelationsGatewayAdapter(client),
+    },
+    {
       provide: SUPABASE_CHAT_GATEWAY,
       inject: [SUPABASE_SERVER_CLIENT],
       useFactory: (client: SupabaseServerClient | null) =>
@@ -202,6 +210,7 @@ import {
     SUPABASE_RAG_READINESS_GATEWAY,
     SUPABASE_RETRIEVAL_CONTRACT_GATEWAY,
     SUPABASE_RETRIEVAL_GATEWAY,
+    SUPABASE_DOCUMENT_RELATIONS_GATEWAY,
     SUPABASE_USER_ADMINISTRATION_GATEWAY,
   ],
 })

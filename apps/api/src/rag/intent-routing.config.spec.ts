@@ -20,8 +20,15 @@ import { temporaryPlacementQueries } from './temporary-placement-retrieval';
  * invisible para la lógica de negocio.
  */
 describe('enrutamiento declarativo de intenciones', () => {
-  it('declara las once intenciones y sus módulos destino', () => {
-    expect(INTENT_ROUTING.intents).toHaveLength(11);
+  it('declara las doce intenciones y sus módulos destino', () => {
+    expect(INTENT_ROUTING.intents).toHaveLength(12);
+    expect(
+      INTENT_ROUTING.intents.find((entry) => entry.id === 'document-relations'),
+    ).toMatchObject({
+      module: 'Ley y reglamento',
+      triggers: ['DOCUMENT_RELATIONS_TRIGGER'],
+      expansions: ['DOCUMENT_RELATIONS_QUERY'],
+    });
     expect(
       INTENT_ROUTING.intents.find((entry) => entry.id === 'reassignment'),
     ).toMatchObject({

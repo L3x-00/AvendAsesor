@@ -93,6 +93,11 @@ export const INTENT_METADATA = {
     label: 'el clasificador de cargos',
     moduleName: 'Cargos y plazas',
   },
+  'document-relations': {
+    id: 'document-relations',
+    label: 'las normas relacionadas con un documento',
+    moduleName: 'Ley y reglamento',
+  },
 } as const satisfies Record<string, IntentRoutingMetadata>;
 
 /** Módulo con régimen documental propio, compartido por varias intenciones. */
@@ -273,6 +278,10 @@ export const INTENT_TRIGGERS = {
     /\b(?:permanencia|a[nñ]os?\s+minimos?|tiempo\s+minimo)\b/u,
   EVALUATION_MASTERS_TRIGGER: /\b(?:maestr[ií]a|maestro|grado\s+academico)\b/u,
   EVALUATION_RESULTS_TRIGGER: /\b(?:resultado|reclamo|impugnaci[oó]n)\b/u,
+
+  // Relaciones entre documentos (Paso 3)
+  DOCUMENT_RELATIONS_TRIGGER:
+    /\b(?:normas?|documentos?)\b[^.]{0,30}\b(?:relacionad[oa]s?|relacionan|vinculad[oa]s?|vinculan)\b|\bque\s+(?:modifica|deroga|reglamenta)\s+(?:(?:la|el|las|los|esta|este|una|un)\s+)?(?:norma|ley|decreto|resolucion|reglamento)\b|\brelaciones?\s+(?:de|entre)\s+(?:las\s+)?normas?\b/u,
 } as const satisfies Record<string, RegExp>;
 
 /** Expansiones canónicas: traducción del lenguaje cotidiano al del corpus. */
@@ -416,6 +425,10 @@ export const INTENT_EXPANSIONS = {
     'modificación derogación disposiciones transitorias Ley 29944 vigencia artículo',
   LEGAL_GENERAL:
     'Ley 29944 Ley de Reforma Magisterial reglamento Decreto Supremo 004-2013-ED artículos vigencia',
+
+  // Relaciones entre documentos
+  DOCUMENT_RELATIONS_QUERY:
+    'normas relacionadas modificaciones derogaciones reglamentos citas complementos',
 } as const satisfies Record<string, string>;
 
 /**
@@ -506,6 +519,11 @@ export const INTENT_ROUTING: IntentRoutingConfig = {
       'position-classifier',
       ['CLASSIFIER_SIGNAL', 'CLASSIFICATION_SIGNAL'],
       ['POSITION_CLASSIFIER_PROCESS', 'POSITION_CLASSIFIER_DETAIL'],
+    ),
+    route(
+      'document-relations',
+      ['DOCUMENT_RELATIONS_TRIGGER'],
+      ['DOCUMENT_RELATIONS_QUERY'],
     ),
   ],
   synonyms: INTENT_SYNONYMS,
