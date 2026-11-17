@@ -6,6 +6,11 @@ import { EMBEDDINGS_GATEWAY } from '../ingestion/ingestion.tokens';
 import { SUPABASE_RETRIEVAL_GATEWAY } from '../supabase/supabase.constants';
 import { refersBack } from './anaphora';
 import {
+  buildContextualRetryQuery,
+  contextualRetryMetrics,
+  retryIndicatesTopicSwitch,
+} from './contextual-retry';
+import {
   asksForDates,
   contiguousSchedule,
   coversScheduleTopic,
@@ -114,6 +119,7 @@ import {
   belongsToAdmittedProcedure,
   belongsToAdmittedVersion,
   inheritedTopicIntent,
+  isProcessDependentTurn,
   processQueriesForIntent,
   treatsInheritedProcess,
   treatsProcessIntent,
@@ -1770,6 +1776,70 @@ export class RagService {
     return null;
   }
 
+  /**
+   * Paso 2: segundo intento determinista con el tema que el hilo ya abrió. Solo
+   * se llama cuando la primera búsqueda no dejó evidencia admisible, el turno no
+   * es conversacional y no hay un tema propio que mande. La reformulación no
+   * relaja el umbral: la búsqueda usa el mismo `searchBase` y sus resultados
+   * pasan por las mismas compuertas que los del primer intento.
+   */
+  private async retrieveWithContextualRetry(input: {
+    abortSignal?: AbortSignal;
+    inheritedIntent: TopicIntent | null;
+    question: string;
+    searchBase: {
+      matchCount: number;
+      matchThreshold: number;
+      retrievalScope: RetrievalScope;
+    };
+    strongTopicQuery: string | null;
+  }): Promise<RetrievedChunk[]> {
+    const enabled =
+      this.config.get<boolean>('RAG_CONTEXTUAL_RETRY_ENABLED') ?? true;
+    if (!enabled || !input.strongTopicQuery) return [];
+    const reformulated = buildContextualRetryQuery(
+      input.question,
+      input.strongTopicQuery,
+    );
+    if (reformulated === input.question.trim()) return [];
+    let embedding: number[] | undefined;
+    try {
+      [embedding] = await this.embed([reformulated], input.abortSignal);
+    } catch (error) {
+      if (input.abortSignal?.aborted) throw error;
+      return [];
+    }
+    input.abortSignal?.throwIfAborted();
+    if (!embedding || embedding.length !== 1536) return [];
+    let sources: RetrievedChunk[];
+    try {
+      sources = await this.gateway.search({
+        abortSignal: input.abortSignal,
+        ...input.searchBase,
+        embedding,
+        query: reformulated,
+        selectedModuleId: null,
+      });
+    } catch (error) {
+      if (input.abortSignal?.aborted) throw error;
+      return [];
+    }
+    input.abortSignal?.throwIfAborted();
+    contextualRetryMetrics.recordAttempt();
+    if (
+      retryIndicatesTopicSwitch({
+        inheritedIntent: input.inheritedIntent,
+        margin: RAG_TOPIC_SWITCH_SCORE_MARGIN,
+        question: input.question,
+        sources,
+      })
+    ) {
+      contextualRetryMetrics.recordTopicSwitch();
+      return [];
+    }
+    return sources;
+  }
+
   private async retrieveEvidence(
     question: string,
     selectedModuleId: string | null,
@@ -2321,6 +2391,48 @@ export class RagService {
           ...rawGlobalSources,
           ...salarySources,
         ]);
+      }
+    }
+    // Paso 2: antes del rescate léxico se prueba una reformulación determinista
+    // con el tema del hilo. Queda acotado al chat general, turnos con señal de
+    // dominio y ausencia total de evidencia admisible: los chats de módulo
+    // (Remuneraciones, Contratación, Auxiliares) y las rutas exactas/legales no
+    // cambian de comportamiento.
+    const retryableDomainTurn =
+      !selectedModuleId &&
+      !options.legalCrossModule &&
+      !options.forceContext &&
+      !salaryQuestionProfile(question).isSalaryQuestion &&
+      (hasTopicTerm(normalizeSpanishText(question)) ||
+        isProcessDependentTurn(question) ||
+        isEllipticalFollowUp(question) ||
+        refersBack(question));
+    if (
+      retryableDomainTurn &&
+      !globalRoutingSources.length &&
+      !selectedRoutingSources.length
+    ) {
+      const retrySources = await this.retrieveWithContextualRetry({
+        abortSignal: options.abortSignal,
+        inheritedIntent,
+        question,
+        searchBase,
+        strongTopicQuery: inheritedProcessQuery,
+      });
+      if (retrySources.length) {
+        const merged = routingSources([...rawGlobalSources, ...retrySources]);
+        if (merged.length) contextualRetryMetrics.recordImprovement();
+        // Estos fragmentos llegaron por la consulta del proceso, así que la
+        // compuerta final los admite por procedencia aunque no repitan el
+        // nombre del trámite (caso documentado en `treatsInheritedProcess`).
+        inheritedProcessChunkIds = new Set([
+          ...inheritedProcessChunkIds,
+          ...retrySources.map((source) => source.chunkId),
+        ]);
+        this.logger.debug(
+          `contextual_retry candidates=${retrySources.length} improved=${merged.length > 0} metrics=${JSON.stringify(contextualRetryMetrics.snapshot())}`,
+        );
+        globalRoutingSources = merged;
       }
     }
     if (!globalRoutingSources.length && !selectedRoutingSources.length) {

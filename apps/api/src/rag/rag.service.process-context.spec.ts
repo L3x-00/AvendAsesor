@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { contextualRetryMetrics } from './contextual-retry';
 import { RagService } from './rag.service';
 
 /**
@@ -1292,6 +1293,128 @@ describe('RagService - contexto de proceso del hilo', () => {
     ).resolves.toMatchObject({
       kind: 'evidence',
       sources: [{ chunkId: 'rvm-page-24' }],
+    });
+  });
+
+  // Paso 2: si la primera búsqueda no deja evidencia, el seguimiento elíptico
+  // se reformula con el tema del hilo y se busca una segunda vez.
+  describe('reintento contextual', () => {
+    const isRetryQuery = (query: string): boolean =>
+      query.startsWith('reasignación docente') && query.includes('hablame mas');
+
+    beforeEach(() => contextualRetryMetrics.reset());
+
+    it('recupera evidencia con la reformulación cuando la primera búsqueda falla', async () => {
+      const { service, embeddings, gateway } = buildSearchable();
+      gateway.search.mockImplementation(({ query }: { query: string }) =>
+        Promise.resolve(isRetryQuery(query) ? [rvmChunk] : []),
+      );
+
+      await expect(
+        service.retrieve('hablame mas sobre las situaciones', null, [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).resolves.toMatchObject({
+        kind: 'evidence',
+        sources: [{ chunkId: 'rvm-inicio' }],
+      });
+      expect(embeddedQueries(embeddings).some(isRetryQuery)).toBe(true);
+      expect(contextualRetryMetrics.snapshot().attempts).toBeGreaterThan(0);
+      expect(contextualRetryMetrics.snapshot().improved).toBeGreaterThan(0);
+    });
+
+    it('no reintenta cuando la primera búsqueda ya dejó evidencia', async () => {
+      const { service, embeddings, gateway } = buildSearchable();
+      gateway.search.mockResolvedValue([rvmChunk]);
+
+      await expect(
+        service.retrieve('hablame mas sobre las situaciones', null, [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).resolves.toMatchObject({ kind: 'evidence' });
+      expect(embeddedQueries(embeddings).some(isRetryQuery)).toBe(false);
+      expect(contextualRetryMetrics.snapshot().attempts).toBe(0);
+    });
+
+    it('admite un fragmento del proceso que no repite su nombre', async () => {
+      const { service, gateway } = buildSearchable();
+      gateway.search.mockImplementation(({ query }: { query: string }) =>
+        Promise.resolve(isRetryQuery(query) ? [plazoChunk] : []),
+      );
+
+      await expect(
+        service.retrieve('hablame mas sobre las situaciones', null, [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).resolves.toMatchObject({
+        kind: 'evidence',
+        sources: [{ chunkId: 'plazo-chunk' }],
+      });
+      expect(contextualRetryMetrics.snapshot().skippedTopicSwitch).toBe(0);
+    });
+
+    it('no reintenta cuando RAG_CONTEXTUAL_RETRY_ENABLED=false', async () => {
+      const embeddings = {
+        embed: jest
+          .fn()
+          .mockImplementation((queries: string[]) =>
+            Promise.resolve(queries.map(() => vector())),
+          ),
+      };
+      const gateway = {
+        search: jest
+          .fn()
+          .mockImplementation(({ query }: { query: string }) =>
+            Promise.resolve(isRetryQuery(query) ? [rvmChunk] : []),
+          ),
+      };
+      const service = new RagService(embeddings, gateway, {
+        get: jest.fn((key: string) =>
+          key === 'RAG_MATCH_COUNT'
+            ? 5
+            : key === 'RAG_MATCH_THRESHOLD'
+              ? 0.5
+              : key === 'RAG_CONTEXTUAL_RETRY_ENABLED'
+                ? false
+                : 0.5,
+        ),
+      } as never);
+
+      await expect(
+        service.retrieve('hablame mas sobre las situaciones', null, [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).resolves.toMatchObject({ kind: 'no_evidence' });
+      expect(
+        (embeddings.embed.mock.calls as [string[]][]).flatMap(([queries]) =>
+          queries.filter(isRetryQuery),
+        ),
+      ).toHaveLength(0);
+      expect(contextualRetryMetrics.snapshot().attempts).toBe(0);
+    });
+
+    it('no fuerza la herencia si el reintento revela otro tema con ventaja', async () => {
+      const otherTopic = {
+        ...rvmChunk,
+        chunkContent:
+          'La remuneración íntegra mensual del profesor se paga según la escala magisterial y la jornada laboral.',
+        chunkId: 'otro-tema',
+        documentTitle: 'Resolución de remuneraciones',
+        semanticScore: 0.95,
+      };
+      const { service, gateway } = buildSearchable();
+      gateway.search.mockImplementation(({ query }: { query: string }) =>
+        Promise.resolve(isRetryQuery(query) ? [otherTopic] : []),
+      );
+
+      await expect(
+        service.retrieve('hablame mas sobre las situaciones', null, [
+          'quiero saber sobre la reasignacion docente por emergencia',
+        ]),
+      ).resolves.toMatchObject({ kind: 'no_evidence' });
+      expect(
+        contextualRetryMetrics.snapshot().skippedTopicSwitch,
+      ).toBeGreaterThan(0);
     });
   });
 });

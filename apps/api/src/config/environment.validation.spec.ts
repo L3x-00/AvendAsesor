@@ -12,6 +12,7 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
       RAG_MATCH_THRESHOLD: 0.5,
+      RAG_CONTEXTUAL_RETRY_ENABLED: true,
       RAG_MINERU_SIDECAR_ENABLED: true,
       WEB_ORIGIN: 'http://localhost:3000',
     });
@@ -34,9 +35,21 @@ describe('validateEnvironment', () => {
       RAG_INGESTION_WORKER_ENABLED: false,
       RAG_MATCH_COUNT: 5,
       RAG_MATCH_THRESHOLD: 0.5,
+      RAG_CONTEXTUAL_RETRY_ENABLED: true,
       RAG_MINERU_SIDECAR_ENABLED: true,
       WEB_ORIGIN: 'http://localhost:3100',
     });
+  });
+
+  it('permite desactivar el reintento contextual sin desplegar', () => {
+    expect(
+      validateEnvironment({ RAG_CONTEXTUAL_RETRY_ENABLED: 'false' })
+        .RAG_CONTEXTUAL_RETRY_ENABLED,
+    ).toBe(false);
+    expect(
+      validateEnvironment({ RAG_CONTEXTUAL_RETRY_ENABLED: 'true' })
+        .RAG_CONTEXTUAL_RETRY_ENABLED,
+    ).toBe(true);
   });
 
   it('convierte el interruptor de MinerU a booleano y rechaza valores inválidos', () => {
