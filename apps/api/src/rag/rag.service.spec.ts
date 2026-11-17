@@ -29,6 +29,19 @@ describe('searchableSalaryQuestion', () => {
     expect(prefersCanonicalSalarySources(question)).toBe(true);
   });
 
+  it('no prioriza la escala canónica solo por mencionar años', () => {
+    expect(
+      prefersCanonicalSalarySources(
+        '¿Qué bonificación recibe un docente con 30 años?',
+      ),
+    ).toBe(false);
+    expect(
+      prefersCanonicalSalarySources(
+        '¿Cuánto gana un profesor con 20 años de servicio?',
+      ),
+    ).toBe(false);
+  });
+
   it('no prioriza la escala canónica en una pregunta de cifra personal', () => {
     expect(
       prefersCanonicalSalarySources(
@@ -415,6 +428,27 @@ describe('RagService', () => {
     const delivered =
       (result as { sources?: Array<{ chunkId: string }> }).sources ?? [];
     expect(delivered[0]?.chunkId).toBe('escala-2025');
+  });
+
+  it('conserva la búsqueda original si la consulta canónica no devuelve fuentes', async () => {
+    const planilla = {
+      ...source,
+      chunkId: 'planilla-2018',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockImplementation((input: { query: string }) =>
+      Promise.resolve(/RIM docente/iu.test(input.query) ? [] : [planilla]),
+    );
+
+    const result = await service.retrieve(
+      'Muéstrame los incrementos de remuneración de los profesores.',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    const delivered =
+      (result as { sources?: Array<{ chunkId: string }> }).sources ?? [];
+    expect(delivered[0]?.chunkId).toBe('planilla-2018');
   });
 
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {

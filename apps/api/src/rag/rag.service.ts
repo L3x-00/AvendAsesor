@@ -524,8 +524,8 @@ export function searchableSalaryQuestion(question: string): string {
 
 /** Una comparación explícita de incrementos debe usar la escala canónica. */
 export function prefersCanonicalSalarySources(question: string): boolean {
-  return /\b(?:incrementos?|comparaci[oó]n|comparar|escalas?|a[ñn]os?|m[áa]s reciente|m[áa]s antiguo)\b/iu.test(
-    searchableSalaryQuestion(question),
+  return /\b(?:incrementos?|comparaci[oó]n|comparar|m[áa]s reciente|m[áa]s antiguo)\b/iu.test(
+    question,
   );
 }
 
@@ -2416,8 +2416,10 @@ export class RagService {
         // La consulta canónica manda cuando la persona pidió comparar el monto.
         const asksSalaryComparison = prefersCanonicalSalarySources(question);
         globalRoutingSources =
-          asksSalaryComparison && salarySources.length
-            ? salarySources
+          asksSalaryComparison &&
+          !exactReferences.length &&
+          salarySources.length
+            ? routingSources(salarySources)
             : routingSources([...rawGlobalSources, ...salarySources]);
       }
     }
