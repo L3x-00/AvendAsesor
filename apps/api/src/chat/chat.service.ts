@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -1945,6 +1945,11 @@ export class ChatService {
       retrieval.kind === 'evidence' &&
       !crossModuleAnswer
     ) {
+      this.traceNoEvidence(
+        'chat_noevidence_scope_probe',
+        effectiveQuestion,
+        `module=${selectedModuleId ?? 'null'} sources=${retrieval.sources.length}`,
+      );
       yield* this.completeWithoutEvidence({
         abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
@@ -2332,6 +2337,11 @@ export class ChatService {
     if (useExtractiveSalary) {
       if (input.abortSignal?.aborted) return;
       if (!extractiveSalary) {
+        this.traceNoEvidence(
+          'chat_noevidence_extractive_null_probe',
+          effectiveQuestion,
+          `sources=${retrieval.sources.length} broad=${broadSalaryAnswerTurn}`,
+        );
         yield* this.completeWithoutEvidence({
           abortSignal: input.abortSignal,
           conversationId: turn.conversationId,
@@ -2517,6 +2527,11 @@ export class ChatService {
     // no mencionan…») o la marca mal escrita— y se cierra como «sin
     // evidencia». Ningún texto factual se ha emitido todavía.
     const whole = `${answer}${citationSeen ? tail : unstreamed}`;
+    this.traceNoEvidence(
+      'chat_noevidence_failclosed_probe',
+      effectiveQuestion,
+      `noSupport=${ending.noSupport} declined=${declined} cites=${cites(whole)} citationSeen=${citationSeen} len=${whole.length}`,
+    );
     if (
       ending.noSupport ||
       declined ||
@@ -2971,6 +2986,27 @@ export class ChatService {
   }
 
   /** Cierra el turno como «sin evidencia»: mensaje claro, sin fuentes. */
+  private traceNoEvidence(
+    kind: string,
+    question: string,
+    detail: string,
+  ): void {
+    const persist = (
+      this.ragService as {
+        persistDiagnostic?: (value: Record<string, unknown>) => Promise<void>;
+      }
+    ).persistDiagnostic;
+    if (!persist) return;
+    void persist.call(this.ragService, {
+      kind,
+      question_hash: createHash('sha256')
+        .update(question)
+        .digest('hex')
+        .slice(0, 12),
+      errors: detail,
+    });
+  }
+
   private async *completeWithoutEvidence(input: {
     abortSignal?: AbortSignal;
     conversationId: string;
