@@ -522,6 +522,13 @@ export function searchableSalaryQuestion(question: string): string {
     .trim();
 }
 
+/** Una comparación explícita de incrementos debe usar la escala canónica. */
+export function prefersCanonicalSalarySources(question: string): boolean {
+  return /\b(?:incrementos?|comparaci[oó]n|comparar|m[áa]s reciente|m[áa]s antiguo)\b/iu.test(
+    question,
+  );
+}
+
 /**
  * Consolida la evidencia por documento y la ordena con precedencia temporal
  * determinista. Un documento no debe ocupar varias referencias por fragmentos
@@ -2404,10 +2411,16 @@ export class RagService {
           (candidate) => candidate.semanticScore >= searchBase.matchThreshold,
         );
         options.abortSignal?.throwIfAborted();
-        globalRoutingSources = routingSources([
-          ...rawGlobalSources,
-          ...salarySources,
-        ]);
+        // En una comparación explícita de incrementos, los decretos administrativos
+        // que solo mencionan "remuneración" desplazan a las escalas con cifras.
+        // La consulta canónica manda cuando la persona pidió comparar el monto.
+        const asksSalaryComparison = prefersCanonicalSalarySources(question);
+        globalRoutingSources =
+          asksSalaryComparison &&
+          !exactReferences.length &&
+          salarySources.length
+            ? routingSources(salarySources)
+            : routingSources([...rawGlobalSources, ...salarySources]);
       }
     }
     // Paso 2: antes del rescate léxico se prueba una reformulación determinista

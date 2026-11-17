@@ -4,6 +4,7 @@ import {
   inheritedFactorQuestions,
   isEllipticalFollowUp,
   RagService,
+  prefersCanonicalSalarySources,
   resolveDetectedSubmodule,
   searchableSalaryQuestion,
 } from './rag.service';
@@ -25,6 +26,28 @@ describe('searchableSalaryQuestion', () => {
     const question =
       'Muéstrame las escalas de remuneración de los profesores, ordenadas del más reciente al más antiguo.';
     expect(searchableSalaryQuestion(question)).not.toContain('ordenadas');
+    expect(prefersCanonicalSalarySources(question)).toBe(true);
+  });
+
+  it('no prioriza la escala canónica solo por mencionar años', () => {
+    expect(
+      prefersCanonicalSalarySources(
+        '¿Qué bonificación recibe un docente con 30 años?',
+      ),
+    ).toBe(false);
+    expect(
+      prefersCanonicalSalarySources(
+        '¿Cuánto gana un profesor con 20 años de servicio?',
+      ),
+    ).toBe(false);
+  });
+
+  it('no prioriza la escala canónica en una pregunta de cifra personal', () => {
+    expect(
+      prefersCanonicalSalarySources(
+        '¿Cuánto gana un profesor contratado de 30 horas?',
+      ),
+    ).toBe(false);
   });
 
   it('no altera una pregunta salarial sin esas instrucciones', () => {
@@ -372,6 +395,60 @@ describe('RagService', () => {
     service = new RagService(embeddings, gateway, {
       get: jest.fn((key: string) => (key === 'RAG_MATCH_COUNT' ? 5 : 0.7)),
     } as never);
+  });
+
+  it('prefiere la escala salarial canónica cuando se comparan incrementos (C18)', async () => {
+    const escala = {
+      ...source,
+      chunkId: 'escala-2025',
+      documentTitle: 'Año 2025: Incremento de remuneraciones DS 049-2025-EF',
+      chunkContent:
+        'La remuneración mensual del docente con jornada de 30 horas es de S/ 3 300,60.',
+      semanticScore: 0.7,
+    };
+    const planilla = {
+      ...source,
+      chunkId: 'planilla-2018',
+      documentTitle: 'Remuneraciones: instructivo de planilla de pagos',
+      chunkContent: 'La remuneración del docente se paga mediante la planilla.',
+      semanticScore: 0.95,
+    };
+    gateway.search.mockImplementation((input: { query: string }) =>
+      Promise.resolve(
+        /RIM docente/iu.test(input.query) ? [escala] : [planilla],
+      ),
+    );
+
+    const result = await service.retrieve(
+      'Muéstrame en una tabla los incrementos de remuneración de los profesores que figuran en los documentos, ordenados del más reciente al más antiguo.',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    const delivered =
+      (result as { sources?: Array<{ chunkId: string }> }).sources ?? [];
+    expect(delivered[0]?.chunkId).toBe('escala-2025');
+  });
+
+  it('conserva la búsqueda original si la consulta canónica no devuelve fuentes', async () => {
+    const planilla = {
+      ...source,
+      chunkId: 'planilla-2018',
+      semanticScore: 0.9,
+    };
+    gateway.search.mockImplementation((input: { query: string }) =>
+      Promise.resolve(/RIM docente/iu.test(input.query) ? [] : [planilla]),
+    );
+
+    const result = await service.retrieve(
+      'Muéstrame los incrementos de remuneración de los profesores.',
+      null,
+    );
+
+    expect(result.kind).toBe('evidence');
+    const delivered =
+      (result as { sources?: Array<{ chunkId: string }> }).sources ?? [];
+    expect(delivered[0]?.chunkId).toBe('planilla-2018');
   });
 
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
