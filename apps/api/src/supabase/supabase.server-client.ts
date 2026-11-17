@@ -330,6 +330,25 @@ export interface SupabaseDatabase {
     };
     Views: Record<string, never>;
     Functions: {
+      get_related_documents: {
+        Args: { p_document_id: string };
+        Returns: Array<{
+          source_document_id: string;
+          source_title: string;
+          source_type: string;
+          source_year: number | null;
+          relation_id: string | null;
+          relation_type:
+            | SupabaseDatabase['public']['Enums']['document_relation_type']
+            | null;
+          notes: string | null;
+          target_document_id: string | null;
+          target_title: string | null;
+          target_type: string | null;
+          target_year: number | null;
+          evidence_chunk_id: string | null;
+        }>;
+      };
       record_user_password_reset: {
         Args: {
           p_actor_id: string;
@@ -1124,6 +1143,8 @@ export interface SupabaseDatabase {
       document_ingestion_status:
         'failed' | 'indexed' | 'pending' | 'processing';
       document_publication_status: 'active' | 'inactive';
+      document_relation_type:
+        'modifica' | 'deroga' | 'reglamenta' | 'cita' | 'complementa';
       document_situation: 'archived' | 'current' | 'replaced';
       document_approval_status: 'pending_approval' | 'ready';
       document_archive_reason:
