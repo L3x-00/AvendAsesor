@@ -1810,6 +1810,20 @@ export class ChatService {
           )
         : [];
 
+    const sourceBelongsToModule = (
+      source: RetrievedChunk,
+      moduleId: string,
+    ): boolean =>
+      (source.moduleIds ?? []).includes(moduleId) ||
+      Boolean(
+        source.moduleAssociations?.some(
+          (association) =>
+            (source.moduleIds ?? []).includes(association.rootModuleId) &&
+            (association.rootModuleId === moduleId ||
+              association.submoduleId === moduleId),
+        ),
+      );
+
     if (
       retrieval.kind === 'topic_change' &&
       !continuesConversation &&
@@ -1824,14 +1838,16 @@ export class ChatService {
       !selectedModuleId &&
       retrieval.resolvedModule &&
       !conversationId &&
-      !topicIntent
+      !topicIntent &&
+      retrieval.sources.length > 0 &&
+      retrieval.sources.every((source) =>
+        sourceBelongsToModule(source, retrieval.resolvedModule?.id ?? ''),
+      )
     ) {
-      // Solo una conversación NUEVA adopta el módulo detectado. Una
-      // conversación general (sin módulo) sigue siéndolo: antes se partía en
-      // otra y la precisión del usuario ("de reasignación") llegaba al modelo
-      // sin la pregunta original. Con intención temática por turno, el chat
-      // general no queda atado a un módulo: la siguiente consulta puede tratar
-      // otro proceso.
+      // Solo una conversación NUEVA adopta el módulo detectado, y solo cuando
+      // toda la evidencia recuperada vive en ese módulo. Si hay fuentes de otros
+      // módulos, adoptarlo convertiría el chat general en una conversación
+      // "del módulo" y la compuerta defensiva cerraría una respuesta válida.
       selectedModuleId = retrieval.resolvedModule.id;
     }
 
@@ -1841,14 +1857,7 @@ export class ChatService {
         retrieval.kind === 'evidence' ||
         retrieval.kind === 'topic_change') &&
         retrieval.sources.some(
-          (source) =>
-            !source.moduleIds.some((id) => id === selectedModuleId) &&
-            !source.moduleAssociations?.some(
-              (association) =>
-                source.moduleIds.includes(association.rootModuleId) &&
-                (association.rootModuleId === selectedModuleId ||
-                  association.submoduleId === selectedModuleId),
-            ),
+          (source) => !sourceBelongsToModule(source, selectedModuleId ?? ''),
         )) ||
         (retrieval.kind === 'topic_change' &&
           retrieval.resolvedModule.id !== selectedModuleId)),
