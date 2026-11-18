@@ -139,6 +139,11 @@ import {
   type ConversationalReplyKind,
 } from './intent/conversational-replies';
 import {
+  asksForEvidenceProvenance,
+  provenanceAfterNoEvidenceMessage,
+  salaryInsufficiencyMessage,
+} from './intent/evidence-provenance';
+import {
   announcesNewTopic,
   announcesNewTopicWithSubject,
   classifyTurnIntent,
@@ -1011,6 +1016,8 @@ const MODULES_CACHE_MS = 2 * 60 * 1000;
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+  /** Pregunta salarial del turno en curso: solo afecta al texto de insuficiencia. */
+  private salaryFallbackQuestion: string | null = null;
   private modulesCache: {
     expiresAt: number;
     promise: Promise<ActiveChatModule[]>;
@@ -1272,6 +1279,10 @@ export class ChatService {
       acceptedQuestion = null;
     }
     const effectiveQuestion = acceptedQuestion ?? question;
+    this.salaryFallbackQuestion = salaryQuestionProfile(effectiveQuestion)
+      .isSalaryQuestion
+      ? effectiveQuestion
+      : null;
 
     if (acceptedQuestion && isConversationSummaryRequest(acceptedQuestion)) {
       yield* this.conversationSummary({
@@ -1442,6 +1453,21 @@ export class ChatService {
       ? (storedContext?.selectedModuleId ?? null)
       : input.selectedModuleId;
     let conversationId = continuesConversation ? input.conversationId : null;
+
+    if (
+      input.conversationId &&
+      !acceptedQuestion &&
+      asksForEvidenceProvenance(question) &&
+      conversationContext.at(-1)?.role === 'no_evidence'
+    ) {
+      // El docente pregunta por el origen de una respuesta que no tuvo sustento.
+      // Se explica la limitación sin citar un documento que no respalda la frase.
+      yield {
+        data: { message: provenanceAfterNoEvidenceMessage() },
+        type: 'conversational',
+      };
+      return;
+    }
     if (
       !selectedModuleId &&
       !conversationId &&
@@ -2172,13 +2198,17 @@ export class ChatService {
           retrievalScope,
         );
       } else if (unrelated) {
-        message = buildConversationalReply('unrelated_no_evidence');
+        message = salaryQuestionProfile(effectiveQuestion).isSalaryQuestion
+          ? salaryInsufficiencyMessage()
+          : buildConversationalReply('unrelated_no_evidence');
       }
       yield* this.completeWithoutEvidence({
         abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
-        message,
+        message: salaryQuestionProfile(effectiveQuestion).isSalaryQuestion
+          ? salaryInsufficiencyMessage()
+          : message,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -2568,6 +2598,9 @@ export class ChatService {
         abortSignal: input.abortSignal,
         conversationId: turn.conversationId,
         faqMemory,
+        message: salaryProfile.isSalaryQuestion
+          ? salaryInsufficiencyMessage()
+          : undefined,
         retrievalScope,
         topRelevanceScore: retrieval.topRelevanceScore,
         userId: input.authorization.userId,
@@ -2982,7 +3015,12 @@ export class ChatService {
     userId: string;
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
-    const base = input.message ?? noEvidenceMessage(input.retrievalScope);
+    const generic =
+      !input.message || input.message.startsWith('Por ahora no encontré');
+    const base =
+      generic && this.salaryFallbackQuestion
+        ? salaryInsufficiencyMessage()
+        : (input.message ?? noEvidenceMessage(input.retrievalScope));
     const message = base;
     input.abortSignal?.throwIfAborted();
     const completed = await this.historyGateway.completeTurn({

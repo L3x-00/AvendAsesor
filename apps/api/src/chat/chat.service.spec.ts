@@ -1683,6 +1683,91 @@ describe('ChatService', () => {
     expect(conversation?.data.moduleId).toBeNull();
   });
 
+  it('explica la insuficiencia salarial sin fabricar citas', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: source.moduleIds[0], name: 'Remuneraciones' },
+      sources: [
+        {
+          ...source,
+          chunkContent:
+            'La remuneración mensual del docente se rige por la normativa vigente.',
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Los documentos disponibles no contienen información específica sobre la comparación solicitada.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cuánto gano como docente?',
+    });
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+
+    expect(noEvidence.data.message).toContain(
+      'No pude darte una respuesta con sustento documental',
+    );
+    expect(noEvidence.data.message).not.toMatch(/\[\d+\]/u);
+    expect(historyGateway.completeTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ replyRole: 'no_evidence', sources: [] }),
+    );
+  });
+
+  it('explica la insuficiencia salarial cuando la recuperación no devuelve evidencia', async () => {
+    ragService.retrieve.mockResolvedValue({
+      kind: 'no_evidence',
+      topRelevanceScore: null,
+    });
+
+    const events = await collect(service, {
+      question: 'Muéstrame los incrementos de remuneración de los profesores.',
+    });
+    const noEvidence = events.find((event) => event.type === 'no_evidence');
+    if (!noEvidence || noEvidence.type !== 'no_evidence') {
+      throw new Error('Expected a no_evidence event.');
+    }
+
+    expect(noEvidence.data.message).toContain(
+      'No pude darte una respuesta con sustento documental',
+    );
+  });
+
+  it('responde la procedencia de una insuficiencia sin proveedor ni citas', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      selectedModuleId: null,
+      messages: [
+        { role: 'user', content: 'Muéstrame los incrementos por año.' },
+        {
+          role: 'no_evidence',
+          content:
+            'No pude darte una respuesta con sustento documental para esa comparación.',
+        },
+      ],
+    });
+
+    const events = await collect(service, {
+      conversationId,
+      question: '¿De dónde sacas esa información?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual(['conversational']);
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(reply.data.message).toContain('no provino de un documento');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+  });
+
   it('no muestra una tabla salarial si el importe no coincide con su fila', async () => {
     const tableSource = {
       ...source,
