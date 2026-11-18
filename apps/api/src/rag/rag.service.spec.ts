@@ -139,6 +139,35 @@ describe('inheritedFactorQuestions', () => {
     ).toEqual([]);
   });
 
+  // P3: un tema fuera del léxico abre un tema propio y no arrastra la cifra
+  // anterior. La señal es la forma de la pregunta, no un inventario de temas.
+  it.each([
+    '¿Cómo se usa el SIAGIE para registrar las notas?',
+    '¿Qué sabes del CNEB?',
+    '¿Qué sabes del CNEB para docentes?',
+    '¿Me pueden obligar a usar mi celular personal para comunicarme con los padres?',
+    '¿Me pueden obligar a usar mi celular como profesor?',
+    'Tengo covid, ¿debo ir a trabajar?',
+  ])('«%s» no hereda la consulta salarial anterior', (question) => {
+    expect(inheritedFactorQuestions(question, [salary], false)).toEqual([]);
+  });
+
+  it('un seguimiento elíptico de la cifra sí conserva la consulta salarial', () => {
+    expect(
+      inheritedFactorQuestions('¿Y el año pasado?', [salary], false),
+    ).toEqual([salary]);
+  });
+
+  // R1 de la auditoría: «tengo» y «estoy» también aparecen en respuestas a la
+  // aclaración salarial. Declarar jornada o vínculo no puede abrir un tema nuevo.
+  it.each([
+    'Tengo 30 horas',
+    'Estoy nombrado',
+    'Soy contratada de primera escala',
+  ])('«%s» responde a la aclaración y conserva la herencia', (answer) => {
+    expect(inheritedFactorQuestions(answer, [salary], true)).toEqual([salary]);
+  });
+
   it('hereda desde la consulta salarial hasta la respuesta a la aclaración', () => {
     expect(
       inheritedFactorQuestions('Nombrado', [salary, 'Sector público'], true),

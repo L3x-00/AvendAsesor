@@ -1049,6 +1049,19 @@ const SELF_CONTAINED_NON_SALARY =
   /\b(?:documentos?|archivos?|anexos?|expediente|requisitos?|plazos?|pasos?|procedimiento)\b/u;
 
 /**
+ * Formas de pregunta que abren un tema propio aunque sus palabras no estén en
+ * el léxico del RAG (SIAGIE, CNEB, uso del celular personal, etc.). Se usan como
+ * señal estructural, no como inventario de temas: un seguimiento elíptico de la
+ * cifra («¿y el año pasado?», «¿cómo se calcula?») no encaja aquí porque no
+ * nombra un objeto ni una acción nueva. Se excluyen «tengo» y «estoy» porque
+ * son también la forma natural de responder a la aclaración salarial («Tengo
+ * 30 horas», «Estoy nombrado»): esos turnos no son preguntas sobre un tema
+ * nuevo y siguen resolviéndose por el léxico de temas.
+ */
+const NEW_SUBJECT_QUESTION_FORM =
+  /\b(?:que sabes (?:del|de|sobre)|como (?:funciona|se usa|hago|hace)|donde (?:puedo|esta|se)|me pueden|debo)\b/u;
+
+/**
  * Factores que en una consulta salarial son datos de la cifra y no un tema:
  * «soy nombrado» responde a la aclaración salarial; «me expulsaron» no.
  */
@@ -1060,16 +1073,18 @@ const SALARY_FACTOR_WORDS =
  * se aplica al responder una aclaración: «soy nombrado» sigue el hilo salarial,
  * «me expulsaron ayer» no.
  *
- * El criterio es el léxico de temas, no la forma de la pregunta: los
- * seguimientos elípticos («¿cómo se calcula?», «¿cuál es el monto máximo?»,
- * «¿desde cuándo rige para los docentes?») también empiezan con un interrogativo
- * y también nombran roles, así que no sirven como señal de cambio de tema.
- * Un tema fuera del léxico queda como límite conocido (ver PR).
+ * El criterio combina el léxico de temas con formas de pregunta que abren un
+ * asunto ajeno al corpus. Los seguimientos elípticos («¿cómo se calcula?»,
+ * «¿cuál es el monto máximo?», «¿desde cuándo rige para los docentes?») no
+ * encajan en esas formas, aunque empiecen con un interrogativo y nombren roles.
+ * Las declaraciones de factor («Tengo 30 horas», «Estoy nombrado») tampoco
+ * encajan y siguen el hilo salarial por el léxico de temas.
  */
 function asksAboutANewSubject(turn: string): boolean {
   if (salaryQuestionProfile(turn).isSalaryQuestion) return false;
   const normalized = normalizeSpanishText(turn);
   if (SELF_CONTAINED_NON_SALARY.test(normalized)) return true;
+  if (NEW_SUBJECT_QUESTION_FORM.test(normalized)) return true;
   return hasTopicTerm(normalized.replace(SALARY_FACTOR_WORDS, ' '));
 }
 
