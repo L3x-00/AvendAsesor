@@ -2414,20 +2414,26 @@ export class RagService {
     // La ruta conserva las asociaciones de todos los documentos pertinentes.
     // La deduplicación interdocumental ocurre solo al armar las fuentes que se
     // entregan al modelo y a la interfaz, nunca antes de decidir el módulo.
-    const routingSources = (sources: RetrievedChunk[]): RetrievedChunk[] =>
-      sourcesWithoutVersionDuplicates(
+    const asksHistoricalComparison =
+      salaryQuestionProfile(question).isSalaryQuestion &&
+      /\b(?:historico|historicos|antecedentes?|mas reciente|mas antiguo|comparar|ordenados)\b/u.test(
+        normalizeSpanishText(question),
+      );
+    const routingSources = (sources: RetrievedChunk[]): RetrievedChunk[] => {
+      const sanitized = reconcileRetrievedDocumentIdentities(
+        sources
+          .map(sanitizeRetrievedEvidence)
+          .filter((source): source is RetrievedChunk => Boolean(source)),
+      );
+      // En una comparación explícita se conservan las normas de otros años:
+      // el orden por vigencia las presenta como históricas, no como vigentes.
+      const eligibleSources = asksHistoricalComparison
+        ? sanitized
+        : withoutExplicitlyRepealedSalarySources(sanitized, salaryQuestion);
+      return sourcesWithoutVersionDuplicates(
         byScoreDescending(
           sourcesEligibleForQuestion(
-            withoutExplicitlyRepealedSalarySources(
-              reconcileRetrievedDocumentIdentities(
-                sources
-                  .map(sanitizeRetrievedEvidence)
-                  .filter((source): source is RetrievedChunk =>
-                    Boolean(source),
-                  ),
-              ),
-              salaryQuestion,
-            ),
+            eligibleSources,
             salaryQuestion,
             retrievalScope,
           ).filter(
@@ -2442,6 +2448,7 @@ export class RagService {
           ),
         ),
       );
+    };
     let globalRoutingSources = routingSources(rawGlobalSources);
     let selectedRoutingSources = routingSources(rawSelectedSources);
     // Derechos, deberes, la ley en general y las modificaciones solo pueden
