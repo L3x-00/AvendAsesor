@@ -99,9 +99,9 @@ describe("groupReferenceSources", () => {
       source(5),
     ]);
 
-    expect(groups.map((group) => group.sources.map((item) => item.rank))).toEqual(
-      [[1, 2], [3], [4], [5]],
-    );
+    expect(
+      groups.map((group) => group.sources.map((item) => item.rank)),
+    ).toEqual([[1, 2], [3], [4], [5]]);
   });
 });
 
@@ -218,9 +218,27 @@ describe("ChatSources", () => {
         citedRanks={[1, 2, 5]}
         messageId="m-referencias"
         sources={[
-          { ...common, id: "11111111-1111-4111-8111-111111111111", pageEnd: 36, pageStart: 36, rank: 1 },
-          { ...common, id: "22222222-2222-4222-8222-222222222222", pageEnd: 11, pageStart: 11, rank: 2 },
-          { ...common, id: "55555555-5555-4555-8555-555555555555", pageEnd: 27, pageStart: 27, rank: 5 },
+          {
+            ...common,
+            id: "11111111-1111-4111-8111-111111111111",
+            pageEnd: 36,
+            pageStart: 36,
+            rank: 1,
+          },
+          {
+            ...common,
+            id: "22222222-2222-4222-8222-222222222222",
+            pageEnd: 11,
+            pageStart: 11,
+            rank: 2,
+          },
+          {
+            ...common,
+            id: "55555555-5555-4555-8555-555555555555",
+            pageEnd: 27,
+            pageStart: 27,
+            rank: 5,
+          },
         ]}
       />,
     );
@@ -233,7 +251,9 @@ describe("ChatSources", () => {
       .closest("tr");
     expect(row).toHaveAttribute("id", "fuente-m-referencias-1");
     expect(within(table).getAllByRole("row")).toHaveLength(2);
-    expect(within(row as HTMLTableRowElement).getByText("11, 27, 36 de 64")).toBeVisible();
+    expect(
+      within(row as HTMLTableRowElement).getByText("11, 27, 36 de 64"),
+    ).toBeVisible();
     expect(
       within(row as HTMLTableRowElement).getByText(
         "Páginas 11, 27, 36 de 64 del PDF · Sin sección o artículo identificado",
@@ -304,9 +324,15 @@ describe("ChatSources", () => {
       name: "Fuentes documentales, ubicación y descarga",
     });
     const row = within(table).getByText("Reglamento de prueba").closest("tr");
-    expect(within(row as HTMLTableRowElement).getByText("11, 27 de 64")).toBeVisible();
-    expect(row).toHaveTextContent("Artículo: Artículo 4 · Numeral o literal: 4.1");
-    expect(row).toHaveTextContent("Artículo: Artículo 6 · Numeral o literal: 6.2");
+    expect(
+      within(row as HTMLTableRowElement).getByText("11, 27 de 64"),
+    ).toBeVisible();
+    expect(row).toHaveTextContent(
+      "Artículo: Artículo 4 · Numeral o literal: 4.1",
+    );
+    expect(row).toHaveTextContent(
+      "Artículo: Artículo 6 · Numeral o literal: 6.2",
+    );
   });
 
   it("preserves ranges and a clear fallback when source metadata is absent", () => {
@@ -462,6 +488,144 @@ describe("ChatSources", () => {
     expect(row).not.toHaveTextContent("NORMAS LEGALES");
     expect(row).toHaveTextContent("Artículo: Artículo 3");
     expect(row).toHaveTextContent("Numeral o literal: Literal h)");
+  });
+
+  it.each([
+    "La integridad del documento y la autoría de las firmas pueden ser verificadas en el validador.",
+    "La integridad del documento y la autoría de la(s) firma(s) pueden ser verificadas en https://apps.firmaperu.gob.pe/web/validador.xhtml EXPEDIENTE: DITEN2026-INT-0108738 CLAVE: 7B61A2",
+    "7 documento electrónico firmado digitalmente en el marco de la Ley N.° 27269.",
+    "Documento electrónico firmado digitalmente en el marco de la Ley N.° 27269.",
+    "ESTO ES UNA COPIA AUTÉNTICA IMPRIMIBLE de un documento electrónico archivado en el Ministerio de Educación.",
+    "Esto es una copia auténtica de un documento electrónico archivado en el Ministerio de Educación.",
+    "Su autenticidad e integridad pueden ser contrastadas en https://esinad.minedu.gob.pe/.",
+    "Firmado digitalmente por: MARÍA DEL CARMEN GARCÍA",
+  ])(
+    "no muestra el sello de firma como sección (OBS-024): %s",
+    (sectionTitle) => {
+      render(
+        <ChatSources
+          sources={[
+            {
+              articleReference: null,
+              documentSituation: "current",
+              documentTitle: "Resolución Ministerial N.° 074-2026-MINEDU",
+              id: "seal-section-source",
+              moduleName: "Reasignaciones",
+              numeralReference: null,
+              pageEnd: 3,
+              pageStart: 3,
+              rank: 1,
+              relevanceScore: 0.9,
+              sectionTitle,
+              versionNumber: 1,
+            },
+          ]}
+        />,
+      );
+
+      const table = screen.getByRole("table", {
+        name: "Fuentes documentales, ubicación y descarga",
+      });
+      const row = within(table)
+        .getByText("Resolución Ministerial N.° 074-2026-MINEDU")
+        .closest("tr");
+
+      expect(row).not.toHaveTextContent("Sección o subtítulo:");
+      expect(row).not.toHaveTextContent(sectionTitle);
+      expect(row).toHaveTextContent(
+        "Página 3 del PDF · Sin sección o artículo identificado",
+      );
+    },
+  );
+
+  it("conserva el artículo jurídico aunque el sello deje de mostrarse como sección", () => {
+    render(
+      <ChatSources
+        sources={[
+          {
+            articleReference: "Artículo 5.- Causal de reasignación",
+            documentSituation: "current",
+            documentTitle: "Ley N.° 29944",
+            id: "seal-with-article-source",
+            moduleName: "Reasignaciones",
+            numeralReference: null,
+            pageEnd: 4,
+            pageStart: 4,
+            rank: 1,
+            relevanceScore: 0.9,
+            sectionTitle:
+              "La integridad del documento y la autoría de la(s) firma(s) pueden ser verificadas en el validador.",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const row = within(table).getByText("Ley N.° 29944").closest("tr");
+
+    expect(row).not.toHaveTextContent("Sección o subtítulo:");
+    expect(row).not.toHaveTextContent("La integridad del documento");
+    expect(row).toHaveTextContent(
+      "Artículo: Artículo 5.- Causal de reasignación",
+    );
+  });
+
+  it("neutraliza el sello en fuentes agrupadas sin ocultar una sección real", () => {
+    render(
+      <ChatSources
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Resolución Ministerial N.° 074-2026-MINEDU",
+            documentVersionId: "version-cronograma",
+            id: "seal-grouped-source",
+            moduleName: "Reasignaciones",
+            numeralReference: null,
+            pageEnd: 3,
+            pageStart: 3,
+            rank: 1,
+            relevanceScore: 0.9,
+            sectionTitle:
+              "La integridad del documento y la autoría de las firmas pueden verificarse.",
+            versionNumber: 1,
+          },
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Resolución Ministerial N.° 074-2026-MINEDU",
+            documentVersionId: "version-cronograma",
+            id: "real-section-grouped-source",
+            moduleName: "Reasignaciones",
+            numeralReference: null,
+            pageEnd: 4,
+            pageStart: 4,
+            rank: 2,
+            relevanceScore: 0.8,
+            sectionTitle: "Cronograma de reasignación docente",
+            versionNumber: 1,
+          },
+        ]}
+      />,
+    );
+
+    const table = screen.getByRole("table", {
+      name: "Fuentes documentales, ubicación y descarga",
+    });
+    const row = within(table)
+      .getByText("Resolución Ministerial N.° 074-2026-MINEDU")
+      .closest("tr");
+
+    expect(row).toHaveTextContent(
+      "Sección o subtítulo: Cronograma de reasignación docente",
+    );
+    expect(row).not.toHaveTextContent("La integridad del documento");
+    // El fragmento neutralizado queda sin ubicación declarada, nunca con el
+    // sello disfrazado de sección.
+    expect(row).toHaveTextContent("Sin sección o artículo identificado");
   });
 
   it("muestra el subtítulo sin repetir su artículo", () => {
@@ -759,9 +923,13 @@ describe("ChatDownloads", () => {
     ).toBeVisible();
     expect(summary?.textContent).not.toContain("(");
     // Icono y flecha son decorativos: el lector de pantalla lee solo nombre y cantidad.
-    expect(summary?.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
+    expect(summary?.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(
+      1,
+    );
     expect(
-      summary?.querySelector('span[aria-hidden="true"] img[src="/microsoft-word.svg"]'),
+      summary?.querySelector(
+        'span[aria-hidden="true"] img[src="/microsoft-word.svg"]',
+      ),
     ).not.toBeNull();
     // El lector de pantalla anuncia nombre y cantidad con el mismo formato de siempre.
     expect(summary).toHaveAttribute("aria-label", "Documentos disponibles (2)");
