@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   Inject,
   Injectable,
@@ -3015,24 +3015,6 @@ export class ChatService {
     userId: string;
     userMessageId: string;
   }): AsyncIterable<ChatStreamEvent> {
-    const stack = (new Error().stack ?? '')
-      .split('\n')
-      .slice(1, 4)
-      .map((line) => line.trim())
-      .join(' | ')
-      .slice(0, 280);
-    void (
-      this.ragService as {
-        persistDiagnostic?: (value: Record<string, unknown>) => Promise<void>;
-      }
-    ).persistDiagnostic?.({
-      kind: 'chat_noevidence_route_probe',
-      question_hash: createHash('sha256')
-        .update(this.salaryFallbackQuestion ?? 'non-salary')
-        .digest('hex')
-        .slice(0, 12),
-      errors: stack,
-    });
     const generic =
       !input.message || input.message.startsWith('Por ahora no encontré');
     const base =
