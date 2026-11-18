@@ -28,3 +28,19 @@ jobs:
       - run: npm run test:e2e
       - run: npm run build
       - run: npm run verify:build-artifacts
+
+  pgtap:
+    name: pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.0
+      - run: supabase start
+      - run: supabase db reset
+      - run: supabase test db
