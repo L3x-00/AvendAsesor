@@ -1258,9 +1258,7 @@ export class RagService {
   };
 
   /** Escritura best-effort: un fallo de diagnóstico nunca rompe el turno. */
-  private async persistDiagnostic(
-    payload: Record<string, unknown>,
-  ): Promise<void> {
+  async persistDiagnostic(payload: Record<string, unknown>): Promise<void> {
     const url = this.config.get<string>('SUPABASE_URL');
     const key = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
     if (
