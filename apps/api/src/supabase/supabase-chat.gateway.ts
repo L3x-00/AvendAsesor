@@ -254,6 +254,7 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
         p_retrieval_scope: input.retrievalScope ?? 'current',
         p_sources: input.sources.map((source) => ({
           chunkId: source.chunkId,
+          crossModule: source.crossModule ?? false,
           moduleId: source.moduleId ?? '',
           relevanceScore: source.relevanceScore,
           sourceId: source.sourceId,

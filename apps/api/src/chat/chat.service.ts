@@ -618,6 +618,7 @@ function toCitationBundle(
   selectedModuleId: string | null,
   relatedModule: ResolvedModule | null,
   relatedSubmodule: ResolvedModule | null,
+  crossModule = false,
 ): CitationBundle {
   const inputs: ChatCitationInput[] = [];
   const sources: ChatSource[] = [];
@@ -632,6 +633,7 @@ function toCitationBundle(
     );
     inputs.push({
       chunkId: source.chunkId,
+      crossModule,
       moduleId: citationModuleId,
       relevanceScore,
       sourceId,
@@ -1905,10 +1907,9 @@ export class ChatService {
     );
 
     // Una consulta abierta en un módulo no encierra a la persona: si la
-    // respuesta está en otro módulo, se responde igual. El turno abre una
-    // consulta general (sin restricción de fuentes, como exige el contrato de
-    // persistencia) y al final se ofrece el módulo donde vive la evidencia para
-    // continuar con precisión.
+    // respuesta está en otro módulo, se responde igual y la conversación
+    // permanece en el módulo elegido, con su historial y su encabezado.
+    // Las fuentes cruzadas se marcan para el contrato de persistencia.
     const crossModuleAnswer =
       outOfConversationScope &&
       retrieval.kind === 'topic_change' &&
@@ -1929,13 +1930,6 @@ export class ChatService {
       crossModuleSuggestion && !broadSalaryModules.length
         ? withModuleSuggestionNote(answer, crossModuleSuggestion.name)
         : answer;
-
-    if (crossModuleAnswer) {
-      conversationId = null;
-      conversationContext = [];
-      startedNewConversation = true;
-      selectedModuleId = null;
-    }
 
     const turn = await this.historyGateway.beginTurn({
       conversationId,
@@ -2365,6 +2359,7 @@ export class ChatService {
       selectedModuleId,
       relatedModule,
       relatedSubmodule,
+      crossModuleAnswer,
     );
 
     // Las cifras, períodos y condiciones de un panorama general no se
@@ -2464,7 +2459,9 @@ export class ChatService {
       return;
     }
 
-    const preparedTopicContext = await selectedTopicContext;
+    const preparedTopicContext = crossModuleAnswer
+      ? null
+      : await selectedTopicContext;
     const topicContext =
       preparedTopicContext?.moduleId === selectedModuleId
         ? preparedTopicContext
