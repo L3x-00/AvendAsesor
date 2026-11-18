@@ -73,7 +73,8 @@ export class OpenAiAnswerGateway implements AnswerGateway {
   ) {
     const mode = input.mode ?? 'grounded';
     const systemPrompt =
-      mode === 'summary'
+      input.systemPromptOverride ??
+      (mode === 'summary'
         ? buildSummarySystemPrompt()
         : mode === 'advisory'
           ? buildAdvisorySystemPrompt()
@@ -82,7 +83,7 @@ export class OpenAiAnswerGateway implements AnswerGateway {
               asksForLegalQuestion:
                 isLegalQuestion(input.question) &&
                 isLegalModuleName(input.selectedModuleName),
-            });
+            }));
     const userPrompt =
       mode === 'summary'
         ? buildSummaryUserPrompt(input.question, input.conversationContext)

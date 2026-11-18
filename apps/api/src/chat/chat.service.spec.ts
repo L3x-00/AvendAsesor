@@ -1683,6 +1683,68 @@ describe('ChatService', () => {
     expect(conversation?.data.moduleId).toBeNull();
   });
 
+  it('responde sobre el sistema con el contexto institucional y sin RAG', async () => {
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Soy AVEND ASESOR; te ayudo con trámites educativos y respondo con sustento documental.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Para qué fue creado este sistema?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual(['conversational']);
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(reply.data.message).toContain('AVEND ASESOR');
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    const calls = answerGateway.generate.mock.calls as Array<
+      [{ systemPromptOverride?: string }]
+    >;
+    expect(calls[0]?.[0].systemPromptOverride).toContain('PROPÓSITO');
+  });
+
+  it('usa una respuesta de respaldo si el proveedor falla al explicar el sistema', async () => {
+    answerGateway.generate.mockImplementation(() => {
+      throw new Error('provider down');
+    });
+
+    const events = await collect(service, {
+      question: '¿Qué es AVEND ASESOR?',
+    });
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+
+    expect(reply.data.message).toContain('Soy AVEND ASESOR');
+    expect(answerGateway.generate).toHaveBeenCalled();
+  });
+
+  it('descarta citas normativas que el proveedorinventa al explicar el sistema', async () => {
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Según la Resolución 045-2025, artículo 5, esto funciona así.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Para qué fue creado este sistema?',
+    });
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+
+    expect(reply.data.message).toContain('Soy AVEND ASESOR');
+    expect(reply.data.message).not.toContain('045-2025');
+  });
+
   it('explica la insuficiencia salarial sin fabricar citas', async () => {
     ragService.retrieve.mockResolvedValue({
       kind: 'evidence',
