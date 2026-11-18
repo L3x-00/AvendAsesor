@@ -532,6 +532,40 @@ describe('RagService', () => {
     global.fetch = previousFetch;
   });
 
+  it('conserva las normas de años anteriores al comparar incrementos', async () => {
+    const older = {
+      ...source,
+      chunkId: 'ds-036',
+      documentTitle: 'Año 2023: Primer tramo DS 036-2023-EF',
+      chunkContent: 'La remuneración mensual del docente es de S/ 3 100,50.',
+      semanticScore: 0.9,
+    };
+    const newer = {
+      ...source,
+      chunkId: 'ds-255',
+      documentTitle: 'Año 2023: Segundo tramo DS 255-2023-EF',
+      chunkContent:
+        'Se deroga el Decreto Supremo N.° 036-2023-EF. La remuneración es de S/ 3 300,60.',
+      semanticScore: 0.8,
+    };
+    gateway.search.mockResolvedValue([older, newer]);
+
+    const result = await service.retrieve(
+      'Muéstrame los incrementos de remuneración ordenados del más reciente al más antiguo.',
+      null,
+    );
+
+    const delivered =
+      (result as { sources?: Array<{ chunkId: string }> }).sources ?? [];
+    expect(delivered.map((item) => item.chunkId)).toContain('ds-036');
+
+    // Sin pedido comparativo, la misma norma derogada sí se descarta.
+    const normal = await service.retrieve('¿Cuánto gana un docente?', null);
+    const normalDelivered =
+      (normal as { sources?: Array<{ chunkId: string }> }).sources ?? [];
+    expect(normalDelivered.map((item) => item.chunkId)).not.toContain('ds-036');
+  });
+
   it('A09 aborts an embedding in flight and never starts document retrieval', async () => {
     const cancellation = new AbortController();
     embeddings.embed.mockImplementation(
