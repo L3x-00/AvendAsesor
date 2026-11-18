@@ -114,9 +114,14 @@ values
   ('55555555-5555-5555-5555-555555555555', 'Ley de prueba C borrada', 'LEY'),
   ('66666666-6666-6666-6666-666666666666', 'Norma de prueba D borrada', 'LEY');
 
+-- El contrato vigente exige situation='archived' junto con un motivo de
+-- archivo para poder dejar un documento inactivo (restricción
+-- documents_situation_publication_check).
 update public.documents
 set
+  situation = 'archived',
   publication_status = 'inactive',
+  archive_reason_code = 'NOT_APPLICABLE',
   deactivated_at = now(),
   deactivated_by = '99999999-9999-9999-9999-999999999999',
   deactivation_reason = 'prueba',
