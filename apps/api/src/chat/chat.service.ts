@@ -3031,7 +3031,7 @@ export class ChatService {
         .update(this.salaryFallbackQuestion ?? 'non-salary')
         .digest('hex')
         .slice(0, 12),
-      errors: `salaryFlag=${Boolean(this.salaryFallbackQuestion)} inputMsg=${(input.message ?? '').slice(0, 40)} stack=${stack}`,
+      errors: stack,
     });
     const generic =
       !input.message || input.message.startsWith('Por ahora no encontré');
