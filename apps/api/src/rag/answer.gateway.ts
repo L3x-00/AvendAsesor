@@ -11,6 +11,8 @@ export interface AnswerGatewayInput {
    * `summary`: resumen de la conversación, sin fuentes y sin hechos nuevos.
    */
   mode?: 'grounded' | 'advisory' | 'summary';
+  /** Prompt de sistema alternativo, usado solo para información del sistema. */
+  systemPromptOverride?: string;
   /**
    * Recibe el motivo de término del proveedor al cerrar el flujo ('stop',
    * 'length'…). Con 'length' la respuesta se cortó por el tope de tokens.

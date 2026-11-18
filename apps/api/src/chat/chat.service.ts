@@ -139,6 +139,11 @@ import {
   type ConversationalReplyKind,
 } from './intent/conversational-replies';
 import {
+  buildSystemInfoSystemPrompt,
+  SYSTEM_INFO_FALLBACK,
+} from './context/avend-system-context';
+import { isAboutTheSystem } from './intent/system-questions';
+import {
   asksForEvidenceProvenance,
   provenanceAfterNoEvidenceMessage,
   salaryInsufficiencyMessage,
@@ -1284,6 +1289,15 @@ export class ChatService {
       ? effectiveQuestion
       : null;
 
+    if (!acceptedQuestion && isAboutTheSystem(question)) {
+      yield* this.answerAboutSystem({
+        abortSignal: input.abortSignal,
+        conversationContext: prefetchedContext?.messages ?? [],
+        question,
+      });
+      return;
+    }
+
     if (acceptedQuestion && isConversationSummaryRequest(acceptedQuestion)) {
       yield* this.conversationSummary({
         abortSignal: input.abortSignal,
@@ -1468,6 +1482,7 @@ export class ChatService {
       };
       return;
     }
+
     if (
       !selectedModuleId &&
       !conversationId &&
@@ -3001,6 +3016,46 @@ export class ChatService {
       );
       return null;
     }
+  }
+
+  /** Explica la identidad y el alcance del sistema con el proveedor de IA. */
+  private async *answerAboutSystem(input: {
+    abortSignal?: AbortSignal;
+    conversationContext: ChatContextMessage[];
+    question: string;
+  }): AsyncIterable<ChatStreamEvent> {
+    let answer = '';
+    try {
+      for await (const token of this.answerGateway.generate({
+        abortSignal: input.abortSignal,
+        conversationContext: input.conversationContext,
+        mode: 'advisory',
+        question: input.question,
+        sources: [],
+        systemPromptOverride: buildSystemInfoSystemPrompt(),
+      })) {
+        if (input.abortSignal?.aborted) return;
+        if (answer.length < 1_200) answer += token;
+      }
+    } catch {
+      answer = '';
+      this.logger.warn(
+        'System info unavailable; using deterministic fallback.',
+      );
+    }
+    const clean = answer
+      .replace(ADVISORY_OUT_OF_SCOPE_MARKER_PATTERN, '')
+      .trim();
+    const normalizedForSafety = normalizeSpanishText(clean);
+    const inventsNormativeData =
+      /\[\d+\]/u.test(clean) ||
+      /\b(?:resolucion|articulo|numeral)\b/u.test(normalizedForSafety);
+    yield {
+      data: {
+        message: clean && !inventsNormativeData ? clean : SYSTEM_INFO_FALLBACK,
+      },
+      type: 'conversational',
+    };
   }
 
   /** Cierra el turno como «sin evidencia»: mensaje claro, sin fuentes. */
