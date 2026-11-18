@@ -11,6 +11,7 @@ export interface ActiveChatModule {
 
 export interface ChatCitationInput {
   chunkId: string;
+  crossModule?: boolean;
   moduleId: string | null;
   relevanceScore: number;
   sourceId: string;

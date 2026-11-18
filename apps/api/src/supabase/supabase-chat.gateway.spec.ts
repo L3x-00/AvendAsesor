@@ -144,11 +144,43 @@ describe('SupabaseChatGatewayAdapter', () => {
         p_sources: [
           {
             chunkId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+            crossModule: false,
             moduleId: '',
             relevanceScore: 0.9,
             sourceId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
           },
         ],
+      }),
+    );
+
+    // Un cruce de módulos viaja marcado al contrato de persistencia.
+    rpc.mockResolvedValueOnce({
+      data: [{ answer_message_id: messageId }],
+      error: null,
+    });
+    await gateway.completeTurn({
+      answer: 'Respuesta cruzada',
+      conversationId,
+      faqMemory: null,
+      replyRole: 'assistant',
+      sources: [
+        {
+          chunkId: '7c8b56af-6d0c-4fef-881e-7c00907540dd',
+          crossModule: true,
+          moduleId: null,
+          relevanceScore: 0.9,
+          sourceId: '8c8b56af-6d0c-4fef-881e-7c00907540dd',
+        },
+      ],
+      topRelevanceScore: 0.9,
+      unansweredReason: null,
+      userId,
+      userMessageId: messageId,
+    });
+    expect(rpc).toHaveBeenLastCalledWith(
+      'complete_chat_turn_with_consultation_case',
+      expect.objectContaining({
+        p_sources: [expect.objectContaining({ crossModule: true })],
       }),
     );
   });

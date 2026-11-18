@@ -986,11 +986,12 @@ describe('ChatService', () => {
       selectedModuleId,
     });
 
+    // La propuesta aceptada se responde en la misma conversación del módulo.
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        question: 'Explícame los requisitos.',
-        selectedModuleId: null,
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        question: 'sí',
+        selectedModuleId,
       }),
     );
     expect(answerGateway.generate).toHaveBeenCalledTimes(1);
@@ -1056,7 +1057,10 @@ describe('ChatService', () => {
       expect.objectContaining({ topicContext: null }),
     );
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: null, selectedModuleId: null }),
+      expect.objectContaining({
+        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
+        selectedModuleId,
+      }),
     );
   });
 
@@ -3963,20 +3967,20 @@ describe('ChatService', () => {
       selectedModuleId: source.moduleIds[0],
     });
 
-    // La consulta abierta en un módulo no limita la respuesta: se abre una
-    // consulta general (sin restricción de fuentes) y se ofrece el módulo donde
-    // vive la evidencia.
+    // La consulta abierta en un módulo no limita la respuesta: se contesta con
+    // la evidencia cruzada y la conversación permanece en el módulo elegido,
+    // con su historial y su encabezado. Las fuentes se marcan como cruzadas.
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        selectedModuleId: null,
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
       }),
     );
     expect(events[0]).toEqual({
       data: {
-        conversationId: '9c8b56af-6d0c-4fef-881e-7c00907540dd',
-        moduleId: null,
-        startedNewConversation: true,
+        conversationId,
+        moduleId: source.moduleIds[0],
+        startedNewConversation: false,
         userMessageId: 'ac8b56af-6d0c-4fef-881e-7c00907540dd',
       },
       type: 'conversation',
@@ -3994,6 +3998,7 @@ describe('ChatService', () => {
     expect(completionCalls.at(-1)?.[0].answer).toContain(
       'Encontré esta información en Vacaciones',
     );
+    expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
   });
 
   it('no añade la sugerencia cuando la evidencia es del mismo módulo', async () => {
@@ -4032,7 +4037,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('responde la consulta de otro módulo en una consulta general nueva', async () => {
+  it('responde la consulta de otro módulo sin salir de la conversación del módulo', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     historyGateway.getConversationContext.mockResolvedValue({
@@ -4069,8 +4074,8 @@ describe('ChatService', () => {
 
     expect(historyGateway.beginTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        conversationId: null,
-        selectedModuleId: null,
+        conversationId,
+        selectedModuleId: source.moduleIds[0],
       }),
     );
     expect(events.map((event) => event.type)).toEqual([

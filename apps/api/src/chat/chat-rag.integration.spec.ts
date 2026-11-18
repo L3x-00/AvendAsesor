@@ -1430,15 +1430,18 @@ describe('ChatService + RagService integration', () => {
     >;
 
     expect(conversation.data).toMatchObject({
-      moduleId: null,
-      startedNewConversation: true,
+      moduleId: LICENSES_MODULE_ID,
+      startedNewConversation: false,
     });
-    expect(conversation.data.conversationId).not.toBe(priorConversationId);
-    // La consulta se responde con la documentación del módulo correcto en una
-    // consulta general nueva; ya no se niega la respuesta por el módulo abierto.
+    expect(conversation.data.conversationId).toBe(priorConversationId);
+    // La consulta se responde con la documentación del módulo correcto sin
+    // abandonar la conversación ni perder el contexto del módulo elegido.
     expect(history.completions[1]?.replyRole).toBe('assistant');
     expect(history.completions[1]?.sources).toEqual([
-      expect.objectContaining({ moduleId: CONTRACTS_MODULE_ID }),
+      expect.objectContaining({
+        moduleId: CONTRACTS_MODULE_ID,
+        crossModule: true,
+      }),
     ]);
   });
 
