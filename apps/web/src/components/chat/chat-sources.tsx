@@ -189,7 +189,9 @@ function groupedPages(group: ReferenceSourceGroup): GroupedPages | undefined {
 function groupedPageLabel(pages: GroupedPages): string {
   const ranges = pages.ranges
     .map((range) =>
-      range.start === range.end ? `${range.start}` : `${range.start}–${range.end}`,
+      range.start === range.end
+        ? `${range.start}`
+        : `${range.start}–${range.end}`,
     )
     .join(", ");
   return `${ranges}${pages.pageCount ? ` de ${pages.pageCount}` : ""}`;
@@ -250,13 +252,23 @@ function normReference(source: ChatSource): string | null {
  */
 const GENERIC_SECTION_TITLE =
   /\b(?:normas legales|el peruano|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/iu;
+/**
+ * Sello de firma digital o de copia auténtica del SINAD. En historiales antiguos
+ * quedó guardado como `sectionTitle`; no identifica una sección jurídica. Se
+ * neutraliza al renderizar, sin reescribir la historia documental (OBS-024),
+ * con el mismo criterio que ya usa el oráculo de calidad del API.
+ */
+const SIGNATURE_SEAL_SECTION =
+  /^\s*(?:\d+\s+)?(?:documento electr[oó]nico firmado|la integridad del documento y la autor[ií]a|(?:esta|esto) es una copia aut[eé]ntica(?:\s+imprimible)?|su autenticidad e integridad pueden ser contrastadas|firmado digitalmente por|expediente\s*:\s*\S+\s+clave\s*:)/iu;
 const DOCUMENT_NAME_AS_SECTION =
   /^\s*(?:ley|decreto|resoluci[oó]n|directiva|norma)\b.{0,180}\bn[.°º]/iu;
 
 function locationSectionTitle(source: ChatSource): string | null {
   let title = source.sectionTitle?.replace(/\s+/gu, " ").trim();
   if (!title) return null;
-  if (GENERIC_SECTION_TITLE.test(title)) return null;
+  if (GENERIC_SECTION_TITLE.test(title) || SIGNATURE_SEAL_SECTION.test(title)) {
+    return null;
+  }
 
   // El título completo de la norma no es una sección. Si existe una ubicación
   // jurídica concreta, se muestra esa referencia y se evita repetir el nombre
@@ -432,7 +444,8 @@ function SourceTable({
                           key={groupedSource.id}
                           tabIndex={-1}
                         >
-                          Fuente {groupedSource.rank} incluida en esta referencia
+                          Fuente {groupedSource.rank} incluida en esta
+                          referencia
                         </span>
                       ))
                     : null}
