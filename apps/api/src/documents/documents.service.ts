@@ -27,6 +27,11 @@ import {
   type ArchiveReasonCode,
 } from './document-governance.constants';
 import {
+  DocumentLibraryCache,
+  documentLibraryCacheKey,
+  type DocumentLibraryCacheKeyInput,
+} from './document-library-cache';
+import {
   toManagedDocumentVersion,
   toDocumentAuditEvent,
   type DocumentMetadata,
@@ -258,6 +263,12 @@ function validateSituationInput(dto: {
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
+  /**
+   * La biblioteca se repite mucho: el Historial la consulta por módulo y el
+   * administrador vuelve sobre los mismos. Se guarda por actor y consulta, y
+   * cada mutación de esta instancia la vacía.
+   */
+  private readonly libraryCache = new DocumentLibraryCache();
 
   constructor(
     @Inject(SUPABASE_DOCUMENTS_GATEWAY)
@@ -303,7 +314,7 @@ export class DocumentsService {
     );
 
     try {
-      return await this.documentsGateway.addVersion({
+      const added = await this.documentsGateway.addVersion({
         actorId: authorization.userId,
         documentId,
         fileSizeBytes: inspectedPdf.sizeBytes,
@@ -316,7 +327,10 @@ export class DocumentsService {
         versionId,
         versionRelation: dto.versionRelation ?? null,
       });
+      this.libraryCache.clear();
+      return added;
     } catch (error) {
+      this.libraryCache.clear();
       return this.resolvePersistenceOrCompensate(
         documentId,
         versionId,
@@ -372,7 +386,7 @@ export class DocumentsService {
     );
 
     try {
-      return await this.documentsGateway.create({
+      const created = await this.documentsGateway.create({
         actorId: authorization.userId,
         archiveReasonCode: dto.archiveReasonCode,
         archiveReasonDetail: dto.archiveReasonDetail,
@@ -399,7 +413,10 @@ export class DocumentsService {
         title: dto.title,
         versionId,
       });
+      this.libraryCache.clear();
+      return created;
     } catch (error) {
+      this.libraryCache.clear();
       return this.resolvePersistenceOrCompensate(
         documentId,
         versionId,
@@ -545,6 +562,7 @@ export class DocumentsService {
       documentId,
       authorization.userId,
     );
+    this.libraryCache.clear();
   }
 
   async linkModule(
@@ -560,6 +578,7 @@ export class DocumentsService {
       dto.moduleId,
       authorization.userId,
     );
+    this.libraryCache.clear();
   }
 
   list(
@@ -584,7 +603,7 @@ export class DocumentsService {
       );
     }
 
-    return this.documentsGateway.listLibrary({
+    const query = {
       actorId: authorization.userId,
       createdBy: dto.createdBy,
       createdFrom: dto.createdFrom,
@@ -600,6 +619,17 @@ export class DocumentsService {
       sort: dto.sort ?? 'newest',
       submoduleId: dto.submoduleId,
       technicalStatus: dto.technicalStatus,
+    } satisfies DocumentLibraryCacheKeyInput;
+    const cacheKey = documentLibraryCacheKey(query);
+    const cached = this.libraryCache.get(cacheKey);
+
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    return this.documentsGateway.listLibrary(query).then((page) => {
+      this.libraryCache.set(cacheKey, page);
+      return page;
     });
   }
 
@@ -626,6 +656,7 @@ export class DocumentsService {
       dto.reason,
       authorization.userId,
     );
+    this.libraryCache.clear();
   }
 
   async setStatus(
@@ -651,12 +682,14 @@ export class DocumentsService {
       );
     }
 
-    return this.documentsGateway.setStatus(
+    const updated = await this.documentsGateway.setStatus(
       documentId,
       dto.isActive,
       dto.reason,
       authorization.userId,
     );
+    this.libraryCache.clear();
+    return updated;
   }
 
   async setSituation(
@@ -699,7 +732,7 @@ export class DocumentsService {
       }
     }
 
-    return this.documentsGateway.setSituation(
+    const updated = await this.documentsGateway.setSituation(
       documentId,
       situation,
       authorization.userId,
@@ -716,6 +749,8 @@ export class DocumentsService {
         replacementYear: dto.replacementYear,
       },
     );
+    this.libraryCache.clear();
+    return updated;
   }
 
   async setTechnicalStatus(
@@ -725,11 +760,13 @@ export class DocumentsService {
   ): Promise<ManagedDocument> {
     await this.requireLiveDocument(documentId);
     await this.assertCanManageDocument(documentId, authorization);
-    return this.documentsGateway.setTechnicalStatus(
+    const updated = await this.documentsGateway.setTechnicalStatus(
       documentId,
       dto.technicalStatus,
       authorization.userId,
     );
+    this.libraryCache.clear();
+    return updated;
   }
 
   async unlinkModule(
@@ -745,6 +782,7 @@ export class DocumentsService {
       moduleId,
       authorization.userId,
     );
+    this.libraryCache.clear();
   }
 
   async updateMetadata(
@@ -818,13 +856,15 @@ export class DocumentsService {
       title: dto.title,
     };
 
-    return this.documentsGateway.updateMetadata(
+    const updated = await this.documentsGateway.updateMetadata(
       documentId,
       Object.fromEntries(
         Object.entries(patch).filter(([, value]) => value !== undefined),
       ),
       authorization.userId,
     );
+    this.libraryCache.clear();
+    return updated;
   }
 
   private async assertCanManageDocument(

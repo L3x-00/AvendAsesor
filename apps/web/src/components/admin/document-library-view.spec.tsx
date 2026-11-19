@@ -17,7 +17,7 @@ vi.mock("@/app/admin/actions", () => ({
 // La vista pide los documentos de cada módulo a una server action: en la prueba
 // se responde con una página ya armada.
 vi.mock("@/app/admin/documents/actions", () => ({
-  loadHistoryModulePage: vi.fn(),
+  loadHistoryModulePage: vi.fn(async () => ({ status: "error" })),
 }));
 
 const moduleId = "2bd75b4c-6a27-460a-a16c-ebf0c3cdeac3";
@@ -568,6 +568,34 @@ describe("DocumentLibraryView", () => {
       screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
     ).toHaveAttribute("href", `/admin/documents?moduleId=${remuneracionesId}`);
     expect(screen.queryByText(/^Mostrando/)).toBeNull();
+  });
+
+  it("adelanta la consulta del módulo cuando el puntero entra en la fila", () => {
+    vi.mocked(loadHistoryModulePage).mockClear();
+    vi.mocked(loadHistoryModulePage).mockResolvedValue({
+      page: { items: [], limit: 3, offset: 0, total: 0 },
+      status: "ok",
+    });
+
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyGrouped
+        historyLayout
+        historyModuleId={moduleId}
+        library={{ items: [document], limit: 3, offset: 0, total: 1 }}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    fireEvent.pointerEnter(
+      screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
+    );
+
+    // La consulta se adelanta antes del clic, así el panel abre sin espera.
+    expect(loadHistoryModulePage).toHaveBeenCalledWith(remuneracionesId);
   });
 
   it("keeps the open module expanded when another module is opened", async () => {
