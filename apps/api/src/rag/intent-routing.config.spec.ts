@@ -60,6 +60,17 @@ describe('enrutamiento declarativo de intenciones', () => {
     }
   });
 
+  it('registra las expansiones nuevas en la fachada de enrutamiento', () => {
+    expect(
+      INTENT_ROUTING.intents.find((entry) => entry.id === 'rationalization')
+        ?.expansions,
+    ).toContain('RATIONALIZATION_MATRICULA');
+    expect(
+      INTENT_ROUTING.intents.find((entry) => entry.id === 'teaching-hours')
+        ?.expansions,
+    ).toContain('TEACHING_HOURS_DECISION');
+  });
+
   it('conserva los metadatos que usaba topic-intent.ts', () => {
     expect(INTENT_METADATA.disciplinary).toEqual({
       id: 'disciplinary',
@@ -137,6 +148,14 @@ describe('enrutamiento declarativo de intenciones', () => {
       rationalizationEvidenceQueries(
         'estan bajando los alumnos y van a reducir plazas',
       ),
+    ).toEqual([
+      'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
+      'proceso de racionalización de plazas instituciones educativas reducción secciones',
+      'disminución de matrícula plazas excedentes proceso de racionalización reubicación docente',
+    ]);
+    // Sin señal de matrícula/alumnos no se añade la variante del corpus.
+    expect(
+      rationalizationEvidenceQueries('proceso de racionalización de plazas'),
     ).toEqual([
       'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
       'proceso de racionalización de plazas instituciones educativas reducción secciones',
