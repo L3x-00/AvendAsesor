@@ -1,10 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  unstable_isUnrecognizedActionError,
-  useRouter,
-} from "next/navigation";
+import { unstable_isUnrecognizedActionError, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -163,15 +160,15 @@ function ConversationRemoveControl({
   }
 
   return (
-    <div className="avend-history-delete-form">
+    <div className={styles.deleteForm}>
       {confirming ? (
         <div
           aria-label={`Quitar «${title}»`}
-          className="avend-history-confirm"
+          className={styles.confirm}
           role="group"
         >
           <p>¿Quitar esta consulta de tu historial? Ya no podrás retomarla.</p>
-          <div className="avend-history-confirm-actions">
+          <div className={styles.confirmActions}>
             <button
               className="avend-button avend-button--danger"
               onClick={onConfirm}
@@ -191,15 +188,16 @@ function ConversationRemoveControl({
         </div>
       ) : (
         <button
-          className="avend-history-remove"
+          aria-label="Quitar del historial"
+          className={styles.remove}
           onClick={() => setConfirming(true)}
           ref={openerRef}
+          title="Quitar del historial"
           type="button"
         >
           <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-            <path d="M5 7h14M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+            <path d="M4.5 6.75h15M9.75 6.75V4.5h4.5v2.25M6.75 6.75l.9 12.1a1.9 1.9 0 0 0 1.9 1.77h4.9a1.9 1.9 0 0 0 1.9-1.77l.9-12.1M10.5 10.5v6M13.5 10.5v6" />
           </svg>
-          Quitar del historial
         </button>
       )}
       {error ? (
@@ -247,6 +245,10 @@ export function ChatHistoryList({
   now?: number;
 }) {
   const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [isRefreshing, startRefresh] = useTransition();
   const activeRef = useRef(false);
   const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(
@@ -267,19 +269,19 @@ export function ChatHistoryList({
     setLastLoaded({ conversations, nextCursor, updates });
   }
 
- useEffect(() => {
-  // Impide que operaciones tardías actúen al salir de Historial.
-  activeRef.current = true;
+  useEffect(() => {
+    // Impide que operaciones tardías actúen al salir de Historial.
+    activeRef.current = true;
 
-  return () => {
-    activeRef.current = false;
+    return () => {
+      activeRef.current = false;
 
-    if (settleTimeoutRef.current !== null) {
-      globalThis.clearTimeout(settleTimeoutRef.current);
-      settleTimeoutRef.current = null;
-    }
-  };
-}, []);
+      if (settleTimeoutRef.current !== null) {
+        globalThis.clearTimeout(settleTimeoutRef.current);
+        settleTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const closeNotice = useCallback(() => setNotice(null), []);
 
@@ -293,7 +295,11 @@ export function ChatHistoryList({
   // El historial se agrupa por tema: módulo raíz (con su submódulo a la vista)
   // y «Consultas generales» para los chats libres. Como llegan ordenadas por
   // actividad, los grupos aparecen con el tema usado más recientemente primero.
-  const groups = new Map<string, { items: ChatConversation[]; label: string }>();
+  const groups = new Map<
+    string,
+    { items: ChatConversation[]; label: string }
+  >();
+  const normalizedQuery = query.trim().toLocaleLowerCase("es");
   for (const conversation of visible) {
     const key =
       conversation.selectedModuleParentId ??
@@ -303,6 +309,18 @@ export function ChatHistoryList({
       conversation.selectedModuleParentName ??
       conversation.selectedModuleName ??
       (key === "general" ? "Consultas generales" : "Tema seleccionado");
+    if (
+      normalizedQuery &&
+      ![
+        conversation.title,
+        conversation.lastQuestion,
+        conversation.selectedModuleName,
+        label,
+      ].some((value) =>
+        value?.toLocaleLowerCase("es").includes(normalizedQuery),
+      )
+    )
+      continue;
     const group = groups.get(key);
     if (group) {
       group.items.push(conversation);
@@ -320,9 +338,15 @@ export function ChatHistoryList({
   }
 
   async function removeConversation(conversationId: string, title: string) {
-    const position = displayOrder.indexOf(conversationId);
+    const focusableOrder = displayOrder.filter((id) => {
+      const details = document
+        .getElementById(historyItemId(id))
+        ?.closest("details");
+      return !details || details.open;
+    });
+    const position = focusableOrder.indexOf(conversationId);
     const neighbour =
-      displayOrder[position + 1] ?? displayOrder[position - 1] ?? null;
+      focusableOrder[position + 1] ?? focusableOrder[position - 1] ?? null;
 
     // Retirada inmediata: la tarjeta sale de la lista antes de que responda
     // el servidor. El foco pasa a la tarjeta vecina (o al título) para que
@@ -349,9 +373,7 @@ export function ChatHistoryList({
       }
     }, SETTLE_MS);
     document
-      .getElementById(
-        neighbour ? historyItemId(neighbour) : HISTORY_TITLE_ID,
-      )
+      .getElementById(neighbour ? historyItemId(neighbour) : HISTORY_TITLE_ID)
       ?.focus();
 
     let result: DeleteConversationResult;
@@ -507,11 +529,71 @@ export function ChatHistoryList({
     <>
       <div
         className={
-          settling
-            ? `avend-history-results ${styles.settling}`
-            : "avend-history-results"
+          settling ? `${styles.results} ${styles.settling}` : styles.results
         }
       >
+        <div className={styles.overview}>
+          <div
+            className={styles.statistics}
+            aria-label="Resumen de esta página"
+          >
+            <div className={styles.statCard}>
+              <span aria-hidden="true" className={styles.statIcon}>
+                <svg fill="none" viewBox="0 0 24 24">
+                  <path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.7-.85L4 20.5l1.4-3.9A8.5 8.5 0 1 1 20.5 11.5Z" />
+                  <path d="M8.5 11h7M8.5 14.25h4.5" />
+                </svg>
+              </span>
+              <span className={styles.statText}>
+                <strong className={styles.statValue}>{visible.length}</strong>
+                <span className={styles.statLabel}>Consultas en total</span>
+              </span>
+            </div>
+            <div className={styles.statCard}>
+              <span aria-hidden="true" className={styles.statIcon}>
+                <svg fill="none" viewBox="0 0 24 24">
+                  <path d="M3.5 8.25V6.4a1.9 1.9 0 0 1 1.9-1.9h3.3l1.9 2.1h8.5a1.9 1.9 0 0 1 1.9 1.9v8.9a1.9 1.9 0 0 1-1.9 1.9H5.4a1.9 1.9 0 0 1-1.9-1.9V8.25Z" />
+                </svg>
+              </span>
+              <span className={styles.statText}>
+                <strong className={styles.statValue}>
+                  {
+                    new Set(
+                      visible.map(
+                        (item) =>
+                          item.selectedModuleParentId ??
+                          item.selectedModuleId ??
+                          "general",
+                      ),
+                    ).size
+                  }
+                </strong>
+                <span className={styles.statLabel}>Temas de consulta</span>
+              </span>
+            </div>
+          </div>
+          <label className={styles.search}>
+            <span aria-hidden="true" className={styles.searchIcon}>
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="6.75" />
+                <path d="m16 16 4.5 4.5" />
+              </svg>
+            </span>
+            <span className="avend-visually-hidden">Buscar en mi historial</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar en mi historial…"
+            />
+          </label>
+        </div>
+        {shown.nextCursor ? (
+          <p className={styles.searchNote}>
+            La búsqueda se aplica a las consultas de esta página. Usa «Ver
+            consultas anteriores» para consultar más.
+          </p>
+        ) : null}
         {loadFailed ? (
           <div className={styles.loadNotice} role="status">
             <p>
@@ -529,68 +611,117 @@ export function ChatHistoryList({
               : `Se incorporó documentación sobre ${updatedVisible} consultas que antes no tenían respuesta. Ábrelas y vuelve a preguntar.`}
           </p>
         ) : null}
+        {groups.size === 0 && normalizedQuery ? (
+          <p className={styles.noResults}>
+            No hay consultas que coincidan en esta página.
+          </p>
+        ) : null}
         {[...groups].map(([key, group]) => (
-          <section aria-labelledby={`history-topic-${key}`} key={key}>
-            <h2
-              className="avend-history-group-title"
-              id={`history-topic-${key}`}
+          <section
+            aria-labelledby={`history-topic-${key}`}
+            className={styles.group}
+            key={key}
+          >
+            <details
+              open={!closedGroups.has(key)}
+              onToggle={(event) => {
+                const isOpen = event.currentTarget.open;
+                setClosedGroups((current) => {
+                  if (current.has(key) === !isOpen) return current;
+                  const next = new Set(current);
+                  if (isOpen) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+              }}
             >
-              {group.label}
-            </h2>
-            <ul className="avend-history-list">
-              {group.items.map((conversation) => {
-                const title = readableConversationTitle(
-                  conversation.lastQuestion ?? conversation.title,
-                );
-                return (
-                  <li
-                    className="avend-history-item"
-                    id={historyItemId(conversation.id)}
-                    key={conversation.id}
-                    tabIndex={-1}
-                  >
-                    <div>
-                      <h3 title={conversation.title ?? undefined}>{title}</h3>
-                      {conversation.selectedModuleParentId &&
-                      conversation.selectedModuleName ? (
-                        <p>
-                          <span className="avend-visually-hidden">
-                            Submódulo:{" "}
+              <summary className={styles.groupSummary}>
+                <span className={styles.groupIcon} aria-hidden="true">
+                  <svg fill="none" viewBox="0 0 24 24">
+                    <path d="M3.5 8.25V6.4a1.9 1.9 0 0 1 1.9-1.9h3.3l1.9 2.1h8.5a1.9 1.9 0 0 1 1.9 1.9v8.9a1.9 1.9 0 0 1-1.9 1.9H5.4a1.9 1.9 0 0 1-1.9-1.9V8.25Z" />
+                  </svg>
+                </span>
+                <h2 className={styles.groupTitle} id={`history-topic-${key}`}>
+                  {group.label}
+                </h2>
+                <span className={styles.groupCount}>
+                  {group.items.length}{" "}
+                  {group.items.length === 1 ? "consulta" : "consultas"}
+                </span>
+                <span className={styles.chevron} aria-hidden="true">
+                  <svg fill="none" viewBox="0 0 24 24">
+                    <path d="m6.75 9.75 5.25 5 5.25-5" />
+                  </svg>
+                </span>
+              </summary>
+              <ul className={styles.list}>
+                {group.items.map((conversation) => {
+                  const title = readableConversationTitle(
+                    conversation.lastQuestion ?? conversation.title,
+                  );
+                  return (
+                    <li
+                      className={styles.item}
+                      id={historyItemId(conversation.id)}
+                      key={conversation.id}
+                      tabIndex={-1}
+                    >
+                      <span className={styles.itemIcon} aria-hidden="true">
+                        <svg fill="none" viewBox="0 0 24 24">
+                          <path d="M20.5 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.7-.85L4 20.5l1.4-3.9A8.5 8.5 0 1 1 20.5 11.5Z" />
+                          <path d="M8.5 11h7M8.5 14.25h4.5" />
+                        </svg>
+                      </span>
+                      <div className={styles.itemBody}>
+                        <h3 title={conversation.title ?? undefined}>{title}</h3>
+                        {conversation.selectedModuleParentId &&
+                        conversation.selectedModuleName ? (
+                          <p className={styles.itemModule}>
+                            <span className="avend-visually-hidden">
+                              Submódulo:{" "}
+                            </span>
+                            Submódulo: {conversation.selectedModuleName}
+                          </p>
+                        ) : null}
+                        {updated.has(conversation.id) ? (
+                          <span className="avend-history-update-badge">
+                            Nueva información disponible
                           </span>
-                          Submódulo: {conversation.selectedModuleName}
+                        ) : null}
+                        <p className={styles.itemDate}>
+                          <span className="avend-visually-hidden">
+                            Última actualización:{" "}
+                          </span>
+                          {formatHistoryDate(conversation.updatedAt, now)}
                         </p>
-                      ) : null}
-                      {updated.has(conversation.id) ? (
-                        <span className="avend-history-update-badge">
-                          Nueva información disponible
-                        </span>
-                      ) : null}
-                      <p>
-                        <span className="avend-visually-hidden">
-                          Última actualización:{" "}
-                        </span>
-                        {formatHistoryDate(conversation.updatedAt, now)}
-                      </p>
-                    </div>
-                    <div className="avend-history-actions">
-                      <Link
-                        className="avend-button avend-button--primary"
-                        href={`/chat/${conversation.id}`}
-                      >
-                        Retomar consulta
-                      </Link>
-                      <ConversationRemoveControl
-                        error={errors[conversation.id]}
-                        onConfirm={() =>
-                          void removeConversation(conversation.id, title)
-                        }
-                        title={title}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                      </div>
+                      <div className={styles.itemActions}>
+                        <Link
+                          className={`${styles.resume} avend-button avend-button--primary`}
+                          href={`/chat/${conversation.id}`}
+                        >
+                          <svg
+                            aria-hidden="true"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+                          </svg>
+                          Retomar consulta
+                        </Link>
+                        <ConversationRemoveControl
+                          error={errors[conversation.id]}
+                          onConfirm={() =>
+                            void removeConversation(conversation.id, title)
+                          }
+                          title={title}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
           </section>
         ))}
         {shown.nextCursor ? (
