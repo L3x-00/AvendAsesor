@@ -343,6 +343,11 @@
   align-self: stretch;
   background: url("/icons/panel3d.webp") center / contain no-repeat;
   min-width: 0;
+  /* La ilustración crece sin ocupar más espacio: al ser una transformación no
+     desplaza el saludo ni la tarjeta de fecha y hora. */
+  pointer-events: none;
+  transform: scale(1.22);
+  transform-origin: center;
 }
 .currentTime {
   flex: 0 0 auto;
