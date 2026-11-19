@@ -567,7 +567,7 @@ function HistoryModulesSection({
     window.setTimeout(() => {
       setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
       setClosingModuleIds((ids) => ids.filter((id) => id !== moduleId));
-    }, 180);
+    }, 200);
   }, []);
 
   /*
@@ -728,7 +728,11 @@ function HistoryModulesSection({
               }`}
               key={module.id}
             >
-              <header className={styles.modulePanelHeader}>
+              {/* Un solo hijo para poder animar la altura del cierre sin medir
+                  el contenido a mano. */}
+              <div className={styles.panelClip}>
+                <div className={styles.panelClipInner}>
+                  <header className={styles.modulePanelHeader}>
                 <span className={styles.moduleRowIcon}>
                   <ModuleIcon name={module.name} />
                 </span>
@@ -889,6 +893,8 @@ function HistoryModulesSection({
                   <span aria-hidden="true"> →</span>
                 </Link>
               </footer>
+                </div>
+              </div>
             </article>
           );
         })}

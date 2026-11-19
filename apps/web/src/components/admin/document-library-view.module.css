@@ -495,8 +495,25 @@
 /* Cierre del módulo: se retira con la misma curva con la que entró, así el
    panel que queda abajo no salta de golpe hacia arriba. */
 .modulePanelClosing {
-  animation: module-panel-out 180ms ease-in both;
+  animation: module-panel-out 200ms ease-in both;
   pointer-events: none;
+}
+
+/* La altura se anima con la fila del grid: no hace falta medir el contenido y
+   el panel que queda debajo se acompaña en lugar de saltar. */
+.panelClip {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms ease-in;
+}
+
+.panelClipInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modulePanelClosing .panelClip {
+  grid-template-rows: 0fr;
 }
 
 .modulePanelHeader {
