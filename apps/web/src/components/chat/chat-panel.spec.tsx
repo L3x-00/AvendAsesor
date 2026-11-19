@@ -235,7 +235,7 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("heading", {
         level: 2,
-        name: "Consulta sobre Licencias.",
+        name: "Soy tu asesor para resolver dudas sobre Licencias.",
       }),
     ).toBeVisible();
     expect(screen.queryByText(/Escribe una consulta sobre procesos/u)).not.toBeInTheDocument();
@@ -855,9 +855,8 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("heading", { name: "Licencias" })).toBeVisible();
     expect(screen.queryByText("LICENSES")).not.toBeInTheDocument();
     expect(screen.getByText("Licencia por salud").closest("button")).toBeNull();
-    expect(
-      screen.getByText(/Puedes preguntar sobre cualquiera de ellos/i),
-    ).toBeVisible();
+    expect(screen.queryByText(/Puedes preguntar sobre cualquiera/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Ocultar temas/i })).toBeNull();
     expect(screen.queryByText(/^Tema:/)).not.toBeInTheDocument();
   });
 
@@ -952,6 +951,48 @@ describe("ChatPanel", () => {
     ).toBeVisible();
     expect(window.location.pathname).toBe("/chat");
     expect(window.location.search).toBe(`?module=${secondModule.id}`);
+  });
+
+  it("vuelve al chat general desde el antetítulo de la pantalla inicial del tema", async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Consulta normativa. Volver al chat general",
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Chat general", level: 1 }),
+    ).toBeVisible();
+    expect(window.location.pathname).toBe("/chat");
+    expect(window.location.search).toBe("");
+    expect(
+      screen.getByRole("button", { name: "¿Qué requisitos necesito para…?" }),
+    ).toBeVisible();
+    // El foco vuelve al cuadro para seguir escribiendo sin tocar el ratón.
+    await waitFor(() =>
+      expect(document.getElementById("chat-question")).toHaveFocus(),
+    );
+  });
+
+  it("acompaña la pantalla inicial con la nota de referencia legal, también en un tema", () => {
+    const { container, rerender } = render(<ChatPanel modules={[chatModule]} />);
+    const generalNote = container.querySelector(".avend-chat-reference-note");
+
+    expect(generalNote).not.toBeNull();
+    expect(generalNote).toHaveTextContent(/no reemplaza la normativa vigente/u);
+
+    rerender(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+    const topicNote = container.querySelector(".avend-chat-reference-note");
+
+    expect(topicNote).not.toBeNull();
+    expect(topicNote).toHaveTextContent(/no reemplaza la normativa vigente/u);
   });
 
   it("sustituye el texto transmitido por la respuesta definitiva y escribe las fechas en lenguaje natural", async () => {
@@ -1109,13 +1150,13 @@ describe("ChatPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("muestra la guía informativa solo si el tema tiene subtemas", () => {
+  it("muestra los temas del módulo como fichas informativas, no como pasos", () => {
     const { rerender } = render(
       <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
     );
 
     expect(
-      screen.queryByText(/Puedes preguntar sobre cualquiera de ellos/i),
+      screen.queryByRole("region", { name: "Temas de Licencias" }),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -1124,9 +1165,9 @@ describe("ChatPanel", () => {
         modules={[chatModule, childModule]}
       />,
     );
-    expect(
-      screen.getByText(/Puedes preguntar sobre cualquiera de ellos/i),
-    ).toBeInTheDocument();
+    const topics = screen.getByRole("region", { name: "Temas de Licencias" });
+    expect(within(topics).getByText("Licencia por salud")).toBeVisible();
+    expect(within(topics).queryByRole("button")).toBeNull();
   });
 
   it("enables source links only after the sourced answer is persisted", async () => {

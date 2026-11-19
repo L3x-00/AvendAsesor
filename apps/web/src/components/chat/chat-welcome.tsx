@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { moduleStartersFor } from "./chat-module-starters";
 
 /**
- * Bienvenida del chat vacío: saluda por el nombre, explica en una frase qué
- * se puede preguntar y ofrece inicios de consulta para completar.
+ * Bienvenida del chat vacío. En el chat general saluda por el nombre, explica
+ * en una frase qué se puede preguntar y ofrece inicios de consulta. En el chat
+ * de un tema presenta el tema a la izquierda y sus preguntas recomendadas a la
+ * derecha, en la misma tarjeta ilustrada.
  */
 export const CHAT_STARTERS = [
   "¿Qué requisitos necesito para ",
@@ -33,6 +36,7 @@ interface ChatWelcomeProps {
   disabled?: boolean;
   fullName?: string | null;
   onSuggestion: (text: string) => void;
+  topicCode?: string | null;
   topicName?: string | null;
 }
 
@@ -69,68 +73,112 @@ export function ChatWelcome({
   disabled,
   fullName,
   onSuggestion,
+  topicCode,
   topicName,
 }: ChatWelcomeProps) {
   const firstName = firstNameOf(fullName);
   const normalizedTopicName = topicName?.trim() ?? "";
   const isGeneralWelcome = normalizedTopicName.length === 0;
   const welcomeMessage = useWelcomeMessage(isGeneralWelcome);
-  const heading = isGeneralWelcome
-    ? welcomeMessage
-    : `Consulta sobre ${normalizedTopicName}.`;
 
-  return (
-    <div
-      className={`avend-chat-welcome ${
-        isGeneralWelcome
-          ? "avend-chat-welcome--general"
-          : "avend-chat-welcome--topic"
-      }`}
-    >
-      <h2 aria-live="off">
-        {isGeneralWelcome && firstName ? `Hola, ${firstName}. ` : null}
-        <span
-          className={
-            isGeneralWelcome ? "avend-chat-welcome-message" : undefined
-          }
-          key={heading}
-        >
-          {heading}
-        </span>
-      </h2>
-      {isGeneralWelcome ? (
+  if (isGeneralWelcome) {
+    const heading = welcomeMessage;
+
+    return (
+      <div className="avend-chat-welcome avend-chat-welcome--general">
+        <h2 aria-live="off">
+          {firstName ? `Hola, ${firstName}. ` : null}
+          <span className="avend-chat-welcome-message" key={heading}>
+            {heading}
+          </span>
+        </h2>
         <p className="avend-chat-welcome-text">
           Escribe una consulta sobre procesos, requisitos, plazos, derechos o
           trámites del ámbito educativo. Cada respuesta te muestra de qué
           documento vigente sale la información; si necesitas una norma
           anterior, pídelo expresamente.
         </p>
-      ) : null}
-      <p className="avend-chat-welcome-label" id="chat-suggestions-label">
-        Empieza con una de estas frases y complétala con tu caso:
-      </p>
-      <ul
-        aria-labelledby="chat-suggestions-label"
-        className="avend-chat-suggestions"
-      >
-        {CHAT_STARTERS.map((starter, index) => (
-          <li key={starter} style={{ animationDelay: `${160 + index * 70}ms` }}>
-            <button
-              disabled={disabled}
-              onClick={() => {
-                onSuggestion(starter);
-                placeCaretAtEnd();
-              }}
-              type="button"
+        <p className="avend-chat-welcome-label" id="chat-suggestions-label">
+          Empieza con una de estas frases y complétala con tu caso:
+        </p>
+        <ul
+          aria-labelledby="chat-suggestions-label"
+          className="avend-chat-suggestions"
+        >
+          {CHAT_STARTERS.map((starter, index) => (
+            <li
+              key={starter}
+              style={{ animationDelay: `${160 + index * 70}ms` }}
             >
-              <span>{`${starter.trimEnd()}…?`}</span>
-              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-                <path d="M5 12h14m0 0-5-5m5 5-5 5" />
-              </svg>
-            </button>
-          </li>
-        ))}
-      </ul>
+              <button
+                disabled={disabled}
+                onClick={() => {
+                  onSuggestion(starter);
+                  placeCaretAtEnd();
+                }}
+                type="button"
+              >
+                <span>{`${starter.trimEnd()}…?`}</span>
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                  <path d="M5 12h14m0 0-5-5m5 5-5 5" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const starters = moduleStartersFor({
+    code: topicCode,
+    name: normalizedTopicName,
+  });
+
+  return (
+    <div className="avend-chat-welcome avend-chat-welcome--topic">
+      <div className="avend-chat-topic-intro">
+        <span aria-hidden="true" className="avend-chat-topic-art" />
+        <h2>
+          {firstName ? `Hola, ${firstName}. ` : null}
+          Soy tu asesor para resolver dudas sobre{" "}
+          <strong>{normalizedTopicName}</strong>.
+        </h2>
+        <p className="avend-chat-welcome-text">
+          Escribe una consulta sobre requisitos, plazos, derechos o trámites
+          del ámbito educativo.
+        </p>
+      </div>
+      <div className="avend-chat-topic-questions">
+        <p className="avend-chat-welcome-label" id="chat-suggestions-label">
+          Preguntas que puedes realizar:
+        </p>
+        <ul
+          aria-labelledby="chat-suggestions-label"
+          className="avend-chat-suggestions"
+        >
+          {starters.map((starter, index) => (
+            <li
+              key={starter}
+              style={{ animationDelay: `${160 + index * 70}ms` }}
+            >
+              <button
+                disabled={disabled}
+                onClick={() => {
+                  onSuggestion(starter);
+                  placeCaretAtEnd();
+                }}
+                type="button"
+              >
+                <span>{starter}</span>
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                  <path d="M5 12h14m0 0-5-5m5 5-5 5" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

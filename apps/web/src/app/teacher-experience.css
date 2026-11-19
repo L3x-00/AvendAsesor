@@ -1887,6 +1887,28 @@ ul.avend-chat-list {
   line-height: 1.3;
 }
 
+/* Icono de carpeta de un tema. Vive fuera del ámbito de la pantalla inicial
+   porque la fila de temas también aparece con la conversación abierta: su
+   tamaño y su trazo no dependen de `.avend-chat-page--topic-start`. */
+.avend-chat-submodule-tag .avend-chat-submodule-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.375rem;
+  justify-content: center;
+  width: 1.375rem;
+}
+
+.avend-chat-submodule-tag .avend-chat-submodule-icon svg {
+  fill: none;
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 100%;
+}
+
 /* El tema elegido ya se ve en su ficha: aquí queda solo una línea discreta
    con la opción de quitarlo. */
 .avend-chat-context {
@@ -1965,33 +1987,33 @@ ul.avend-chat-list {
 }
 
 /* =========================================================================
-   Chat general (pantalla inicial): la bienvenida como una sola tarjeta
-   ilustrada, cabecera editorial y cuadro de consulta centrado.
-   Solo aplica cuando no hay tema elegido y todavía no hay mensajes: el chat
-   de un tema conserva su bienvenida compacta y su contexto.
+   Chat (pantalla inicial): la bienvenida como una sola tarjeta ilustrada,
+   cabecera editorial y cuadro de consulta centrado. Sirve al chat general y
+   al chat de un tema; el chat de un tema añade su fila de temas y sus
+   preguntas recomendadas sin cambiar la composición.
    ========================================================================= */
-.avend-chat-page--general-empty {
+.avend-chat-page--start {
   --avend-chat-general-width: 56rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-hero,
-.avend-chat-page--general-empty .avend-chat-workspace-transition,
-.avend-chat-page--general-empty .avend-chat-conversation,
-.avend-chat-page--general-empty .avend-chat-composer {
+.avend-chat-page--start .avend-chat-hero,
+.avend-chat-page--start .avend-chat-workspace-transition,
+.avend-chat-page--start .avend-chat-conversation,
+.avend-chat-page--start .avend-chat-composer {
   max-width: var(--avend-chat-general-width);
 }
 
 /* La escena WebGPU se retira: la tarjeta de bienvenida ya trae su propio
    degradado y dos fondos azules a la vez competían entre sí. */
-.avend-chat-page--general-empty .avend-chat-aero-shards {
+.avend-chat-page--start .avend-chat-aero-shards {
   display: none;
 }
 
-.avend-chat-page--general-empty .avend-chat-hero {
+.avend-chat-page--start .avend-chat-hero {
   padding-bottom: clamp(1rem, 2vw, 1.5rem);
 }
 
-.avend-chat-page--general-empty .avend-chat-hero::before {
+.avend-chat-page--start .avend-chat-hero::before {
   background: radial-gradient(
     ellipse 42% 62% at 50% 0%,
     rgb(206 235 255 / 65%),
@@ -2001,11 +2023,11 @@ ul.avend-chat-list {
 
 /* Cabecera: antetítulo en azul con retorno visual, título con burbuja y una
    sola línea de contexto. Todo el bloque comparte el ancho de la tarjeta. */
-.avend-chat-page--general-empty .avend-chat-header {
+.avend-chat-page--start .avend-chat-header {
   padding: clamp(0.5rem, 1.5vw, 1rem) 0 0.25rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-header .avend-eyebrow {
+.avend-chat-page--start .avend-chat-header .avend-eyebrow {
   align-items: center;
   color: var(--avend-accent-strong);
   display: flex;
@@ -2016,7 +2038,7 @@ ul.avend-chat-list {
   text-transform: none;
 }
 
-.avend-chat-page--general-empty .avend-chat-header .avend-eyebrow::before {
+.avend-chat-page--start .avend-chat-header .avend-eyebrow::before {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23115eca' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 5-7 7 7 7'/%3E%3C/svg%3E")
     center / contain no-repeat;
   content: "";
@@ -2025,7 +2047,7 @@ ul.avend-chat-list {
   width: 0.75rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-header h1 {
+.avend-chat-page--start .avend-chat-header h1 {
   align-items: center;
   color: var(--avend-navy);
   display: flex;
@@ -2037,7 +2059,7 @@ ul.avend-chat-list {
   margin: 0.25rem 0 0;
 }
 
-.avend-chat-page--general-empty .avend-chat-header h1::before {
+.avend-chat-page--start .avend-chat-header h1::before {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231677ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 5.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3.5v-3.5h-.9a2 2 0 0 1-2-2z'/%3E%3C/svg%3E")
     center / contain no-repeat;
   content: "";
@@ -2046,7 +2068,7 @@ ul.avend-chat-list {
   width: 1.625rem;
 }
 
-.avend-chat-page--general-empty
+.avend-chat-page--start
   .avend-chat-header
   .avend-chat-module-description {
   color: #40556d;
@@ -2057,7 +2079,7 @@ ul.avend-chat-list {
 }
 
 /* ---------- Tarjeta de bienvenida ---------- */
-.avend-chat-page--general-empty .avend-chat-welcome--general {
+.avend-chat-page--start .avend-chat-welcome--general {
   background:
     radial-gradient(ellipse 62% 46% at 50% 0%, #ffffff 0%, transparent 72%),
     linear-gradient(180deg, #fbfdff 0%, #edf5ff 100%);
@@ -2075,14 +2097,14 @@ ul.avend-chat-list {
 }
 
 /* Contenido sobre la curva decorativa. */
-.avend-chat-page--general-empty .avend-chat-welcome--general > * {
+.avend-chat-page--start .avend-chat-welcome--general > * {
   position: relative;
   z-index: 1;
 }
 
 /* Curva azul de la esquina superior derecha: un óvalo recortado por la tarjeta
    con un brillo blanco dentro, para la doble curva del diseño. */
-.avend-chat-page--general-empty .avend-chat-welcome--general::after {
+.avend-chat-page--start .avend-chat-welcome--general::after {
   background:
     radial-gradient(
       72% 68% at 100% 0%,
@@ -2107,7 +2129,7 @@ ul.avend-chat-list {
   z-index: 0;
 }
 
-.avend-chat-page--general-empty .avend-chat-welcome--general::before {
+.avend-chat-page--start .avend-chat-welcome--general::before {
   animation: avend-chat-bubble-float 8s ease-in-out infinite;
   background: url("/icons/chat.webp") center / contain no-repeat;
   content: "";
@@ -2127,7 +2149,7 @@ ul.avend-chat-list {
 
 /* Saludo: se reserva el alto de dos líneas porque el mensaje rota cada 3 s y
    la tarjeta no debe dar saltos; el texto queda centrado en ese alto. */
-.avend-chat-page--general-empty .avend-chat-welcome--general h2 {
+.avend-chat-page--start .avend-chat-welcome--general h2 {
   align-items: center;
   color: #102750;
   column-gap: 0.3ch;
@@ -2145,7 +2167,7 @@ ul.avend-chat-list {
   text-wrap: balance;
 }
 
-.avend-chat-page--general-empty .avend-chat-welcome-text {
+.avend-chat-page--start .avend-chat-welcome-text {
   color: #455b73;
   font-size: 1rem;
   line-height: 1.65;
@@ -2154,7 +2176,7 @@ ul.avend-chat-list {
   text-align: center;
 }
 
-.avend-chat-page--general-empty .avend-chat-welcome-label {
+.avend-chat-page--start .avend-chat-welcome-label {
   align-items: center;
   color: #1f3550;
   display: flex;
@@ -2167,7 +2189,7 @@ ul.avend-chat-list {
   max-width: 42rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-welcome-label::before {
+.avend-chat-page--start .avend-chat-welcome-label::before {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231677ff'%3E%3Cpath d='M13.5 2 5 13.5h5.2L9.8 22 18.5 10.5h-5.2z'/%3E%3C/svg%3E")
     center / contain no-repeat;
   content: "";
@@ -2177,12 +2199,12 @@ ul.avend-chat-list {
 }
 
 /* ---------- Inicios de consulta ---------- */
-.avend-chat-page--general-empty .avend-chat-suggestions {
+.avend-chat-page--start .avend-chat-suggestions {
   gap: 0.75rem 0.875rem;
   margin-top: 1rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-suggestions button {
+.avend-chat-page--start .avend-chat-suggestions button {
   background: var(--avend-surface);
   border: 1px solid #dbe8f6;
   border-radius: 0.75rem;
@@ -2200,7 +2222,7 @@ ul.avend-chat-list {
     transform 200ms var(--avend-ease-interaction);
 }
 
-.avend-chat-page--general-empty .avend-chat-suggestions button::before {
+.avend-chat-page--start .avend-chat-suggestions button::before {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231677ff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5h7.2L18.5 9v11.5H6z'/%3E%3Cpath d='M13 3.5V9h5.5'/%3E%3Cpath d='M9 13h6M9 16.5h4'/%3E%3C/svg%3E")
     center / contain no-repeat;
   content: "";
@@ -2209,12 +2231,12 @@ ul.avend-chat-list {
   width: 1.125rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-suggestions button span {
+.avend-chat-page--start .avend-chat-suggestions button span {
   flex: 1;
   text-align: left;
 }
 
-.avend-chat-page--general-empty
+.avend-chat-page--start
   .avend-chat-suggestions
   button:not(:disabled):hover {
   background: #f7fbff;
@@ -2225,18 +2247,18 @@ ul.avend-chat-list {
   transform: translateY(-1px);
 }
 
-.avend-chat-page--general-empty
+.avend-chat-page--start
   .avend-chat-suggestions
   button:not(:disabled):active {
   transform: translateY(0);
 }
 
 /* ---------- Cuadro de consulta ---------- */
-.avend-chat-page--general-empty .avend-chat-composer {
+.avend-chat-page--start .avend-chat-composer {
   padding-top: clamp(1.5rem, 3vw, 2.25rem);
 }
 
-.avend-chat-page--general-empty
+.avend-chat-page--start
   .avend-chat-composer
   .avend-chat-input-shell {
   background: var(--avend-surface);
@@ -2248,7 +2270,7 @@ ul.avend-chat-list {
   padding: 0.375rem 0.375rem 0.375rem 1.25rem;
 }
 
-.avend-chat-page--general-empty
+.avend-chat-page--start
   .avend-chat-composer
   .avend-chat-input-shell:focus-within {
   border-color: var(--avend-accent);
@@ -2257,22 +2279,22 @@ ul.avend-chat-list {
     0 12px 32px -22px rgb(20 58 110 / 55%);
 }
 
-.avend-chat-page--general-empty .avend-chat-send {
+.avend-chat-page--start .avend-chat-send {
   background: var(--avend-accent);
   box-shadow: 0 8px 16px -8px rgb(22 119 255 / 85%);
 }
 
-.avend-chat-page--general-empty .avend-chat-send:not(:disabled):hover {
+.avend-chat-page--start .avend-chat-send:not(:disabled):hover {
   background: var(--avend-accent-strong);
 }
 
-.avend-chat-page--general-empty .avend-chat-send:disabled {
+.avend-chat-page--start .avend-chat-send:disabled {
   background: #c7d6e6;
   box-shadow: none;
 }
 
 /* Nota de sustento, atajos y aviso legal: una sola columna centrada. */
-.avend-chat-page--general-empty .avend-chat-status {
+.avend-chat-page--start .avend-chat-status {
   color: #455b73;
   font-size: 1rem;
   line-height: 1.5;
@@ -2280,7 +2302,7 @@ ul.avend-chat-list {
   text-align: center;
 }
 
-.avend-chat-page--general-empty .avend-chat-status[data-default]::before {
+.avend-chat-page--start .avend-chat-status[data-default]::before {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23455b73' stroke-width='1.9' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 11v5.5M12 7.9v.01'/%3E%3C/svg%3E")
     center / contain no-repeat;
   content: "";
@@ -2291,12 +2313,12 @@ ul.avend-chat-list {
   width: 1rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-keyboard-hint {
+.avend-chat-page--start .avend-chat-keyboard-hint {
   color: #5a6f87;
   margin-top: 0.125rem;
 }
 
-.avend-chat-page--general-empty .avend-chat-keyboard-hint kbd {
+.avend-chat-page--start .avend-chat-keyboard-hint kbd {
   border-color: #d5e0ec;
   border-radius: 0.375rem;
   box-shadow: 0 1px 0 rgb(20 58 110 / 8%);
@@ -2314,42 +2336,386 @@ ul.avend-chat-list {
 
 /* El marco ya muestra ese mismo aviso al pie: en la pantalla inicial se lee
    junto al cuadro de consulta y no se repite más abajo. */
-.avend-teacher-main:has(.avend-chat-page--general-empty)
+.avend-teacher-main:has(.avend-chat-page--start)
   > .avend-teacher-disclaimer {
   display: none;
+}
+
+/* ---------- Chat de un tema: la misma pantalla con su propio contenido ----------
+   La cabecera, la tarjeta y el cuadro comparten el diseño del chat general.
+   El tema añade la fila de temas que abarca y sus preguntas recomendadas, sin
+   sumar bloques ni alto: la pantalla cabe sin desplazamiento en un portátil. */
+.avend-chat-page--topic-start {
+  --avend-chat-general-width: 62rem;
+}
+
+.avend-chat-page--topic-start .avend-chat-hero {
+  padding-bottom: clamp(0.75rem, 1.6vw, 1.15rem);
+}
+
+.avend-chat-page--topic-start .avend-chat-header {
+  padding-bottom: 0;
+}
+
+.avend-chat-page--topic-start .avend-chat-workspace-transition {
+  display: grid;
+  gap: 0.875rem;
+}
+
+/* «Consulta normativa» vuelve al chat general: mismo antetítulo con flecha,
+   ahora como acción de teclado y no como texto suelto. El área pulsable llega
+   a 44 px sin mover el antetítulo: el relleno vertical se compensa con un
+   margen negativo. */
+.avend-chat-back-link {
+  align-items: center;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  margin-block: -0.6875rem;
+  min-height: 2.75rem;
+  padding: 0.6875rem 0.25rem;
+  text-align: left;
+}
+
+.avend-chat-back-link:not(:disabled):hover {
+  text-decoration: underline;
+}
+
+.avend-chat-back-link:focus-visible {
+  border-radius: 0.375rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 3px;
+}
+
+/* Fila de temas: fichas informativas, sin etiqueta ni plegado. */
+.avend-chat-page--topic-start .avend-chat-topic-folder {
+  background: var(--avend-surface);
+  border: 1px solid #d9e7f7;
+  border-radius: 1rem;
+  box-shadow: 0 10px 24px -20px rgb(20 58 110 / 45%);
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.avend-chat-page--topic-start .avend-chat-submodules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.avend-chat-page--topic-start .avend-chat-submodule-tag {
+  align-items: center;
+  animation: avend-rise-in 300ms var(--avend-ease-interaction) both;
+  background: #eaf3ff;
+  border-radius: 0.7rem;
+  color: #16324f;
+  display: flex;
+  flex: 1 1 11rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  line-height: 1.35;
+  min-height: 2.75rem;
+  /* La ficha se adapta a su texto, pero ninguna palabra se parte a la mitad:
+     el contenedor hereda `overflow-wrap: anywhere`, que aquí dejaría
+     «Compensacione / s» en una ficha estrecha. */
+  overflow-wrap: normal;
+  padding: 0.55rem 0.85rem;
+}
+
+/* El nombre hereda `overflow-wrap: anywhere` de la ficha genérica; en esta
+   fila cabe entero, así que se respeta la palabra completa. */
+.avend-chat-page--topic-start
+  .avend-chat-submodule-tag
+  .avend-chat-module-name {
+  overflow-wrap: normal;
+}
+
+.avend-chat-page--topic-start .avend-chat-submodule-icon {
+  color: var(--avend-accent);
+}
+
+/* Tarjeta de bienvenida en dos columnas: el tema a la izquierda, sus
+   preguntas a la derecha. */
+.avend-chat-page--topic-start .avend-chat-welcome--topic {
+  align-items: center;
+  animation: none;
+  background:
+    radial-gradient(ellipse 66% 60% at 6% 0%, #ffffff 0%, transparent 72%),
+    linear-gradient(180deg, #fbfdff 0%, #eef6ff 100%);
+  border: 1px solid #d9e7f7;
+  border-radius: 1.25rem;
+  box-shadow:
+    0 26px 54px -32px rgb(20 58 110 / 48%),
+    0 2px 8px rgb(20 58 110 / 5%);
+  display: grid;
+  gap: clamp(1.25rem, 2.4vw, 2.25rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  overflow: hidden;
+  padding: clamp(1.125rem, 2.4vw, 1.75rem);
+  position: relative;
+}
+
+/* Misma curva azul del chat general, más discreta para no competir con la
+   ilustración ni con las preguntas. */
+.avend-chat-page--topic-start .avend-chat-welcome--topic::after {
+  background:
+    radial-gradient(
+      72% 68% at 100% 0%,
+      rgb(255 255 255 / 0%) 44%,
+      rgb(255 255 255 / 46%) 58%,
+      rgb(255 255 255 / 0%) 72%
+    ),
+    radial-gradient(
+      100% 100% at 100% 0%,
+      #cbe0fa 0%,
+      #ddedfe 42%,
+      #eaf4ff 64%,
+      rgb(237 245 255 / 0%) 90%
+    );
+  content: "";
+  height: 42%;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 55%;
+  z-index: 0;
+}
+
+.avend-chat-page--topic-start .avend-chat-topic-intro,
+.avend-chat-page--topic-start .avend-chat-topic-questions {
+  position: relative;
+  z-index: 1;
+}
+
+.avend-chat-page--topic-start .avend-chat-topic-intro {
+  display: grid;
+  gap: 0.375rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.avend-chat-page--topic-start .avend-chat-topic-art {
+  aspect-ratio: 178 / 100;
+  background: url("/icons/chat.webp") center / contain no-repeat;
+  display: block;
+  margin-bottom: 0.25rem;
+  width: clamp(6.5rem, 12vw, 10rem);
+}
+
+.avend-chat-page--topic-start .avend-chat-welcome--topic h2 {
+  color: #102750;
+  font-size: clamp(1.25rem, 1.9vw, 1.625rem);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  margin: 0;
+  max-width: 26rem;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.avend-chat-page--topic-start .avend-chat-welcome--topic h2 strong {
+  color: var(--avend-accent-strong);
+  font-weight: 700;
+}
+
+.avend-chat-page--topic-start .avend-chat-welcome--topic .avend-chat-welcome-text {
+  color: #455b73;
+  font-size: 1rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 24rem;
+  text-align: center;
+}
+
+.avend-chat-page--topic-start .avend-chat-topic-questions {
+  border-inline-start: 1px solid #dbe8f6;
+  padding-inline-start: clamp(1.25rem, 2.4vw, 2.25rem);
+}
+
+.avend-chat-page--topic-start .avend-chat-welcome-label {
+  justify-content: flex-start;
+  margin: 0 0 0.75rem;
+  max-width: none;
+  text-align: left;
+}
+
+.avend-chat-page--topic-start .avend-chat-suggestions {
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+
+.avend-chat-page--topic-start .avend-chat-suggestions button {
+  min-height: 2.875rem;
+  padding-block: 0.5rem;
+}
+
+.avend-chat-page--topic-start .avend-chat-composer {
+  padding-top: clamp(1rem, 2vw, 1.35rem);
+}
+
+@media (max-width: 63.99rem) {
+  .avend-chat-page--topic-start .avend-chat-welcome--topic {
+    gap: 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-questions {
+    border-inline-start: 0;
+    border-block-start: 1px solid #dbe8f6;
+    padding-inline-start: 0;
+    padding-block-start: 1.25rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-art {
+    width: clamp(5.5rem, 22vw, 8rem);
+  }
+}
+
+/* En un teléfono la tarjeta se lee de un vistazo: ilustración y saludo más
+   compactos dejan las preguntas a la vista sin desplazar la pantalla. */
+@media (max-width: 40rem) {
+  .avend-chat-page--topic-start .avend-chat-topic-folder {
+    padding: 0.625rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-submodules {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .avend-chat-page--topic-start .avend-chat-submodule-tag {
+    flex: initial;
+    font-size: 1rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.7rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome--topic {
+    gap: 0.875rem;
+    padding: 1rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-art {
+    width: 4.5rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome--topic h2 {
+    font-size: 1.125rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome--topic .avend-chat-welcome-text {
+    font-size: 1rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-questions {
+    padding-top: 0.875rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome-label {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Portátiles bajos (1280×720, 1366×768): la pantalla inicial del tema se
+   compacta para que las preguntas se lean sin bajar por la página. */
+@media (min-width: 64rem) and (max-height: 48rem) {
+  .avend-chat-page--topic-start .avend-chat-hero {
+    padding-bottom: 0.5rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-workspace-transition {
+    gap: 0.625rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-folder {
+    padding: 0.4rem 0.625rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-submodule-tag {
+    flex: 1 1 7.5rem;
+    font-size: 0.875rem;
+    min-height: 2rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome--topic {
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-topic-art {
+    width: 3rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome--topic .avend-chat-welcome-text {
+    display: none;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-welcome-label {
+    margin-bottom: 0.375rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-suggestions {
+    gap: 0.3rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-suggestions button {
+    min-height: 2.125rem;
+    padding-block: 0.25rem;
+  }
+
+  .avend-chat-page--topic-start .avend-chat-composer {
+    padding-top: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-page--topic-start .avend-chat-submodule-tag {
+    animation: none;
+  }
 }
 
 /* Entrada de la pantalla inicial: el panel marca con `data-chat-entrance`
    el primer fotograma ya pintado y estas transiciones escalonadas hacen el
    resto. Sin JavaScript el atributo no existe y todo se ve completo. */
-.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-hero,
-.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-welcome,
-.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-composer {
+.avend-chat-page--start[data-chat-entrance] .avend-chat-hero,
+.avend-chat-page--start[data-chat-entrance] .avend-chat-welcome,
+.avend-chat-page--start[data-chat-entrance] .avend-chat-composer {
   transition:
     opacity 460ms var(--avend-ease-enter),
     transform 460ms var(--avend-ease-enter);
 }
 
-.avend-chat-page--general-empty[data-chat-entrance]
+.avend-chat-page--start[data-chat-entrance]
   .avend-chat-welcome {
   transition-delay: 70ms;
 }
 
-.avend-chat-page--general-empty[data-chat-entrance]
+.avend-chat-page--start[data-chat-entrance]
   .avend-chat-composer {
   transition-delay: 140ms;
 }
 
-.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
-.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-welcome,
-.avend-chat-page--general-empty[data-chat-entrance="out"]
+.avend-chat-page--start[data-chat-entrance="out"] .avend-chat-hero,
+.avend-chat-page--start[data-chat-entrance="out"] .avend-chat-welcome,
+.avend-chat-page--start[data-chat-entrance="out"]
   .avend-chat-composer {
   opacity: 0;
   transform: translateY(12px);
 }
 
 @media (max-width: 47.99rem) {
-  .avend-chat-page--general-empty .avend-chat-welcome--general h2 {
+  .avend-chat-page--start .avend-chat-welcome--general h2 {
     min-height: 0;
   }
 }
@@ -2357,19 +2723,19 @@ ul.avend-chat-list {
 /* Con dos columnas estrechas las frases se parten en dos líneas y las fichas
    pierden la simetría del diseño: por debajo de 60rem van en una sola. */
 @media (max-width: 59.99rem) {
-  .avend-chat-page--general-empty .avend-chat-suggestions {
+  .avend-chat-page--start .avend-chat-suggestions {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .avend-chat-page--general-empty .avend-chat-welcome--general::before {
+  .avend-chat-page--start .avend-chat-welcome--general::before {
     animation: none;
   }
 
-  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-hero,
-  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-welcome,
-  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-composer {
+  .avend-chat-page--start[data-chat-entrance] .avend-chat-hero,
+  .avend-chat-page--start[data-chat-entrance] .avend-chat-welcome,
+  .avend-chat-page--start[data-chat-entrance] .avend-chat-composer {
     transition: none;
   }
 }
@@ -2383,9 +2749,9 @@ ul.avend-chat-list {
   }
 }
 
-.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
-.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-welcome,
-.avend-chat-page--general-empty[data-chat-entrance="out"]
+.avend-chat-page--start[data-chat-entrance="out"] .avend-chat-hero,
+.avend-chat-page--start[data-chat-entrance="out"] .avend-chat-welcome,
+.avend-chat-page--start[data-chat-entrance="out"]
   .avend-chat-composer {
   animation: avend-chat-entrance-fallback 1ms linear 1.2s forwards;
 }
@@ -2393,10 +2759,10 @@ ul.avend-chat-list {
 /* Sin JavaScript no hay fotograma que marque la entrada: la pantalla se
    muestra completa en lugar de quedarse a la espera. */
 @media (scripting: none) {
-  .avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
-  .avend-chat-page--general-empty[data-chat-entrance="out"]
+  .avend-chat-page--start[data-chat-entrance="out"] .avend-chat-hero,
+  .avend-chat-page--start[data-chat-entrance="out"]
     .avend-chat-welcome,
-  .avend-chat-page--general-empty[data-chat-entrance="out"]
+  .avend-chat-page--start[data-chat-entrance="out"]
     .avend-chat-composer {
     opacity: 1;
     transform: none;
