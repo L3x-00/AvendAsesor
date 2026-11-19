@@ -125,23 +125,6 @@ const document: DocumentLibraryItem = {
   updatedBy: null,
 };
 
-// Previsualizaciones por módulo que arma el Historial en el servidor.
-const overviewPreviews = [
-  {
-    moduleId,
-    page: { items: [document], limit: 3, offset: 0, total: 1 },
-  },
-  {
-    moduleId: remuneracionesId,
-    page: {
-      items: [{ ...document, title: "Ley 32498 remuneraciones" }],
-      limit: 3,
-      offset: 0,
-      total: 2,
-    },
-  },
-];
-
 describe("DocumentLibraryView", () => {
   it("renders a searchable responsive library with safe document actions", () => {
     render(
@@ -428,9 +411,10 @@ describe("DocumentLibraryView", () => {
     render(
       <DocumentLibraryView
         activeFilterCount={0}
+        historyGrouped
         historyLayout
+        historyModuleId={moduleId}
         library={{ items: [document], limit: 3, offset: 0, total: 1 }}
-        modulePreviews={overviewPreviews}
         moduleSummaries={historySummaries}
         modules={historySummaries}
         query={parseDocumentLibraryQuery({})}
@@ -471,14 +455,15 @@ describe("DocumentLibraryView", () => {
     render(
       <DocumentLibraryView
         activeFilterCount={1}
+        historyGrouped
         historyLayout
+        historyModuleId={remuneracionesId}
         library={{
           items: [{ ...document, title: "Contrato auxiliares 2026" }],
           limit: 3,
           offset: 0,
           total: 2,
         }}
-        modulePreviews={overviewPreviews}
         moduleSummaries={historySummaries}
         modules={historySummaries}
         query={parseDocumentLibraryQuery({ moduleId: remuneracionesId })}
@@ -533,15 +518,10 @@ describe("DocumentLibraryView", () => {
     render(
       <DocumentLibraryView
         activeFilterCount={0}
+        historyGrouped
         historyLayout
+        historyModuleId={moduleId}
         library={{ items: [], limit: 3, offset: 0, total: 0 }}
-        modulePreviews={[
-          { moduleId, page: { items: [], limit: 3, offset: 0, total: 0 } },
-          {
-            moduleId: remuneracionesId,
-            page: { items: [], limit: 3, offset: 0, total: 0 },
-          },
-        ]}
         moduleSummaries={unmanageable}
         modules={unmanageable}
         query={parseDocumentLibraryQuery({})}
@@ -551,5 +531,35 @@ describe("DocumentLibraryView", () => {
     expect(screen.getByRole("link", { name: "Evaluación docente" })).toBeVisible();
     // Sin módulos con documentos se conserva la invitación a cargar desde Módulos.
     expect(screen.getByText("Aún no hay documentos registrados")).toBeVisible();
+  });
+
+  it("keeps the module rail usable when the documents request fails", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyGrouped
+        historyLayout
+        historyModuleId={moduleId}
+        library={{ items: [], limit: 3, offset: 0, total: 0 }}
+        loadError
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    // El aviso queda dentro del panel y ofrece reintentar la misma consulta.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "No pudimos cargar los documentos",
+    );
+    expect(screen.getByRole("link", { name: "Reintentar" })).toHaveAttribute(
+      "href",
+      "/admin/documents",
+    );
+    // La navegación entre módulos no se bloquea.
+    expect(
+      screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
+    ).toHaveAttribute("href", `/admin/documents?moduleId=${remuneracionesId}`);
+    expect(screen.queryByText(/^Mostrando/)).toBeNull();
   });
 });

@@ -26,29 +26,24 @@ import {
 import { DocumentRowActions } from "./document-row-actions";
 import styles from "./document-library-view.module.css";
 
-/**
- * Documentos de un módulo para la vista general del Historial: la página los
- * consulta ya acotados al módulo, así la tabla del panel y su total son
- * coherentes sin repetir la consulta en el cliente.
- */
-export interface HistoryModulePreview {
-  moduleId: string;
-  page: DocumentLibraryPage;
-}
-
 interface DocumentLibraryViewProps {
   activeFilterCount: number;
   basePath?: string;
+  /**
+   * Vista general del Historial agrupada por módulo. Si es falsa hay filtros
+   * activos y se muestra la tabla de resultados plana, que puede cruzar
+   * módulos.
+   */
+  historyGrouped?: boolean;
+  /** Módulo abierto en la vista agrupada; lo resuelve la página. */
+  historyModuleId?: string;
   library: DocumentLibraryPage;
+  /** La consulta de la página falló: se avisa sin bloquear el carril. */
+  loadError?: boolean;
   lockLocation?: boolean;
   modules: ManagedModule[];
   /** Resumen con cantidades para la vista general de Historial. */
   moduleSummaries?: ManagedModuleSummary[];
-  /**
-   * Vista general del Historial agrupada por módulo. Si llega vacío se asume
-   * una consulta con filtros y se muestra la tabla de resultados plana.
-   */
-  modulePreviews?: HistoryModulePreview[];
   query: ParsedDocumentLibraryQuery;
   /**
    * Acciones rápidas de administración en la columna Acciones (eliminar y
@@ -445,11 +440,13 @@ function EmptyLibraryState({
 export function DocumentLibraryView({
   activeFilterCount,
   basePath = "/admin/documents",
+  historyGrouped = false,
   historyLayout = false,
+  historyModuleId,
   library,
+  loadError = false,
   lockLocation = false,
   modules,
-  modulePreviews = [],
   moduleSummaries = [],
   query,
   quickActions = false,
@@ -486,36 +483,21 @@ export function DocumentLibraryView({
     .filter((module) => !module.isDeleted && !module.parentModuleId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   const historyOverview =
-    historyLayout && modulePreviews.length > 0 && historyModules.length > 0;
-  const previewByModule = new Map(
-    modulePreviews.map((preview) => [preview.moduleId, preview.page]),
-  );
-  // Sin elección explícita se muestra el primer módulo que tenga documentos:
-  // abrir uno vacío por defecto haría parecer vacío todo el Historial.
-  const defaultHistoryModuleId =
-    historyModules.find(
-      (module) => (previewByModule.get(module.id)?.total ?? 0) > 0,
-    )?.id ?? historyModules[0]?.id;
-  const selectedHistoryModuleId = query.moduleId
-    ? query.moduleId
-    : query.submoduleId
-      ? visibleModules.find((module) => module.id === query.submoduleId)
-          ?.parentModuleId
-      : historyOverview
-        ? defaultHistoryModuleId
-        : undefined;
+    historyLayout && historyGrouped && historyModules.length > 0;
+  const selectedHistoryModuleId = historyOverview ? historyModuleId : undefined;
   const moduleHref = (moduleId: string) =>
     documentLibraryHref(
       { ...query, moduleId, offset: 0, page: 1, submoduleId: undefined },
       1,
       basePath,
     );
+  const retryHref = documentLibraryHref(query, query.page, basePath);
   // Sin documentos en ningún módulo la vista general queda vacía: se conserva
   // la invitación a cargar desde Módulos en lugar de dejar solo paneles mudos.
   const overviewIsEmpty =
     historyOverview &&
     historyModules.every(
-      (module) => (previewByModule.get(module.id)?.total ?? 0) === 0,
+      (module) => module.canManage === false || module.documentCount === 0,
     );
 
   return (
@@ -890,9 +872,7 @@ export function DocumentLibraryView({
           {historyOverview ? (
             <div className={styles.modulePanels}>
               {historyModules.map((module) => {
-                const preview = previewByModule.get(module.id);
-                const expanded =
-                  module.id === selectedHistoryModuleId && preview !== undefined;
+                const expanded = module.id === selectedHistoryModuleId;
 
                 if (!expanded) {
                   return (
@@ -921,8 +901,8 @@ export function DocumentLibraryView({
                   );
                 }
 
-                const total = preview.total;
-                const shown = preview.items.length;
+                const total = library.total;
+                const shown = library.items.length;
                 return (
                   <article className={styles.modulePanel} key={module.id}>
                     <header className={styles.modulePanelHeader}>
@@ -936,7 +916,18 @@ export function DocumentLibraryView({
                       <ChevronIcon direction="up" />
                     </header>
 
-                    {shown === 0 ? (
+                    {loadError ? (
+                      <div className={styles.modulePanelError} role="alert">
+                        <div>
+                          <strong>No pudimos cargar los documentos</strong>
+                          <p>
+                            Revisa tu conexión e inténtalo nuevamente. Ningún
+                            cambio fue aplicado.
+                          </p>
+                        </div>
+                        <Link href={retryHref}>Reintentar</Link>
+                      </div>
+                    ) : shown === 0 ? (
                       <p className={styles.modulePanelEmpty}>
                         Este módulo todavía no tiene documentos registrados.
                       </p>
@@ -972,7 +963,7 @@ export function DocumentLibraryView({
                               </tr>
                             </thead>
                             <tbody>
-                              {preview.items.map((document) => (
+                              {library.items.map((document) => (
                                 <tr key={document.id}>
                                   <th scope="row">
                                     <Link
@@ -1019,7 +1010,7 @@ export function DocumentLibraryView({
                           </table>
                         </div>
                         <ul className={styles.previewCards} role="list">
-                          {preview.items.map((document) => (
+                          {library.items.map((document) => (
                             <PreviewDocumentCard
                               document={document}
                               key={document.id}
@@ -1032,8 +1023,11 @@ export function DocumentLibraryView({
 
                     <footer className={styles.modulePanelFooter}>
                       <span>
-                        Mostrando {shown} de {total}{" "}
-                        {total === 1 ? "documento" : "documentos"}
+                        {loadError
+                          ? "No se pudo contar este módulo"
+                          : `Mostrando ${shown} de ${total} ${
+                              total === 1 ? "documento" : "documentos"
+                            }`}
                       </span>
                       <Link href={`/admin/modules/${module.id}`}>
                         <span>Ver todos en {module.name}</span>
@@ -1063,13 +1057,26 @@ export function DocumentLibraryView({
             <h2 className="text-xl font-bold" id="document-library-results">
               {historyLayout ? "Resultados" : resultsTitle}
             </h2>
-            <p aria-live="polite" className="text-base text-avend-text-muted">
-              {library.total}{" "}
-              {library.total === 1 ? "documento" : "documentos"}
-            </p>
+            {loadError ? null : (
+              <p aria-live="polite" className="text-base text-avend-text-muted">
+                {library.total}{" "}
+                {library.total === 1 ? "documento" : "documentos"}
+              </p>
+            )}
           </div>
 
-          {library.items.length === 0 ? (
+          {loadError ? (
+            <div className={styles.resultsError} role="alert">
+              <div>
+                <strong>No pudimos cargar los documentos</strong>
+                <p>
+                  Revisa tu conexión e inténtalo nuevamente. Ningún cambio fue
+                  aplicado.
+                </p>
+              </div>
+              <Link href={retryHref}>Reintentar</Link>
+            </div>
+          ) : library.items.length === 0 ? (
             <EmptyLibraryState activeFilterCount={activeFilterCount} />
           ) : (
           <>

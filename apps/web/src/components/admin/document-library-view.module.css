@@ -17,6 +17,13 @@
    filtros detallados disponibles sin competir visualmente con la biblioteca. */
 .historyLayout .searchCard {
   align-items: start;
+  /* Sin superficie propia: cada control muestra su propio recuadro, así la
+     fila de búsqueda, período y filtros avanzados se lee como controles
+     separados y no como una sola caja. */
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
   gap: 0.75rem;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -36,14 +43,19 @@
 }
 
 .historyLayout .advanced {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   margin: 0;
 }
 
 .historyLayout .advanced[open] {
+  background: var(--avend-surface);
+  border: 1px solid var(--avend-border);
+  border-radius: 0.875rem;
+  box-shadow: var(--avend-shadow-surface);
   grid-column: 1 / -1;
   grid-row: 2;
+  padding: 0.875rem 1rem 1rem;
 }
 
 .historyLayout .advancedToggle {
@@ -176,7 +188,7 @@
 }
 
 .periodFilter {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   position: relative;
 }
@@ -468,6 +480,7 @@
 }
 
 .modulePanel {
+  animation: module-panel-in 240ms ease-out both;
   background: var(--avend-surface);
   border: 1px solid #cfe0f8;
   border-radius: 0.875rem;
@@ -504,6 +517,89 @@
   font-size: 1rem;
   margin: 0;
   padding: 1.25rem 1rem;
+}
+
+/* La consulta falló: el aviso vive dentro del panel para que el carril de
+   módulos siga disponible y el administrador pueda reintentar o cambiar de
+   módulo sin salir de la página. */
+.modulePanelError {
+  align-items: center;
+  background: #fef3f2;
+  border-bottom: 1px solid #fecdca;
+  color: #912018;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.modulePanelError strong {
+  font-size: 1.0625rem;
+}
+
+.modulePanelError p {
+  font-size: 1rem;
+  margin: 0.2rem 0 0;
+}
+
+.modulePanelError a {
+  align-items: center;
+  background: var(--avend-navy);
+  border-radius: 0.5rem;
+  color: #ffffff;
+  display: inline-flex;
+  font-weight: 700;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  text-decoration: none;
+}
+
+.modulePanelError a:hover {
+  text-decoration: underline;
+}
+
+.modulePanelError a:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.resultsError {
+  align-items: center;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 0.875rem;
+  color: #912018;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.resultsError strong {
+  font-size: 1.0625rem;
+}
+
+.resultsError p {
+  font-size: 1rem;
+  margin: 0.2rem 0 0;
+}
+
+.resultsError a {
+  align-items: center;
+  background: var(--avend-navy);
+  border-radius: 0.5rem;
+  color: #ffffff;
+  display: inline-flex;
+  font-weight: 700;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  text-decoration: none;
+}
+
+.resultsError a:hover {
+  text-decoration: underline;
 }
 
 .panelTableRegion {
@@ -611,6 +707,7 @@
   color: var(--avend-accent-strong);
   display: inline-flex;
   font-weight: 700;
+  gap: 0.3rem;
   min-height: 2.75rem;
   text-decoration: none;
 }
@@ -664,13 +761,20 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .historyLayout .periodFilter {
-    grid-column: 2;
+  /* En pantallas medianas la búsqueda ocupa la fila completa y los dos
+     controles se reparten la siguiente, cada uno con su propio recuadro. */
+  .historyLayout .searchRow {
+    grid-column: 1 / -1;
     grid-row: 1;
   }
 
   .historyLayout .advanced {
     grid-column: 1;
+    grid-row: 2;
+  }
+
+  .historyLayout .periodFilter {
+    grid-column: 2;
     grid-row: 2;
   }
 
@@ -907,8 +1011,33 @@
   }
 }
 
+/* Apertura del módulo en el Historial: entrada breve y sin exageración, para
+   que el cambio de módulo se perciba como una transición y no como un salto. */
+@keyframes module-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+}
+
+@keyframes module-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+}
+
+.moduleRow {
+  animation: module-row-in 180ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .filtersGrid {
+    animation: none;
+  }
+
+  .modulePanel,
+  .moduleRow {
     animation: none;
   }
 
