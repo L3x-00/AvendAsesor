@@ -32,12 +32,23 @@
 .search {
   min-height: 2.75rem;
   width: min(100%, 22rem);
-  padding: 0 0.75rem;
-  border: 1px solid var(--avend-border);
-  border-radius: 0.5rem;
-  background: var(--avend-surface);
+  padding: 0 0.9rem 0 2.75rem;
+  border: 1px solid #d5e3f2;
+  border-radius: 0.65rem;
+  background-color: var(--avend-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.85rem 50%;
+  background-size: 1.2rem;
   font-size: 1rem;
   color: var(--avend-text);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.search:hover {
+  border-color: #b9d3ec;
 }
 
 .search:focus-visible {
@@ -91,7 +102,11 @@
  * 900 ms: menos de 3 destellos por segundo.
  */
 .cardNew {
-  --card-new-tint: color-mix(in srgb, var(--avend-accent) 18%, var(--avend-surface));
+  --card-new-tint: color-mix(
+    in srgb,
+    var(--avend-accent) 18%,
+    var(--avend-surface)
+  );
   animation: card-created 900ms ease-in-out 3;
   border-color: var(--avend-accent);
 }
@@ -177,11 +192,32 @@
   color: var(--avend-text);
 }
 
-.cardStat {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
+/* Etiquetas «N submódulos» / «N documentos»: mismo lenguaje visual en la
+   vista de submódulos y en la vista general. */
+.cardStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.cardChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.45rem;
+  background: var(--avend-surface-muted);
   color: var(--avend-text);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.cardChip svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--avend-text-muted);
 }
 
 .cardLink {
@@ -454,4 +490,401 @@
   justify-content: flex-end;
   margin-top: auto;
   padding-top: 0.75rem;
+}
+/* Vista general de módulos; el explorador de submódulos conserva su diseño. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.rootExplorer {
+  gap: 1.5rem;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #dfebf8;
+  border-radius: 0.9rem;
+  background: var(--avend-surface);
+  box-shadow: 0 4px 18px rgb(16 61 115 / 6%);
+  padding: 0.85rem 0.5rem;
+}
+.summary > div {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.4rem 1.25rem;
+  min-width: 0;
+}
+.summary > div + div {
+  border-left: 1px solid #e1ecf7;
+}
+.summary > div > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.summary strong {
+  color: #102a4c;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.summary > div > span:last-child > span {
+  color: #5a6c83;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+.summaryIcon {
+  width: 3.1rem;
+  height: 3.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, #eef7ff, #d9ecff);
+  color: #1473d2;
+}
+.summaryIcon svg {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+.rootExplorer .toolbarActions {
+  gap: 0.75rem;
+}
+.rootExplorer .search {
+  width: min(100%, 28rem);
+}
+.viewToggle {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid #d6e4f3;
+  border-radius: 0.65rem;
+  background: #fff;
+  overflow: hidden;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.viewToggle:hover {
+  border-color: #b9d3ec;
+}
+.viewToggle button {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #23436c;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.viewToggle button svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.viewToggle button:hover {
+  background: #eef6ff;
+}
+.viewToggle button[aria-pressed="true"] {
+  background: #173d72;
+  color: #fff;
+}
+.viewToggle button:focus-visible {
+  outline: 3px solid #1479cf;
+  outline-offset: -3px;
+}
+.rootExplorer .createButton {
+  margin-left: 0;
+  border-color: #0f6ad8;
+  background: linear-gradient(180deg, #1a7bff, #0b62d6);
+  box-shadow: 0 6px 16px rgb(22 119 255 / 26%);
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    transform 160ms ease;
+}
+.rootExplorer .createButton:not(:disabled):hover {
+  background: linear-gradient(180deg, #166fe8, #0a56bd);
+  box-shadow: 0 9px 20px rgb(22 119 255 / 30%);
+}
+.rootExplorer .grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+}
+.rootExplorer .grid.listView {
+  grid-template-columns: 1fr;
+}
+.rootExplorer .card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "icon title badge"
+    "desc desc desc"
+    "stats stats stats"
+    "footer footer footer";
+  gap: 0.65rem;
+  padding: 1rem 1rem 0.9rem;
+  border: 1px solid #e2edf9;
+  border-left: 4px solid #1b7fe0;
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+  box-shadow: 0 2px 10px rgb(16 61 115 / 5%);
+  transition:
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    transform 220ms ease;
+  animation: module-card-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--module-index, 0) * 45ms);
+}
+.rootExplorer .card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgb(16 61 115 / 11%);
+}
+/* La tarjeta recién creada se resalta con su propio parpadeo; no compite con
+   la animación de entrada. */
+.rootExplorer .cardNew {
+  animation: card-created 900ms ease-in-out 3;
+}
+@keyframes module-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rootExplorer .card:nth-child(4n + 2) {
+  border-left-color: #8b4fd6;
+}
+.rootExplorer .card:nth-child(4n + 3) {
+  border-left-color: #0f9d63;
+}
+.rootExplorer .card:nth-child(4n + 4) {
+  border-left-color: #e08a1e;
+}
+.rootExplorer .cardHeader {
+  display: contents;
+}
+.rootExplorer .moduleTag {
+  grid-area: icon;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-height: 0;
+  padding: 0.5rem;
+  border-radius: 0.6rem;
+  background: linear-gradient(145deg, #eaf4ff, #d9ecff);
+  color: #126fc9;
+}
+.rootExplorer .moduleTag svg {
+  width: 100%;
+  height: 100%;
+}
+.rootExplorer .cardTitle {
+  grid-area: title;
+  align-self: center;
+  min-height: 2.55em;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 1rem;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
+}
+.rootExplorer .badgeActive,
+.rootExplorer .badgeInactive {
+  grid-area: badge;
+  align-self: start;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.rootExplorer .badgeActive {
+  background: #e5f8ed;
+  color: #0b7a4b;
+}
+.rootExplorer .cardDescription {
+  grid-area: desc;
+  display: -webkit-box;
+  min-height: 2.9em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: #4b5d73;
+}
+.rootExplorer .cardStats {
+  grid-area: stats;
+  gap: 0.25rem;
+}
+.rootExplorer .cardChip {
+  gap: 0.25rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 0.45rem;
+  background: #f1f7fe;
+  color: #36506d;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+.rootExplorer .cardChip svg {
+  color: #5b7fa6;
+}
+.rootExplorer .cardFooter {
+  grid-area: footer;
+  padding-top: 0.15rem;
+}
+.rootExplorer .cardLink {
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid #bcd8f3;
+  border-radius: 0.55rem;
+  color: #0f66c4;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+.rootExplorer .cardLink:hover {
+  border-color: #8dc0ea;
+  background: #eaf4ff;
+  color: #0b56a8;
+  box-shadow: 0 3px 10px rgb(16 97 190 / 12%);
+}
+.rootExplorer .cardLink span {
+  transition: transform 180ms ease;
+}
+.rootExplorer .cardLink:hover span {
+  transform: translateX(3px);
+}
+.rootExplorer .grid.listView .card {
+  grid-template-areas:
+    "icon title badge"
+    "desc desc desc"
+    "stats stats footer";
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.rootExplorer .grid.listView .cardFooter {
+  padding-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rootExplorer .card {
+    animation: none;
+  }
+  .rootExplorer .cardNew {
+    animation: none;
+  }
+  .rootExplorer .card:hover {
+    transform: none;
+  }
+}
+@media (max-width: 42rem) {
+  .summary {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .summary > div {
+    padding: 0.5rem;
+  }
+  .summary > div + div {
+    border-left: 0;
+    border-top: 1px solid #e1ecf7;
+  }
+  .rootExplorer .search {
+    width: 100%;
+  }
+  .rootExplorer .viewToggle {
+    margin-left: 0;
+  }
+  .rootExplorer .createButton {
+    order: 0;
+    width: auto;
+    margin-left: auto;
+  }
+}
+.pageHeader {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(1.1rem, 2.5vw, 2rem) clamp(1rem, 2.5vw, 2rem)
+    clamp(1.35rem, 2.5vw, 2.15rem);
+  background: linear-gradient(135deg, #eff7ff 0%, #f5faff 48%, #e8f3ff 100%);
+}
+.headerWaves {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.headerWaves svg {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(48%, 34rem);
+  height: 100%;
+  opacity: 0.65;
+  mask-image: linear-gradient(to right, transparent 0%, #000 35%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 35%);
+}
+.headerContent {
+  position: relative;
+  max-width: 60rem;
+}
+.headerContent > p:first-child {
+  margin: 0 0 0.4rem;
+  color: #143a63;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.headerContent h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0 0 0.45rem;
+  font-size: clamp(1.9rem, 3vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: #102852;
+}
+.headerContent h1 svg {
+  width: 2.3rem;
+  height: 2.3rem;
+  color: #0d73d1;
+  flex: none;
+}
+.headerContent > p:last-child {
+  margin: 0;
+  max-width: 58rem;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: #3c5673;
+}
+.pageBody {
+  padding-top: 0;
 }

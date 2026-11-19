@@ -1,8 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal, useFormStatus } from "react-dom";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { createPortal, flushSync, useFormStatus } from "react-dom";
 import {
   createModuleAction,
   deleteModuleAction,
@@ -111,8 +120,124 @@ const HIGHLIGHT_MS = 3600;
  */
 const consumedInitialHighlights = new Set<string>();
 
+/**
+ * Icono temático de la tarjeta. Se elige por el nombre del módulo para que cada
+ * área de la biblioteca se reconozca de un vistazo, como en la referencia
+ * visual. El trazo es el mismo en todos los casos para que el conjunto resulte
+ * homogéneo.
+ */
+function ModuleIcon({ name }: { name: string }) {
+  const text = name.toLocaleLowerCase("es");
+  const shape = text.includes("remuner") ? (
+    <>
+      <ellipse cx="12" cy="6" rx="7" ry="3" />
+      <path d="M5 6v12c0 1.7 3 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3 3 7 3s7-1.3 7-3" />
+    </>
+  ) : text.includes("evaluaci") ? (
+    <>
+      <path d="m3 9 9-4 9 4-9 4zM6 11v5c3 2 9 2 12 0v-5M21 9v6" />
+    </>
+  ) : text.includes("contrat") ? (
+    <>
+      <rect x="3" y="8" width="18" height="12" rx="2" />
+      <path d="M8 8V5h8v3M3 13h18M10 13v2h4v-2" />
+    </>
+  ) : text.includes("auxiliar") ? (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20v-1a6 6 0 0 1 12 0v1M16 6a3 3 0 0 1 0 6M16 14a5 5 0 0 1 5 5v1" />
+    </>
+  ) : text.includes("ley") ||
+    text.includes("reglament") ||
+    text.includes("normat") ? (
+    <>
+      <path d="M12 3v18M7 21h10M5 7h14M5 7 2 14h6zM19 7l-3 7h6z" />
+    </>
+  ) : text.includes("cargo") || text.includes("plaza") ? (
+    <>
+      <path d="M3 21h18M4 21V9l8-5 8 5v12M9 21v-6h6v6M4 9h16" />
+    </>
+  ) : text.includes("situaci") ? (
+    <>
+      <rect x="4" y="4" width="16" height="17" rx="2" />
+      <path d="M9 4V3h6v1M8 10h8M8 14h8M8 18h5" />
+    </>
+  ) : (
+    <path d="M3 6h7l2 2h9v11H3z" />
+  );
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {shape}
+    </svg>
+  );
+}
+
+/** Icono del resumen: módulos (carpeta), submódulos (capas) y documentos. */
+function SummaryIcon({ kind }: { kind: "folder" | "layers" | "documents" }) {
+  const shape =
+    kind === "folder" ? (
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    ) : kind === "layers" ? (
+      <path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5" />
+    ) : (
+      <>
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+        <path d="M14 3v6h6M8 13h8M8 17h6" />
+      </>
+    );
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {shape}
+    </svg>
+  );
+}
+
+/** Icono pequeño de las etiquetas «N submódulos» y «N documentos». */
+function StatIcon({ kind }: { kind: "layers" | "documents" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {kind === "layers" ? (
+        <path d="m12 3 9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5" />
+      ) : (
+        <>
+          <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+          <path d="M14 3v6h6M8 13h8M8 17h6" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function submoduleWord(count: number): string {
   return count === 1 ? "submódulo" : "submódulos";
+}
+
+function documentWord(count: number): string {
+  return count === 1 ? "documento" : "documentos";
 }
 
 /** Un módulo sin submódulos cuyos documentos están asociados a él mismo. */
@@ -128,7 +253,11 @@ function removeCreatedParam(createdId: string): void {
   // Next integra `history.replaceState` con su enrutador: sincroniza la ruta
   // sin navegar ni desplazar, a diferencia de `router.replace`, que volvería a
   // renderizar la página en el servidor y a consultar el API.
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  window.history.replaceState(
+    null,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
 }
 
 /**
@@ -136,7 +265,11 @@ function removeCreatedParam(createdId: string): void {
  * dentro del `<form>` porque `useFormStatus` solo lee el formulario que lo
  * contiene.
  */
-function PendingWatcher({ onChange }: { onChange: (pending: boolean) => void }) {
+function PendingWatcher({
+  onChange,
+}: {
+  onChange: (pending: boolean) => void;
+}) {
   const { pending } = useFormStatus();
 
   useEffect(() => {
@@ -263,11 +396,7 @@ export function ModuleManageDetails({
             </p>
           )}
           <div style={{ marginTop: "1rem" }}>
-            <button
-              className="avend-button"
-              onClick={closeForm}
-              type="button"
-            >
+            <button className="avend-button" onClick={closeForm} type="button">
               Cancelar
             </button>
           </div>
@@ -329,45 +458,45 @@ export function ModuleManageDetails({
                 module.parentModuleId ? "Eliminar submódulo" : "Eliminar módulo"
               }
             >
-            <AdminActionForm
-              action={deleteModuleAction}
-              rules={MODULE_REASON_RULES}
-              submitLabel={
-                module.parentModuleId
-                  ? "Sí, eliminar submódulo"
-                  : "Sí, eliminar módulo"
-              }
-              onSuccess={closeForm}
-              tone="danger"
-            >
-              <input name="moduleId" type="hidden" value={module.id} />
-              {/* Tras el borrado, el servidor redirige aquí para no quedar en la
-                  ruta del módulo eliminado (que daría 404). */}
-              <input
-                name="redirectTo"
-                type="hidden"
-                value={
+              <AdminActionForm
+                action={deleteModuleAction}
+                rules={MODULE_REASON_RULES}
+                submitLabel={
                   module.parentModuleId
-                    ? `/admin/modules/${module.parentModuleId}`
-                    : "/admin/modules"
+                    ? "Sí, eliminar submódulo"
+                    : "Sí, eliminar módulo"
                 }
-              />
-              <label
-                className={styles.fieldLabel}
-                htmlFor={`${fieldId}-delete-reason`}
+                onSuccess={closeForm}
+                tone="danger"
               >
-                Motivo de baja
+                <input name="moduleId" type="hidden" value={module.id} />
+                {/* Tras el borrado, el servidor redirige aquí para no quedar en la
+                  ruta del módulo eliminado (que daría 404). */}
                 <input
-                  className={styles.input}
-                  id={`${fieldId}-delete-reason`}
-                  maxLength={500}
-                  minLength={2}
-                  name="reason"
-                  required
+                  name="redirectTo"
+                  type="hidden"
+                  value={
+                    module.parentModuleId
+                      ? `/admin/modules/${module.parentModuleId}`
+                      : "/admin/modules"
+                  }
                 />
-                <FieldError name="reason" />
-              </label>
-            </AdminActionForm>
+                <label
+                  className={styles.fieldLabel}
+                  htmlFor={`${fieldId}-delete-reason`}
+                >
+                  Motivo de baja
+                  <input
+                    className={styles.input}
+                    id={`${fieldId}-delete-reason`}
+                    maxLength={500}
+                    minLength={2}
+                    name="reason"
+                    required
+                  />
+                  <FieldError name="reason" />
+                </label>
+              </AdminActionForm>
             </DeleteDisclosure>
           )}
         </div>
@@ -706,6 +835,7 @@ export function ModulesExplorer({
 }: ModulesExplorerProps) {
   const { showToast } = useToast();
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   // Elemento resaltado (parpadeo). Se retira siempre a los HIGHLIGHT_MS.
@@ -721,6 +851,34 @@ export function ModulesExplorer({
   const revealedId = useRef<string | undefined>(undefined);
   const cardRefs = useRef(new Map<string, HTMLLIElement>());
   const closeCreate = useCallback(() => setCreateOpen(false), []);
+
+  /**
+   * Cambio de vista con transición suave. Si el navegador soporta la View
+   * Transitions API se anima el reacomodo de las tarjetas; si no, o si la
+   * persona pidió menos movimiento, el cambio es inmediato. `flushSync` es
+   * necesario para que la nueva vista exista cuando el navegador captura el
+   * fotograma final de la transición.
+   */
+  const changeView = (next: "grid" | "list") => {
+    if (next === view) return;
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const animatedDocument = document as Document & {
+      startViewTransition?: (callback: () => void) => unknown;
+    };
+    if (
+      prefersReducedMotion ||
+      typeof animatedDocument.startViewTransition !== "function"
+    ) {
+      setView(next);
+      return;
+    }
+    animatedDocument.startViewTransition(() => {
+      flushSync(() => setView(next));
+    });
+  };
+
   const searchId = useId();
   const modalTitleId = `${searchId}-create-title`;
   const isRoot = context.kind === "root";
@@ -794,9 +952,52 @@ export function ModulesExplorer({
   }, [filtered, highlightId]);
 
   return (
-    <div className={styles.explorer}>
+    <div className={`${styles.explorer} ${isRoot ? styles.rootExplorer : ""}`}>
+      {isRoot ? (
+        <div className={styles.summary} aria-label="Resumen de módulos">
+          <div>
+            <span aria-hidden="true" className={styles.summaryIcon}>
+              <SummaryIcon kind="folder" />
+            </span>
+            <span>
+              <strong>{modules.length}</strong>
+              <span>Módulos registrados</span>
+            </span>
+          </div>
+          <div>
+            <span aria-hidden="true" className={styles.summaryIcon}>
+              <SummaryIcon kind="layers" />
+            </span>
+            <span>
+              <strong>
+                {modules.reduce(
+                  (total, module) => total + module.submoduleCount,
+                  0,
+                )}
+              </strong>
+              <span>Submódulos en total</span>
+            </span>
+          </div>
+          <div>
+            <span aria-hidden="true" className={styles.summaryIcon}>
+              <SummaryIcon kind="documents" />
+            </span>
+            <span>
+              <strong>
+                {modules.some((module) => module.canManage === false)
+                  ? "—"
+                  : modules.reduce(
+                      (total, module) => total + module.documentCount,
+                      0,
+                    )}
+              </strong>
+              <span>Documentos vinculados</span>
+            </span>
+          </div>
+        </div>
+      ) : null}
       <div className={styles.toolbar}>
-        <div className={styles.toolbarHeading}>
+        <div className={isRoot ? styles.visuallyHidden : styles.toolbarHeading}>
           <h2 className={styles.title}>{isRoot ? "Módulos" : "Submódulos"}</h2>
           <span className={styles.count}>{modules.length} en total</span>
         </div>
@@ -813,10 +1014,60 @@ export function ModulesExplorer({
             className={styles.search}
             id={`${searchId}-search`}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={isRoot ? "Buscar módulo…" : "Buscar submódulo…"}
+            placeholder={
+              isRoot
+                ? "Buscar módulo por nombre o código…"
+                : "Buscar submódulo por nombre o código…"
+            }
             type="search"
             value={query}
           />
+          {isRoot ? (
+            <div
+              className={styles.viewToggle}
+              role="group"
+              aria-label="Vista de módulos"
+            >
+              <button
+                type="button"
+                aria-label="Vista de tarjetas"
+                aria-pressed={view === "grid"}
+                onClick={() => changeView("grid")}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
+                  <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+                  <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
+                  <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label="Vista de lista"
+                aria-pressed={view === "list"}
+                onClick={() => changeView("list")}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
+          ) : null}
           {showCreate ? (
             <button
               className={`avend-button avend-button--primary ${styles.createButton}`}
@@ -851,14 +1102,25 @@ export function ModulesExplorer({
             : "Ningún resultado coincide con la búsqueda."}
         </p>
       ) : (
-        <ul className={styles.grid} role="list">
-          {filtered.map((module) => {
+        <ul
+          className={`${styles.grid} ${isRoot && view === "list" ? styles.listView : ""}`}
+          role="list"
+        >
+          {filtered.map((module, index) => {
             const isNew = highlightId === module.id;
             return (
               <li
                 className={`${styles.card} ${isNew ? styles.cardNew : ""}`}
                 data-highlighted={isNew ? "true" : undefined}
                 key={module.id}
+                style={
+                  {
+                    "--module-index": Math.min(index, 8),
+                    viewTransitionName: isRoot
+                      ? `module-card-${module.id.replace(/[^A-Za-z0-9_-]/gu, "")}`
+                      : undefined,
+                  } as CSSProperties
+                }
                 onBlur={
                   focusedCardId === module.id
                     ? (event) => {
@@ -872,15 +1134,17 @@ export function ModulesExplorer({
                   if (element) cardRefs.current.set(module.id, element);
                   else cardRefs.current.delete(module.id);
                 }}
-                tabIndex={
-                  isNew || focusedCardId === module.id ? -1 : undefined
-                }
+                tabIndex={isNew || focusedCardId === module.id ? -1 : undefined}
               >
                 <div className={styles.cardHeader}>
                   {/* Repite el nombre del título: se oculta al lector de
                       pantalla para que no lo lea dos veces. */}
                   <div aria-hidden="true" className={styles.moduleTag}>
-                    {isRoot ? "Módulo" : "Submódulo"}: {module.name}
+                    {isRoot ? (
+                      <ModuleIcon name={module.name} />
+                    ) : (
+                      `Submódulo: ${module.name}`
+                    )}
                   </div>
                   <span
                     className={
@@ -893,17 +1157,34 @@ export function ModulesExplorer({
                   </span>
                 </div>
                 <h3 className={styles.cardTitle}>{module.name}</h3>
-                <p className={styles.cardMeta}>
-                  Código {module.code} · Orden {module.sortOrder}
-                </p>
+                {isRoot ? null : (
+                  <p className={styles.cardMeta}>
+                    Código {module.code} · Orden {module.sortOrder}
+                  </p>
+                )}
                 {module.description ? (
                   <p className={styles.cardDescription}>{module.description}</p>
                 ) : null}
-                <p className={styles.cardStat}>
-                  {isRoot
-                    ? `${module.submoduleCount} ${submoduleWord(module.submoduleCount)} · ${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`
-                    : `${module.documentCount} ${module.documentCount === 1 ? "documento" : "documentos"}`}
-                </p>
+                <div className={styles.cardStats}>
+                  {isRoot ? (
+                    <span className={styles.cardChip}>
+                      <StatIcon kind="layers" />
+                      {module.submoduleCount}{" "}
+                      {submoduleWord(module.submoduleCount)}
+                    </span>
+                  ) : null}
+                  {isRoot && module.canManage === false ? (
+                    <span className={styles.cardChip}>
+                      Conteo de documentos no disponible
+                    </span>
+                  ) : (
+                    <span className={styles.cardChip}>
+                      <StatIcon kind="documents" />
+                      {module.documentCount}{" "}
+                      {documentWord(module.documentCount)}
+                    </span>
+                  )}
+                </div>
                 <div className={styles.cardFooter}>
                   <Link
                     className={styles.cardLink}
