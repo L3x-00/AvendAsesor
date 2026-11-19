@@ -74,9 +74,7 @@ describe("AdminDashboard", () => {
 
   it("renders the five general metrics with their required semantics", () => {
     render(<AdminDashboard dashboard={dashboard} />);
-    const section = within(
-      sectionNamed("Información general de AVEND ASESOR"),
-    );
+    const section = within(sectionNamed("Información general de AVEND ASESOR"));
     const cards = section.getAllByRole("listitem");
 
     expect(cards.map((card) => card.firstElementChild?.textContent)).toEqual([
@@ -134,8 +132,11 @@ describe("AdminDashboard", () => {
   it("renders one card per root module with real counts and routes", () => {
     render(<AdminDashboard dashboard={dashboard} />);
     const section = within(sectionNamed("Módulos de AVEND ASESOR"));
-    const links = section.getAllByRole("link");
+    const links = within(section.getByRole("list")).getAllByRole("link");
 
+    expect(
+      section.getByRole("link", { name: /Ver todos los módulos/ }),
+    ).toHaveAttribute("href", "/admin/modules");
     expect(links).toHaveLength(7);
     expect(links.map((link) => link.firstElementChild?.textContent)).toEqual(
       moduleNames,
@@ -164,15 +165,17 @@ describe("AdminDashboard", () => {
         }}
       />,
     );
-    const links = within(sectionNamed("Módulos de AVEND ASESOR")).getAllByRole(
-      "link",
-    );
+    const links = within(
+      within(sectionNamed("Módulos de AVEND ASESOR")).getByRole("list"),
+    ).getAllByRole("link");
 
     expect(links).toHaveLength(3);
     expect(within(links[2]).getByText("Inactivo")).toBeVisible();
     expect(within(links[0]).queryByText("Inactivo")).not.toBeInTheDocument();
 
-    rerender(<AdminDashboard dashboard={{ ...dashboard, moduleSummaries: [] }} />);
+    rerender(
+      <AdminDashboard dashboard={{ ...dashboard, moduleSummaries: [] }} />,
+    );
     expect(screen.getByText(/Aún no hay módulos registrados/)).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Crear el primer módulo" }),
@@ -224,9 +227,9 @@ describe("AdminDashboard", () => {
 
     expect(sectionHeadings).toEqual([
       "Estado de usuarios",
-      "Información general de AVEND ASESOR",
-      "Accesos rápidos",
       "Módulos de AVEND ASESOR",
+      "Accesos rápidos",
+      "Información general de AVEND ASESOR",
     ]);
     expect(screen.getAllByText("0").length).toBeGreaterThan(5);
   });
