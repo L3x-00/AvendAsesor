@@ -492,6 +492,13 @@
   overflow: hidden;
 }
 
+/* Cierre del módulo: se retira con la misma curva con la que entró, así el
+   panel que queda abajo no salta de golpe hacia arriba. */
+.modulePanelClosing {
+  animation: module-panel-out 180ms ease-in both;
+  pointer-events: none;
+}
+
 .modulePanelHeader {
   align-items: center;
   background: linear-gradient(90deg, #eef5ff 0%, #e4efff 100%);
@@ -1072,6 +1079,13 @@
   from {
     opacity: 0;
     transform: translateY(0.25rem);
+  }
+}
+
+@keyframes module-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.35rem);
   }
 }
 

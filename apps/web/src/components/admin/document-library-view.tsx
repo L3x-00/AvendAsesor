@@ -483,6 +483,7 @@ function HistoryModulesSection({
     initialModuleId && initialError ? { [initialModuleId]: true } : {},
   );
   const [loadingModuleIds, setLoadingModuleIds] = useState<string[]>([]);
+  const [closingModuleIds, setClosingModuleIds] = useState<string[]>([]);
   // Los refs permiten consultar el estado dentro de un callback estable, sin
   // repetir la consulta de un módulo que ya está cargado o en curso.
   const pagesRef = useRef(pages);
@@ -547,9 +548,73 @@ function HistoryModulesSection({
   );
 
   const closeModule = useCallback((moduleId: string) => {
-    setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
     setActiveModuleId((current) => (current === moduleId ? undefined : current));
+
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (reducedMotion) {
+      setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
+      return;
+    }
+
+    // Se contrae con la misma transición con la que se abrió y recién después
+    // se retira, para que el cierre no sea un salto.
+    setClosingModuleIds((ids) =>
+      ids.includes(moduleId) ? ids : [...ids, moduleId],
+    );
+    window.setTimeout(() => {
+      setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
+      setClosingModuleIds((ids) => ids.filter((id) => id !== moduleId));
+    }, 180);
   }, []);
+
+  /*
+   * Precarga: el Historial existe para abrir módulos, así que al entrar se
+   * adelantan los dos con más documentos (los que primero se eligen). Se hace
+   * en tiempo ocioso para no competir con lo que ya está en pantalla y se omite
+   * si el equipo o el navegador piden ahorrar datos.
+   */
+  useEffect(() => {
+    const connection = (
+      navigator as Navigator & { connection?: { saveData?: boolean } }
+    ).connection;
+
+    if (connection?.saveData) {
+      return;
+    }
+
+    const candidates = [...modules]
+      .filter(
+        (module) =>
+          module.id !== initialModuleId &&
+          module.canManage !== false &&
+          module.documentCount > 0,
+      )
+      .sort((a, b) => b.documentCount - a.documentCount)
+      .slice(0, 2);
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const run = () => {
+      candidates.forEach((module) => void fetchModulePage(module.id));
+    };
+    const handle =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(run)
+        : window.setTimeout(run, 300);
+
+    return () => {
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(handle);
+        return;
+      }
+      window.clearTimeout(handle);
+    };
+  }, [fetchModulePage, initialModuleId, modules]);
 
   const retryModule = useCallback(
     (moduleId: string) => {
@@ -656,7 +721,11 @@ function HistoryModulesSection({
           return (
             <article
               aria-busy={loading}
-              className={styles.modulePanel}
+              className={`${styles.modulePanel}${
+                closingModuleIds.includes(module.id)
+                  ? ` ${styles.modulePanelClosing}`
+                  : ""
+              }`}
               key={module.id}
             >
               <header className={styles.modulePanelHeader}>
