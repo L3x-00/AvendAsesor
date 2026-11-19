@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { loadHistoryModulePage } from "@/app/admin/documents/actions";
 import {
   clearedLibraryFiltersHref,
   documentLibraryHref,
@@ -437,6 +441,401 @@ function EmptyLibraryState({
   );
 }
 
+interface HistoryModulesSectionProps {
+  activeFilterCount: number;
+  basePath: string;
+  initialError: boolean;
+  initialModuleId?: string;
+  initialPage: DocumentLibraryPage;
+  modules: ManagedModuleSummary[];
+  query: ParsedDocumentLibraryQuery;
+  quickActions: boolean;
+}
+
+/**
+ * Carril y paneles del Historial agrupado.
+ *
+ * Abrir un módulo no navega: el primer módulo llega consultado desde el
+ * servidor y los demás se piden de a uno a una server action. Así el módulo
+ * anterior permanece abierto, no se remonta la página (ni su esqueleto de
+ * carga) y no hay salto de scroll. Cada módulo se consulta una sola vez y el
+ * puntero o el foco sobre una fila adelanta la consulta para que la apertura se
+ * sienta inmediata.
+ */
+function HistoryModulesSection({
+  activeFilterCount,
+  basePath,
+  initialError,
+  initialModuleId,
+  initialPage,
+  modules,
+  query,
+  quickActions,
+}: HistoryModulesSectionProps) {
+  const [openModuleIds, setOpenModuleIds] = useState<string[]>(
+    initialModuleId ? [initialModuleId] : [],
+  );
+  const [activeModuleId, setActiveModuleId] = useState(initialModuleId);
+  const [pages, setPages] = useState<Record<string, DocumentLibraryPage>>(
+    initialModuleId && !initialError ? { [initialModuleId]: initialPage } : {},
+  );
+  const [errors, setErrors] = useState<Record<string, boolean>>(
+    initialModuleId && initialError ? { [initialModuleId]: true } : {},
+  );
+  const [loadingModuleIds, setLoadingModuleIds] = useState<string[]>([]);
+  // Los refs permiten consultar el estado dentro de un callback estable, sin
+  // repetir la consulta de un módulo que ya está cargado o en curso.
+  const pagesRef = useRef(pages);
+  const errorsRef = useRef(errors);
+  const inFlight = useRef(new Map<string, Promise<void>>());
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  const fetchModulePage = useCallback((moduleId: string): Promise<void> => {
+    const pending = inFlight.current.get(moduleId);
+    if (pending) return pending;
+    if (pagesRef.current[moduleId] || errorsRef.current[moduleId]) {
+      return Promise.resolve();
+    }
+
+    setLoadingModuleIds((ids) =>
+      ids.includes(moduleId) ? ids : [...ids, moduleId],
+    );
+
+    const task = loadHistoryModulePage(moduleId)
+      .then((result) => {
+        if (!isMounted.current) return;
+        if (result.status === "ok") {
+          pagesRef.current = { ...pagesRef.current, [moduleId]: result.page };
+          setPages(pagesRef.current);
+          return;
+        }
+        errorsRef.current = { ...errorsRef.current, [moduleId]: true };
+        setErrors(errorsRef.current);
+      })
+      .catch(() => {
+        if (!isMounted.current) return;
+        errorsRef.current = { ...errorsRef.current, [moduleId]: true };
+        setErrors(errorsRef.current);
+      })
+      .finally(() => {
+        inFlight.current.delete(moduleId);
+        if (isMounted.current) {
+          setLoadingModuleIds((ids) => ids.filter((id) => id !== moduleId));
+        }
+      });
+
+    inFlight.current.set(moduleId, task);
+    return task;
+  }, []);
+
+  const openModule = useCallback(
+    (moduleId: string) => {
+      setActiveModuleId(moduleId);
+      setOpenModuleIds((ids) =>
+        ids.includes(moduleId) ? ids : [...ids, moduleId],
+      );
+      void fetchModulePage(moduleId);
+    },
+    [fetchModulePage],
+  );
+
+  const closeModule = useCallback((moduleId: string) => {
+    setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
+    setActiveModuleId((current) => (current === moduleId ? undefined : current));
+  }, []);
+
+  const retryModule = useCallback(
+    (moduleId: string) => {
+      const nextErrors = { ...errorsRef.current };
+      delete nextErrors[moduleId];
+      errorsRef.current = nextErrors;
+      setErrors(nextErrors);
+      void fetchModulePage(moduleId);
+    },
+    [fetchModulePage],
+  );
+
+  const moduleHref = (moduleId: string) =>
+    documentLibraryHref(
+      { ...query, moduleId, offset: 0, page: 1, submoduleId: undefined },
+      1,
+      basePath,
+    );
+  const retryHref = documentLibraryHref(query, query.page, basePath);
+
+  return (
+    <section
+      aria-labelledby="documents-by-module"
+      className={styles.modulesSection}
+    >
+      <div className={styles.sectionHeading}>
+        <h2 id="documents-by-module">Documentos por módulo</h2>
+      </div>
+      <div className={styles.moduleRail}>
+        {modules.map((module) => {
+          const selected = module.id === activeModuleId;
+          return (
+            <Link
+              aria-current={selected ? "page" : undefined}
+              className={`${styles.moduleCard}${selected ? ` ${styles.moduleCardSelected}` : ""}`}
+              href={moduleHref(module.id)}
+              key={module.id}
+              onClick={(event) => {
+                // Sin JavaScript el enlace sigue abriendo el módulo por URL.
+                event.preventDefault();
+                openModule(module.id);
+              }}
+              onFocus={() => void fetchModulePage(module.id)}
+              onPointerEnter={() => void fetchModulePage(module.id)}
+            >
+              <span className={styles.moduleCardIcon}>
+                <ModuleIcon name={module.name} />
+              </span>
+              <span className={styles.moduleCardText}>
+                <strong>{module.name}</strong>
+                {module.canManage !== false ? (
+                  <small>
+                    {module.documentCount}{" "}
+                    {module.documentCount === 1 ? "documento" : "documentos"}
+                  </small>
+                ) : null}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className={styles.modulePanels}>
+        {modules.map((module) => {
+          const open = openModuleIds.includes(module.id);
+          const page = pages[module.id];
+          const failed = errors[module.id] ?? false;
+          const loading = loadingModuleIds.includes(module.id);
+
+          if (!open) {
+            return (
+              <Link
+                aria-label={`Abrir el módulo ${module.name}`}
+                className={styles.moduleRow}
+                href={moduleHref(module.id)}
+                key={module.id}
+                onClick={(event) => {
+                  event.preventDefault();
+                  openModule(module.id);
+                }}
+                onFocus={() => void fetchModulePage(module.id)}
+                onPointerEnter={() => void fetchModulePage(module.id)}
+              >
+                <span className={styles.moduleRowIcon}>
+                  <ModuleIcon name={module.name} />
+                </span>
+                <span className={styles.moduleRowName}>{module.name}</span>
+                {module.canManage !== false ? (
+                  <span className={styles.moduleRowCount}>
+                    {module.documentCount}{" "}
+                    {module.documentCount === 1 ? "documento" : "documentos"}
+                  </span>
+                ) : (
+                  <span className={styles.moduleRowCount} />
+                )}
+                <ChevronIcon direction="down" />
+              </Link>
+            );
+          }
+
+          const total = page?.total ?? 0;
+          const shown = page?.items.length ?? 0;
+
+          return (
+            <article
+              aria-busy={loading}
+              className={styles.modulePanel}
+              key={module.id}
+            >
+              <header className={styles.modulePanelHeader}>
+                <span className={styles.moduleRowIcon}>
+                  <ModuleIcon name={module.name} />
+                </span>
+                <h3>{module.name}</h3>
+                <span className={styles.modulePanelCount}>
+                  {failed
+                    ? `${module.documentCount} ${
+                        module.documentCount === 1 ? "documento" : "documentos"
+                      }`
+                    : `${total} ${total === 1 ? "documento" : "documentos"}`}
+                </span>
+                <button
+                  aria-expanded="true"
+                  aria-label={`Contraer el módulo ${module.name}`}
+                  className={styles.modulePanelToggle}
+                  onClick={() => closeModule(module.id)}
+                  type="button"
+                >
+                  <ChevronIcon direction="up" />
+                </button>
+              </header>
+
+              {failed ? (
+                <div className={styles.modulePanelError} role="alert">
+                  <div>
+                    <strong>No pudimos cargar los documentos</strong>
+                    <p>
+                      Revisa tu conexión e inténtalo nuevamente. Ningún cambio
+                      fue aplicado.
+                    </p>
+                  </div>
+                  <Link
+                    href={retryHref}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      retryModule(module.id);
+                    }}
+                  >
+                    Reintentar
+                  </Link>
+                </div>
+              ) : !page ? (
+                <div className={styles.panelLoading}>
+                  <div aria-hidden="true" className={styles.panelSkeleton}>
+                    <span className={styles.panelSkeletonRow} />
+                    <span className={styles.panelSkeletonRow} />
+                    <span className={styles.panelSkeletonRow} />
+                  </div>
+                  <p className="sr-only" role="status">
+                    Cargando los documentos de {module.name}
+                  </p>
+                </div>
+              ) : shown === 0 ? (
+                <p className={styles.modulePanelEmpty}>
+                  Este módulo todavía no tiene documentos registrados.
+                </p>
+              ) : (
+                <>
+                  {/*
+                    Dentro de un módulo la columna «Módulo / Submódulo» repite
+                    el contexto del panel: se omite y cada fila se resume en
+                    una sola línea, como en el diseño de referencia.
+                  */}
+                  <div
+                    aria-label={`Documentos de ${module.name}, desplazable horizontalmente`}
+                    className={styles.panelTableRegion}
+                    role="region"
+                    tabIndex={0}
+                  >
+                    <table className={styles.panelTable}>
+                      <thead>
+                        <tr>
+                          <th scope="col">Tipo / Número</th>
+                          <th scope="col">Año</th>
+                          <th scope="col">Entidad</th>
+                          <th scope="col">Situación</th>
+                          <th scope="col">Estado</th>
+                          <th scope="col">Fecha de carga</th>
+                          <th
+                            className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} ${styles.panelActionsCell}`}
+                            scope="col"
+                          >
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {page.items.map((document) => (
+                          <tr key={document.id}>
+                            <th scope="row">
+                              <Link
+                                className={styles.panelTitleLink}
+                                href={`/admin/documents/${document.id}`}
+                                title={document.title}
+                              >
+                                {document.title}
+                              </Link>
+                              <span className={styles.panelType}>
+                                {displayedDocumentType(document)}
+                                {document.resolutionNumber
+                                  ? ` · ${document.resolutionNumber}`
+                                  : ""}
+                              </span>
+                              <MissingPdfNote document={document} />
+                            </th>
+                            <td>{document.issuanceYear ?? "—"}</td>
+                            <td>{displayedIssuingEntity(document)}</td>
+                            <td>
+                              <SituationBadge document={document} />
+                            </td>
+                            <td>
+                              <TechnicalBadge document={document} />
+                            </td>
+                            <td>
+                              <time dateTime={document.createdAt}>
+                                {dateFormatter.format(
+                                  new Date(document.createdAt),
+                                )}
+                              </time>
+                            </td>
+                            <td
+                              className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""}`}
+                            >
+                              <DocumentActions
+                                document={document}
+                                quickActions={quickActions}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <ul className={styles.previewCards} role="list">
+                    {page.items.map((document) => (
+                      <PreviewDocumentCard
+                        document={document}
+                        key={document.id}
+                        quickActions={quickActions}
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <footer className={styles.modulePanelFooter}>
+                <span>
+                  {failed
+                    ? "No se pudo contar este módulo"
+                    : loading || !page
+                      ? "Cargando documentos…"
+                      : `Mostrando ${shown} de ${total} ${
+                          total === 1 ? "documento" : "documentos"
+                        }`}
+                </span>
+                <Link href={`/admin/modules/${module.id}`}>
+                  <span>Ver todos en {module.name}</span>
+                  <span aria-hidden="true"> →</span>
+                </Link>
+              </footer>
+            </article>
+          );
+        })}
+      </div>
+
+      {modules.every(
+        (module) => module.canManage === false || module.documentCount === 0,
+      ) ? (
+        <div className={styles.modulePanels}>
+          <EmptyLibraryState activeFilterCount={activeFilterCount} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function DocumentLibraryView({
   activeFilterCount,
   basePath = "/admin/documents",
@@ -484,21 +883,19 @@ export function DocumentLibraryView({
     .sort((a, b) => a.sortOrder - b.sortOrder);
   const historyOverview =
     historyLayout && historyGrouped && historyModules.length > 0;
-  const selectedHistoryModuleId = historyOverview ? historyModuleId : undefined;
-  const moduleHref = (moduleId: string) =>
-    documentLibraryHref(
-      { ...query, moduleId, offset: 0, page: 1, submoduleId: undefined },
-      1,
-      basePath,
-    );
   const retryHref = documentLibraryHref(query, query.page, basePath);
-  // Sin documentos en ningún módulo la vista general queda vacía: se conserva
-  // la invitación a cargar desde Módulos en lugar de dejar solo paneles mudos.
-  const overviewIsEmpty =
-    historyOverview &&
-    historyModules.every(
-      (module) => module.canManage === false || module.documentCount === 0,
-    );
+  /*
+   * La sección interactiva se reinicia solo cuando el servidor entrega otra
+   * consulta (búsqueda, filtros u orden). Al abrir módulos en el cliente la
+   * clave no cambia, así que los paneles ya abiertos se conservan.
+   */
+  const historySeed = [
+    basePath,
+    JSON.stringify(query),
+    library.offset,
+    library.total,
+    loadError ? "error" : "ok",
+  ].join("|");
 
   return (
     <div
@@ -833,219 +1230,17 @@ export function DocumentLibraryView({
       </form>
 
       {historyLayout && historyModules.length > 0 ? (
-        <section
-          aria-labelledby="documents-by-module"
-          className={styles.modulesSection}
-        >
-          <div className={styles.sectionHeading}>
-            <h2 id="documents-by-module">Documentos por módulo</h2>
-          </div>
-          <div className={styles.moduleRail}>
-            {historyModules.map((module) => {
-              const selected = module.id === selectedHistoryModuleId;
-              return (
-                <Link
-                  aria-current={selected ? "page" : undefined}
-                  className={`${styles.moduleCard}${selected ? ` ${styles.moduleCardSelected}` : ""}`}
-                  href={moduleHref(module.id)}
-                  key={module.id}
-                >
-                  <span className={styles.moduleCardIcon}>
-                    <ModuleIcon name={module.name} />
-                  </span>
-                  <span className={styles.moduleCardText}>
-                    <strong>{module.name}</strong>
-                    {module.canManage !== false ? (
-                      <small>
-                        {module.documentCount}{" "}
-                        {module.documentCount === 1
-                          ? "documento"
-                          : "documentos"}
-                      </small>
-                    ) : null}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-
-          {historyOverview ? (
-            <div className={styles.modulePanels}>
-              {historyModules.map((module) => {
-                const expanded = module.id === selectedHistoryModuleId;
-
-                if (!expanded) {
-                  return (
-                    <Link
-                      aria-label={`Abrir el módulo ${module.name}`}
-                      className={styles.moduleRow}
-                      href={moduleHref(module.id)}
-                      key={module.id}
-                    >
-                      <span className={styles.moduleRowIcon}>
-                        <ModuleIcon name={module.name} />
-                      </span>
-                      <span className={styles.moduleRowName}>{module.name}</span>
-                      {module.canManage !== false ? (
-                        <span className={styles.moduleRowCount}>
-                          {module.documentCount}{" "}
-                          {module.documentCount === 1
-                            ? "documento"
-                            : "documentos"}
-                        </span>
-                      ) : (
-                        <span className={styles.moduleRowCount} />
-                      )}
-                      <ChevronIcon direction="down" />
-                    </Link>
-                  );
-                }
-
-                const total = library.total;
-                const shown = library.items.length;
-                return (
-                  <article className={styles.modulePanel} key={module.id}>
-                    <header className={styles.modulePanelHeader}>
-                      <span className={styles.moduleRowIcon}>
-                        <ModuleIcon name={module.name} />
-                      </span>
-                      <h3>{module.name}</h3>
-                      <span className={styles.modulePanelCount}>
-                        {total} {total === 1 ? "documento" : "documentos"}
-                      </span>
-                      <ChevronIcon direction="up" />
-                    </header>
-
-                    {loadError ? (
-                      <div className={styles.modulePanelError} role="alert">
-                        <div>
-                          <strong>No pudimos cargar los documentos</strong>
-                          <p>
-                            Revisa tu conexión e inténtalo nuevamente. Ningún
-                            cambio fue aplicado.
-                          </p>
-                        </div>
-                        <Link href={retryHref}>Reintentar</Link>
-                      </div>
-                    ) : shown === 0 ? (
-                      <p className={styles.modulePanelEmpty}>
-                        Este módulo todavía no tiene documentos registrados.
-                      </p>
-                    ) : (
-                      <>
-                        {/*
-                          Dentro de un módulo la columna «Módulo / Submódulo»
-                          repite el contexto del panel: se omite y cada fila se
-                          resume en una sola línea, como en el diseño de
-                          referencia.
-                        */}
-                        <div
-                          aria-label={`Documentos de ${module.name}, desplazable horizontalmente`}
-                          className={styles.panelTableRegion}
-                          role="region"
-                          tabIndex={0}
-                        >
-                          <table className={styles.panelTable}>
-                            <thead>
-                              <tr>
-                                <th scope="col">Tipo / Número</th>
-                                <th scope="col">Año</th>
-                                <th scope="col">Entidad</th>
-                                <th scope="col">Situación</th>
-                                <th scope="col">Estado</th>
-                                <th scope="col">Fecha de carga</th>
-                                <th
-                                  className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} ${styles.panelActionsCell}`}
-                                  scope="col"
-                                >
-                                  Acciones
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {library.items.map((document) => (
-                                <tr key={document.id}>
-                                  <th scope="row">
-                                    <Link
-                                      className={styles.panelTitleLink}
-                                      href={`/admin/documents/${document.id}`}
-                                      title={document.title}
-                                    >
-                                      {document.title}
-                                    </Link>
-                                    <span className={styles.panelType}>
-                                      {displayedDocumentType(document)}
-                                      {document.resolutionNumber
-                                        ? ` · ${document.resolutionNumber}`
-                                        : ""}
-                                    </span>
-                                    <MissingPdfNote document={document} />
-                                  </th>
-                                  <td>{document.issuanceYear ?? "—"}</td>
-                                  <td>{displayedIssuingEntity(document)}</td>
-                                  <td>
-                                    <SituationBadge document={document} />
-                                  </td>
-                                  <td>
-                                    <TechnicalBadge document={document} />
-                                  </td>
-                                  <td>
-                                    <time dateTime={document.createdAt}>
-                                      {dateFormatter.format(
-                                        new Date(document.createdAt),
-                                      )}
-                                    </time>
-                                  </td>
-                                  <td
-                                    className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""}`}
-                                  >
-                                    <DocumentActions
-                                      document={document}
-                                      quickActions={quickActions}
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <ul className={styles.previewCards} role="list">
-                          {library.items.map((document) => (
-                            <PreviewDocumentCard
-                              document={document}
-                              key={document.id}
-                              quickActions={quickActions}
-                            />
-                          ))}
-                        </ul>
-                      </>
-                    )}
-
-                    <footer className={styles.modulePanelFooter}>
-                      <span>
-                        {loadError
-                          ? "No se pudo contar este módulo"
-                          : `Mostrando ${shown} de ${total} ${
-                              total === 1 ? "documento" : "documentos"
-                            }`}
-                      </span>
-                      <Link href={`/admin/modules/${module.id}`}>
-                        <span>Ver todos en {module.name}</span>
-                        <span aria-hidden="true"> →</span>
-                      </Link>
-                    </footer>
-                  </article>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {overviewIsEmpty ? (
-            <div className={styles.modulePanels}>
-              <EmptyLibraryState activeFilterCount={activeFilterCount} />
-            </div>
-          ) : null}
-        </section>
+        <HistoryModulesSection
+          activeFilterCount={activeFilterCount}
+          basePath={basePath}
+          initialError={loadError}
+          initialModuleId={historyModuleId}
+          initialPage={library}
+          key={historySeed}
+          modules={historyModules}
+          query={query}
+          quickActions={quickActions}
+        />
       ) : null}
 
       {historyOverview ? null : (
