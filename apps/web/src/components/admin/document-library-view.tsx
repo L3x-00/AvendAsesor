@@ -15,6 +15,7 @@ import type {
   DocumentModuleAssociation,
   DocumentUploader,
   ManagedModule,
+  ManagedModuleSummary,
 } from "@/lib/admin-api/types";
 import {
   DOCUMENT_TYPE_OPTIONS,
@@ -31,6 +32,8 @@ interface DocumentLibraryViewProps {
   library: DocumentLibraryPage;
   lockLocation?: boolean;
   modules: ManagedModule[];
+  /** Resumen con cantidades para la vista general de Historial. */
+  moduleSummaries?: ManagedModuleSummary[];
   query: ParsedDocumentLibraryQuery;
   /**
    * Acciones rápidas de administración en la columna Acciones (eliminar y
@@ -39,6 +42,8 @@ interface DocumentLibraryViewProps {
   quickActions?: boolean;
   resultsTitle?: string;
   uploaders?: DocumentUploader[];
+  /** La biblioteca global se organiza visualmente por módulos. */
+  historyLayout?: boolean;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -182,7 +187,9 @@ function displayedIssuingEntity(document: DocumentLibraryItem): string {
 
 function MissingPdfNote({ document }: { document: DocumentLibraryItem }) {
   if (document.currentVersionId) return null;
-  return <span className="block text-avend-text-muted">Sin PDF disponible</span>;
+  return (
+    <span className="block text-avend-text-muted">Sin PDF disponible</span>
+  );
 }
 
 function EyeIcon() {
@@ -271,12 +278,61 @@ function SearchIcon() {
   );
 }
 
+function CalendarIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <rect height="15" rx="2" width="17" x="3.5" y="5.5" />
+      <path d="M7.5 3v5M16.5 3v5M3.5 10h17" />
+    </svg>
+  );
+}
+
+function ModuleIcon({ name }: { name: string }) {
+  const normalized = name.toLocaleLowerCase("es-PE");
+  const icon = normalized.includes("remuner") ? (
+    <>
+      <ellipse cx="12" cy="6" rx="7" ry="3" />
+      <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
+    </>
+  ) : normalized.includes("contrat") || normalized.includes("desplaz") ? (
+    <>
+      <path d="M4 8h16v11H4zM8 8V5h8v3M4 13h16" />
+      <path d="M10 13h4v2h-4z" />
+    </>
+  ) : normalized.includes("evaluaci") ? (
+    <>
+      <path d="m3 9 9-4 9 4-9 4zM6 11.3V16c2.8 2.2 9.2 2.2 12 0v-4.7M21 9v6" />
+    </>
+  ) : normalized.includes("auxiliar") ? (
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <circle cx="17" cy="10" r="2.5" />
+      <path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20M14.5 16.5a4.5 4.5 0 0 1 6 4" />
+    </>
+  ) : (
+    <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11l2.5 2.5h4A2.5 2.5 0 0 1 20 8v10A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z" />
+  );
+
+  return (
+    <svg
+      aria-hidden="true"
+      className={styles.moduleIcon}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      {icon}
+    </svg>
+  );
+}
+
 export function DocumentLibraryView({
   activeFilterCount,
   basePath = "/admin/documents",
+  historyLayout = false,
   library,
   lockLocation = false,
   modules,
+  moduleSummaries = [],
   query,
   quickActions = false,
   resultsTitle = "Biblioteca documental",
@@ -308,9 +364,40 @@ export function DocumentLibraryView({
     0,
     activeFilterCount - (query.q !== undefined ? 1 : 0),
   );
+  const historyModules = moduleSummaries
+    .filter((module) => !module.isDeleted && !module.parentModuleId)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const selectedHistoryModuleId = query.moduleId
+    ? query.moduleId
+    : query.submoduleId
+      ? visibleModules.find((module) => module.id === query.submoduleId)
+          ?.parentModuleId
+      : undefined;
+  const selectedHistoryModule = historyModules.find(
+    (module) => module.id === selectedHistoryModuleId,
+  );
+  const moduleHref = (moduleId: string) =>
+    documentLibraryHref(
+      { ...query, moduleId, offset: 0, page: 1, submoduleId: undefined },
+      1,
+      basePath,
+    );
+  const allModulesHref = documentLibraryHref(
+    {
+      ...query,
+      moduleId: undefined,
+      offset: 0,
+      page: 1,
+      submoduleId: undefined,
+    },
+    1,
+    basePath,
+  );
 
   return (
-    <div className="space-y-6">
+    <div
+      className={`${styles.library}${historyLayout ? ` ${styles.historyLayout}` : ""}`}
+    >
       {/*
         Vista minimalista: a la vista solo queda la búsqueda. El resto de los
         filtros vive en un panel plegable, así la pantalla no se satura ni se
@@ -336,7 +423,7 @@ export function DocumentLibraryView({
               id="library-search"
               maxLength={200}
               name="q"
-              placeholder="Buscar documentos por nombre"
+              placeholder="Buscar documento por nombre, número o entidad..."
               type="search"
             />
           </label>
@@ -353,11 +440,18 @@ export function DocumentLibraryView({
               <span className={styles.badge}>
                 {advancedFilterCount}
                 <span className="sr-only">
-                  {advancedFilterCount === 1 ? " filtro activo" : " filtros activos"}
+                  {advancedFilterCount === 1
+                    ? " filtro activo"
+                    : " filtros activos"}
                 </span>
               </span>
             ) : null}
-            <svg aria-hidden="true" className={styles.chevron} fill="none" viewBox="0 0 24 24">
+            <svg
+              aria-hidden="true"
+              className={styles.chevron}
+              fill="none"
+              viewBox="0 0 24 24"
+            >
               <path d="m6 9 6 6 6-6" />
             </svg>
           </summary>
@@ -483,30 +577,36 @@ export function DocumentLibraryView({
               >
                 <option value="">Todos</option>
                 <option value="ready">Listo</option>
-                <option value="pending_approval">Pendiente de aprobación</option>
+                <option value="pending_approval">
+                  Pendiente de aprobación
+                </option>
                 <option value="error">Error</option>
               </select>
             </label>
-            <label htmlFor="library-created-from">
-              <span className="text-base font-semibold">Cargado desde</span>
-              <input
-                className={fieldClass}
-                defaultValue={query.createdFrom ?? ""}
-                id="library-created-from"
-                name="createdFrom"
-                type="date"
-              />
-            </label>
-            <label htmlFor="library-created-to">
-              <span className="text-base font-semibold">Cargado hasta</span>
-              <input
-                className={fieldClass}
-                defaultValue={query.createdTo ?? ""}
-                id="library-created-to"
-                name="createdTo"
-                type="date"
-              />
-            </label>
+            {!historyLayout ? (
+              <>
+                <label htmlFor="library-created-from">
+                  <span className="text-base font-semibold">Cargado desde</span>
+                  <input
+                    className={fieldClass}
+                    defaultValue={query.createdFrom ?? ""}
+                    id="library-created-from"
+                    name="createdFrom"
+                    type="date"
+                  />
+                </label>
+                <label htmlFor="library-created-to">
+                  <span className="text-base font-semibold">Cargado hasta</span>
+                  <input
+                    className={fieldClass}
+                    defaultValue={query.createdTo ?? ""}
+                    id="library-created-to"
+                    name="createdTo"
+                    type="date"
+                  />
+                </label>
+              </>
+            ) : null}
             {uploaders.length > 0 ? (
               <label htmlFor="library-created-by">
                 <span className="text-base font-semibold">
@@ -544,7 +644,9 @@ export function DocumentLibraryView({
                 </option>
                 <option value="document_type">Tipo documental (A–Z)</option>
                 <option value="issuing_entity">Entidad emisora (A–Z)</option>
-                <option value="situation">Situación (Vigente → Archivado)</option>
+                <option value="situation">
+                  Situación (Vigente → Archivado)
+                </option>
                 <option value="technical_status">
                   Estado técnico (Error primero)
                 </option>
@@ -554,11 +656,63 @@ export function DocumentLibraryView({
           </fieldset>
 
           <div className={styles.advancedActions}>
-            <button className="avend-button avend-button--primary" type="submit">
+            <button
+              className="avend-button avend-button--primary"
+              type="submit"
+            >
               Aplicar filtros
             </button>
           </div>
         </details>
+
+        {historyLayout ? (
+          <details className={styles.periodFilter}>
+            <summary>
+              <CalendarIcon />
+              <span>
+                {query.createdFrom || query.createdTo
+                  ? "Período personalizado"
+                  : "Todo el período"}
+              </span>
+              <svg
+                aria-hidden="true"
+                className={styles.chevron}
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </summary>
+            <div className={styles.periodPanel}>
+              <label htmlFor="library-created-from">
+                <span>Desde</span>
+                <input
+                  className={fieldClass}
+                  defaultValue={query.createdFrom ?? ""}
+                  id="library-created-from"
+                  name="createdFrom"
+                  type="date"
+                />
+              </label>
+              <label htmlFor="library-created-to">
+                <span>Hasta</span>
+                <input
+                  className={fieldClass}
+                  defaultValue={query.createdTo ?? ""}
+                  id="library-created-to"
+                  name="createdTo"
+                  type="date"
+                />
+              </label>
+              <button
+                className="avend-button avend-button--primary"
+                type="submit"
+              >
+                Aplicar período
+              </button>
+            </div>
+          </details>
+        ) : null}
 
         {activeFilterCount > 0 ? (
           <p className={styles.activeSummary}>
@@ -572,10 +726,53 @@ export function DocumentLibraryView({
         ) : null}
       </form>
 
-      <section aria-labelledby="document-library-results" className="space-y-4">
+      {historyLayout && historyModules.length > 0 ? (
+        <section
+          aria-labelledby="documents-by-module"
+          className={styles.modulesSection}
+        >
+          <div className={styles.sectionHeading}>
+            <h2 id="documents-by-module">Documentos por módulo</h2>
+            {selectedHistoryModule ? (
+              <Link href={allModulesHref}>Ver todos</Link>
+            ) : null}
+          </div>
+          <div className={styles.moduleRail}>
+            {historyModules.map((module) => {
+              const selected = module.id === selectedHistoryModuleId;
+              return (
+                <Link
+                  aria-current={selected ? "page" : undefined}
+                  className={`${styles.moduleCard}${selected ? ` ${styles.moduleCardSelected}` : ""}`}
+                  href={moduleHref(module.id)}
+                  key={module.id}
+                >
+                  <ModuleIcon name={module.name} />
+                  <span>
+                    <strong>{module.name}</strong>
+                    {module.canManage !== false ? (
+                      <small>
+                        {module.documentCount}{" "}
+                        {module.documentCount === 1
+                          ? "documento"
+                          : "documentos"}
+                      </small>
+                    ) : null}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      <section
+        aria-labelledby="document-library-results"
+        className={styles.resultsSection}
+      >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-xl font-bold" id="document-library-results">
-            {resultsTitle}
+            {selectedHistoryModule ? selectedHistoryModule.name : resultsTitle}
           </h2>
           <p aria-live="polite" className="text-base text-avend-text-muted">
             {library.total} {library.total === 1 ? "documento" : "documentos"}
@@ -613,11 +810,13 @@ export function DocumentLibraryView({
             */}
             <div
               aria-label="Tabla de documentos, desplazable horizontalmente"
-              className="hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block"
+              className={`${styles.tableRegion} hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block`}
               role="region"
               tabIndex={0}
             >
-              <table className={`${styles.table} w-full min-w-[60rem] border-collapse text-left text-base`}>
+              <table
+                className={`${styles.table} w-full min-w-[60rem] border-collapse text-left text-base`}
+              >
                 <thead className="bg-avend-surface-muted text-avend-navy">
                   <tr>
                     <th className="px-4 py-3 font-bold" scope="col">
@@ -652,7 +851,11 @@ export function DocumentLibraryView({
                 {library.items.map((document) => (
                   <tbody className={styles.documentGroup} key={document.id}>
                     <tr>
-                      <th className={styles.titleCell} colSpan={8} scope="rowgroup">
+                      <th
+                        className={styles.titleCell}
+                        colSpan={8}
+                        scope="rowgroup"
+                      >
                         <Link
                           className={styles.titleLink}
                           href={`/admin/documents/${document.id}`}
