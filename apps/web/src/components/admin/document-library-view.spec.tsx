@@ -17,7 +17,7 @@ vi.mock("@/app/admin/actions", () => ({
 // La vista pide los documentos de cada módulo a una server action: en la prueba
 // se responde con una página ya armada.
 vi.mock("@/app/admin/documents/actions", () => ({
-  loadHistoryModulePage: vi.fn(),
+  loadHistoryModulePage: vi.fn(async () => ({ status: "error" })),
 }));
 
 const moduleId = "2bd75b4c-6a27-460a-a16c-ebf0c3cdeac3";
@@ -512,7 +512,9 @@ describe("DocumentLibraryView", () => {
         name: "Tabla de documentos, desplazable horizontalmente",
       }),
     ).toHaveAttribute("tabindex", "0");
-    expect(screen.queryByRole("region", { name: /^Documentos de / })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: /^Documentos de / }),
+    ).toBeNull();
   });
 
   it("does not display a misleading count for an unmanageable parent module", () => {
@@ -535,7 +537,9 @@ describe("DocumentLibraryView", () => {
       />,
     );
 
-    expect(screen.getByRole("link", { name: "Evaluación docente" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Evaluación docente" }),
+    ).toBeVisible();
     // Sin módulos con documentos se conserva la invitación a cargar desde Módulos.
     expect(screen.getByText("Aún no hay documentos registrados")).toBeVisible();
   });
@@ -568,6 +572,70 @@ describe("DocumentLibraryView", () => {
       screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
     ).toHaveAttribute("href", `/admin/documents?moduleId=${remuneracionesId}`);
     expect(screen.queryByText(/^Mostrando/)).toBeNull();
+  });
+
+  it("adelanta la consulta del módulo cuando el puntero entra en la fila", () => {
+    vi.mocked(loadHistoryModulePage).mockClear();
+    vi.mocked(loadHistoryModulePage).mockResolvedValue({
+      page: { items: [], limit: 3, offset: 0, total: 0 },
+      status: "ok",
+    });
+
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyGrouped
+        historyLayout
+        historyModuleId={moduleId}
+        library={{ items: [document], limit: 3, offset: 0, total: 1 }}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    fireEvent.pointerEnter(
+      screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
+    );
+
+    // La consulta se adelanta antes del clic, así el panel abre sin espera.
+    expect(loadHistoryModulePage).toHaveBeenCalledWith(remuneracionesId);
+  });
+
+  it("completa el panel inicial sin esperar la consulta en el servidor", async () => {
+    vi.mocked(loadHistoryModulePage).mockClear();
+    vi.mocked(loadHistoryModulePage).mockResolvedValue({
+      page: { items: [document], limit: 3, offset: 0, total: 29 },
+      status: "ok",
+    });
+
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyGrouped
+        historyLayout
+        historyModuleId={remuneracionesId}
+        initialPagePending
+        library={{ items: [], limit: 3, offset: 0, total: 0 }}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    // El conteo viene del resumen: el módulo ya no se muestra vacío mientras
+    // carga, y la consulta se pide al montar en lugar de esperarla en el
+    // servidor.
+    expect(screen.queryByText("0 documentos")).toBeNull();
+    expect(loadHistoryModulePage).toHaveBeenCalledWith(remuneracionesId);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", {
+          name: "Documentos de Remuneraciones, desplazable horizontalmente",
+        }),
+      ).toBeVisible(),
+    );
   });
 
   it("keeps the open module expanded when another module is opened", async () => {
