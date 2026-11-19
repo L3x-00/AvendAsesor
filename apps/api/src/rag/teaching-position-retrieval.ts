@@ -124,6 +124,12 @@ export function teachingPositionEvidenceQueries(question: string): string[] {
       INTENT_EXPANSIONS.TEACHING_HOURS_TABLE,
       INTENT_EXPANSIONS.TEACHING_HOURS_ASSIGNMENT,
     );
+    // «Quién decide» apunta al procedimiento de aprobación del cuadro, no a la
+    // definición general. Se añade solo con esa señal para no desviar las
+    // preguntas de qué es o cuántas horas corresponden.
+    if (HOUR_DECISION.test(normalizeSpanishText(question))) {
+      queries.push(INTENT_EXPANSIONS.TEACHING_HOURS_DECISION);
+    }
   }
   if (isPositionConditionQuestion(question)) {
     queries.push(

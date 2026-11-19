@@ -403,6 +403,10 @@ export const INTENT_EXPANSIONS = {
     'cuadro de distribución de horas de clase jornada laboral docente institución educativa',
   TEACHING_HOURS_ASSIGNMENT:
     'asignación de horas pedagógicas carga horaria docente nivel inicial primaria secundaria',
+  /** Para «quién decide cuántas horas me tocan»: el corpus nombra al comité de
+   * cuadro de horas y a la DRE/UGEL que lo conforma, no una regla de jornada. */
+  TEACHING_HOURS_DECISION:
+    'comité de cuadro de horas responsable aprobación distribución de horas pedagógicas DRE UGEL director institución educativa',
   POSITION_SURPLUS:
     'plazas excedentes reducción de plazas reubicación del personal docente',
   POSITION_CLASSIFIER_DETAIL:
@@ -507,8 +511,12 @@ export const INTENT_ROUTING: IntentRoutingConfig = {
     ),
     route(
       'teaching-hours',
-      ['HOURS_DISTRIBUTION', 'HOUR_ASSIGNMENT'],
-      ['TEACHING_HOURS_PROCESS', 'TEACHING_HOURS_TABLE'],
+      ['HOURS_DISTRIBUTION', 'HOUR_ASSIGNMENT', 'HOUR_DECISION'],
+      [
+        'TEACHING_HOURS_PROCESS',
+        'TEACHING_HOURS_TABLE',
+        'TEACHING_HOURS_DECISION',
+      ],
     ),
     route(
       'position-condition',

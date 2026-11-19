@@ -241,6 +241,18 @@ describe('teaching-position-retrieval', () => {
       ).toContain('clasificador de cargos');
     });
 
+    it('apunta al procedimiento de aprobación solo cuando preguntan quién decide', () => {
+      const decision =
+        teachingPositionEvidenceQueries(decisionQuestion).join(' ');
+      expect(decision).toContain('comité de cuadro de horas');
+      expect(decision).toContain('DRE UGEL');
+
+      const definition =
+        teachingPositionEvidenceQueries(hoursQuestion).join(' ');
+      expect(definition).toContain('cuadro de distribución de horas');
+      expect(definition).not.toContain('comité de cuadro de horas');
+    });
+
     it('no propone consultas canónicas para otro trámite', () => {
       expect(
         teachingPositionEvidenceQueries(
