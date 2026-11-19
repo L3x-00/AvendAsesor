@@ -165,17 +165,46 @@ describe("contratos de presentación del chat en teléfono", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("los documentos y temas evitan crear tarjetas adicionales", () => {
+  it("los documentos evitan crear tarjetas y los temas son fichas en la pantalla inicial", () => {
     const downloadsToggle = ruleBody(sourceStyles, ".foldToggle");
     expect(downloadsToggle).toMatch(/background:\s*transparent/u);
     expect(downloadsToggle).toMatch(/border:\s*0/u);
 
-    const topic = ruleBody(
+    // Con la conversación abierta los temas siguen siendo una guía discreta…
+    const conversationTopic = ruleBody(
       teacherStyles,
       ".avend-chat-submodule-tag",
     );
-    expect(topic).toMatch(/border-radius:\s*0/u);
-    expect(topic).toMatch(/border-left:\s*0\.1875rem solid transparent/u);
+    expect(conversationTopic).toMatch(/background:\s*transparent/u);
+    expect(conversationTopic).toMatch(/border-radius:\s*0/u);
+
+    // …y en la pantalla inicial del tema se leen como fichas.
+    const startTopic = ruleBody(
+      teacherStyles,
+      ".avend-chat-page--topic-start .avend-chat-submodule-tag",
+    );
+    expect(startTopic).toMatch(/background:\s*#eaf3ff/u);
+    expect(startTopic).toMatch(/border-radius:\s*0\.7rem/u);
+  });
+
+  it("el icono de cada tema conserva tamaño y trazo fuera de la pantalla inicial", () => {
+    // La fila de temas también se muestra con la conversación abierta: si el
+    // tamaño viviera solo en `--topic-start`, el SVG se pintaría a tamaño
+    // natural y rompería la fila.
+    const icon = ruleBody(
+      teacherStyles,
+      ".avend-chat-submodule-tag .avend-chat-submodule-icon",
+    );
+    expect(icon).toMatch(/height:\s*1\.375rem/u);
+    expect(icon).toMatch(/width:\s*1\.375rem/u);
+
+    const glyph = ruleBody(
+      teacherStyles,
+      ".avend-chat-submodule-tag .avend-chat-submodule-icon svg",
+    );
+    expect(glyph).toMatch(/stroke:\s*currentColor/u);
+    expect(glyph).toMatch(/width:\s*100%/u);
+    expect(glyph).toMatch(/height:\s*100%/u);
   });
 
   it("los documentos se despliegan con una transición breve y reducible", () => {

@@ -973,6 +973,26 @@ describe("ChatPanel", () => {
     expect(
       screen.getByRole("button", { name: "¿Qué requisitos necesito para…?" }),
     ).toBeVisible();
+    // El foco vuelve al cuadro para seguir escribiendo sin tocar el ratón.
+    await waitFor(() =>
+      expect(document.getElementById("chat-question")).toHaveFocus(),
+    );
+  });
+
+  it("acompaña la pantalla inicial con la nota de referencia legal, también en un tema", () => {
+    const { container, rerender } = render(<ChatPanel modules={[chatModule]} />);
+    const generalNote = container.querySelector(".avend-chat-reference-note");
+
+    expect(generalNote).not.toBeNull();
+    expect(generalNote).toHaveTextContent(/no reemplaza la normativa vigente/u);
+
+    rerender(
+      <ChatPanel initialModuleId={chatModule.id} modules={[chatModule]} />,
+    );
+    const topicNote = container.querySelector(".avend-chat-reference-note");
+
+    expect(topicNote).not.toBeNull();
+    expect(topicNote).toHaveTextContent(/no reemplaza la normativa vigente/u);
   });
 
   it("sustituye el texto transmitido por la respuesta definitiva y escribe las fechas en lenguaje natural", async () => {
