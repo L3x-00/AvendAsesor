@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { loadHistoryModulePage } from "@/app/admin/documents/actions";
 import { parseDocumentLibraryQuery } from "@/lib/admin-api/document-library-query";
 import type {
   DocumentLibraryItem,
@@ -11,6 +12,12 @@ import { DocumentLibraryView } from "./document-library-view";
 vi.mock("@/app/admin/actions", () => ({
   deleteDocumentAction: vi.fn(async () => ({ status: "idle" })),
   setDocumentTechnicalStatusAction: vi.fn(async () => ({ status: "idle" })),
+}));
+
+// La vista pide los documentos de cada módulo a una server action: en la prueba
+// se responde con una página ya armada.
+vi.mock("@/app/admin/documents/actions", () => ({
+  loadHistoryModulePage: vi.fn(),
 }));
 
 const moduleId = "2bd75b4c-6a27-460a-a16c-ebf0c3cdeac3";
@@ -561,5 +568,59 @@ describe("DocumentLibraryView", () => {
       screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
     ).toHaveAttribute("href", `/admin/documents?moduleId=${remuneracionesId}`);
     expect(screen.queryByText(/^Mostrando/)).toBeNull();
+  });
+
+  it("keeps the open module expanded when another module is opened", async () => {
+    vi.mocked(loadHistoryModulePage).mockResolvedValue({
+      page: {
+        items: [{ ...document, title: "Ley 32498 de remuneraciones" }],
+        limit: 3,
+        offset: 0,
+        total: 2,
+      },
+      status: "ok",
+    });
+
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyGrouped
+        historyLayout
+        historyModuleId={moduleId}
+        library={{ items: [document], limit: 3, offset: 0, total: 1 }}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
+    );
+
+    const remuneracionesPanel = await screen.findByRole("region", {
+      name: "Documentos de Remuneraciones, desplazable horizontalmente",
+    });
+    expect(remuneracionesPanel).toBeVisible();
+    expect(loadHistoryModulePage).toHaveBeenCalledWith(remuneracionesId);
+
+    // El módulo anterior sigue abierto: no se cierra ni se recarga la vista.
+    expect(
+      screen.getByRole("region", {
+        name: "Documentos de Evaluación docente, desplazable horizontalmente",
+      }),
+    ).toBeVisible();
+
+    // El módulo abierto se puede contraer de forma explícita.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Contraer el módulo Remuneraciones" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", {
+          name: "Documentos de Remuneraciones, desplazable horizontalmente",
+        }),
+      ).toBeNull(),
+    );
   });
 });
