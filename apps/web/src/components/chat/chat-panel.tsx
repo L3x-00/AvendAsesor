@@ -828,11 +828,10 @@ export function ChatPanel({
         : [],
     [modules, activeParentId],
   );
-  // Pantalla inicial del chat general: sin tema elegido y sin mensajes. Es la
-  // única que estrena la bienvenida ilustrada; el chat de un tema conserva su
-  // encabezado compacto y su bienvenida breve.
-  const isGeneralWelcome = !activeParent && messages.length === 0;
-  const entrance = useChatEntrance(isGeneralWelcome);
+  // Pantalla inicial: sin mensajes todavía. La misma composición ilustrada
+  // sirve al chat general y al chat de un tema; solo cambia su contenido.
+  const isStartScreen = messages.length === 0;
+  const entrance = useChatEntrance(isStartScreen);
   const latestReportableAnswerId = useMemo(
     () =>
       [...messages]
@@ -1627,8 +1626,8 @@ export function ChatPanel({
       <section
         aria-labelledby="chat-title"
         className={`avend-chat-page${
-          isGeneralWelcome ? " avend-chat-page--general-empty" : ""
-        }`}
+          isStartScreen ? " avend-chat-page--start" : ""
+        }${isStartScreen && activeParent ? " avend-chat-page--topic-start" : ""}`}
         data-chat-entrance={entrance}
       >
         {/* La escena animada acompaña solo la cabecera inicial. La
@@ -1642,7 +1641,18 @@ export function ChatPanel({
           >
             <header className="avend-chat-header">
               <div>
-                <p className="avend-eyebrow">Consulta normativa</p>
+                {activeParent && isStartScreen ? (
+                  <button
+                    aria-label="Consulta normativa. Volver al chat general"
+                    className="avend-eyebrow avend-chat-back-link"
+                    onClick={() => changeModuleContext(undefined, true)}
+                    type="button"
+                  >
+                    Consulta normativa
+                  </button>
+                ) : (
+                  <p className="avend-eyebrow">Consulta normativa</p>
+                )}
                 <h1 id="chat-title">
                   {activeParent ? activeParent.name : "Chat general"}
                 </h1>
@@ -1666,7 +1676,6 @@ export function ChatPanel({
               </p>
             ) : activeParent && submodules.length > 0 ? (
               <SubmoduleFolder
-                disabled={isStreaming}
                 moduleName={activeParent.name}
                 submodules={submodules}
               />
@@ -1719,6 +1728,7 @@ export function ChatPanel({
                 );
                 questionInputRef.current?.focus();
               }}
+              topicCode={activeParent?.code}
               topicName={activeParent?.name}
             />
           ) : (
@@ -1978,7 +1988,7 @@ export function ChatPanel({
             <kbd>Enter</kbd> para enviar · <kbd>Shift</kbd> + <kbd>Enter</kbd>{" "}
             para una línea nueva
           </p>
-          {isGeneralWelcome ? (
+          {isStartScreen ? (
             <p className="avend-chat-reference-note">
               La información proporcionada es referencial y no reemplaza la
               normativa vigente.

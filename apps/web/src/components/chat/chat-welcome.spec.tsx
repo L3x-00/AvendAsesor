@@ -56,28 +56,61 @@ describe("ChatWelcome", () => {
     );
   });
 
-  it("presenta una guía compacta del tema sin la bienvenida extensa", () => {
+  it("presenta el tema con sus preguntas recomendadas", () => {
     render(
       <ChatWelcome
+        fullName="Ana"
         onSuggestion={vi.fn()}
+        topicCode="SITUACIONES_ADMINISTRATIVAS"
         topicName="Situaciones administrativas"
       />,
     );
 
     expect(
       screen.getByRole("heading", {
-        name: "Consulta sobre Situaciones administrativas.",
+        name: "Hola, Ana. Soy tu asesor para resolver dudas sobre Situaciones administrativas.",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Preguntas que puedes realizar:")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "¿Qué licencias puedo solicitar como docente?",
+      }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("button")).toHaveLength(4);
+    expect(
+      screen.queryByText(/Empieza con una de estas frases/u),
+    ).not.toBeInTheDocument();
+  });
+
+  it("cambia las preguntas según el tema y usa su nombre cuando no lo conoce", () => {
+    const { rerender } = render(
+      <ChatWelcome
+        onSuggestion={vi.fn()}
+        topicCode="REMUNERACIONES"
+        topicName="Remuneraciones"
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Soy tu asesor para resolver dudas sobre Remuneraciones.",
       }),
     ).toBeVisible();
     expect(
-      screen.queryByText(/Escribe una consulta sobre procesos/u),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
-        name: /Pausar mensajes de bienvenida|Reanudar mensajes de bienvenida/u,
+      screen.getByRole("button", {
+        name: "¿Qué asignaciones y bonificaciones me corresponden?",
       }),
-    ).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button")).toHaveLength(CHAT_STARTERS.length);
+    ).toBeVisible();
+
+    rerender(
+      <ChatWelcome onSuggestion={vi.fn()} topicName="Tema nuevo sin documentos" />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "¿Qué requisitos necesito para un trámite de Tema nuevo sin documentos?",
+      }),
+    ).toBeVisible();
   });
 
   it("mantiene el primer mensaje si el usuario redujo el movimiento", () => {
