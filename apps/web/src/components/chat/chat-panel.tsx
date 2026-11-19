@@ -130,6 +130,26 @@ export function canPrepareOrientation(
 const ORIENTATION_HINT =
   "Se abrirá una vista previa editable solo en sus datos de presentación.";
 
+/**
+ * Entrada de la pantalla inicial del chat general. JavaScript solo marca el
+ * primer fotograma ya pintado (`out` → `in`); las transiciones CSS —suaves y
+ * escalonadas— hacen el resto. Se marca también en el servidor, así que la
+ * tarjeta no aparece antes de su entrada; con menos movimiento se muestra de
+ * inmediato y sin JavaScript el CSS la deja visible (`@media scripting: none`).
+ */
+function useChatEntrance(active: boolean): "in" | "out" | undefined {
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!active || entered) return;
+    // El fotograma pinta primero el estado marcado por el servidor; el cambio
+    // llega en la siguiente vuelta y dispara la transición.
+    const frame = window.requestAnimationFrame(() => setEntered(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, entered]);
+  if (!active) return undefined;
+  return entered ? "in" : "out";
+}
+
 /** Marca de inicio de un turno (fuera del render: lo llama el envío). */
 function turnStartedAt(): number {
   return Date.now();
@@ -808,6 +828,11 @@ export function ChatPanel({
         : [],
     [modules, activeParentId],
   );
+  // Pantalla inicial del chat general: sin tema elegido y sin mensajes. Es la
+  // única que estrena la bienvenida ilustrada; el chat de un tema conserva su
+  // encabezado compacto y su bienvenida breve.
+  const isGeneralWelcome = !activeParent && messages.length === 0;
+  const entrance = useChatEntrance(isGeneralWelcome);
   const latestReportableAnswerId = useMemo(
     () =>
       [...messages]
@@ -1599,7 +1624,13 @@ export function ChatPanel({
       role={role}
       selectedModuleId={activeParentId}
     >
-      <section aria-labelledby="chat-title" className="avend-chat-page">
+      <section
+        aria-labelledby="chat-title"
+        className={`avend-chat-page${
+          isGeneralWelcome ? " avend-chat-page--general-empty" : ""
+        }`}
+        data-chat-entrance={entrance}
+      >
         {/* La escena animada acompaña solo la cabecera inicial. La
             conversación y el cuadro de consulta quedan sobre el fondo neutro
             para que el texto conserve todo su contraste. */}
@@ -1618,6 +1649,11 @@ export function ChatPanel({
                 {activeParent?.description ? (
                   <p className="avend-chat-module-description">
                     {activeParent.description}
+                  </p>
+                ) : !activeParent ? (
+                  <p className="avend-chat-module-description">
+                    Resuelve dudas académicas sobre procesos, requisitos y
+                    normativa del ámbito educativo.
                   </p>
                 ) : null}
               </div>
@@ -1933,6 +1969,7 @@ export function ChatPanel({
             aria-atomic="true"
             aria-live="polite"
             className="avend-chat-status"
+            data-default={status ? undefined : ""}
           >
             {status ??
               "Las respuestas se sustentan en los documentos disponibles."}
@@ -1941,6 +1978,12 @@ export function ChatPanel({
             <kbd>Enter</kbd> para enviar · <kbd>Shift</kbd> + <kbd>Enter</kbd>{" "}
             para una línea nueva
           </p>
+          {isGeneralWelcome ? (
+            <p className="avend-chat-reference-note">
+              La información proporcionada es referencial y no reemplaza la
+              normativa vigente.
+            </p>
+          ) : null}
         </form>
         {/* Destino del desplazamiento automático: DESPUÉS del error y del
             cuadro de consulta, para que ambos queden a la vista. */}
