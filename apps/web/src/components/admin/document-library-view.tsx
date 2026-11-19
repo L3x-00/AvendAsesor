@@ -26,6 +26,16 @@ import {
 import { DocumentRowActions } from "./document-row-actions";
 import styles from "./document-library-view.module.css";
 
+/**
+ * Documentos de un módulo para la vista general del Historial: la página los
+ * consulta ya acotados al módulo, así la tabla del panel y su total son
+ * coherentes sin repetir la consulta en el cliente.
+ */
+export interface HistoryModulePreview {
+  moduleId: string;
+  page: DocumentLibraryPage;
+}
+
 interface DocumentLibraryViewProps {
   activeFilterCount: number;
   basePath?: string;
@@ -34,6 +44,11 @@ interface DocumentLibraryViewProps {
   modules: ManagedModule[];
   /** Resumen con cantidades para la vista general de Historial. */
   moduleSummaries?: ManagedModuleSummary[];
+  /**
+   * Vista general del Historial agrupada por módulo. Si llega vacío se asume
+   * una consulta con filtros y se muestra la tabla de resultados plana.
+   */
+  modulePreviews?: HistoryModulePreview[];
   query: ParsedDocumentLibraryQuery;
   /**
    * Acciones rápidas de administración en la columna Acciones (eliminar y
@@ -325,6 +340,108 @@ function ModuleIcon({ name }: { name: string }) {
   );
 }
 
+function ChevronIcon({ direction }: { direction: "down" | "up" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`${styles.chevron} ${
+        direction === "up" ? styles.chevronUp : ""
+      }`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/**
+ * En pantallas pequeñas la tabla del panel no cabe: cada documento se resume
+ * con el mismo contenido imprescindible (título, tipo, situación y estado) y
+ * las mismas acciones, sin perder ningún control.
+ */
+function PreviewDocumentCard({
+  document,
+  quickActions,
+}: {
+  document: DocumentLibraryItem;
+  quickActions: boolean;
+}) {
+  return (
+    <li className={styles.previewCard}>
+      <Link
+        className={`${styles.cardTitle} text-lg`}
+        href={`/admin/documents/${document.id}`}
+        title={document.title}
+      >
+        {document.title}
+      </Link>
+      <p className="mt-1 text-base text-avend-text-muted">
+        {displayedDocumentType(document)}
+        {document.resolutionNumber ? ` · ${document.resolutionNumber}` : ""}
+      </p>
+      <MissingPdfNote document={document} />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <SituationBadge document={document} />
+        <TechnicalBadge document={document} />
+      </div>
+      <dl className="mt-3 grid gap-2 text-base">
+        <div>
+          <dt className="font-semibold">Año / entidad</dt>
+          <dd>
+            {document.issuanceYear ?? "—"} · {displayedIssuingEntity(document)}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-semibold">Fecha de carga</dt>
+          <dd>
+            <time dateTime={document.createdAt}>
+              {dateFormatter.format(new Date(document.createdAt))}
+            </time>{" "}
+            · {document.createdByName ?? "Cuenta no disponible"}
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-4">
+        <DocumentActions
+          document={document}
+          quickActions={quickActions}
+          variant="card"
+        />
+      </div>
+    </li>
+  );
+}
+
+function EmptyLibraryState({
+  activeFilterCount,
+}: {
+  activeFilterCount: number;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-6">
+      <h3 className="text-lg font-bold">
+        {activeFilterCount > 0
+          ? "No encontramos coincidencias"
+          : "Aún no hay documentos registrados"}
+      </h3>
+      <p className="mt-2 text-base leading-7 text-avend-text-muted">
+        {activeFilterCount > 0
+          ? "Prueba con menos filtros, revisa la ortografía o usa una palabra más general."
+          : "La carga se realiza desde Módulos, dentro del módulo o submódulo correspondiente."}
+      </p>
+      {activeFilterCount === 0 ? (
+        <Link
+          className="mt-4 inline-flex min-h-11 items-center rounded-md bg-avend-navy px-4 text-base font-semibold text-white"
+          href="/admin/modules"
+        >
+          Ir a Módulos
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 export function DocumentLibraryView({
   activeFilterCount,
   basePath = "/admin/documents",
@@ -332,6 +449,7 @@ export function DocumentLibraryView({
   library,
   lockLocation = false,
   modules,
+  modulePreviews = [],
   moduleSummaries = [],
   query,
   quickActions = false,
@@ -367,32 +485,38 @@ export function DocumentLibraryView({
   const historyModules = moduleSummaries
     .filter((module) => !module.isDeleted && !module.parentModuleId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
+  const historyOverview =
+    historyLayout && modulePreviews.length > 0 && historyModules.length > 0;
+  const previewByModule = new Map(
+    modulePreviews.map((preview) => [preview.moduleId, preview.page]),
+  );
+  // Sin elección explícita se muestra el primer módulo que tenga documentos:
+  // abrir uno vacío por defecto haría parecer vacío todo el Historial.
+  const defaultHistoryModuleId =
+    historyModules.find(
+      (module) => (previewByModule.get(module.id)?.total ?? 0) > 0,
+    )?.id ?? historyModules[0]?.id;
   const selectedHistoryModuleId = query.moduleId
     ? query.moduleId
     : query.submoduleId
       ? visibleModules.find((module) => module.id === query.submoduleId)
           ?.parentModuleId
-      : undefined;
-  const selectedHistoryModule = historyModules.find(
-    (module) => module.id === selectedHistoryModuleId,
-  );
+      : historyOverview
+        ? defaultHistoryModuleId
+        : undefined;
   const moduleHref = (moduleId: string) =>
     documentLibraryHref(
       { ...query, moduleId, offset: 0, page: 1, submoduleId: undefined },
       1,
       basePath,
     );
-  const allModulesHref = documentLibraryHref(
-    {
-      ...query,
-      moduleId: undefined,
-      offset: 0,
-      page: 1,
-      submoduleId: undefined,
-    },
-    1,
-    basePath,
-  );
+  // Sin documentos en ningún módulo la vista general queda vacía: se conserva
+  // la invitación a cargar desde Módulos en lugar de dejar solo paneles mudos.
+  const overviewIsEmpty =
+    historyOverview &&
+    historyModules.every(
+      (module) => (previewByModule.get(module.id)?.total ?? 0) === 0,
+    );
 
   return (
     <div
@@ -733,9 +857,6 @@ export function DocumentLibraryView({
         >
           <div className={styles.sectionHeading}>
             <h2 id="documents-by-module">Documentos por módulo</h2>
-            {selectedHistoryModule ? (
-              <Link href={allModulesHref}>Ver todos</Link>
-            ) : null}
           </div>
           <div className={styles.moduleRail}>
             {historyModules.map((module) => {
@@ -747,8 +868,10 @@ export function DocumentLibraryView({
                   href={moduleHref(module.id)}
                   key={module.id}
                 >
-                  <ModuleIcon name={module.name} />
-                  <span>
+                  <span className={styles.moduleCardIcon}>
+                    <ModuleIcon name={module.name} />
+                  </span>
+                  <span className={styles.moduleCardText}>
                     <strong>{module.name}</strong>
                     {module.canManage !== false ? (
                       <small>
@@ -763,44 +886,192 @@ export function DocumentLibraryView({
               );
             })}
           </div>
+
+          {historyOverview ? (
+            <div className={styles.modulePanels}>
+              {historyModules.map((module) => {
+                const preview = previewByModule.get(module.id);
+                const expanded =
+                  module.id === selectedHistoryModuleId && preview !== undefined;
+
+                if (!expanded) {
+                  return (
+                    <Link
+                      aria-label={`Abrir el módulo ${module.name}`}
+                      className={styles.moduleRow}
+                      href={moduleHref(module.id)}
+                      key={module.id}
+                    >
+                      <span className={styles.moduleRowIcon}>
+                        <ModuleIcon name={module.name} />
+                      </span>
+                      <span className={styles.moduleRowName}>{module.name}</span>
+                      {module.canManage !== false ? (
+                        <span className={styles.moduleRowCount}>
+                          {module.documentCount}{" "}
+                          {module.documentCount === 1
+                            ? "documento"
+                            : "documentos"}
+                        </span>
+                      ) : (
+                        <span className={styles.moduleRowCount} />
+                      )}
+                      <ChevronIcon direction="down" />
+                    </Link>
+                  );
+                }
+
+                const total = preview.total;
+                const shown = preview.items.length;
+                return (
+                  <article className={styles.modulePanel} key={module.id}>
+                    <header className={styles.modulePanelHeader}>
+                      <span className={styles.moduleRowIcon}>
+                        <ModuleIcon name={module.name} />
+                      </span>
+                      <h3>{module.name}</h3>
+                      <span className={styles.modulePanelCount}>
+                        {total} {total === 1 ? "documento" : "documentos"}
+                      </span>
+                      <ChevronIcon direction="up" />
+                    </header>
+
+                    {shown === 0 ? (
+                      <p className={styles.modulePanelEmpty}>
+                        Este módulo todavía no tiene documentos registrados.
+                      </p>
+                    ) : (
+                      <>
+                        {/*
+                          Dentro de un módulo la columna «Módulo / Submódulo»
+                          repite el contexto del panel: se omite y cada fila se
+                          resume en una sola línea, como en el diseño de
+                          referencia.
+                        */}
+                        <div
+                          aria-label={`Documentos de ${module.name}, desplazable horizontalmente`}
+                          className={styles.panelTableRegion}
+                          role="region"
+                          tabIndex={0}
+                        >
+                          <table className={styles.panelTable}>
+                            <thead>
+                              <tr>
+                                <th scope="col">Tipo / Número</th>
+                                <th scope="col">Año</th>
+                                <th scope="col">Entidad</th>
+                                <th scope="col">Situación</th>
+                                <th scope="col">Estado</th>
+                                <th scope="col">Fecha de carga</th>
+                                <th
+                                  className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} ${styles.panelActionsCell}`}
+                                  scope="col"
+                                >
+                                  Acciones
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {preview.items.map((document) => (
+                                <tr key={document.id}>
+                                  <th scope="row">
+                                    <Link
+                                      className={styles.panelTitleLink}
+                                      href={`/admin/documents/${document.id}`}
+                                      title={document.title}
+                                    >
+                                      {document.title}
+                                    </Link>
+                                    <span className={styles.panelType}>
+                                      {displayedDocumentType(document)}
+                                      {document.resolutionNumber
+                                        ? ` · ${document.resolutionNumber}`
+                                        : ""}
+                                    </span>
+                                    <MissingPdfNote document={document} />
+                                  </th>
+                                  <td>{document.issuanceYear ?? "—"}</td>
+                                  <td>{displayedIssuingEntity(document)}</td>
+                                  <td>
+                                    <SituationBadge document={document} />
+                                  </td>
+                                  <td>
+                                    <TechnicalBadge document={document} />
+                                  </td>
+                                  <td>
+                                    <time dateTime={document.createdAt}>
+                                      {dateFormatter.format(
+                                        new Date(document.createdAt),
+                                      )}
+                                    </time>
+                                  </td>
+                                  <td
+                                    className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""}`}
+                                  >
+                                    <DocumentActions
+                                      document={document}
+                                      quickActions={quickActions}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <ul className={styles.previewCards} role="list">
+                          {preview.items.map((document) => (
+                            <PreviewDocumentCard
+                              document={document}
+                              key={document.id}
+                              quickActions={quickActions}
+                            />
+                          ))}
+                        </ul>
+                      </>
+                    )}
+
+                    <footer className={styles.modulePanelFooter}>
+                      <span>
+                        Mostrando {shown} de {total}{" "}
+                        {total === 1 ? "documento" : "documentos"}
+                      </span>
+                      <Link href={`/admin/modules/${module.id}`}>
+                        <span>Ver todos en {module.name}</span>
+                        <span aria-hidden="true"> →</span>
+                      </Link>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {overviewIsEmpty ? (
+            <div className={styles.modulePanels}>
+              <EmptyLibraryState activeFilterCount={activeFilterCount} />
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      <section
-        aria-labelledby="document-library-results"
-        className={styles.resultsSection}
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="text-xl font-bold" id="document-library-results">
-            {selectedHistoryModule ? selectedHistoryModule.name : resultsTitle}
-          </h2>
-          <p aria-live="polite" className="text-base text-avend-text-muted">
-            {library.total} {library.total === 1 ? "documento" : "documentos"}
-          </p>
-        </div>
-
-        {library.items.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-6">
-            <h3 className="text-lg font-bold">
-              {activeFilterCount > 0
-                ? "No encontramos coincidencias"
-                : "Aún no hay documentos registrados"}
-            </h3>
-            <p className="mt-2 text-base leading-7 text-avend-text-muted">
-              {activeFilterCount > 0
-                ? "Prueba con menos filtros, revisa la ortografía o usa una palabra más general."
-                : "La carga se realiza desde Módulos, dentro del módulo o submódulo correspondiente."}
+      {historyOverview ? null : (
+        <section
+          aria-labelledby="document-library-results"
+          className={styles.resultsSection}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-xl font-bold" id="document-library-results">
+              {historyLayout ? "Resultados" : resultsTitle}
+            </h2>
+            <p aria-live="polite" className="text-base text-avend-text-muted">
+              {library.total}{" "}
+              {library.total === 1 ? "documento" : "documentos"}
             </p>
-            {activeFilterCount === 0 ? (
-              <Link
-                className="mt-4 inline-flex min-h-11 items-center rounded-md bg-avend-navy px-4 text-base font-semibold text-white"
-                href="/admin/modules"
-              >
-                Ir a Módulos
-              </Link>
-            ) : null}
           </div>
-        ) : (
+
+          {library.items.length === 0 ? (
+            <EmptyLibraryState activeFilterCount={activeFilterCount} />
+          ) : (
           <>
             {/*
               Cada documento ocupa dos filas: el título a lo ancho de toda la
@@ -1007,7 +1278,8 @@ export function DocumentLibraryView({
             </div>
           </nav>
         ) : null}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
