@@ -2,6 +2,7 @@ import { unstable_rethrow } from "next/navigation";
 import { ChatHistoryList } from "@/components/chat/chat-history-list";
 import { resolveAuthorizedChatContext } from "@/lib/chat-api/authorized-client";
 import type { ChatConversationPage } from "@/lib/chat-api/types";
+import styles from "@/components/chat/chat-history-list.module.css";
 
 /**
  * Instante de esta petición. Es a propósito un valor "impuro": el servidor lo
@@ -37,7 +38,7 @@ export default async function HistoryPage({
 
   return (
     <section aria-labelledby="history-title" className="avend-content-page">
-      <header className="avend-content-header">
+      <header className={`avend-content-header ${styles.historyHeader}`}>
         <p className="avend-eyebrow">Tu actividad</p>
         {/* tabIndex=-1: destino del foco al quitar la última consulta visible
             o al cerrar el aviso de confirmación. */}

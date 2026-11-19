@@ -95,6 +95,74 @@ describe("ChatHistoryList", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("filtra la página sin cambiar sus contadores y permite abrir y cerrar el grupo", async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatHistoryList
+        conversations={[conversation, second]}
+        nextCursor="otro"
+      />,
+    );
+    expect(screen.getByText("Consultas en total")).toBeVisible();
+    expect(screen.getByText("Temas de consulta")).toBeVisible();
+    expect(
+      screen.getByText(/La búsqueda se aplica a las consultas de esta página/),
+    ).toBeVisible();
+    await user.type(
+      screen.getByRole("searchbox", {
+        name: "Buscar en mi historial",
+      }),
+      "licencias",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Licencias por salud" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Permiso por capacitación" }),
+    ).toBeNull();
+    const summary = screen.getByText("Consultas generales").closest("summary");
+    if (!summary) throw new Error("Falta el grupo de consultas generales");
+    await user.click(summary);
+    expect(summary.closest("details")).not.toHaveAttribute("open");
+    await user.click(summary);
+    expect(
+      screen.getByRole("heading", { name: "Licencias por salud" }),
+    ).toBeVisible();
+  });
+
+  it("al retirar una consulta no envía el foco a un grupo cerrado", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<DeleteConversationResult>();
+    deleteConversationAction.mockReturnValueOnce(pending.promise);
+    const other = {
+      ...second,
+      selectedModuleId: "m1",
+      selectedModuleName: "Remuneraciones",
+    };
+    render(
+      <>
+        <h1 id="history-title" tabIndex={-1}>
+          Historial de consultas
+        </h1>
+        <ChatHistoryList
+          conversations={[conversation, other]}
+          nextCursor={null}
+        />
+      </>,
+    );
+    const summary = screen.getByText("Remuneraciones").closest("summary");
+    if (!summary) throw new Error("Falta el grupo de remuneraciones");
+    await user.click(summary);
+    await confirmRemoval(user, "Licencias por salud");
+    expect(
+      screen.getByRole("heading", { name: "Historial de consultas" }),
+    ).toHaveFocus();
+    await act(async () => pending.resolve({ status: "removed" }));
+    expect(
+      await screen.findByRole("dialog", { name: REMOVED_TITLE }),
+    ).toBeVisible();
+  });
+
   it("communicates an explicit empty state instead of inventing history", () => {
     render(<ChatHistoryList conversations={[]} nextCursor={null} />);
 
@@ -107,14 +175,24 @@ describe("ChatHistoryList", () => {
   });
 
   it("señala las consultas que ya tienen información nueva", () => {
-    const other = { ...conversation, id: "8c8b56af-6d0c-4fef-881e-7c00907540dd", title: "Otra" };
+    const other = {
+      ...conversation,
+      id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+      title: "Otra",
+    };
     const { rerender } = render(
       <ChatHistoryList
         conversations={[conversation, other]}
         nextCursor={null}
         updates={[
-          { conversationId: conversation.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
-          { conversationId: "no-visible", resolvedAt: "2026-09-26T10:00:00.000Z" },
+          {
+            conversationId: conversation.id,
+            resolvedAt: "2026-09-26T10:00:00.000Z",
+          },
+          {
+            conversationId: "no-visible",
+            resolvedAt: "2026-09-26T10:00:00.000Z",
+          },
           // Volvió a preguntar después de resolverse: sin aviso.
           { conversationId: other.id, resolvedAt: "2026-08-01T10:00:00.000Z" },
         ]}
@@ -131,7 +209,10 @@ describe("ChatHistoryList", () => {
         conversations={[conversation, other]}
         nextCursor={null}
         updates={[
-          { conversationId: conversation.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
+          {
+            conversationId: conversation.id,
+            resolvedAt: "2026-09-26T10:00:00.000Z",
+          },
           { conversationId: other.id, resolvedAt: "2026-09-26T10:00:00.000Z" },
         ]}
       />,
@@ -143,7 +224,9 @@ describe("ChatHistoryList", () => {
 
   it("pide confirmación antes de quitar y el foco va a la salida segura", async () => {
     const user = userEvent.setup();
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+    render(
+      <ChatHistoryList conversations={[conversation]} nextCursor={null} />,
+    );
 
     expect(
       screen.getByRole("link", { name: "Retomar consulta" }),
@@ -181,7 +264,8 @@ describe("ChatHistoryList", () => {
     ).toBeNull();
     // El foco no se pierde: pasa a la consulta vecina.
     expect(
-      screen.getByRole("heading", { name: "Permiso por capacitación" })
+      screen
+        .getByRole("heading", { name: "Permiso por capacitación" })
         .closest("li"),
     ).toHaveFocus();
 
@@ -231,15 +315,21 @@ describe("ChatHistoryList", () => {
     await confirmRemoval(user, "Licencias por salud");
 
     const dialog = await screen.findByRole("dialog", { name: REMOVED_TITLE });
-    expect(dialog).toHaveAccessibleDescription(/Te mostramos el inicio de tu historial/);
+    expect(dialog).toHaveAccessibleDescription(
+      /Te mostramos el inicio de tu historial/,
+    );
     expect(replace).toHaveBeenCalledExactlyOnceWith("/history");
     expect(refresh).not.toHaveBeenCalled();
   });
 
   it("si ya se había quitado en otro dispositivo, lo trata como hecho y no pide recargar", async () => {
     const user = userEvent.setup();
-    deleteConversationAction.mockResolvedValueOnce({ status: "already-removed" });
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+    deleteConversationAction.mockResolvedValueOnce({
+      status: "already-removed",
+    });
+    render(
+      <ChatHistoryList conversations={[conversation]} nextCursor={null} />,
+    );
 
     await confirmRemoval(user, "Licencias por salud");
 
@@ -255,7 +345,9 @@ describe("ChatHistoryList", () => {
       message: "No tienes permiso para quitar esta consulta.",
       status: "error",
     });
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+    render(
+      <ChatHistoryList conversations={[conversation]} nextCursor={null} />,
+    );
 
     await confirmRemoval(user, "Licencias por salud");
 
@@ -322,7 +414,9 @@ describe("ChatHistoryList", () => {
     const user = userEvent.setup();
     const pending = deferred<DeleteConversationResult>();
     deleteConversationAction.mockReturnValueOnce(pending.promise);
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+    render(
+      <ChatHistoryList conversations={[conversation]} nextCursor={null} />,
+    );
 
     await confirmRemoval(user, "Licencias por salud");
     window.history.pushState(null, "", "/chat");
@@ -380,9 +474,13 @@ describe("ChatHistoryList", () => {
   });
   it("cancelar la confirmación no quita nada y devuelve el foco", async () => {
     const user = userEvent.setup();
-    render(<ChatHistoryList conversations={[conversation]} nextCursor={null} />);
+    render(
+      <ChatHistoryList conversations={[conversation]} nextCursor={null} />,
+    );
 
-    await user.click(screen.getByRole("button", { name: "Quitar del historial" }));
+    await user.click(
+      screen.getByRole("button", { name: "Quitar del historial" }),
+    );
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
     expect(deleteConversationAction).not.toHaveBeenCalled();
@@ -395,9 +493,7 @@ describe("ChatHistoryList", () => {
 
   it("si la lista no se pudo pedir, muestra un aviso en línea con «Actualizar»", async () => {
     const user = userEvent.setup();
-    render(
-      <ChatHistoryList conversations={[]} loadFailed nextCursor={null} />,
-    );
+    render(<ChatHistoryList conversations={[]} loadFailed nextCursor={null} />);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "No pudimos mostrar tu historial en este momento",
