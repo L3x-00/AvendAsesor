@@ -1963,3 +1963,442 @@ ul.avend-chat-list {
   margin-top: 0.375rem;
   padding: 0.125rem 0.625rem;
 }
+
+/* =========================================================================
+   Chat general (pantalla inicial): la bienvenida como una sola tarjeta
+   ilustrada, cabecera editorial y cuadro de consulta centrado.
+   Solo aplica cuando no hay tema elegido y todavía no hay mensajes: el chat
+   de un tema conserva su bienvenida compacta y su contexto.
+   ========================================================================= */
+.avend-chat-page--general-empty {
+  --avend-chat-general-width: 56rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-hero,
+.avend-chat-page--general-empty .avend-chat-workspace-transition,
+.avend-chat-page--general-empty .avend-chat-conversation,
+.avend-chat-page--general-empty .avend-chat-composer {
+  max-width: var(--avend-chat-general-width);
+}
+
+/* La escena WebGPU se retira: la tarjeta de bienvenida ya trae su propio
+   degradado y dos fondos azules a la vez competían entre sí. */
+.avend-chat-page--general-empty .avend-chat-aero-shards {
+  display: none;
+}
+
+.avend-chat-page--general-empty .avend-chat-hero {
+  padding-bottom: clamp(1rem, 2vw, 1.5rem);
+}
+
+.avend-chat-page--general-empty .avend-chat-hero::before {
+  background: radial-gradient(
+    ellipse 42% 62% at 50% 0%,
+    rgb(206 235 255 / 65%),
+    transparent 100%
+  );
+}
+
+/* Cabecera: antetítulo en azul con retorno visual, título con burbuja y una
+   sola línea de contexto. Todo el bloque comparte el ancho de la tarjeta. */
+.avend-chat-page--general-empty .avend-chat-header {
+  padding: clamp(0.5rem, 1.5vw, 1rem) 0 0.25rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-header .avend-eyebrow {
+  align-items: center;
+  color: var(--avend-accent-strong);
+  display: flex;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.avend-chat-page--general-empty .avend-chat-header .avend-eyebrow::before {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23115eca' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 5-7 7 7 7'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  content: "";
+  flex: none;
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-header h1 {
+  align-items: center;
+  color: var(--avend-navy);
+  display: flex;
+  font-size: clamp(1.75rem, 2.6vw, 2.125rem);
+  font-weight: 700;
+  gap: 0.625rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0.25rem 0 0;
+}
+
+.avend-chat-page--general-empty .avend-chat-header h1::before {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231677ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 5.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8l-4 3.5v-3.5h-.9a2 2 0 0 1-2-2z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  content: "";
+  flex: none;
+  height: 1.625rem;
+  width: 1.625rem;
+}
+
+.avend-chat-page--general-empty
+  .avend-chat-header
+  .avend-chat-module-description {
+  color: #40556d;
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-top: 0.5rem;
+  max-width: 46rem;
+}
+
+/* ---------- Tarjeta de bienvenida ---------- */
+.avend-chat-page--general-empty .avend-chat-welcome--general {
+  background:
+    radial-gradient(ellipse 62% 46% at 50% 0%, #ffffff 0%, transparent 72%),
+    linear-gradient(180deg, #fbfdff 0%, #edf5ff 100%);
+  border: 1px solid #d9e7f7;
+  border-radius: 1.25rem;
+  box-shadow:
+    0 26px 54px -32px rgb(20 58 110 / 48%),
+    0 2px 8px rgb(20 58 110 / 5%);
+  /* La entrada la orquesta el panel con transiciones (ver más abajo). */
+  animation: none;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3.2vw, 2.25rem) clamp(1.25rem, 3.2vw, 2.5rem)
+    clamp(1.75rem, 3.2vw, 2.25rem);
+  position: relative;
+}
+
+/* Contenido sobre la curva decorativa. */
+.avend-chat-page--general-empty .avend-chat-welcome--general > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Curva azul de la esquina superior derecha: un óvalo recortado por la tarjeta
+   con un brillo blanco dentro, para la doble curva del diseño. */
+.avend-chat-page--general-empty .avend-chat-welcome--general::after {
+  background:
+    radial-gradient(
+      72% 68% at 100% 0%,
+      rgb(255 255 255 / 0%) 44%,
+      rgb(255 255 255 / 52%) 57%,
+      rgb(255 255 255 / 0%) 70%
+    ),
+    radial-gradient(
+      100% 100% at 100% 0%,
+      #cbe0fa 0%,
+      #dbecfe 40%,
+      #eaf4ff 62%,
+      rgb(237 245 255 / 0%) 88%
+    );
+  content: "";
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  pointer-events: none;
+  position: absolute;
+  height: 46%;
+  width: 60%;
+  z-index: 0;
+}
+
+.avend-chat-page--general-empty .avend-chat-welcome--general::before {
+  animation: avend-chat-bubble-float 8s ease-in-out infinite;
+  background: url("/icons/chat.webp") center / contain no-repeat;
+  content: "";
+  display: block;
+  margin: 0 auto -0.25rem;
+  position: relative;
+  width: clamp(9rem, 16vw, 13.5rem);
+  aspect-ratio: 178 / 100;
+  z-index: 1;
+}
+
+@keyframes avend-chat-bubble-float {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* Saludo: se reserva el alto de dos líneas porque el mensaje rota cada 3 s y
+   la tarjeta no debe dar saltos; el texto queda centrado en ese alto. */
+.avend-chat-page--general-empty .avend-chat-welcome--general h2 {
+  align-items: center;
+  color: #102750;
+  column-gap: 0.3ch;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: clamp(1.375rem, 2.2vw, 1.75rem);
+  font-weight: 700;
+  justify-content: center;
+  letter-spacing: -0.015em;
+  line-height: 1.32;
+  margin: 0 auto;
+  max-width: 44rem;
+  min-height: 2.25em;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.avend-chat-page--general-empty .avend-chat-welcome-text {
+  color: #455b73;
+  font-size: 1rem;
+  line-height: 1.65;
+  margin: 0.75rem auto 0;
+  max-width: 43rem;
+  text-align: center;
+}
+
+.avend-chat-page--general-empty .avend-chat-welcome-label {
+  align-items: center;
+  color: #1f3550;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 500;
+  gap: 0.5rem;
+  justify-content: center;
+  line-height: 1.5;
+  margin: 1.875rem auto 0;
+  max-width: 42rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-welcome-label::before {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231677ff'%3E%3Cpath d='M13.5 2 5 13.5h5.2L9.8 22 18.5 10.5h-5.2z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  content: "";
+  flex: none;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+/* ---------- Inicios de consulta ---------- */
+.avend-chat-page--general-empty .avend-chat-suggestions {
+  gap: 0.75rem 0.875rem;
+  margin-top: 1rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-suggestions button {
+  background: var(--avend-surface);
+  border: 1px solid #dbe8f6;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 1px 2px rgb(20 58 110 / 4%),
+    0 8px 18px -14px rgb(20 58 110 / 55%);
+  color: #1b3550;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.6875rem 0.875rem;
+  transition:
+    background-color 200ms var(--avend-ease-interaction),
+    border-color 200ms var(--avend-ease-interaction),
+    box-shadow 200ms var(--avend-ease-interaction),
+    transform 200ms var(--avend-ease-interaction);
+}
+
+.avend-chat-page--general-empty .avend-chat-suggestions button::before {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231677ff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5h7.2L18.5 9v11.5H6z'/%3E%3Cpath d='M13 3.5V9h5.5'/%3E%3Cpath d='M9 13h6M9 16.5h4'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  content: "";
+  flex: none;
+  height: 1.375rem;
+  width: 1.125rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-suggestions button span {
+  flex: 1;
+  text-align: left;
+}
+
+.avend-chat-page--general-empty
+  .avend-chat-suggestions
+  button:not(:disabled):hover {
+  background: #f7fbff;
+  border-color: #b9d8f6;
+  box-shadow:
+    0 2px 4px rgb(20 58 110 / 6%),
+    0 12px 22px -14px rgb(20 58 110 / 60%);
+  transform: translateY(-1px);
+}
+
+.avend-chat-page--general-empty
+  .avend-chat-suggestions
+  button:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* ---------- Cuadro de consulta ---------- */
+.avend-chat-page--general-empty .avend-chat-composer {
+  padding-top: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.avend-chat-page--general-empty
+  .avend-chat-composer
+  .avend-chat-input-shell {
+  background: var(--avend-surface);
+  border: 1px solid #dbe6f2;
+  border-radius: 999px;
+  box-shadow:
+    0 12px 32px -22px rgb(20 58 110 / 55%),
+    0 1px 2px rgb(20 58 110 / 5%);
+  padding: 0.375rem 0.375rem 0.375rem 1.25rem;
+}
+
+.avend-chat-page--general-empty
+  .avend-chat-composer
+  .avend-chat-input-shell:focus-within {
+  border-color: var(--avend-accent);
+  box-shadow:
+    0 0 0 3px var(--avend-soft-blue),
+    0 12px 32px -22px rgb(20 58 110 / 55%);
+}
+
+.avend-chat-page--general-empty .avend-chat-send {
+  background: var(--avend-accent);
+  box-shadow: 0 8px 16px -8px rgb(22 119 255 / 85%);
+}
+
+.avend-chat-page--general-empty .avend-chat-send:not(:disabled):hover {
+  background: var(--avend-accent-strong);
+}
+
+.avend-chat-page--general-empty .avend-chat-send:disabled {
+  background: #c7d6e6;
+  box-shadow: none;
+}
+
+/* Nota de sustento, atajos y aviso legal: una sola columna centrada. */
+.avend-chat-page--general-empty .avend-chat-status {
+  color: #455b73;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+.avend-chat-page--general-empty .avend-chat-status[data-default]::before {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23455b73' stroke-width='1.9' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 11v5.5M12 7.9v.01'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  content: "";
+  display: inline-block;
+  height: 1rem;
+  margin-inline-end: 0.375rem;
+  vertical-align: -0.15em;
+  width: 1rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-keyboard-hint {
+  color: #5a6f87;
+  margin-top: 0.125rem;
+}
+
+.avend-chat-page--general-empty .avend-chat-keyboard-hint kbd {
+  border-color: #d5e0ec;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 0 rgb(20 58 110 / 8%);
+  padding: 0.0625rem 0.4375rem;
+}
+
+.avend-chat-reference-note {
+  color: #6b7d92;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0.875rem auto 0.25rem;
+  max-width: 44rem;
+  text-align: center;
+}
+
+/* El marco ya muestra ese mismo aviso al pie: en la pantalla inicial se lee
+   junto al cuadro de consulta y no se repite más abajo. */
+.avend-teacher-main:has(.avend-chat-page--general-empty)
+  > .avend-teacher-disclaimer {
+  display: none;
+}
+
+/* Entrada de la pantalla inicial: el panel marca con `data-chat-entrance`
+   el primer fotograma ya pintado y estas transiciones escalonadas hacen el
+   resto. Sin JavaScript el atributo no existe y todo se ve completo. */
+.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-hero,
+.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-welcome,
+.avend-chat-page--general-empty[data-chat-entrance] .avend-chat-composer {
+  transition:
+    opacity 460ms var(--avend-ease-enter),
+    transform 460ms var(--avend-ease-enter);
+}
+
+.avend-chat-page--general-empty[data-chat-entrance]
+  .avend-chat-welcome {
+  transition-delay: 70ms;
+}
+
+.avend-chat-page--general-empty[data-chat-entrance]
+  .avend-chat-composer {
+  transition-delay: 140ms;
+}
+
+.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
+.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-welcome,
+.avend-chat-page--general-empty[data-chat-entrance="out"]
+  .avend-chat-composer {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (max-width: 47.99rem) {
+  .avend-chat-page--general-empty .avend-chat-welcome--general h2 {
+    min-height: 0;
+  }
+}
+
+/* Con dos columnas estrechas las frases se parten en dos líneas y las fichas
+   pierden la simetría del diseño: por debajo de 60rem van en una sola. */
+@media (max-width: 59.99rem) {
+  .avend-chat-page--general-empty .avend-chat-suggestions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avend-chat-page--general-empty .avend-chat-welcome--general::before {
+    animation: none;
+  }
+
+  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-hero,
+  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-welcome,
+  .avend-chat-page--general-empty[data-chat-entrance] .avend-chat-composer {
+    transition: none;
+  }
+}
+
+/* Red de seguridad: si la hidratación tarda, la pantalla se revela sola en
+   lugar de quedarse esperando el fotograma de JavaScript. */
+@keyframes avend-chat-entrance-fallback {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
+.avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-welcome,
+.avend-chat-page--general-empty[data-chat-entrance="out"]
+  .avend-chat-composer {
+  animation: avend-chat-entrance-fallback 1ms linear 1.2s forwards;
+}
+
+/* Sin JavaScript no hay fotograma que marque la entrada: la pantalla se
+   muestra completa en lugar de quedarse a la espera. */
+@media (scripting: none) {
+  .avend-chat-page--general-empty[data-chat-entrance="out"] .avend-chat-hero,
+  .avend-chat-page--general-empty[data-chat-entrance="out"]
+    .avend-chat-welcome,
+  .avend-chat-page--general-empty[data-chat-entrance="out"]
+    .avend-chat-composer {
+    opacity: 1;
+    transform: none;
+  }
+}
