@@ -1,9 +1,21 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createModuleAction, deleteModuleAction, setModuleStatusAction, updateModuleAction } from "@/app/admin/actions";
+import {
+  createModuleAction,
+  deleteModuleAction,
+  setModuleStatusAction,
+  updateModuleAction,
+} from "@/app/admin/actions";
 import type { AdminActionState } from "@/lib/admin-api/action-state";
 import { ModuleManageDetails } from "./modules-explorer";
 import { ModulesExplorer, type ModuleView } from "./modules-explorer";
@@ -72,9 +84,8 @@ describe("ModulesExplorer", () => {
       .getByRole("heading", { name: "Evaluación docente" })
       .closest("li");
     if (!evaluation) throw new Error("Missing module card");
-    expect(
-      within(evaluation).getByText("8 submódulos · 73 documentos"),
-    ).toBeVisible();
+    expect(within(evaluation).getByText("8 submódulos")).toBeVisible();
+    expect(within(evaluation).getByText("73 documentos")).toBeVisible();
     expect(within(evaluation).getByText("Activo")).toBeVisible();
     expect(
       within(evaluation).getByRole("link", { name: /Ingresar/ }),
@@ -84,13 +95,75 @@ describe("ModulesExplorer", () => {
       .getByRole("heading", { name: "Contrato y desplazamiento" })
       .closest("li");
     if (!contrato) throw new Error("Missing module card");
-    expect(
-      within(contrato).getByText("0 submódulos · 0 documentos"),
-    ).toBeVisible();
+    expect(within(contrato).getByText("0 submódulos")).toBeVisible();
+    expect(within(contrato).getByText("0 documentos")).toBeVisible();
     expect(within(contrato).getByText("Inactivo")).toBeVisible();
     expect(
       within(contrato).getByRole("link", { name: /Ingresar/ }),
     ).toHaveAttribute("href", "/admin/modules/m2");
+  });
+
+  it("shows the library summary with the three totals", () => {
+    render(
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={rootModules}
+        parents={parents}
+      />,
+    );
+
+    const summary = screen.getByLabelText("Resumen de módulos");
+    expect(within(summary).getByText("2")).toBeVisible();
+    expect(within(summary).getByText("8")).toBeVisible();
+    expect(within(summary).getByText("73")).toBeVisible();
+    expect(within(summary).getByText("Módulos registrados")).toBeVisible();
+    expect(within(summary).getByText("Submódulos en total")).toBeVisible();
+    expect(within(summary).getByText("Documentos vinculados")).toBeVisible();
+  });
+
+  it("switches between card and list views without losing the search", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={rootModules}
+        parents={parents}
+      />,
+    );
+    await user.type(
+      screen.getByRole("searchbox", {
+        name: "Buscar módulo por nombre o código",
+      }),
+      "contrato",
+    );
+    await user.click(screen.getByRole("button", { name: "Vista de lista" }));
+    expect(
+      screen.getByRole("button", { name: "Vista de lista" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("heading", { name: "Contrato y desplazamiento" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Evaluación docente" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Vista de tarjetas" }));
+    expect(
+      screen.getByRole("button", { name: "Vista de tarjetas" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("does not present a restricted document count as zero", () => {
+    render(
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={[{ ...rootModules[0], canManage: false, documentCount: 0 }]}
+        parents={parents}
+      />,
+    );
+    expect(
+      screen.getByText("Conteo de documentos no disponible", { exact: false }),
+    ).toBeVisible();
+    expect(screen.getByText("—")).toBeVisible();
   });
 
   it("filters cards by the search box", async () => {
@@ -122,15 +195,25 @@ describe("ModulesExplorer", () => {
     render(
       <ModulesExplorer
         canCreate={false}
-        context={{ kind: "module", moduleId: "m1", moduleName: "Evaluación docente" }}
+        context={{
+          kind: "module",
+          moduleId: "m1",
+          moduleName: "Evaluación docente",
+        }}
         modules={[{ ...rootModules[0], parentModuleId: "m1" }]}
         parents={parents}
       />,
     );
 
-    expect(screen.getByRole("searchbox", { name: "Buscar submódulo por nombre o código" })).toBeVisible();
+    expect(
+      screen.getByRole("searchbox", {
+        name: "Buscar submódulo por nombre o código",
+      }),
+    ).toBeVisible();
     expect(screen.getByRole("link", { name: /Ingresar/ })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "+ Crear submódulo" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "+ Crear submódulo" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers a parent selector when creating a submodule at the root level", async () => {
@@ -199,11 +282,18 @@ describe("ModulesExplorer", () => {
   it("asks the server to open the parent after creating a submodule from the root", async () => {
     const user = userEvent.setup();
     render(
-      <ModulesExplorer context={{ kind: "root" }} modules={rootModules} parents={parents} />,
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={rootModules}
+        parents={parents}
+      />,
     );
 
     await user.click(screen.getByText("+ Crear módulo"));
-    await user.selectOptions(screen.getByLabelText("Tipo de elemento"), "submodule");
+    await user.selectOptions(
+      screen.getByLabelText("Tipo de elemento"),
+      "submodule",
+    );
     await user.type(screen.getByLabelText("Nombre"), "Submódulo nuevo");
     await user.type(screen.getByLabelText("Código"), "SUB_NUEVO");
     await user.selectOptions(screen.getByLabelText("Módulo padre"), "m1");
@@ -254,20 +344,34 @@ describe("ModulesExplorer", () => {
     );
 
     view.rerender(<ModulesExplorer {...props} modules={[child]} />);
-    const card = screen.getByRole("heading", { name: child.name }).closest("li");
+    const card = screen
+      .getByRole("heading", { name: child.name })
+      .closest("li");
     await waitFor(() => expect(card).toHaveFocus());
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it("marks every missing submodule field and clears the corrected parent", async () => {
     const user = userEvent.setup();
-    render(<ModulesExplorer context={{ kind: "root" }} modules={[]} parents={parents} />);
+    render(
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={[]}
+        parents={parents}
+      />,
+    );
     await user.click(screen.getByText("+ Crear módulo"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Tipo de elemento" }), "submodule");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Tipo de elemento" }),
+      "submodule",
+    );
     await user.click(screen.getByRole("button", { name: "Crear" }));
 
     for (const label of ["Nombre", "Código", "Módulo padre"]) {
-      expect(screen.getByLabelText(label)).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(label)).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
     }
     expect(screen.getByText("El nombre es obligatorio.")).toBeVisible();
     expect(screen.getByText("El código es obligatorio.")).toBeVisible();
@@ -276,32 +380,60 @@ describe("ModulesExplorer", () => {
     expect(createModuleAction).not.toHaveBeenCalled();
 
     await user.selectOptions(screen.getByLabelText("Módulo padre"), "m1");
-    await waitFor(() => expect(screen.getByLabelText("Módulo padre")).not.toHaveAttribute("aria-invalid"));
-    expect(screen.queryByText("Este campo es obligatorio.")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Módulo padre")).not.toHaveAttribute(
+        "aria-invalid",
+      ),
+    );
+    expect(
+      screen.queryByText("Este campo es obligatorio."),
+    ).not.toBeInTheDocument();
   });
 
   it("explains name, description and order constraints before submitting the module", async () => {
     const user = userEvent.setup();
-    render(<ModulesExplorer context={{ kind: "root" }} modules={[]} parents={parents} />);
+    render(
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={[]}
+        parents={parents}
+      />,
+    );
     await user.click(screen.getByText("+ Crear módulo"));
     await user.type(screen.getByLabelText("Nombre"), "A");
     await user.type(screen.getByLabelText("Código"), "modulo invalido");
     await user.type(screen.getByLabelText("Descripción (opcional)"), "A");
     await user.type(screen.getByLabelText("Orden (opcional)"), "-1");
     await user.click(screen.getByRole("button", { name: "Crear" }));
-    expect(screen.getByText("El nombre debe tener al menos 2 caracteres.")).toBeVisible();
-    expect(screen.getByText("La descripción debe tener al menos 2 caracteres.")).toBeVisible();
-    expect(screen.getByText("El valor debe ser igual o mayor que 0.")).toBeVisible();
+    expect(
+      screen.getByText("El nombre debe tener al menos 2 caracteres."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("La descripción debe tener al menos 2 caracteres."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("El valor debe ser igual o mayor que 0."),
+    ).toBeVisible();
     expect(screen.getByText(/El código empieza por una letra/)).toBeVisible();
     expect(createModuleAction).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "M".repeat(255) } });
-    fireEvent.change(screen.getByLabelText("Código"), { target: { value: "MODULO" } });
-    fireEvent.change(screen.getByLabelText("Descripción (opcional)"), { target: { value: "Descripción válida" } });
-    fireEvent.change(screen.getByLabelText("Orden (opcional)"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Nombre"), {
+      target: { value: "M".repeat(255) },
+    });
+    fireEvent.change(screen.getByLabelText("Código"), {
+      target: { value: "MODULO" },
+    });
+    fireEvent.change(screen.getByLabelText("Descripción (opcional)"), {
+      target: { value: "Descripción válida" },
+    });
+    fireEvent.change(screen.getByLabelText("Orden (opcional)"), {
+      target: { value: "0" },
+    });
     await user.click(screen.getByRole("button", { name: "Crear" }));
     await waitFor(() => expect(createModuleAction).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(createModuleAction).mock.calls[0][1].get("name")).toHaveLength(255);
+    expect(
+      vi.mocked(createModuleAction).mock.calls[0][1].get("name"),
+    ).toHaveLength(255);
   });
 
   it("keeps edit, deactivate and delete field errors separate", async () => {
@@ -318,23 +450,48 @@ describe("ModulesExplorer", () => {
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     await user.click(screen.getByRole("button", { name: "Desactivar" }));
     // Eliminar va en dos pasos: el botón rojo despliega la confirmación.
-    await user.click(screen.getByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }),
+    );
     await user.click(screen.getByRole("button", { name: /^Sí, eliminar/ }));
-    expect(screen.getByLabelText("Nombre")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText(/Motivo de desactivación/)).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Nombre")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByLabelText(/Motivo de desactivación/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
     expect(screen.getAllByText("El motivo es obligatorio.")).toHaveLength(2);
-    const errorIds = [...container.querySelectorAll(".avend-field-error")].map((error) => error.id);
+    const errorIds = [...container.querySelectorAll(".avend-field-error")].map(
+      (error) => error.id,
+    );
     expect(new Set(errorIds).size).toBe(errorIds.length);
     expect(updateModuleAction).not.toHaveBeenCalled();
     expect(setModuleStatusAction).not.toHaveBeenCalled();
     expect(deleteModuleAction).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText(/Motivo de desactivación/), "A");
-    expect(screen.getByText("El motivo debe tener al menos 2 caracteres.")).toBeVisible();
-    await user.type(screen.getByLabelText(/Motivo de desactivación/), "probado");
-    await waitFor(() => expect(screen.getByLabelText(/Motivo de desactivación/)).not.toHaveAttribute("aria-invalid"));
-    expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByText("El motivo debe tener al menos 2 caracteres."),
+    ).toBeVisible();
+    await user.type(
+      screen.getByLabelText(/Motivo de desactivación/),
+      "probado",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(/Motivo de desactivación/),
+      ).not.toHaveAttribute("aria-invalid"),
+    );
+    expect(screen.getByLabelText(/Motivo de baja/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 
   it("blocks deleting a module that still has submodules and says why", async () => {
@@ -351,9 +508,7 @@ describe("ModulesExplorer", () => {
     expect(
       screen.queryByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/Elimina primero sus submódulos/i),
-    ).toBeVisible();
+    expect(screen.getByText(/Elimina primero sus submódulos/i)).toBeVisible();
   });
 });
 
@@ -392,7 +547,11 @@ function cardOf(name: string): HTMLElement {
 describe("ModulesExplorer — barra de herramientas (R2)", () => {
   it("places the search box first and the create button after it", () => {
     render(
-      <ModulesExplorer context={{ kind: "root" }} modules={rootModules} parents={parents} />,
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={rootModules}
+        parents={parents}
+      />,
     );
     const search = screen.getByRole("searchbox");
     const button = screen.getByRole("button", { name: "+ Crear módulo" });
@@ -413,7 +572,9 @@ describe("ModulesExplorer — barra de herramientas (R2)", () => {
     );
     const search = screen.getByRole("searchbox");
     expect(search.parentElement?.firstElementChild).toBe(search);
-    expect(screen.queryByRole("button", { name: /Crear/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Crear/ }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -439,7 +600,11 @@ describe("ModulesExplorer — resaltado del elemento creado (R3/R4)", () => {
       status: "success",
     });
     const view = render(
-      <ModulesExplorer context={moduleContext} modules={[existingChild]} parents={parents} />,
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
     );
 
     // La búsqueda activa no coincide con el nombre del submódulo que se creará.
@@ -448,7 +613,9 @@ describe("ModulesExplorer — resaltado del elemento creado (R3/R4)", () => {
     await user.type(screen.getByLabelText("Nombre"), newChild.name);
     await user.type(screen.getByLabelText("Código"), newChild.code);
     await user.click(screen.getByRole("button", { name: "Crear submódulo" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
 
     expect(screen.getByRole("searchbox")).toHaveValue("");
     view.rerender(
@@ -491,13 +658,19 @@ describe("ModulesExplorer — resaltado del elemento creado (R3/R4)", () => {
       status: "success",
     });
     const view = render(
-      <ModulesExplorer context={moduleContext} modules={[existingChild]} parents={parents} />,
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
     );
     await user.click(screen.getByRole("button", { name: "+ Crear submódulo" }));
     await user.type(screen.getByLabelText("Nombre"), newChild.name);
     await user.type(screen.getByLabelText("Código"), newChild.code);
     await user.click(screen.getByRole("button", { name: "Crear submódulo" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
 
     act(() => {
       vi.advanceTimersByTime(3600);
@@ -563,10 +736,17 @@ describe("ModulesExplorer — modal de creación", () => {
   it("keeps the modal open and shows the server error when creation fails", async () => {
     const user = userEvent.setup();
     vi.mocked(createModuleAction).mockResolvedValueOnce({
-      message: "No se pudo crear el submódulo. Revisa que el código no lo use otro módulo.",
+      message:
+        "No se pudo crear el submódulo. Revisa que el código no lo use otro módulo.",
       status: "error",
     });
-    render(<ModulesExplorer context={moduleContext} modules={[]} parents={parents} />);
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[]}
+        parents={parents}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "+ Crear submódulo" }));
     await user.type(screen.getByLabelText("Nombre"), newChild.name);
@@ -584,11 +764,18 @@ describe("ModulesExplorer — modal de creación", () => {
     const user = userEvent.setup();
     let finish: (state: AdminActionState) => void = () => undefined;
     vi.mocked(createModuleAction).mockImplementationOnce(
-      () => new Promise<AdminActionState>((resolveAction) => {
-        finish = resolveAction;
-      }),
+      () =>
+        new Promise<AdminActionState>((resolveAction) => {
+          finish = resolveAction;
+        }),
     );
-    render(<ModulesExplorer context={moduleContext} modules={[]} parents={parents} />);
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[]}
+        parents={parents}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "+ Crear submódulo" }));
     await user.type(screen.getByLabelText("Nombre"), newChild.name);
@@ -601,9 +788,15 @@ describe("ModulesExplorer — modal de creación", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await act(async () => {
-      finish({ entityId: "s2", message: "Submódulo creado.", status: "success" });
+      finish({
+        entityId: "s2",
+        message: "Submódulo creado.",
+        status: "success",
+      });
     });
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(showToast).toHaveBeenCalledWith("Submódulo creado.");
   });
 
@@ -620,21 +813,34 @@ describe("ModulesExplorer — modal de creación", () => {
 
     const status = screen.getByRole("combobox", { name: /Estado/ });
     expect(status).toHaveValue("false");
-    expect(within(status).getByRole("option", { name: "Activo" })).toBeDisabled();
+    expect(
+      within(status).getByRole("option", { name: "Activo" }),
+    ).toBeDisabled();
     expect(screen.getByText(/El módulo padre está inactivo/)).toBeVisible();
   });
 
   it("forces an inactive submodule when an inactive parent is chosen at the root", async () => {
     const user = userEvent.setup();
     render(
-      <ModulesExplorer context={{ kind: "root" }} modules={rootModules} parents={parents} />,
+      <ModulesExplorer
+        context={{ kind: "root" }}
+        modules={rootModules}
+        parents={parents}
+      />,
     );
     await user.click(screen.getByText("+ Crear módulo"));
-    await user.selectOptions(screen.getByLabelText("Tipo de elemento"), "submodule");
-    expect(screen.getByRole("combobox", { name: /Estado/ })).toHaveValue("true");
+    await user.selectOptions(
+      screen.getByLabelText("Tipo de elemento"),
+      "submodule",
+    );
+    expect(screen.getByRole("combobox", { name: /Estado/ })).toHaveValue(
+      "true",
+    );
 
     await user.selectOptions(screen.getByLabelText("Módulo padre"), "m2");
-    expect(screen.getByRole("combobox", { name: /Estado/ })).toHaveValue("false");
+    expect(screen.getByRole("combobox", { name: /Estado/ })).toHaveValue(
+      "false",
+    );
     expect(screen.getByText(/El módulo padre está inactivo/)).toBeVisible();
   });
 
@@ -657,12 +863,19 @@ describe("ModulesExplorer — modal de creación", () => {
       />,
     );
     await user.click(screen.getByText("+ Crear módulo"));
-    await user.selectOptions(screen.getByLabelText("Tipo de elemento"), "submodule");
+    await user.selectOptions(
+      screen.getByLabelText("Tipo de elemento"),
+      "submodule",
+    );
 
     expect(
-      screen.getByRole("option", { name: /Normas sueltas \(NORMAS\) — tiene documentos propios/ }),
+      screen.getByRole("option", {
+        name: /Normas sueltas \(NORMAS\) — tiene documentos propios/,
+      }),
     ).toBeDisabled();
-    expect(screen.getByRole("option", { name: "Evaluación docente (EVAL)" })).toBeEnabled();
+    expect(
+      screen.getByRole("option", { name: "Evaluación docente (EVAL)" }),
+    ).toBeEnabled();
   });
 
   it("explains why a module with its own documents cannot receive submodules", () => {
@@ -673,14 +886,26 @@ describe("ModulesExplorer — modal de creación", () => {
         parents={parents}
       />,
     );
-    expect(screen.queryByRole("button", { name: "+ Crear submódulo" })).not.toBeInTheDocument();
-    expect(screen.getByRole("note")).toHaveTextContent(/ya tiene documentos propios/);
+    expect(
+      screen.queryByRole("button", { name: "+ Crear submódulo" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      /ya tiene documentos propios/,
+    );
     expect(screen.queryByText(/Puedes crear uno/)).not.toBeInTheDocument();
   });
 
   it("labels submodule cards with the same spelling as the rest of the interface", () => {
-    render(<ModulesExplorer context={moduleContext} modules={[existingChild]} parents={parents} />);
-    expect(screen.getByText(`Submódulo: ${existingChild.name}`)).toBeInTheDocument();
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
+    );
+    expect(
+      screen.getByText(`Submódulo: ${existingChild.name}`),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Sub Módulo/)).not.toBeInTheDocument();
   });
 });
@@ -692,7 +917,9 @@ describe("modules-explorer.module.css — contratos visuales", () => {
   );
 
   it("puts the create button at the right on desktop and on top, full width, on mobile", () => {
-    expect(css).toMatch(/\.toolbarActions\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/);
+    expect(css).toMatch(
+      /\.toolbarActions\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/,
+    );
     expect(css).not.toMatch(/\.toolbarActions\s*\{[^}]*space-between/);
     expect(css).toMatch(/\.createButton\s*\{[^}]*margin-left:\s*auto/);
     expect(css).toMatch(
@@ -701,15 +928,20 @@ describe("modules-explorer.module.css — contratos visuales", () => {
   });
 
   it("blinks with a full-accent ring and a tint different from the Activo badge", () => {
-    expect(css).toMatch(/\.cardNew\s*\{[^}]*animation:\s*card-created 900ms ease-in-out 3/);
+    expect(css).toMatch(
+      /\.cardNew\s*\{[^}]*animation:\s*card-created 900ms ease-in-out 3/,
+    );
     expect(css).toMatch(
       /@keyframes card-created\s*\{[\s\S]*?50%\s*\{[^}]*box-shadow:\s*0 0 0 5px var\(--avend-accent\)/,
     );
-    const keyframes = /@keyframes card-created\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    const keyframes =
+      /@keyframes card-created\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
     expect(keyframes).toContain("var(--card-new-tint)");
     // El pico no usa el mismo azul que la insignia «Activo».
     expect(keyframes).not.toContain("--avend-soft-blue");
-    expect(css).toMatch(/\.cardNew \.badgeActive\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--avend-accent\)/);
+    expect(css).toMatch(
+      /\.cardNew \.badgeActive\s*\{[^}]*box-shadow:\s*inset 0 0 0 1px var\(--avend-accent\)/,
+    );
     expect(css).toMatch(
       /prefers-reduced-motion: reduce\)\s*\{\s*\.cardNew\s*\{[^}]*animation:\s*none;[^}]*box-shadow:\s*0 0 0 5px var\(--avend-accent\)/,
     );
@@ -725,6 +957,46 @@ describe("modules-explorer.module.css — contratos visuales", () => {
   });
 
   it("leaves room above the modal submit button", () => {
-    expect(css).toMatch(/\.createForm :global\(\.avend-admin-submit\)\s*\{[^}]*margin-top:\s*1\.5rem/);
+    expect(css).toMatch(
+      /\.createForm :global\(\.avend-admin-submit\)\s*\{[^}]*margin-top:\s*1\.5rem/,
+    );
+  });
+
+  it("reproduces the reference cards: accent edge, icon tile and stat chips", () => {
+    expect(css).toMatch(
+      /\.rootExplorer \.grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill, minmax\(min\(100%, 19rem\), 1fr\)\)/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.card\s*\{[^}]*border-left:\s*4px solid #[0-9a-f]{6}/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.moduleTag\s*\{[^}]*width:\s*2\.5rem;[^}]*height:\s*2\.5rem/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.cardChip\s*\{[^}]*padding:\s*0\.28rem 0\.4rem;[^}]*background:\s*#f1f7fe/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.badgeActive\s*\{[^}]*background:\s*#e5f8ed/,
+    );
+  });
+
+  it("animates the cards smoothly and respects reduced motion", () => {
+    expect(css).toMatch(
+      /@keyframes module-card-in\s*\{[\s\S]*?from\s*\{[^}]*opacity:\s*0;[^}]*transform:\s*translateY\(14px\)/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.card\s*\{[^}]*animation:\s*module-card-in 520ms cubic-bezier\(0\.22, 1, 0\.36, 1\) backwards/,
+    );
+    expect(css).toMatch(
+      /\.rootExplorer \.card:hover\s*\{[^}]*transform:\s*translateY\(-3px\)/,
+    );
+    expect(css).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.rootExplorer \.card\s*\{\s*animation:\s*none/,
+    );
+  });
+
+  it("draws the search field with its own magnifier icon", () => {
+    expect(css).toMatch(/\.search\s*\{[^}]*background-image:\s*url\("data:image\/svg\+xml/);
+    expect(css).toMatch(/\.search\s*\{[^}]*padding:\s*0 0\.9rem 0 2\.75rem/);
   });
 });
