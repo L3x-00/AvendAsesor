@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
-import {
-  DocumentLibraryView,
-  type HistoryModulePreview,
-} from "@/components/admin/document-library-view";
+import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
 import {
   countDocumentLibraryFilters,
@@ -12,16 +9,19 @@ import {
   type DocumentLibrarySearchParams,
   type ParsedDocumentLibraryQuery,
 } from "@/lib/admin-api/document-library-query";
-import type { DocumentLibraryPage } from "@/lib/admin-api/types";
+import type {
+  DocumentLibraryPage,
+  ManagedModuleSummary,
+} from "@/lib/admin-api/types";
 
-/** Filas visibles por módulo en la vista general del Historial. */
+/** Filas visibles del módulo abierto en la vista agrupada del Historial. */
 const HISTORY_PREVIEW_LIMIT = 3;
 
 /**
  * El Historial agrupa por módulo solo cuando no hay una búsqueda o filtro de
  * contenido: con filtros activos los resultados deben poder cruzar módulos, así
- * que se conserva la consulta plana. Elegir un módulo (o un submódulo) no cuenta
- * como filtro de contenido.
+ * que se conserva la consulta plana. Elegir un módulo no cuenta como filtro de
+ * contenido.
  */
 function hasContentFilters(query: ParsedDocumentLibraryQuery): boolean {
   return Boolean(
@@ -38,6 +38,30 @@ function hasContentFilters(query: ParsedDocumentLibraryQuery): boolean {
       query.page > 1,
   );
 }
+
+/**
+ * Cuando la URL no elige módulo se abre el primero que tenga documentos: abrir
+ * uno vacío por defecto haría parecer vacío todo el Historial. La misma regla
+ * usa la vista para marcar la tarjeta activa.
+ */
+function resolveHistoryModuleId(
+  rootModules: ManagedModuleSummary[],
+  requested: string | undefined,
+): string | undefined {
+  if (requested && rootModules.some((module) => module.id === requested)) {
+    return requested;
+  }
+  return (
+    rootModules.find((module) => module.documentCount > 0) ?? rootModules[0]
+  )?.id;
+}
+
+const emptyLibrary: DocumentLibraryPage = {
+  items: [],
+  limit: HISTORY_PREVIEW_LIMIT,
+  offset: 0,
+  total: 0,
+};
 
 interface DocumentsPageProps {
   searchParams: Promise<DocumentLibrarySearchParams>;
@@ -58,38 +82,43 @@ export default async function DocumentsPage({
     .filter((module) => !module.isDeleted && !module.parentModuleId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  let library: DocumentLibraryPage;
-  let modulePreviews: HistoryModulePreview[] = [];
-  if (rootModules.length > 0 && !hasContentFilters(query)) {
-    // Cada panel necesita su propio total y sus primeras filas: se consultan en
-    // paralelo y acotadas al módulo, reutilizando el endpoint autorizado.
-    modulePreviews = await Promise.all(
-      rootModules.map(async (module) => ({
-        moduleId: module.id,
-        page: await client.listDocumentLibrary({
-          ...query,
-          limit: HISTORY_PREVIEW_LIMIT,
-          moduleId: module.id,
-          offset: 0,
-          submoduleId: undefined,
-        }),
-      })),
-    );
-    library =
-      modulePreviews.find((preview) => preview.moduleId === query.moduleId)
-        ?.page ?? modulePreviews[0].page;
-  } else {
-    library = await client.listDocumentLibrary(query);
+  const grouped = rootModules.length > 0 && !hasContentFilters(query);
+  const historyModuleId = grouped
+    ? resolveHistoryModuleId(rootModules, query.moduleId)
+    : undefined;
 
-    if (query.page > 1 && library.items.length === 0) {
-      const firstPage = await client.listDocumentLibrary({
-        ...query,
-        offset: 0,
-      });
-      if (firstPage.total > 0) {
-        const lastPage = Math.ceil(firstPage.total / firstPage.limit);
-        redirect(documentLibraryHref(query, lastPage));
-      }
+  // Una sola consulta por navegación. Los conteos de cada módulo ya vienen en
+  // el resumen y solo el módulo abierto necesita sus documentos: antes se
+  // pedían en paralelo los de todos los módulos, lo que hacía lenta cada
+  // selección y podía agotar el tiempo de la función.
+  let library: DocumentLibraryPage = emptyLibrary;
+  let loadError = false;
+  try {
+    library = await client.listDocumentLibrary(
+      grouped
+        ? {
+            ...query,
+            limit: HISTORY_PREVIEW_LIMIT,
+            moduleId: historyModuleId,
+            offset: 0,
+            submoduleId: undefined,
+          }
+        : query,
+    );
+  } catch {
+    // La vista muestra el aviso con la opción de reintentar sin bloquear el
+    // resto de la pantalla: el carril de módulos sigue navegable.
+    loadError = true;
+  }
+
+  if (!grouped && !loadError && query.page > 1 && library.items.length === 0) {
+    const firstPage = await client.listDocumentLibrary({
+      ...query,
+      offset: 0,
+    });
+    if (firstPage.total > 0) {
+      const lastPage = Math.ceil(firstPage.total / firstPage.limit);
+      redirect(documentLibraryHref(query, lastPage));
     }
   }
 
@@ -100,10 +129,12 @@ export default async function DocumentsPage({
     >
       <DocumentLibraryView
         activeFilterCount={countDocumentLibraryFilters(query)}
-        library={library}
+        historyGrouped={grouped}
         historyLayout
+        historyModuleId={historyModuleId}
+        library={library}
+        loadError={loadError}
         modules={moduleSummaries}
-        modulePreviews={modulePreviews}
         moduleSummaries={moduleSummaries}
         query={query}
         quickActions
