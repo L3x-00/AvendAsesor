@@ -249,8 +249,11 @@ export const INTENT_TRIGGERS = {
   SURPLUS_SIGNAL: /\bexcedent(?:e|es)\b/u,
   QUALIFIED_PLACE:
     /\bplazas?\b[\s\S]{0,20}?\b(?:organicas?|eventual(?:es)?)\b|\b(?:organicas?|eventual(?:es)?)\s+plazas?\b/u,
-  CLASSIFIER_SIGNAL: /\bclasificador(?:es)?\s+de\s+cargos?\b/u,
-  CLASSIFICATION_SIGNAL: /\bclasificacion\s+de\s+cargos?\b/u,
+  // Los títulos del corpus llegan con guiones («ANEXO-MANUAL-DE-CLASIFICADOR-
+  // DE-CARGOS…»); el encabezado debe reconocerlos igual que el texto con
+  // espacios para no descartar un fragmento que sí regula el tema.
+  CLASSIFIER_SIGNAL: /\bclasificador(?:es)?[\s\-_]+de[\s\-_]+cargos?\b/u,
+  CLASSIFICATION_SIGNAL: /\bclasificacion[\s\-_]+de[\s\-_]+cargos?\b/u,
   COMPETING_PROCESS:
     /\b(?:desta(?:c|qu)\p{L}*|encarg\p{L}*|reasign\p{L}*|permut\p{L}*|racionaliz\p{L}*|contratacion|contratos?|contrat(?:ar|aron|an|arme)|ascens\p{L}*|ascend\p{L}*|asciend\p{L}*|licencias?|descanso medico|ces(?:e|es|en|an|aron|ado)|jubil\p{L}*)\b/u,
   DEFINITION_REQUEST:

@@ -219,6 +219,17 @@ describe('teaching-position-retrieval', () => {
       ).toBe(true);
     });
 
+    it('reconoce las grafías con guion del corpus y no un prefijo pegado', () => {
+      expect(
+        isPositionClassifierQuestion(
+          '¿Dónde veo la clasificacion-de-cargos del colegio?',
+        ),
+      ).toBe(true);
+      expect(
+        isPositionClassifierQuestion('miclasificador-de-cargos del colegio'),
+      ).toBe(false);
+    });
+
     it('no toma cualquier mención de un cargo como clasificador', () => {
       expect(
         isPositionClassifierQuestion(
@@ -648,6 +659,19 @@ describe('teaching-position-retrieval', () => {
             'Ley de reforma magisterial',
             ['Ley y reglamento'],
             'Clasificación de cargos',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('admite un título del corpus con guiones en «clasificador de cargos»', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El clasificador de cargos ordena los puestos de trabajo y los grupos ocupacionales.',
+            'ANEXO-MANUAL-DE-CLASIFICADOR-DE-CARGOS-DRELM-Y-UGEL-DE-LIMA-METROPOLITANA',
+            ['Condición de plazas y clasificador'],
           ),
         ),
       ).toBe(true);
