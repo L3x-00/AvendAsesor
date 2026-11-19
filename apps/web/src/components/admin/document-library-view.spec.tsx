@@ -70,6 +70,20 @@ const moduleSummaries: ManagedModuleSummary[] = modules.map((module) => ({
   submoduleCount: module.parentModuleId ? 0 : 1,
 }));
 
+// Vista general del Historial: dos módulos principales con sus conteos.
+const remuneracionesId = "7f1c2f7e-5b0c-4ab2-9f4a-8d6f7c1a2b3d";
+const historySummaries: ManagedModuleSummary[] = [
+  moduleSummaries[0],
+  {
+    ...moduleSummaries[0],
+    code: "REMUNERACIONES",
+    documentCount: 29,
+    id: remuneracionesId,
+    name: "Remuneraciones",
+    sortOrder: 2,
+  },
+];
+
 const document: DocumentLibraryItem = {
   additionalDetail: null,
   articleReference: null,
@@ -110,6 +124,23 @@ const document: DocumentLibraryItem = {
   updatedAt: "2026-09-01T15:00:00.000Z",
   updatedBy: null,
 };
+
+// Previsualizaciones por módulo que arma el Historial en el servidor.
+const overviewPreviews = [
+  {
+    moduleId,
+    page: { items: [document], limit: 3, offset: 0, total: 1 },
+  },
+  {
+    moduleId: remuneracionesId,
+    page: {
+      items: [{ ...document, title: "Ley 32498 remuneraciones" }],
+      limit: 3,
+      offset: 0,
+      total: 2,
+    },
+  },
+];
 
 describe("DocumentLibraryView", () => {
   it("renders a searchable responsive library with safe document actions", () => {
@@ -398,10 +429,11 @@ describe("DocumentLibraryView", () => {
       <DocumentLibraryView
         activeFilterCount={0}
         historyLayout
-        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
-        moduleSummaries={moduleSummaries}
-        modules={modules}
-        query={parseDocumentLibraryQuery({ moduleId })}
+        library={{ items: [document], limit: 3, offset: 0, total: 1 }}
+        modulePreviews={overviewPreviews}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({})}
         quickActions
       />,
     );
@@ -409,37 +441,115 @@ describe("DocumentLibraryView", () => {
     expect(screen.getByText("Documentos por módulo")).toBeVisible();
     expect(screen.getByText("Todo el período")).toBeVisible();
     expect(screen.getByRole("button", { name: "Buscar" })).toBeVisible();
+    // El primer módulo queda desplegado con su tabla y su total.
     expect(
-      screen.getByRole("link", { name: /Evaluación docente.*documento/ }),
+      screen.getByRole("region", {
+        name: "Documentos de Evaluación docente, desplazable horizontalmente",
+      }),
+    ).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Mostrando 1 de 1 documento")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /^Ver todos en Evaluación docente/ }),
+    ).toHaveAttribute("href", `/admin/modules/${moduleId}`);
+    // Los demás módulos se pliegan en una fila que lleva a ese módulo.
+    expect(
+      screen.getByRole("link", { name: "Abrir el módulo Remuneraciones" }),
+    ).toHaveAttribute("href", `/admin/documents?moduleId=${remuneracionesId}`);
+    expect(
+      screen.getByRole("link", { name: /^Evaluación docente/ }),
     ).toHaveAttribute("aria-current", "page");
-    expect(screen.getAllByText("Evaluación docente").length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "Ver todos" })).toHaveAttribute(
-      "href",
-      "/admin/documents",
-    );
+    // En el historial las acciones rápidas siguen disponibles.
     expect(
       screen.getAllByRole("button", { name: /^Eliminar: / }).length,
     ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: /^Ver detalle: / }).length,
+    ).toBeGreaterThan(0);
   });
 
-  it("does not display a misleading count for an unmanageable parent module", () => {
+  it("expands the module chosen in the module rail", () => {
     render(
       <DocumentLibraryView
-        activeFilterCount={0}
+        activeFilterCount={1}
         historyLayout
-        library={{ items: [], limit: 20, offset: 0, total: 0 }}
-        moduleSummaries={moduleSummaries.map((module) => ({
-          ...module,
-          canManage: false,
-          documentCount: 0,
-        }))}
-        modules={modules}
-        query={parseDocumentLibraryQuery({})}
+        library={{
+          items: [{ ...document, title: "Contrato auxiliares 2026" }],
+          limit: 3,
+          offset: 0,
+          total: 2,
+        }}
+        modulePreviews={overviewPreviews}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({ moduleId: remuneracionesId })}
       />,
     );
 
     expect(
-      screen.getByRole("link", { name: "Evaluación docente" }),
+      screen.getByRole("region", {
+        name: "Documentos de Remuneraciones, desplazable horizontalmente",
+      }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /^Remuneraciones/ }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("link", { name: /^Ver todos en Remuneraciones/ }),
+    ).toHaveAttribute("href", `/admin/modules/${remuneracionesId}`);
+    // El módulo no elegido queda plegado y sin tabla propia.
+    expect(
+      screen.getByRole("link", { name: "Abrir el módulo Evaluación docente" }),
+    ).toHaveAttribute("href", `/admin/documents?moduleId=${moduleId}`);
+  });
+
+  it("keeps the flat results when a search can span several modules", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={1}
+        historyLayout
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        moduleSummaries={historySummaries}
+        modules={historySummaries}
+        query={parseDocumentLibraryQuery({ q: "nombramiento" })}
+      />,
+    );
+
+    expect(screen.getByText("Resultados")).toBeVisible();
+    expect(
+      screen.getByRole("region", {
+        name: "Tabla de documentos, desplazable horizontalmente",
+      }),
+    ).toHaveAttribute("tabindex", "0");
+    expect(screen.queryByRole("region", { name: /^Documentos de / })).toBeNull();
+  });
+
+  it("does not display a misleading count for an unmanageable parent module", () => {
+    const unmanageable = historySummaries.map((module) => ({
+      ...module,
+      canManage: false,
+      documentCount: 0,
+    }));
+
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyLayout
+        library={{ items: [], limit: 3, offset: 0, total: 0 }}
+        modulePreviews={[
+          { moduleId, page: { items: [], limit: 3, offset: 0, total: 0 } },
+          {
+            moduleId: remuneracionesId,
+            page: { items: [], limit: 3, offset: 0, total: 0 },
+          },
+        ]}
+        moduleSummaries={unmanageable}
+        modules={unmanageable}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Evaluación docente" })).toBeVisible();
+    // Sin módulos con documentos se conserva la invitación a cargar desde Módulos.
+    expect(screen.getByText("Aún no hay documentos registrados")).toBeVisible();
   });
 });
