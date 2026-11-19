@@ -179,6 +179,10 @@
 
 .chevron {
   height: 1.125rem !important;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
   transition: transform 200ms ease-out;
   width: 1.125rem !important;
 }
@@ -517,6 +521,50 @@
   font-size: 1rem;
   margin: 0;
   padding: 1.25rem 1rem;
+}
+
+.modulePanelToggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.75rem;
+  justify-content: center;
+  padding: 0;
+  width: 2.75rem;
+}
+
+.modulePanelToggle:hover {
+  background: rgb(29 60 116 / 8%);
+}
+
+.modulePanelToggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+/* Carga de un módulo: el panel aparece de inmediato con filas fantasma, así el
+   módulo se percibe abierto al instante aunque la consulta tarde un poco. */
+.panelLoading {
+  padding: 1rem;
+}
+
+.panelSkeleton {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.panelSkeletonRow {
+  animation: panel-skeleton 1.2s ease-in-out infinite;
+  background: linear-gradient(90deg, #eef3fb 0%, #dfeaf9 50%, #eef3fb 100%);
+  background-size: 200% 100%;
+  border-radius: 0.5rem;
+  display: block;
+  height: 1.9rem;
 }
 
 /* La consulta falló: el aviso vive dentro del panel para que el carril de
@@ -1027,6 +1075,15 @@
   }
 }
 
+@keyframes panel-skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
 .moduleRow {
   animation: module-row-in 180ms ease-out both;
 }
@@ -1038,6 +1095,10 @@
 
   .modulePanel,
   .moduleRow {
+    animation: none;
+  }
+
+  .panelSkeletonRow {
     animation: none;
   }
 
