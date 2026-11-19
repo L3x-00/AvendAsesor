@@ -39,10 +39,18 @@ export function isRationalizationQuestion(question: string): boolean {
 /** Consulta canónica con la denominación que usa el corpus para este proceso. */
 export function rationalizationEvidenceQueries(question: string): string[] {
   if (!isRationalizationQuestion(question)) return [];
-  return [
+  const queries: string[] = [
     INTENT_EXPANSIONS.RATIONALIZATION_PLAZAS,
     INTENT_EXPANSIONS.RATIONALIZATION_SECTIONS,
   ];
+  // «Pocos alumnos» es el lenguaje de la persona; la norma 2024 habla de
+  // matrícula. Se añade cuando la pregunta nombra alumnos, estudiantes,
+  // matrícula, secciones o aulas; siempre dentro de una consulta ya
+  // identificada como racionalización por `isRationalizationQuestion`.
+  if (ENROLLMENT_SIGNAL.test(normalizeSpanishText(question))) {
+    queries.push(INTENT_EXPANSIONS.RATIONALIZATION_MATRICULA);
+  }
+  return queries;
 }
 
 /**

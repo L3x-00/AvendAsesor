@@ -399,6 +399,10 @@ export const INTENT_EXPANSIONS = {
     'racionalización de plazas docentes reducción de plazas por disminución de estudiantes',
   RATIONALIZATION_SECTIONS:
     'proceso de racionalización de plazas instituciones educativas reducción secciones',
+  /** El corpus de la norma 2024 habla de matrícula; «estudiantes» solo apparce
+   * en la consulta coloquial. Se activa solo con señal de matrícula/alumnos. */
+  RATIONALIZATION_MATRICULA:
+    'disminución de matrícula plazas excedentes proceso de racionalización reubicación docente',
   TEACHING_HOURS_TABLE:
     'cuadro de distribución de horas de clase jornada laboral docente institución educativa',
   TEACHING_HOURS_ASSIGNMENT:
@@ -507,7 +511,11 @@ export const INTENT_ROUTING: IntentRoutingConfig = {
     route(
       'rationalization',
       ['RATIONALIZATION_EXPLICIT_SIGNAL', 'PLACE_SIGNAL'],
-      ['RATIONALIZATION_PROCESS', 'RATIONALIZATION_SECTIONS'],
+      [
+        'RATIONALIZATION_PROCESS',
+        'RATIONALIZATION_SECTIONS',
+        'RATIONALIZATION_MATRICULA',
+      ],
     ),
     route(
       'teaching-hours',
