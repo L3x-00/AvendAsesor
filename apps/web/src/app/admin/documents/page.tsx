@@ -22,7 +22,7 @@ export default async function DocumentsPage({
   });
   const [initialLibrary, modules, uploaders] = await Promise.all([
     client.listDocumentLibrary(query),
-    client.listModules("all"),
+    client.listModuleSummaries("all"),
     client.listDocumentUploaders(),
   ]);
 
@@ -42,7 +42,9 @@ export default async function DocumentsPage({
       <DocumentLibraryView
         activeFilterCount={countDocumentLibraryFilters(query)}
         library={initialLibrary}
+        historyLayout
         modules={modules}
+        moduleSummaries={modules}
         query={query}
         quickActions
         uploaders={uploaders}

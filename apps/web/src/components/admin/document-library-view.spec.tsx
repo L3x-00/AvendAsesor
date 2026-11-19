@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { parseDocumentLibraryQuery } from "@/lib/admin-api/document-library-query";
-import type { DocumentLibraryItem, ManagedModule } from "@/lib/admin-api/types";
+import type {
+  DocumentLibraryItem,
+  ManagedModule,
+  ManagedModuleSummary,
+} from "@/lib/admin-api/types";
 import { DocumentLibraryView } from "./document-library-view";
 
 vi.mock("@/app/admin/actions", () => ({
@@ -59,6 +63,13 @@ const modules: ManagedModule[] = [
   },
 ];
 
+const moduleSummaries: ManagedModuleSummary[] = modules.map((module) => ({
+  ...module,
+  canManage: true,
+  documentCount: 1,
+  submoduleCount: module.parentModuleId ? 0 : 1,
+}));
+
 const document: DocumentLibraryItem = {
   additionalDetail: null,
   articleReference: null,
@@ -112,7 +123,9 @@ describe("DocumentLibraryView", () => {
     );
 
     expect(
-      screen.getByPlaceholderText("Buscar documentos por nombre"),
+      screen.getByPlaceholderText(
+        "Buscar documento por nombre, número o entidad...",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getAllByText("Vigente").length).toBeGreaterThan(0);
@@ -127,9 +140,7 @@ describe("DocumentLibraryView", () => {
       screen.getAllByRole("link", { name: /^Editar: / })[0],
     ).toHaveAttribute("href", `/admin/documents/${documentId}#edit-document`);
     // Las acciones rápidas de administración solo se piden desde el Historial.
-    expect(
-      screen.queryByRole("button", { name: /^Eliminar: / }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Eliminar: / })).toBeNull();
     expect(screen.queryByRole("link", { name: "Ver PDF" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Descargar PDF" })).toBeNull();
     expect(screen.getByLabelText("Año")).toHaveAttribute("type", "number");
@@ -184,9 +195,9 @@ describe("DocumentLibraryView", () => {
       screen.getByLabelText("Buscar documentos por nombre"),
     );
     // La búsqueda no cuenta en el contador del panel: 3 activos, 2 avanzados.
-    expect(screen.getByText("Filtros avanzados").parentElement).toHaveTextContent(
-      "2 filtros activos",
-    );
+    expect(
+      screen.getByText("Filtros avanzados").parentElement,
+    ).toHaveTextContent("2 filtros activos");
     expect(screen.getByRole("link", { name: "Limpiar filtros" })).toBeVisible();
   });
 
@@ -203,9 +214,9 @@ describe("DocumentLibraryView", () => {
       />,
     );
 
-    expect(screen.getByText("Filtros avanzados").parentElement).toHaveTextContent(
-      "1 filtro activo",
-    );
+    expect(
+      screen.getByText("Filtros avanzados").parentElement,
+    ).toHaveTextContent("1 filtro activo");
     expect(screen.getByLabelText("Año")).not.toHaveAttribute("max");
   });
 
@@ -289,9 +300,9 @@ describe("DocumentLibraryView", () => {
     );
 
     expect(screen.getAllByText(/Protocolo regional/)).toHaveLength(2);
-    expect(
-      screen.getAllByText(/Instituto Pedagógico Regional/),
-    ).toHaveLength(2);
+    expect(screen.getAllByText(/Instituto Pedagógico Regional/)).toHaveLength(
+      2,
+    );
   });
 
   it("offers the upload-date and uploader filters the client enumerated", () => {
@@ -361,9 +372,7 @@ describe("DocumentLibraryView", () => {
       />,
     );
 
-    const group = screen
-      .getByLabelText("Submódulo")
-      .querySelector("optgroup");
+    const group = screen.getByLabelText("Submódulo").querySelector("optgroup");
     expect(group).toHaveAttribute("label", "Evaluación docente");
   });
 
@@ -382,5 +391,55 @@ describe("DocumentLibraryView", () => {
         name: "Tabla de documentos, desplazable horizontalmente",
       }),
     ).toHaveAttribute("tabindex", "0");
+  });
+
+  it("organizes the global history by module without changing document actions", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyLayout
+        library={{ items: [document], limit: 20, offset: 0, total: 1 }}
+        moduleSummaries={moduleSummaries}
+        modules={modules}
+        query={parseDocumentLibraryQuery({ moduleId })}
+        quickActions
+      />,
+    );
+
+    expect(screen.getByText("Documentos por módulo")).toBeVisible();
+    expect(screen.getByText("Todo el período")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Buscar" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Evaluación docente.*documento/ }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByText("Evaluación docente").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Ver todos" })).toHaveAttribute(
+      "href",
+      "/admin/documents",
+    );
+    expect(
+      screen.getAllByRole("button", { name: /^Eliminar: / }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("does not display a misleading count for an unmanageable parent module", () => {
+    render(
+      <DocumentLibraryView
+        activeFilterCount={0}
+        historyLayout
+        library={{ items: [], limit: 20, offset: 0, total: 0 }}
+        moduleSummaries={moduleSummaries.map((module) => ({
+          ...module,
+          canManage: false,
+          documentCount: 0,
+        }))}
+        modules={modules}
+        query={parseDocumentLibraryQuery({})}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Evaluación docente" }),
+    ).toBeVisible();
   });
 });
