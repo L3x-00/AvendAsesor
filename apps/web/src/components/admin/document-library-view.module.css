@@ -492,6 +492,30 @@
   overflow: hidden;
 }
 
+/* Cierre del módulo: se retira con la misma curva con la que entró, así el
+   panel que queda abajo no salta de golpe hacia arriba. */
+.modulePanelClosing {
+  animation: module-panel-out 200ms ease-in both;
+  pointer-events: none;
+}
+
+/* La altura se anima con la fila del grid: no hace falta medir el contenido y
+   el panel que queda debajo se acompaña en lugar de saltar. */
+.panelClip {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms ease-in;
+}
+
+.panelClipInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modulePanelClosing .panelClip {
+  grid-template-rows: 0fr;
+}
+
 .modulePanelHeader {
   align-items: center;
   background: linear-gradient(90deg, #eef5ff 0%, #e4efff 100%);
@@ -1072,6 +1096,13 @@
   from {
     opacity: 0;
     transform: translateY(0.25rem);
+  }
+}
+
+@keyframes module-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.35rem);
   }
 }
 

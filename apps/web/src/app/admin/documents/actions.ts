@@ -17,11 +17,12 @@ export type HistoryModulePageResult =
 /**
  * Documentos del módulo que el administrador abre en el Historial.
  *
- * La vista general entrega el primer módulo ya consultado desde el servidor.
- * Los demás se piden aquí, de a uno y solo cuando hacen falta, para que abrir
- * un módulo no repita la consulta completa ni recargue la página. El error se
- * devuelve como dato en lugar de lanzarse, así el carril de módulos sigue
- * usable y la vista puede ofrecer reintentar.
+ * La vista general no espera la consulta para mostrar el marco: el panel del
+ * módulo inicial también se pide aquí al montar, y los demás se piden de a uno
+ * y solo cuando hacen falta, para que abrir un módulo no repita la consulta
+ * completa ni recargue la página. El error se devuelve como dato en lugar de
+ * lanzarse, así el carril de módulos sigue usable y la vista puede ofrecer
+ * reintentar.
  */
 export async function loadHistoryModulePage(
   moduleId: string,

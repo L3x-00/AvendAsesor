@@ -807,6 +807,67 @@ describe('DocumentsService', () => {
     expect(documentsGateway.listLibrary).not.toHaveBeenCalled();
   });
 
+  it('reuses the module page instead of querying again', async () => {
+    documentsGateway.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 3,
+      offset: 0,
+      total: 29,
+    });
+    const query = { moduleId: '8d4b660b-9e94-4d34-a3d2-2548a83587e1' };
+
+    await service.listLibrary(query, authorization);
+    await expect(
+      service.listLibrary(query, authorization),
+    ).resolves.toMatchObject({ total: 29 });
+
+    expect(documentsGateway.listLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reuse a page from another administrator', async () => {
+    documentsGateway.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 3,
+      offset: 0,
+      total: 4,
+    });
+
+    await service.listLibrary({}, authorization);
+    await service.listLibrary(
+      {},
+      {
+        ...authorization,
+        userId: 'a4f0c1f4-71c9-4e97-8b1e-8ef0b6a5c111',
+      },
+    );
+
+    expect(documentsGateway.listLibrary).toHaveBeenCalledTimes(2);
+  });
+
+  it('forgets the cached library after a document changes', async () => {
+    documentsGateway.listLibrary.mockResolvedValue({
+      items: [],
+      limit: 3,
+      offset: 0,
+      total: 1,
+    });
+
+    await service.listLibrary({}, authorization);
+    await service.listLibrary({}, authorization);
+    expect(documentsGateway.listLibrary).toHaveBeenCalledTimes(1);
+
+    documentsGateway.setTechnicalStatus.mockResolvedValue(documentRecord);
+    documentsGateway.findById.mockResolvedValue(documentRecord);
+    await service.setTechnicalStatus(
+      documentRecord.id,
+      { technicalStatus: 'ready' },
+      authorization,
+    );
+
+    await service.listLibrary({}, authorization);
+    expect(documentsGateway.listLibrary).toHaveBeenCalledTimes(2);
+  });
+
   it('exposes the administrators that uploaded documents for the filter', async () => {
     documentsGateway.listUploaders.mockResolvedValue([
       {

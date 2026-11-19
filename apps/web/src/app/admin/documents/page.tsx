@@ -26,16 +26,16 @@ const HISTORY_PREVIEW_LIMIT = 3;
 function hasContentFilters(query: ParsedDocumentLibraryQuery): boolean {
   return Boolean(
     query.q ||
-      query.issuanceYear !== undefined ||
-      query.documentType ||
-      query.issuingEntity ||
-      query.situation ||
-      query.technicalStatus ||
-      query.createdBy ||
-      query.createdFrom ||
-      query.createdTo ||
-      query.submoduleId ||
-      query.page > 1,
+    query.issuanceYear !== undefined ||
+    query.documentType ||
+    query.issuingEntity ||
+    query.situation ||
+    query.technicalStatus ||
+    query.createdBy ||
+    query.createdFrom ||
+    query.createdTo ||
+    query.submoduleId ||
+    query.page > 1,
   );
 }
 
@@ -87,28 +87,23 @@ export default async function DocumentsPage({
     ? resolveHistoryModuleId(rootModules, query.moduleId)
     : undefined;
 
-  // Una sola consulta por navegación. Los conteos de cada módulo ya vienen en
-  // el resumen y solo el módulo abierto necesita sus documentos: antes se
-  // pedían en paralelo los de todos los módulos, lo que hacía lenta cada
-  // selección y podía agotar el tiempo de la función.
+  // En la vista agrupada no se bloquea el render con la consulta de la
+  // biblioteca: el marco del Historial, el carril y los conteos ya llegan con
+  // el resumen de módulos, y el panel del módulo inicial se llena con la server
+  // action apenas monta la vista. Con filtros activos sí se consulta aquí: la
+  // tabla plana necesita sus filas desde el primer render.
   let library: DocumentLibraryPage = emptyLibrary;
   let loadError = false;
-  try {
-    library = await client.listDocumentLibrary(
-      grouped
-        ? {
-            ...query,
-            limit: HISTORY_PREVIEW_LIMIT,
-            moduleId: historyModuleId,
-            offset: 0,
-            submoduleId: undefined,
-          }
-        : query,
-    );
-  } catch {
-    // La vista muestra el aviso con la opción de reintentar sin bloquear el
-    // resto de la pantalla: el carril de módulos sigue navegable.
-    loadError = true;
+  const initialPagePending = grouped;
+
+  if (!grouped) {
+    try {
+      library = await client.listDocumentLibrary(query);
+    } catch {
+      // La vista muestra el aviso con la opción de reintentar sin bloquear el
+      // resto de la pantalla: el carril de módulos sigue navegable.
+      loadError = true;
+    }
   }
 
   if (!grouped && !loadError && query.page > 1 && library.items.length === 0) {
@@ -132,6 +127,7 @@ export default async function DocumentsPage({
         historyGrouped={grouped}
         historyLayout
         historyModuleId={historyModuleId}
+        initialPagePending={initialPagePending}
         library={library}
         loadError={loadError}
         modules={moduleSummaries}

@@ -41,6 +41,12 @@ interface DocumentLibraryViewProps {
   historyGrouped?: boolean;
   /** Módulo abierto en la vista agrupada; lo resuelve la página. */
   historyModuleId?: string;
+  /**
+   * El servidor no esperó la consulta del módulo inicial (vista agrupada): el
+   * panel arranca en esqueleto y pide sus documentos al montar. Así el marco
+   * del Historial aparece antes que la consulta más pesada.
+   */
+  initialPagePending?: boolean;
   library: DocumentLibraryPage;
   /** La consulta de la página falló: se avisa sin bloquear el carril. */
   loadError?: boolean;
@@ -447,6 +453,7 @@ interface HistoryModulesSectionProps {
   initialError: boolean;
   initialModuleId?: string;
   initialPage: DocumentLibraryPage;
+  initialPagePending: boolean;
   modules: ManagedModuleSummary[];
   query: ParsedDocumentLibraryQuery;
   quickActions: boolean;
@@ -455,12 +462,15 @@ interface HistoryModulesSectionProps {
 /**
  * Carril y paneles del Historial agrupado.
  *
- * Abrir un módulo no navega: el primer módulo llega consultado desde el
- * servidor y los demás se piden de a uno a una server action. Así el módulo
- * anterior permanece abierto, no se remonta la página (ni su esqueleto de
- * carga) y no hay salto de scroll. Cada módulo se consulta una sola vez y el
- * puntero o el foco sobre una fila adelanta la consulta para que la apertura se
- * sienta inmediata.
+ * Abrir un módulo no navega: los módulos se piden de a uno a una server action,
+ * en el cliente. Así el módulo anterior permanece abierto, no se remonta la
+ * página (ni su esqueleto de carga) y no hay salto de scroll. Cada módulo se
+ * consulta una sola vez y el puntero o el foco sobre una fila adelanta la
+ * consulta para que la apertura se sienta inmediata.
+ *
+ * El primero también puede llegar sin consultar (`initialPagePending`): en ese
+ * caso el marco del Historial se muestra de inmediato con el conteo del
+ * resumen y el panel se llena apenas responde la consulta.
  */
 function HistoryModulesSection({
   activeFilterCount,
@@ -468,6 +478,7 @@ function HistoryModulesSection({
   initialError,
   initialModuleId,
   initialPage,
+  initialPagePending,
   modules,
   query,
   quickActions,
@@ -477,12 +488,17 @@ function HistoryModulesSection({
   );
   const [activeModuleId, setActiveModuleId] = useState(initialModuleId);
   const [pages, setPages] = useState<Record<string, DocumentLibraryPage>>(
-    initialModuleId && !initialError ? { [initialModuleId]: initialPage } : {},
+    initialModuleId && !initialError && !initialPagePending
+      ? { [initialModuleId]: initialPage }
+      : {},
   );
   const [errors, setErrors] = useState<Record<string, boolean>>(
     initialModuleId && initialError ? { [initialModuleId]: true } : {},
   );
-  const [loadingModuleIds, setLoadingModuleIds] = useState<string[]>([]);
+  const [loadingModuleIds, setLoadingModuleIds] = useState<string[]>(
+    initialPagePending && initialModuleId ? [initialModuleId] : [],
+  );
+  const [closingModuleIds, setClosingModuleIds] = useState<string[]>([]);
   // Los refs permiten consultar el estado dentro de un callback estable, sin
   // repetir la consulta de un módulo que ya está cargado o en curso.
   const pagesRef = useRef(pages);
@@ -547,9 +563,86 @@ function HistoryModulesSection({
   );
 
   const closeModule = useCallback((moduleId: string) => {
-    setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
-    setActiveModuleId((current) => (current === moduleId ? undefined : current));
+    setActiveModuleId((current) =>
+      current === moduleId ? undefined : current,
+    );
+
+    const reducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (reducedMotion) {
+      setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
+      return;
+    }
+
+    // Se contrae con la misma transición con la que se abrió y recién después
+    // se retira, para que el cierre no sea un salto.
+    setClosingModuleIds((ids) =>
+      ids.includes(moduleId) ? ids : [...ids, moduleId],
+    );
+    window.setTimeout(() => {
+      setOpenModuleIds((ids) => ids.filter((id) => id !== moduleId));
+      setClosingModuleIds((ids) => ids.filter((id) => id !== moduleId));
+    }, 200);
   }, []);
+
+  /*
+   * El módulo inicial no esperó al servidor: se pide apenas monta la vista. El
+   * marco, el carril y el conteo del resumen ya están en pantalla, así que la
+   * espera se ve como un panel que se completa y no como una página en blanco.
+   */
+  useEffect(() => {
+    if (initialPagePending && initialModuleId && !initialError) {
+      void fetchModulePage(initialModuleId);
+    }
+  }, [fetchModulePage, initialError, initialModuleId, initialPagePending]);
+
+  /*
+   * Precarga: el Historial existe para abrir módulos, así que al entrar se
+   * adelantan los dos con más documentos (los que primero se eligen). Se hace
+   * en tiempo ocioso para no competir con lo que ya está en pantalla y se omite
+   * si el equipo o el navegador piden ahorrar datos.
+   */
+  useEffect(() => {
+    const connection = (
+      navigator as Navigator & { connection?: { saveData?: boolean } }
+    ).connection;
+
+    if (connection?.saveData) {
+      return;
+    }
+
+    const candidates = [...modules]
+      .filter(
+        (module) =>
+          module.id !== initialModuleId &&
+          module.canManage !== false &&
+          module.documentCount > 0,
+      )
+      .sort((a, b) => b.documentCount - a.documentCount)
+      .slice(0, 2);
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const run = () => {
+      candidates.forEach((module) => void fetchModulePage(module.id));
+    };
+    const handle =
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(run)
+        : window.setTimeout(run, 300);
+
+    return () => {
+      if (typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(handle);
+        return;
+      }
+      window.clearTimeout(handle);
+    };
+  }, [fetchModulePage, initialModuleId, modules]);
 
   const retryModule = useCallback(
     (moduleId: string) => {
@@ -656,170 +749,182 @@ function HistoryModulesSection({
           return (
             <article
               aria-busy={loading}
-              className={styles.modulePanel}
+              className={`${styles.modulePanel}${
+                closingModuleIds.includes(module.id)
+                  ? ` ${styles.modulePanelClosing}`
+                  : ""
+              }`}
               key={module.id}
             >
-              <header className={styles.modulePanelHeader}>
-                <span className={styles.moduleRowIcon}>
-                  <ModuleIcon name={module.name} />
-                </span>
-                <h3>{module.name}</h3>
-                <span className={styles.modulePanelCount}>
-                  {failed
-                    ? `${module.documentCount} ${
-                        module.documentCount === 1 ? "documento" : "documentos"
-                      }`
-                    : `${total} ${total === 1 ? "documento" : "documentos"}`}
-                </span>
-                <button
-                  aria-expanded="true"
-                  aria-label={`Contraer el módulo ${module.name}`}
-                  className={styles.modulePanelToggle}
-                  onClick={() => closeModule(module.id)}
-                  type="button"
-                >
-                  <ChevronIcon direction="up" />
-                </button>
-              </header>
+              {/* Un solo hijo para poder animar la altura del cierre sin medir
+                  el contenido a mano. */}
+              <div className={styles.panelClip}>
+                <div className={styles.panelClipInner}>
+                  <header className={styles.modulePanelHeader}>
+                    <span className={styles.moduleRowIcon}>
+                      <ModuleIcon name={module.name} />
+                    </span>
+                    <h3>{module.name}</h3>
+                    <span className={styles.modulePanelCount}>
+                      {failed || !page
+                        ? `${module.documentCount} ${
+                            module.documentCount === 1
+                              ? "documento"
+                              : "documentos"
+                          }`
+                        : `${total} ${total === 1 ? "documento" : "documentos"}`}
+                    </span>
+                    <button
+                      aria-expanded="true"
+                      aria-label={`Contraer el módulo ${module.name}`}
+                      className={styles.modulePanelToggle}
+                      onClick={() => closeModule(module.id)}
+                      type="button"
+                    >
+                      <ChevronIcon direction="up" />
+                    </button>
+                  </header>
 
-              {failed ? (
-                <div className={styles.modulePanelError} role="alert">
-                  <div>
-                    <strong>No pudimos cargar los documentos</strong>
-                    <p>
-                      Revisa tu conexión e inténtalo nuevamente. Ningún cambio
-                      fue aplicado.
+                  {failed ? (
+                    <div className={styles.modulePanelError} role="alert">
+                      <div>
+                        <strong>No pudimos cargar los documentos</strong>
+                        <p>
+                          Revisa tu conexión e inténtalo nuevamente. Ningún
+                          cambio fue aplicado.
+                        </p>
+                      </div>
+                      <Link
+                        href={retryHref}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          retryModule(module.id);
+                        }}
+                      >
+                        Reintentar
+                      </Link>
+                    </div>
+                  ) : !page ? (
+                    <div className={styles.panelLoading}>
+                      <div aria-hidden="true" className={styles.panelSkeleton}>
+                        <span className={styles.panelSkeletonRow} />
+                        <span className={styles.panelSkeletonRow} />
+                        <span className={styles.panelSkeletonRow} />
+                      </div>
+                      <p className="sr-only" role="status">
+                        Cargando los documentos de {module.name}
+                      </p>
+                    </div>
+                  ) : shown === 0 ? (
+                    <p className={styles.modulePanelEmpty}>
+                      Este módulo todavía no tiene documentos registrados.
                     </p>
-                  </div>
-                  <Link
-                    href={retryHref}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      retryModule(module.id);
-                    }}
-                  >
-                    Reintentar
-                  </Link>
-                </div>
-              ) : !page ? (
-                <div className={styles.panelLoading}>
-                  <div aria-hidden="true" className={styles.panelSkeleton}>
-                    <span className={styles.panelSkeletonRow} />
-                    <span className={styles.panelSkeletonRow} />
-                    <span className={styles.panelSkeletonRow} />
-                  </div>
-                  <p className="sr-only" role="status">
-                    Cargando los documentos de {module.name}
-                  </p>
-                </div>
-              ) : shown === 0 ? (
-                <p className={styles.modulePanelEmpty}>
-                  Este módulo todavía no tiene documentos registrados.
-                </p>
-              ) : (
-                <>
-                  {/*
+                  ) : (
+                    <>
+                      {/*
                     Dentro de un módulo la columna «Módulo / Submódulo» repite
                     el contexto del panel: se omite y cada fila se resume en
                     una sola línea, como en el diseño de referencia.
                   */}
-                  <div
-                    aria-label={`Documentos de ${module.name}, desplazable horizontalmente`}
-                    className={styles.panelTableRegion}
-                    role="region"
-                    tabIndex={0}
-                  >
-                    <table className={styles.panelTable}>
-                      <thead>
-                        <tr>
-                          <th scope="col">Tipo / Número</th>
-                          <th scope="col">Año</th>
-                          <th scope="col">Entidad</th>
-                          <th scope="col">Situación</th>
-                          <th scope="col">Estado</th>
-                          <th scope="col">Fecha de carga</th>
-                          <th
-                            className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} ${styles.panelActionsCell}`}
-                            scope="col"
-                          >
-                            Acciones
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {page.items.map((document) => (
-                          <tr key={document.id}>
-                            <th scope="row">
-                              <Link
-                                className={styles.panelTitleLink}
-                                href={`/admin/documents/${document.id}`}
-                                title={document.title}
+                      <div
+                        aria-label={`Documentos de ${module.name}, desplazable horizontalmente`}
+                        className={styles.panelTableRegion}
+                        role="region"
+                        tabIndex={0}
+                      >
+                        <table className={styles.panelTable}>
+                          <thead>
+                            <tr>
+                              <th scope="col">Tipo / Número</th>
+                              <th scope="col">Año</th>
+                              <th scope="col">Entidad</th>
+                              <th scope="col">Situación</th>
+                              <th scope="col">Estado</th>
+                              <th scope="col">Fecha de carga</th>
+                              <th
+                                className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} ${styles.panelActionsCell}`}
+                                scope="col"
                               >
-                                {document.title}
-                              </Link>
-                              <span className={styles.panelType}>
-                                {displayedDocumentType(document)}
-                                {document.resolutionNumber
-                                  ? ` · ${document.resolutionNumber}`
-                                  : ""}
-                              </span>
-                              <MissingPdfNote document={document} />
-                            </th>
-                            <td>{document.issuanceYear ?? "—"}</td>
-                            <td>{displayedIssuingEntity(document)}</td>
-                            <td>
-                              <SituationBadge document={document} />
-                            </td>
-                            <td>
-                              <TechnicalBadge document={document} />
-                            </td>
-                            <td>
-                              <time dateTime={document.createdAt}>
-                                {dateFormatter.format(
-                                  new Date(document.createdAt),
-                                )}
-                              </time>
-                            </td>
-                            <td
-                              className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""}`}
-                            >
-                              <DocumentActions
-                                document={document}
-                                quickActions={quickActions}
-                              />
-                            </td>
-                          </tr>
+                                Acciones
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {page.items.map((document) => (
+                              <tr key={document.id}>
+                                <th scope="row">
+                                  <Link
+                                    className={styles.panelTitleLink}
+                                    href={`/admin/documents/${document.id}`}
+                                    title={document.title}
+                                  >
+                                    {document.title}
+                                  </Link>
+                                  <span className={styles.panelType}>
+                                    {displayedDocumentType(document)}
+                                    {document.resolutionNumber
+                                      ? ` · ${document.resolutionNumber}`
+                                      : ""}
+                                  </span>
+                                  <MissingPdfNote document={document} />
+                                </th>
+                                <td>{document.issuanceYear ?? "—"}</td>
+                                <td>{displayedIssuingEntity(document)}</td>
+                                <td>
+                                  <SituationBadge document={document} />
+                                </td>
+                                <td>
+                                  <TechnicalBadge document={document} />
+                                </td>
+                                <td>
+                                  <time dateTime={document.createdAt}>
+                                    {dateFormatter.format(
+                                      new Date(document.createdAt),
+                                    )}
+                                  </time>
+                                </td>
+                                <td
+                                  className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""}`}
+                                >
+                                  <DocumentActions
+                                    document={document}
+                                    quickActions={quickActions}
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <ul className={styles.previewCards} role="list">
+                        {page.items.map((document) => (
+                          <PreviewDocumentCard
+                            document={document}
+                            key={document.id}
+                            quickActions={quickActions}
+                          />
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <ul className={styles.previewCards} role="list">
-                    {page.items.map((document) => (
-                      <PreviewDocumentCard
-                        document={document}
-                        key={document.id}
-                        quickActions={quickActions}
-                      />
-                    ))}
-                  </ul>
-                </>
-              )}
+                      </ul>
+                    </>
+                  )}
 
-              <footer className={styles.modulePanelFooter}>
-                <span>
-                  {failed
-                    ? "No se pudo contar este módulo"
-                    : loading || !page
-                      ? "Cargando documentos…"
-                      : `Mostrando ${shown} de ${total} ${
-                          total === 1 ? "documento" : "documentos"
-                        }`}
-                </span>
-                <Link href={`/admin/modules/${module.id}`}>
-                  <span>Ver todos en {module.name}</span>
-                  <span aria-hidden="true"> →</span>
-                </Link>
-              </footer>
+                  <footer className={styles.modulePanelFooter}>
+                    <span>
+                      {failed
+                        ? "No se pudo contar este módulo"
+                        : loading || !page
+                          ? "Cargando documentos…"
+                          : `Mostrando ${shown} de ${total} ${
+                              total === 1 ? "documento" : "documentos"
+                            }`}
+                    </span>
+                    <Link href={`/admin/modules/${module.id}`}>
+                      <span>Ver todos en {module.name}</span>
+                      <span aria-hidden="true"> →</span>
+                    </Link>
+                  </footer>
+                </div>
+              </div>
             </article>
           );
         })}
@@ -842,6 +947,7 @@ export function DocumentLibraryView({
   historyGrouped = false,
   historyLayout = false,
   historyModuleId,
+  initialPagePending = false,
   library,
   loadError = false,
   lockLocation = false,
@@ -1236,6 +1342,7 @@ export function DocumentLibraryView({
           initialError={loadError}
           initialModuleId={historyModuleId}
           initialPage={library}
+          initialPagePending={initialPagePending}
           key={historySeed}
           modules={historyModules}
           query={query}
@@ -1274,212 +1381,212 @@ export function DocumentLibraryView({
           ) : library.items.length === 0 ? (
             <EmptyLibraryState activeFilterCount={activeFilterCount} />
           ) : (
-          <>
-            {/*
+            <>
+              {/*
               Cada documento ocupa dos filas: el título a lo ancho de toda la
               tabla (una sola línea; el texto completo va en el tooltip y en el
               detalle) y debajo sus datos. Antes el título vivía en una columna
               angosta y un nombre largo estiraba cada fila hacia abajo.
             */}
-            <div
-              aria-label="Tabla de documentos, desplazable horizontalmente"
-              className={`${styles.tableRegion} hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block`}
-              role="region"
-              tabIndex={0}
-            >
-              <table
-                className={`${styles.table} w-full min-w-[60rem] border-collapse text-left text-base`}
+              <div
+                aria-label="Tabla de documentos, desplazable horizontalmente"
+                className={`${styles.tableRegion} hidden overflow-x-auto rounded-xl border border-avend-border bg-avend-surface lg:block`}
+                role="region"
+                tabIndex={0}
               >
-                <thead className="bg-avend-surface-muted text-avend-navy">
-                  <tr>
-                    <th className="px-4 py-3 font-bold" scope="col">
-                      Tipo / número
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Año
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Entidad
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Módulo / Submódulo
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Situación
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Estado
-                    </th>
-                    <th className="px-3 py-3 font-bold" scope="col">
-                      Fecha de carga
-                    </th>
-                    <th
-                      className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 py-3 text-right font-bold`}
-                      scope="col"
-                    >
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                {library.items.map((document) => (
-                  <tbody className={styles.documentGroup} key={document.id}>
+                <table
+                  className={`${styles.table} w-full min-w-[60rem] border-collapse text-left text-base`}
+                >
+                  <thead className="bg-avend-surface-muted text-avend-navy">
                     <tr>
+                      <th className="px-4 py-3 font-bold" scope="col">
+                        Tipo / número
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Año
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Entidad
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Módulo / Submódulo
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Situación
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Estado
+                      </th>
+                      <th className="px-3 py-3 font-bold" scope="col">
+                        Fecha de carga
+                      </th>
                       <th
-                        className={styles.titleCell}
-                        colSpan={8}
-                        scope="rowgroup"
+                        className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 py-3 text-right font-bold`}
+                        scope="col"
                       >
-                        <Link
-                          className={styles.titleLink}
-                          href={`/admin/documents/${document.id}`}
-                          title={document.title}
-                        >
-                          {document.title}
-                        </Link>
+                        Acciones
                       </th>
                     </tr>
-                    <tr className="align-top">
-                      <td className="px-4 pb-4 pt-1 text-avend-text-muted">
-                        {displayedDocumentType(document)}
-                        {document.resolutionNumber
-                          ? ` · ${document.resolutionNumber}`
-                          : ""}
-                        <MissingPdfNote document={document} />
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        {document.issuanceYear ?? "—"}
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        {displayedIssuingEntity(document)}
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        <AssociationList
-                          associations={document.moduleAssociations}
-                        />
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        <SituationBadge document={document} />
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        <TechnicalBadge document={document} />
-                      </td>
-                      <td className="px-3 pb-4 pt-1">
-                        <time dateTime={document.createdAt}>
-                          {dateFormatter.format(new Date(document.createdAt))}
-                        </time>
-                        <span className="mt-1 block break-words text-avend-text-muted">
-                          {document.createdByName ?? "Cuenta no disponible"}
-                        </span>
-                        <LastVersionDate document={document} />
-                      </td>
-                      <td
-                        className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 pb-4 pt-1`}
-                      >
-                        <DocumentActions
-                          document={document}
-                          quickActions={quickActions}
-                        />
-                      </td>
-                    </tr>
-                  </tbody>
-                ))}
-              </table>
-            </div>
+                  </thead>
+                  {library.items.map((document) => (
+                    <tbody className={styles.documentGroup} key={document.id}>
+                      <tr>
+                        <th
+                          className={styles.titleCell}
+                          colSpan={8}
+                          scope="rowgroup"
+                        >
+                          <Link
+                            className={styles.titleLink}
+                            href={`/admin/documents/${document.id}`}
+                            title={document.title}
+                          >
+                            {document.title}
+                          </Link>
+                        </th>
+                      </tr>
+                      <tr className="align-top">
+                        <td className="px-4 pb-4 pt-1 text-avend-text-muted">
+                          {displayedDocumentType(document)}
+                          {document.resolutionNumber
+                            ? ` · ${document.resolutionNumber}`
+                            : ""}
+                          <MissingPdfNote document={document} />
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          {document.issuanceYear ?? "—"}
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          {displayedIssuingEntity(document)}
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          <AssociationList
+                            associations={document.moduleAssociations}
+                          />
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          <SituationBadge document={document} />
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          <TechnicalBadge document={document} />
+                        </td>
+                        <td className="px-3 pb-4 pt-1">
+                          <time dateTime={document.createdAt}>
+                            {dateFormatter.format(new Date(document.createdAt))}
+                          </time>
+                          <span className="mt-1 block break-words text-avend-text-muted">
+                            {document.createdByName ?? "Cuenta no disponible"}
+                          </span>
+                          <LastVersionDate document={document} />
+                        </td>
+                        <td
+                          className={`${styles.actionsCell} ${quickActions ? styles.actionsCellWide : ""} px-3 pb-4 pt-1`}
+                        >
+                          <DocumentActions
+                            document={document}
+                            quickActions={quickActions}
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  ))}
+                </table>
+              </div>
 
-            <ul className="space-y-4 lg:hidden" role="list">
-              {library.items.map((document) => (
-                <li
-                  className="rounded-xl border border-avend-border bg-avend-surface p-5 shadow-sm"
-                  key={document.id}
-                >
-                  <Link
-                    className={`${styles.cardTitle} text-lg`}
-                    href={`/admin/documents/${document.id}`}
-                    title={document.title}
+              <ul className="space-y-4 lg:hidden" role="list">
+                {library.items.map((document) => (
+                  <li
+                    className="rounded-xl border border-avend-border bg-avend-surface p-5 shadow-sm"
+                    key={document.id}
                   >
-                    {document.title}
-                  </Link>
-                  <p className="mt-1 text-base text-avend-text-muted">
-                    {displayedDocumentType(document)}
-                    {document.resolutionNumber
-                      ? ` · ${document.resolutionNumber}`
-                      : ""}
-                  </p>
-                  <MissingPdfNote document={document} />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <SituationBadge document={document} />
-                    <TechnicalBadge document={document} />
-                  </div>
-                  <dl className="mt-4 grid gap-3 text-base">
-                    <div>
-                      <dt className="font-semibold">Año / entidad</dt>
-                      <dd>
-                        {document.issuanceYear ?? "—"} ·{" "}
-                        {displayedIssuingEntity(document)}
-                      </dd>
+                    <Link
+                      className={`${styles.cardTitle} text-lg`}
+                      href={`/admin/documents/${document.id}`}
+                      title={document.title}
+                    >
+                      {document.title}
+                    </Link>
+                    <p className="mt-1 text-base text-avend-text-muted">
+                      {displayedDocumentType(document)}
+                      {document.resolutionNumber
+                        ? ` · ${document.resolutionNumber}`
+                        : ""}
+                    </p>
+                    <MissingPdfNote document={document} />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <SituationBadge document={document} />
+                      <TechnicalBadge document={document} />
                     </div>
-                    <div>
-                      <dt className="font-semibold">Módulo / Submódulo</dt>
-                      <dd>
-                        <AssociationList
-                          associations={document.moduleAssociations}
-                        />
-                      </dd>
+                    <dl className="mt-4 grid gap-3 text-base">
+                      <div>
+                        <dt className="font-semibold">Año / entidad</dt>
+                        <dd>
+                          {document.issuanceYear ?? "—"} ·{" "}
+                          {displayedIssuingEntity(document)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold">Módulo / Submódulo</dt>
+                        <dd>
+                          <AssociationList
+                            associations={document.moduleAssociations}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold">
+                          Fecha y responsable de carga
+                        </dt>
+                        <dd>
+                          <time dateTime={document.createdAt}>
+                            {dateFormatter.format(new Date(document.createdAt))}
+                          </time>{" "}
+                          · {document.createdByName ?? "Cuenta no disponible"}
+                          <LastVersionDate document={document} />
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="mt-5">
+                      <DocumentActions
+                        document={document}
+                        quickActions={quickActions}
+                        variant="card"
+                      />
                     </div>
-                    <div>
-                      <dt className="font-semibold">
-                        Fecha y responsable de carga
-                      </dt>
-                      <dd>
-                        <time dateTime={document.createdAt}>
-                          {dateFormatter.format(new Date(document.createdAt))}
-                        </time>{" "}
-                        · {document.createdByName ?? "Cuenta no disponible"}
-                        <LastVersionDate document={document} />
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="mt-5">
-                    <DocumentActions
-                      document={document}
-                      quickActions={quickActions}
-                      variant="card"
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
-        {totalPages > 1 ? (
-          <nav
-            aria-label="Paginación de documentos"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3"
-          >
-            <span className="text-base text-avend-text-muted">
-              Página {query.page} de {totalPages}
-            </span>
-            <div className="flex gap-2">
-              {query.page > 1 ? (
-                <Link
-                  className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
-                  href={documentLibraryHref(query, query.page - 1, basePath)}
-                >
-                  Anterior
-                </Link>
-              ) : null}
-              {query.page < totalPages ? (
-                <Link
-                  className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
-                  href={documentLibraryHref(query, query.page + 1, basePath)}
-                >
-                  Siguiente
-                </Link>
-              ) : null}
-            </div>
-          </nav>
-        ) : null}
+          {totalPages > 1 ? (
+            <nav
+              aria-label="Paginación de documentos"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3"
+            >
+              <span className="text-base text-avend-text-muted">
+                Página {query.page} de {totalPages}
+              </span>
+              <div className="flex gap-2">
+                {query.page > 1 ? (
+                  <Link
+                    className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
+                    href={documentLibraryHref(query, query.page - 1, basePath)}
+                  >
+                    Anterior
+                  </Link>
+                ) : null}
+                {query.page < totalPages ? (
+                  <Link
+                    className="inline-flex min-h-11 items-center rounded-md border border-avend-border px-4 text-base font-semibold"
+                    href={documentLibraryHref(query, query.page + 1, basePath)}
+                  >
+                    Siguiente
+                  </Link>
+                ) : null}
+              </div>
+            </nav>
+          ) : null}
         </section>
       )}
     </div>
