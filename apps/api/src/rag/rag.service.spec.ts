@@ -948,6 +948,85 @@ describe('RagService', () => {
     });
   });
 
+  it('rescata el artículo legal de destitución en el módulo legal', async () => {
+    const sanction = {
+      ...source,
+      chunkContent:
+        'Artículo 83.- Destitución. La sanción de destitución se oficializa por resolución del Titular de la instancia respectiva.',
+      documentTitle:
+        'Decreto Supremo N 004-2013-ED, Reglamento de la Ley de Reforma Magisterial',
+      lexicalScore: 0.5,
+      moduleIds: ['legal-module'],
+      moduleNames: ['Ley y reglamento'],
+      semanticScore: 0.4,
+    };
+    gateway.search.mockImplementation(
+      (args: { matchThreshold?: number; query?: string }) => {
+        if (!(args.query ?? '').includes('destitución')) {
+          return Promise.resolve([]);
+        }
+        // La búsqueda canónica no encuentra nada; solo el rescate sin umbral
+        // devuelve el artículo del Reglamento.
+        if (args.matchThreshold === 0) return Promise.resolve([sanction]);
+        return Promise.resolve([]);
+      },
+    );
+
+    const result = await service.retrieve(
+      '¿Y qué autoridad impone una sanción de destitución?',
+      'legal-module',
+      [],
+      { legalCrossModule: true, selectedModuleName: 'Ley y reglamento' },
+    );
+    expect(result).toMatchObject({
+      kind: 'evidence',
+      sources: [expect.objectContaining({ chunkId: sanction.chunkId })],
+    });
+    // Solo el rescate busca sin umbral; la búsqueda canónica mantiene el
+    // umbral del módulo. Sin el rescate legal no existe esta llamada.
+    const rescueCalls = (
+      gateway.search.mock.calls as Array<
+        [{ matchThreshold?: number; query?: string }]
+      >
+    ).filter(
+      ([args]) =>
+        args.matchThreshold === 0 && (args.query ?? '').includes('destitución'),
+    );
+    expect(rescueCalls.length).toBeGreaterThan(0);
+  });
+
+  it('no rescata la Ley 29944 cuando la pregunta nombra otra ley', async () => {
+    gateway.search.mockImplementation(
+      (args: { matchThreshold?: number; query?: string }) =>
+        Promise.resolve(
+          args.matchThreshold === 0 &&
+            (args.query ?? '').includes('destitución')
+            ? [
+                {
+                  ...source,
+                  chunkContent:
+                    'Artículo 83.- Destitución. Sanción administrativa.',
+                  documentTitle:
+                    'Decreto Supremo N 004-2013-ED, Reglamento de la Ley de Reforma Magisterial',
+                  lexicalScore: 0.5,
+                  moduleIds: ['legal-module'],
+                  moduleNames: ['Ley y reglamento'],
+                },
+              ]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve(
+        '¿Qué dice la Ley 29988 sobre la destitución?',
+        'legal-module',
+        [],
+        { legalCrossModule: true, selectedModuleName: 'Ley y reglamento' },
+      ),
+    ).resolves.toEqual({ kind: 'no_evidence', topRelevanceScore: null });
+  });
+
   it.each([
     [
       '¿Cuál es la mejor época para sembrar papa?',

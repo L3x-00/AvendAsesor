@@ -1,4 +1,5 @@
 import {
+  isCoreLegalEvidence,
   isLegalModuleName,
   isLegalQuestion,
   isLegalSource,
@@ -120,5 +121,24 @@ describe('legal-retrieval', () => {
     expect(legalEvidenceQueries('¿Qué es la Ley N.º 29944?', true)).toContain(
       'Ley 29944 Ley de Reforma Magisterial reglamento Decreto Supremo 004-2013-ED artículos vigencia',
     );
+  });
+
+  it('admite la destitución del propio Reglamento como evidencia legal directa', () => {
+    const question = '¿Y qué autoridad impone una sanción de destitución?';
+    expect(
+      isCoreLegalEvidence(question, {
+        documentTitle:
+          'Decreto Supremo N 004-2013-ED, Reglamento de la Ley de Reforma Magisterial',
+        chunkContent:
+          'Artículo 83.- Destitución. La sanción de destitución se oficializa por resolución del Titular.',
+      }),
+    ).toBe(true);
+    expect(
+      isCoreLegalEvidence(question, {
+        documentTitle: 'Norma técnica de asistencia',
+        chunkContent:
+          'La destitución se coordina con el área de recursos humanos.',
+      }),
+    ).toBe(false);
   });
 });

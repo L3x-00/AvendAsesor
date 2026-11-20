@@ -2619,6 +2619,13 @@ export class RagService {
         ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
         ...teachingPositionEvidenceQueries(salaryQuestion),
+        // El módulo legal necesita el mismo rescate que los otros temas: sin
+        // él, un seguimiento ("¿qué autoridad impone destitución?") se queda
+        // sin evidencia aunque el Reglamento contenga el artículo.
+        ...legalEvidenceQueries(
+          question,
+          Boolean(options.legalModule || options.legalCrossModule),
+        ),
         ...processQueriesForIntent(
           inheritedIntent,
           question,
@@ -2670,7 +2677,10 @@ export class RagService {
                   (inheritedIntent &&
                     treatsProcessIntent(inheritedIntent, candidate)) ||
                   isDirectRationalizationEvidence(question, candidate) ||
-                  isDirectTeachingPositionEvidence(question, candidate)),
+                  isDirectTeachingPositionEvidence(question, candidate) ||
+                  ((options.legalModule || options.legalCrossModule) &&
+                    !namesOtherLaw(question) &&
+                    isCoreLegalEvidence(question, candidate))),
             ),
         );
       }

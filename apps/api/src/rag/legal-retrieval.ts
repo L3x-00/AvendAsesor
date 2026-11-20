@@ -157,10 +157,13 @@ export function isCoreLegalEvidence(
       asked,
     )
   ) {
+    // El propio Reglamento (art. 83) también regula la destitución: ser la
+    // fuente primaria basta, sin exigir que el título nombre el PAD.
     return (
-      /proceso administrativo disciplinario|29988|hostigamiento sexual/u.test(
-        title,
-      ) &&
+      (isPrimaryLegalSource(source) ||
+        /proceso administrativo disciplinario|29988|hostigamiento sexual/u.test(
+          title,
+        )) &&
       /\bdestitucion\b|\bsancion(?:es)?\b|\bproceso administrativo disciplinario\b/u.test(
         text,
       )
