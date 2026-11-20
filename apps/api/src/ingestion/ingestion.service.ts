@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MAX_PDF_PAGES } from '../documents/pdf-inspection.service';
@@ -229,10 +230,13 @@ export class IngestionService {
     // stop the job, even when an optional sidecar was supplied.
     const total = await this.pdf.countPages(file);
     signal.throwIfAborted();
-    const pages = this.mineru.extract(sidecar.toString('utf8'), total);
+    // TD-008: la huella se calcula sobre el PDF canónico del job, no sobre el
+    // sidecar, para que un Markdown generado desde otro archivo sea rechazado.
+    const pdfHash = createHash('sha256').update(file).digest('hex');
+    const pages = this.mineru.extract(sidecar.toString('utf8'), total, pdfHash);
     if (!pages)
       this.logger.warn(
-        `MinerU sidecar inválido para el job ${job.jobId}; se usa la extracción PDF.`,
+        `MinerU sidecar sin huella válida del PDF para el job ${job.jobId}; se usa la extracción PDF.`,
       );
     return pages;
   }

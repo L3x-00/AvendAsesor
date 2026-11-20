@@ -1,5 +1,6 @@
 // Run after building the API. All files are synthetic and persistence is isolated.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, rmdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -99,6 +100,10 @@ async function verify(
   { blank = null, expected = null, sidecar = null } = {},
 ) {
   const file = syntheticPdf(total, new Set(scanned), blank);
+  // TD-008: los fixtures del sidecar llevan la huella del PDF sintético.
+  const boundSidecar = sidecar
+    ? `<!-- avend-pdf-sha256: ${createHash("sha256").update(file).digest("hex")} -->\n${sidecar}`
+    : null;
   const pdf = new PdfExtractionService();
   const render = pdf.render.bind(pdf);
   const rendered = [];
@@ -123,7 +128,8 @@ async function verify(
     {
       claimNext: async () => job,
       downloadPdf: async () => file,
-      downloadOptionalObject: async () => sidecar && Buffer.from(sidecar),
+      downloadOptionalObject: async () =>
+        boundSidecar && Buffer.from(boundSidecar),
       clearChunks: async () => {
         cleared = true;
       },
