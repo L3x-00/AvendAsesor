@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method */
+import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { MAX_EXTRACTED_CHARS } from './document-format';
 import { IngestionService, MAX_JOB_DURATION_MS } from './ingestion.service';
@@ -137,8 +138,13 @@ describe('IngestionService', () => {
   it('usa el sidecar MinerU válido antes de extraer el PDF', async () => {
     gateway.claimNext.mockResolvedValue(job);
     gateway.downloadPdf.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    const pdfHash = createHash('sha256')
+      .update(Buffer.from('%PDF-1.7'))
+      .digest('hex');
     (gateway.downloadOptionalObject as jest.Mock).mockResolvedValue(
-      Buffer.from('<!-- page 1 of 1 -->\n| A | B |\n| --- | --- |\n| 1 | 2 |'),
+      Buffer.from(
+        `<!-- avend-pdf-sha256: ${pdfHash} -->\n<!-- page 1 of 1 -->\n| A | B |\n| --- | --- |\n| 1 | 2 |`,
+      ),
     );
     mineru.extract.mockReturnValue([
       { pageNumber: 1, text: '| A | B |\n| --- | --- |\n| 1 | 2 |' },
@@ -152,7 +158,7 @@ describe('IngestionService', () => {
       job.storageBucket,
       `${job.storagePath}.mineru.md`,
     );
-    expect(mineru.extract).toHaveBeenCalledWith(expect.any(String), 1);
+    expect(mineru.extract).toHaveBeenCalledWith(expect.any(String), 1, pdfHash);
     expect(pdf.extract).not.toHaveBeenCalled();
     expect(gateway.complete).toHaveBeenCalledWith(job, 1);
   });

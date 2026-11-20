@@ -76,4 +76,16 @@ describe('parseMineruMarkdown', () => {
   it('devuelve null si no queda texto útil', () => {
     expect(parseMineruMarkdown('<!-- page 1 of 1 -->\n\n')).toBeNull();
   });
+
+  it('acepta el sidecar solo cuando la huella del PDF coincide (TD-008)', () => {
+    const hash = 'a'.repeat(64);
+    const markdown = `<!-- avend-pdf-sha256: ${hash} -->\n<!-- page 1 of 1 -->\nTexto.`;
+    expect(parseMineruMarkdown(markdown, 1, hash)).toEqual([
+      { pageNumber: 1, text: 'Texto.' },
+    ]);
+    expect(parseMineruMarkdown(markdown, 1, 'b'.repeat(64))).toBeNull();
+    expect(
+      parseMineruMarkdown('<!-- page 1 of 1 -->\nTexto.', 1, hash),
+    ).toBeNull();
+  });
 });

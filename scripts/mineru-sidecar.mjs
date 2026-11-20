@@ -23,6 +23,7 @@
  * nada en Supabase. Las claves se piden a la CLI en memoria y no se imprimen.
  */
 
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -189,10 +190,16 @@ function convertPdf(pdfPath, outputPath, mineru, startServer) {
         'El Markdown no contiene todas las páginas de forma contigua; no se subirá una conversión parcial.',
       );
     }
-    writeFileSync(outputPath, markdown, 'utf8');
+    // TD-008: el sidecar queda ligado al PDF del que se generó. La ingesta
+    // rechaza cualquier Markdown sin esta marca o con una huella distinta.
+    const pdfHash = createHash('sha256')
+      .update(readFileSync(pdfPath))
+      .digest('hex');
+    const boundMarkdown = `<!-- avend-pdf-sha256: ${pdfHash} -->\n${markdown}`;
+    writeFileSync(outputPath, boundMarkdown, 'utf8');
     return {
-      bytes,
-      markdown,
+      bytes: Buffer.byteLength(boundMarkdown, 'utf8'),
+      markdown: boundMarkdown,
       maxPage: Math.max(...pages),
       pages: uniquePages.length,
       tables: markdown
