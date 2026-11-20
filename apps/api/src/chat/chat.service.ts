@@ -2395,7 +2395,7 @@ export class ChatService {
       deterministicRemunerationTopic;
     const responseSources = useExtractiveSalary
       ? (extractiveSalary?.sources ?? [])
-      : retrieval.sources;
+      : [...scopedSources];
     const citations = toCitationBundle(
       responseSources,
       selectedModuleId,

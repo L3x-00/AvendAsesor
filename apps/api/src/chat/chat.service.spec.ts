@@ -4210,6 +4210,7 @@ describe('ChatService', () => {
         },
       ]
     >;
+    expect(completionCalls.at(-1)?.[0].sources).toHaveLength(2);
     expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
     expect(completionCalls.at(-1)?.[0].detectedSubmoduleId).toBeNull();
     expect(completionCalls.at(-1)?.[0].detectedModuleId).toBe(root);
