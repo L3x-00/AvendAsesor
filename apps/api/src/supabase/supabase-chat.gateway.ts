@@ -91,9 +91,8 @@ function databaseError(error: PostgrestError): never {
     error.code === '23505' ||
     error.code === 'P0001'
   ) {
-    // Instrumentación temporal (se retira tras diagnosticar PI-01).
     throw new ConflictException(
-      `The chat request conflicts with current data (${error.code}: ${error.message}${error.details ? ` | ${error.details}` : ''})`,
+      'The chat request conflicts with current data.',
     );
   }
 

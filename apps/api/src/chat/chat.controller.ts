@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import {
   Body,
   Controller,
@@ -33,9 +32,6 @@ import { SourceDownloadQueryDto } from './dto/source-download-query.dto';
 @UseGuards(ThrottlerGuard, AuthorizationGuard, RolesGuard)
 @RequireRoles('docente', 'admin', 'superadmin')
 export class ChatController {
-  // Instrumentación temporal (se retira tras diagnosticar PI-01).
-  private readonly logger = new Logger(ChatController.name);
-
   constructor(private readonly chatService: ChatService) {}
 
   @Get('modules')
@@ -155,11 +151,6 @@ export class ChatController {
         this.writeEvent(response, event);
       }
     } catch (error) {
-      // Instrumentación temporal (se retira tras diagnosticar PI-01).
-      this.logger.error(
-        `CHAT_STREAM_DIAG code=${this.streamFailureCode(error)}`,
-        error instanceof Error ? error.stack : String(error),
-      );
       if (!abortController.signal.aborted) {
         if (startedTurn) {
           try {
