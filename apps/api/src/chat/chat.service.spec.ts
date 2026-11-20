@@ -4127,6 +4127,76 @@ describe('ChatService', () => {
     );
   });
 
+  it('acepta la Ley y el Reglamento en submódulos del mismo módulo legal', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    const root = 'root-legal';
+    historyGateway.listActiveModules.mockResolvedValue([
+      {
+        code: 'LEG',
+        description: null,
+        id: root,
+        name: 'Ley y reglamento',
+        parentModuleId: null,
+        sortOrder: 0,
+      },
+      {
+        code: 'LEY',
+        description: null,
+        id: 'sub-ley',
+        name: 'Ley de Reforma Magisterial',
+        parentModuleId: root,
+        sortOrder: 1,
+      },
+      {
+        code: 'REG',
+        description: null,
+        id: 'sub-reg',
+        name: 'Reglamento de la Ley de Reforma Magisterial',
+        parentModuleId: root,
+        sortOrder: 2,
+      },
+    ]);
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [],
+      selectedModuleId: root,
+    });
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: {
+        id: 'sub-reg',
+        name: 'Reglamento de la Ley de Reforma Magisterial',
+      },
+      sources: [
+        {
+          ...source,
+          moduleIds: ['sub-ley'],
+          moduleNames: ['Ley de Reforma Magisterial'],
+        },
+        {
+          ...source,
+          chunkId: 'reg-chunk',
+          moduleIds: ['sub-reg'],
+          moduleNames: ['Reglamento de la Ley de Reforma Magisterial'],
+        },
+      ],
+      topRelevanceScore: 0.9,
+    });
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'La destitución se oficializa por resolución. [1]';
+      })(),
+    );
+
+    const events = await collect(service, {
+      conversationId,
+      selectedModuleId: root,
+    });
+    expect(events.map((event) => event.type)).not.toContain('no_evidence');
+    expect(answerGateway.generate).toHaveBeenCalled();
+  });
+
   it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {
     const selectedModuleId = source.moduleIds[0];
     ragService.retrieve.mockResolvedValue({
