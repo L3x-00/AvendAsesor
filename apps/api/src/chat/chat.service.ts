@@ -1867,6 +1867,18 @@ export class ChatService {
         ),
       );
 
+    // La Ley y su Reglamento pueden estar en submódulos distintos del mismo
+    // módulo legal: ambas fuentes pertenecen al ámbito elegido aunque su id no
+    // coincida con el del módulo seleccionado.
+    const legalConversationScope = Boolean(
+      selectedModuleId && isLegalModuleName(selectedModuleName),
+    );
+    const sourceBelongsToConversation = (source: RetrievedChunk): boolean =>
+      sourceBelongsToModule(source, selectedModuleId ?? '') ||
+      (legalConversationScope &&
+        (source.moduleNames ?? []).length > 0 &&
+        (source.moduleNames ?? []).every((name) => isLegalModuleName(name)));
+
     if (
       retrieval.kind === 'topic_change' &&
       !continuesConversation &&
@@ -1900,10 +1912,14 @@ export class ChatService {
         retrieval.kind === 'evidence' ||
         retrieval.kind === 'topic_change') &&
         retrieval.sources.some(
-          (source) => !sourceBelongsToModule(source, selectedModuleId ?? ''),
+          (source) => !sourceBelongsToConversation(source),
         )) ||
         (retrieval.kind === 'topic_change' &&
-          retrieval.resolvedModule.id !== selectedModuleId)),
+          retrieval.resolvedModule.id !== selectedModuleId &&
+          !(
+            legalConversationScope &&
+            isLegalModuleName(retrieval.resolvedModule.name)
+          ))),
     );
 
     // Una consulta abierta en un módulo no encierra a la persona: si la
