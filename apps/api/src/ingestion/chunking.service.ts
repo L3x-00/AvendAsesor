@@ -176,6 +176,8 @@ interface ChunkUnit {
   content: string;
   /** La unidad es un título/subtítulo comprobable, no texto descriptivo. */
   structuralHeading: boolean;
+  /** La unidad es una tabla Markdown: sus ventanas deben repetir el encabezado. */
+  table?: boolean;
   numeralReference?: string;
   /** Texto arrastrado del chunk anterior como contexto; nunca forma un chunk por sí solo. */
   overlap: boolean;
@@ -554,6 +556,7 @@ export class ChunkingService {
               .filter(Boolean)
               .join(' · ') || undefined,
           overlap: false,
+          table: block.table ?? false,
           pageEnd: page.pageNumber,
           pageStart: page.pageNumber,
           // El título puede continuar en otra línea. Solo el número se
@@ -629,6 +632,74 @@ export class ChunkingService {
     state.flush({ keepOverlap: false });
 
     const heading = headings.map((item) => item.content).join(UNIT_SEPARATOR);
+    // TD-007: una tabla larga se parte por filas completas. Cada ventana
+    // repite la cabecera para que la condición de la fila no se pierda.
+    if (unit.table) {
+      const lines = unit.content.split('\n');
+      // Un separador real Markdown tiene al menos un guion o dos puntos entre
+      // barras; `| | |` es una fila vacía, no una cabecera.
+      const separator = /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/u;
+      const hasHeader = lines.length > 2 && separator.test(lines[1] ?? '');
+      const header = hasHeader ? lines.slice(0, 2) : [];
+      const rows = hasHeader ? lines.slice(2) : lines;
+      const headerText = header.join('\n');
+      const headerTokens = headerText
+        ? this.encoding.encode(headerText).length
+        : 0;
+      const budget = MAX_TOKENS - headingTokens - headerTokens - 2;
+      const groups: string[][] = [];
+      let current: string[] = [];
+      let currentTokens = 0;
+      for (const row of rows) {
+        const rowTokens = this.encoding.encode(row).length + 1;
+        // Una celda aislada más grande que el presupuesto se parte por tokens
+        // para no emitir nunca un chunk por encima de MAX_TOKENS.
+        if (rowTokens > budget) {
+          if (current.length) {
+            groups.push(current);
+            current = [];
+            currentTokens = 0;
+          }
+          const rowTokenIds = this.encoding.encode(row);
+          // Una cabecera patológica puede dejar presupuesto no positivo; el
+          // paso mínimo de 1 evita un bucle que no avanzaría.
+          const step = Math.max(1, budget);
+          for (let start = 0; start < rowTokenIds.length; start += step) {
+            groups.push([this.decode(rowTokenIds.slice(start, start + step))]);
+          }
+          continue;
+        }
+        if (current.length && currentTokens + rowTokens > budget) {
+          groups.push(current);
+          current = [];
+          currentTokens = 0;
+        }
+        current.push(row);
+        currentTokens += rowTokens;
+      }
+      if (current.length) groups.push(current);
+      for (let index = 0; index < groups.length; index += 1) {
+        const content = [heading, headerText, groups[index].join('\n')]
+          .filter(Boolean)
+          .join('\n');
+        state.setUnits([
+          {
+            articleReference: unit.articleReference,
+            content,
+            structuralHeading: false,
+            table: true,
+            numeralReference: unit.numeralReference,
+            overlap: false,
+            pageEnd: unit.pageEnd,
+            pageStart: headings[0]?.pageStart ?? unit.pageStart,
+            sectionTitle: unit.sectionTitle,
+            tokenCount: this.encoding.encode(content).length,
+          },
+        ]);
+        if (index < groups.length - 1) state.flush({ keepOverlap: false });
+      }
+      return;
+    }
     const budget = MAX_TOKENS - headingTokens;
     const windows = Math.ceil(
       (tokens.length - OVERLAP_TOKENS) / (budget - OVERLAP_TOKENS),
