@@ -4202,9 +4202,15 @@ describe('ChatService', () => {
     expect(events.map((event) => event.type)).not.toContain('no_evidence');
     expect(answerGateway.generate).toHaveBeenCalled();
     const completionCalls = historyGateway.completeTurn.mock.calls as Array<
-      [{ sources: Array<{ crossModule?: boolean }> }]
+      [
+        {
+          sources: Array<{ crossModule?: boolean }>;
+          detectedSubmoduleId?: string | null;
+        },
+      ]
     >;
     expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
+    expect(completionCalls.at(-1)?.[0].detectedSubmoduleId).toBeNull();
   });
 
   it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {

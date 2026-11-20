@@ -2073,7 +2073,9 @@ export class ChatService {
             conversationId: turn.conversationId,
             faqMemory,
             detectedModuleId: relatedModule?.id ?? null,
-            detectedSubmoduleId: relatedSubmodule?.id ?? null,
+            detectedSubmoduleId: crossModulePersistence
+              ? null
+              : (relatedSubmodule?.id ?? null),
             qualitySignals: [],
             replyRole: 'assistant',
             retrievalScope,
@@ -2167,7 +2169,9 @@ export class ChatService {
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: relatedModule?.id ?? null,
-        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        detectedSubmoduleId: crossModulePersistence
+          ? null
+          : (relatedSubmodule?.id ?? null),
         qualitySignals: quality.signals,
         qualityExcerpts: quality.excerpts,
         replyRole: 'assistant',
@@ -2427,7 +2431,9 @@ export class ChatService {
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: relatedModule?.id ?? null,
-        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        detectedSubmoduleId: crossModulePersistence
+          ? null
+          : (relatedSubmodule?.id ?? null),
         qualitySignals: [],
         replyRole: 'assistant',
         retrievalScope,
@@ -2468,7 +2474,9 @@ export class ChatService {
         conversationId: turn.conversationId,
         faqMemory,
         detectedModuleId: relatedModule?.id ?? null,
-        detectedSubmoduleId: relatedSubmodule?.id ?? null,
+        detectedSubmoduleId: crossModulePersistence
+          ? null
+          : (relatedSubmodule?.id ?? null),
         qualitySignals: [],
         replyRole: 'assistant',
         retrievalScope,
@@ -2823,7 +2831,9 @@ export class ChatService {
       conversationId: turn.conversationId,
       faqMemory,
       detectedModuleId: relatedModule?.id ?? null,
-      detectedSubmoduleId: relatedSubmodule?.id ?? null,
+      detectedSubmoduleId: crossModulePersistence
+        ? null
+        : (relatedSubmodule?.id ?? null),
       qualityExcerpts,
       qualitySignals: [...qualitySignals],
       replyRole: 'assistant',
