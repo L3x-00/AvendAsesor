@@ -1873,6 +1873,18 @@ export class ChatService {
     const legalConversationScope = Boolean(
       selectedModuleId && isLegalModuleName(selectedModuleName),
     );
+    const legalSources =
+      legalConversationScope && retrieval.kind !== 'no_evidence'
+        ? retrieval.sources.filter((source) =>
+            (source.moduleNames ?? []).some((name) => isLegalModuleName(name)),
+          )
+        : [];
+    const scopedSources: readonly RetrievedChunk[] =
+      legalSources.length > 0
+        ? legalSources
+        : retrieval.kind === 'no_evidence'
+          ? []
+          : retrieval.sources;
     const sourceBelongsToConversation = (source: RetrievedChunk): boolean =>
       sourceBelongsToModule(source, selectedModuleId ?? '') ||
       (legalConversationScope &&
@@ -1910,9 +1922,7 @@ export class ChatService {
       (((retrieval.kind === 'ambiguous' ||
         retrieval.kind === 'evidence' ||
         retrieval.kind === 'topic_change') &&
-        retrieval.sources.some(
-          (source) => !sourceBelongsToConversation(source),
-        )) ||
+        scopedSources.some((source) => !sourceBelongsToConversation(source))) ||
         (retrieval.kind === 'topic_change' &&
           retrieval.resolvedModule.id !== selectedModuleId &&
           !(

@@ -4179,6 +4179,12 @@ describe('ChatService', () => {
           moduleIds: ['sub-reg'],
           moduleNames: ['Reglamento de la Ley de Reforma Magisterial'],
         },
+        {
+          ...source,
+          chunkId: 'foreign-chunk',
+          moduleIds: ['foreign'],
+          moduleNames: ['Nombramiento del auxiliar de educación'],
+        },
       ],
       topRelevanceScore: 0.9,
     });
