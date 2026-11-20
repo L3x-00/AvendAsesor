@@ -4201,6 +4201,10 @@ describe('ChatService', () => {
     });
     expect(events.map((event) => event.type)).not.toContain('no_evidence');
     expect(answerGateway.generate).toHaveBeenCalled();
+    const completionCalls = historyGateway.completeTurn.mock.calls as Array<
+      [{ sources: Array<{ crossModule?: boolean }> }]
+    >;
+    expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
   });
 
   it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {

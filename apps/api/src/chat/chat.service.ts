@@ -1939,6 +1939,15 @@ export class ChatService {
       outOfConversationScope &&
       retrieval.kind === 'topic_change' &&
       retrieval.sources.length > 0;
+    // La persistencia comprueba la pertenencia exacta al módulo. Las fuentes de
+    // submódulos hermanos siguen siendo del mismo ámbito para la respuesta,
+    // pero deben marcarse como cruzadas para no violar ese contrato.
+    const crossModulePersistence =
+      Boolean(selectedModuleId) &&
+      retrieval.kind !== 'no_evidence' &&
+      retrieval.sources.some(
+        (source) => !sourceBelongsToModule(source, selectedModuleId ?? ''),
+      );
     const crossModuleSuggestion = crossModuleAnswer
       ? retrieval.resolvedModule
       : null;
@@ -2384,7 +2393,7 @@ export class ChatService {
       selectedModuleId,
       relatedModule,
       relatedSubmodule,
-      crossModuleAnswer,
+      crossModuleAnswer || crossModulePersistence,
     );
 
     // Las cifras, períodos y condiciones de un panorama general no se
