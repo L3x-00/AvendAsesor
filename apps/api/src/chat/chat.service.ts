@@ -1876,8 +1876,7 @@ export class ChatService {
     const sourceBelongsToConversation = (source: RetrievedChunk): boolean =>
       sourceBelongsToModule(source, selectedModuleId ?? '') ||
       (legalConversationScope &&
-        (source.moduleNames ?? []).length > 0 &&
-        (source.moduleNames ?? []).every((name) => isLegalModuleName(name)));
+        (source.moduleNames ?? []).some((name) => isLegalModuleName(name)));
 
     if (
       retrieval.kind === 'topic_change' &&
