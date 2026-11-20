@@ -2072,7 +2072,9 @@ export class ChatService {
             answer: finalMessage,
             conversationId: turn.conversationId,
             faqMemory,
-            detectedModuleId: relatedModule?.id ?? null,
+            detectedModuleId: crossModulePersistence
+              ? (selectedModuleId ?? null)
+              : (relatedModule?.id ?? null),
             detectedSubmoduleId: crossModulePersistence
               ? null
               : (relatedSubmodule?.id ?? null),
@@ -2168,7 +2170,9 @@ export class ChatService {
         answer: finalReviewedAnswer,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: relatedModule?.id ?? null,
+        detectedModuleId: crossModulePersistence
+          ? (selectedModuleId ?? null)
+          : (relatedModule?.id ?? null),
         detectedSubmoduleId: crossModulePersistence
           ? null
           : (relatedSubmodule?.id ?? null),
@@ -2430,7 +2434,9 @@ export class ChatService {
         answer: finalAnswer,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: relatedModule?.id ?? null,
+        detectedModuleId: crossModulePersistence
+          ? (selectedModuleId ?? null)
+          : (relatedModule?.id ?? null),
         detectedSubmoduleId: crossModulePersistence
           ? null
           : (relatedSubmodule?.id ?? null),
@@ -2473,7 +2479,9 @@ export class ChatService {
         answer: finalNoChangesMessage,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: relatedModule?.id ?? null,
+        detectedModuleId: crossModulePersistence
+          ? (selectedModuleId ?? null)
+          : (relatedModule?.id ?? null),
         detectedSubmoduleId: crossModulePersistence
           ? null
           : (relatedSubmodule?.id ?? null),
@@ -2830,7 +2838,9 @@ export class ChatService {
       answer: finalAnswer,
       conversationId: turn.conversationId,
       faqMemory,
-      detectedModuleId: relatedModule?.id ?? null,
+      detectedModuleId: crossModulePersistence
+        ? (selectedModuleId ?? null)
+        : (relatedModule?.id ?? null),
       detectedSubmoduleId: crossModulePersistence
         ? null
         : (relatedSubmodule?.id ?? null),

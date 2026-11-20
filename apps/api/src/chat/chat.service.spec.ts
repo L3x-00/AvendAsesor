@@ -4205,12 +4205,14 @@ describe('ChatService', () => {
       [
         {
           sources: Array<{ crossModule?: boolean }>;
+          detectedModuleId?: string | null;
           detectedSubmoduleId?: string | null;
         },
       ]
     >;
     expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
     expect(completionCalls.at(-1)?.[0].detectedSubmoduleId).toBeNull();
+    expect(completionCalls.at(-1)?.[0].detectedModuleId).toBe(root);
   });
 
   it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {
