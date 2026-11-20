@@ -884,6 +884,41 @@ describe('ChunkingService — revisión de ingesta (2026-09-24)', () => {
     },
   );
 
+  it('repite la cabecera en cada ventana de una tabla larga (TD-007)', () => {
+    const rows = Array.from(
+      { length: 160 },
+      (_, index) => `| Nivel ${index} | S/ ${3000 + index} |`,
+    );
+    const table = ['| Nivel | Remuneración |', '| --- | --- |', ...rows].join(
+      '\n',
+    );
+    const chunks = service.chunk([{ pageNumber: 1, text: table }]);
+    const windows = chunks.filter((chunk) =>
+      chunk.chunkContent.includes('| Nivel | Remuneración |'),
+    );
+    expect(windows.length).toBeGreaterThan(1);
+    for (const chunk of windows) {
+      expect(chunk.chunkContent).toContain('| Nivel | Remuneración |');
+      expect(chunk.chunkContent).toContain('| --- | --- |');
+      expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+    }
+  });
+
+  it('no emite un chunk sobredimensionado aunque una fila sea enorme', () => {
+    const hugeRow = `| ${words('celda', 900)} |`;
+    const chunks = service.chunk([
+      {
+        pageNumber: 1,
+        text: ['| Detalle | Valor |', '| --- | --- |', hugeRow].join('\n'),
+      },
+    ]);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.tokenCount).toBeLessThanOrEqual(800);
+      expect(chunk.chunkContent).toContain('| Detalle | Valor |');
+    }
+  });
+
   it('conserva una tabla Markdown como una unidad con sus filas', () => {
     const chunks = service.chunk([
       {
