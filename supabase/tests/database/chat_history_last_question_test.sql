@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(11);
 
 -- Identidad y módulo con submódulo ---------------------------------------------
 
@@ -110,6 +110,46 @@ select results_eq(
   $$,
   $$ values ('¿Y el plazo?', 'Submodulo QA historial', 'Modulo QA historial') $$,
   'La página del historial devuelve última pregunta y snapshot de tema'
+);
+
+-- TD-006: el mensaje visible es literal, la pregunta efectiva va al historial.
+select lives_ok(
+  $$
+    select public.begin_chat_turn(
+      '3a000000-0000-0000-0000-000000000901',
+      (
+        select id from public.chat_conversations
+        where user_id = '3a000000-0000-0000-0000-000000000901'
+      ),
+      '3a000000-0000-0000-0000-000000000102',
+      'sí',
+      'Explícame los requisitos'
+    );
+  $$,
+  'Se inicia un turno con pregunta efectiva'
+);
+
+select is(
+  (
+    select count(*)::integer from public.chat_messages
+    where conversation_id = (
+      select id from public.chat_conversations
+      where user_id = '3a000000-0000-0000-0000-000000000901'
+    )
+      and role = 'user'
+      and content = 'sí'
+  ),
+  1,
+  'El mensaje del historial conserva lo que la persona escribió'
+);
+
+select is(
+  (
+    select last_question from public.chat_conversations
+    where user_id = '3a000000-0000-0000-0000-000000000901'
+  ),
+  'Explícame los requisitos',
+  'La última pregunta muestra la pregunta efectiva'
 );
 
 select * from finish();

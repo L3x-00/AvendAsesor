@@ -682,6 +682,7 @@ export interface SupabaseDatabase {
         Args: {
           p_conversation_id?: string | null;
           p_question?: string | null;
+          p_effective_question?: string | null;
           p_selected_module_id?: string | null;
           p_user_id: string;
         };

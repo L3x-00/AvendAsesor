@@ -1975,6 +1975,11 @@ export class ChatService {
         acceptedQuestion && startedNewConversation
           ? effectiveQuestion
           : input.question,
+      // TD-006: en la misma conversación el mensaje visible sigue siendo el
+      // "sí" literal, pero la pregunta efectiva es la que se responde y la que
+      // debe aparecer en `last_question` y en la cola sin sustento.
+      effectiveQuestion:
+        acceptedQuestion && !startedNewConversation ? effectiveQuestion : null,
       selectedModuleId,
       userId: input.authorization.userId,
     });

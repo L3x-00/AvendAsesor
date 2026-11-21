@@ -82,6 +82,8 @@ export interface ChatHistoryGateway {
   beginTurn(input: {
     conversationId: string | null;
     question: string;
+    /** Pregunta efectiva cuando la persona aceptó una propuesta con "sí". */
+    effectiveQuestion?: string | null;
     selectedModuleId: string | null;
     userId: string;
   }): Promise<ChatTurnStart>;

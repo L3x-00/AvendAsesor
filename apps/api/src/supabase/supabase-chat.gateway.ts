@@ -30,6 +30,7 @@ interface ConsultationChatRpcClient {
     args: {
       p_conversation_id: string | null;
       p_question: string;
+      p_effective_question?: string | null;
       p_selected_module_id: string | null;
       p_user_id: string;
     },
@@ -217,6 +218,7 @@ export class SupabaseChatGatewayAdapter implements ChatHistoryGateway {
       {
         p_conversation_id: input.conversationId,
         p_question: input.question,
+        p_effective_question: input.effectiveQuestion ?? null,
         p_selected_module_id: input.selectedModuleId,
         p_user_id: input.userId,
       },
