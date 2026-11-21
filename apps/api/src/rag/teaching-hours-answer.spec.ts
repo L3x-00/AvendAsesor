@@ -35,6 +35,21 @@ describe('buildTeachingHoursDecisionAnswer', () => {
     expect(result?.sources).toEqual([source]);
   });
 
+  it('afirma solo la aprobación cuando el fragmento no describe la propuesta', () => {
+    const result = buildTeachingHoursDecisionAnswer(
+      '¿Quién decide cuántas horas me tocan?',
+      [
+        {
+          ...source,
+          chunkContent:
+            'Aprueba las propuestas del cuadro de distribución de horas de las IIEE a través de acto resolutivo, firmado por el director de la UGEL o DRE.',
+        },
+      ],
+    );
+    expect(result?.answer).toContain('aprobación del cuadro de distribución');
+    expect(result?.answer).not.toContain('recae en el director');
+  });
+
   it('no responde si la pregunta no pide quién decide las horas', () => {
     expect(
       buildTeachingHoursDecisionAnswer('¿Cuánto gana un docente?', [source]),

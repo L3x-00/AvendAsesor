@@ -35,15 +35,15 @@ export function buildTeachingHoursDecisionAnswer(
       DISTRIBUTION.test(text) &&
       APPROVAL.test(text) &&
       AUTHORITY.test(text) &&
-      IE_PROPOSAL.test(text) &&
       !NEGATED.test(text)
     );
   });
   if (!source) return null;
 
-  return {
-    answer:
-      'La propuesta del cuadro de distribución de horas recae en el director de la institución educativa; la aprobación corresponde a la UGEL o a la DRE mediante acto resolutivo firmado por su director. [1]',
-    sources: [source],
-  };
+  const text = normalizeSpanishText(source.chunkContent);
+  const answer = IE_PROPOSAL.test(text)
+    ? 'La propuesta del cuadro de distribución de horas recae en el director de la institución educativa; la aprobación corresponde a la UGEL o a la DRE mediante acto resolutivo firmado por su director. [1]'
+    : 'La aprobación del cuadro de distribución de horas corresponde a la UGEL o a la DRE mediante acto resolutivo. [1]';
+
+  return { answer, sources: [source] };
 }
