@@ -4132,6 +4132,40 @@ describe('ChatService', () => {
     );
   });
 
+  it('responde quién decide las horas desde la fuente verificada', async () => {
+    const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
+    historyGateway.getConversationContext.mockResolvedValue({
+      conversationId,
+      messages: [],
+      selectedModuleId: 'module-a',
+    });
+    const hoursSource = {
+      ...source,
+      chunkContent:
+        'La propuesta de cuadro de distribución de horas recae directamente en el director de la IE. Aprueba las propuestas del cuadro de distribución de horas a través de acto resolutivo firmado por el director de la UGEL o DRE.',
+      moduleIds: ['module-a'],
+      moduleNames: ['Cargos y plazas'],
+    };
+    ragService.retrieve.mockResolvedValue({
+      kind: 'evidence',
+      resolvedModule: { id: 'module-a', name: 'Cargos y plazas' },
+      sources: [hoursSource],
+      topRelevanceScore: 0.9,
+    });
+
+    const events = await collect(service, {
+      conversationId,
+      question: '¿Quién decide cuántas horas me tocan?',
+      selectedModuleId: 'module-a',
+    });
+
+    expect(events.map((event) => event.type)).not.toContain('no_evidence');
+    expect(answerGateway.generate).not.toHaveBeenCalled();
+    const token = events.find((event) => event.type === 'token') as
+      { data: { text: string } } | undefined;
+    expect(token?.data.text).toContain('UGEL o a la DRE');
+  });
+
   it('acepta la Ley y el Reglamento en submódulos del mismo módulo legal', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const root = 'root-legal';
