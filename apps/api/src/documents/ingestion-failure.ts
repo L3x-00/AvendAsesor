@@ -32,6 +32,7 @@ export function ingestionFailureCause(
     return 'unsupported_format';
   }
   if (detail.includes('INGESTION_DOCUMENT_TOO_LARGE')) return 'too_large';
+  if (detail.includes('INGESTION_DOC_UNREADABLE')) return 'unreadable_file';
   if (
     detail.includes('INGESTION_INVALID_EMBEDDING') ||
     /\b(?:embedding|openai|openrouter|api key|rate limit|429|5\d\d)\b/iu.test(

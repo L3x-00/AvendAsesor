@@ -1,6 +1,10 @@
 const mockExtractRawText = jest.fn();
+const mockExtractDoc = jest.fn();
 
 jest.mock('mammoth', () => ({ extractRawText: mockExtractRawText }));
+jest.mock('word-extractor', () =>
+  jest.fn().mockImplementation(() => ({ extract: mockExtractDoc })),
+);
 
 import { DocxExtractionService } from './docx-extraction.service';
 import { MAX_DOCX_XML_BYTES, MAX_EXTRACTED_CHARS } from './document-format';
@@ -25,7 +29,28 @@ function docxWithXmlSize(uncompressedSize: number): Buffer {
 describe('DocxExtractionService', () => {
   const service = new DocxExtractionService();
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExtractDoc.mockResolvedValue({ getBody: () => 'Texto del .doc' });
+  });
+
+  it('rechaza un .doc grande antes de parsearlo', async () => {
+    await expect(
+      service.extractLegacy(Buffer.alloc(20 * 1024 * 1024 + 1)),
+    ).rejects.toThrow('INGESTION_DOCUMENT_TOO_LARGE');
+    expect(mockExtractDoc).not.toHaveBeenCalled();
+  });
+
+  it('extrae un .doc heredado y rechaza uno ilegible', async () => {
+    await expect(
+      service.extractLegacy(Buffer.from([0xd0, 0xcf, 0x11, 0xe0])),
+    ).resolves.toBe('Texto del .doc');
+
+    mockExtractDoc.mockRejectedValueOnce(new Error('OLE inválido'));
+    await expect(
+      service.extractLegacy(Buffer.from('no es un doc')),
+    ).rejects.toThrow('INGESTION_DOC_UNREADABLE');
+  });
 
   it('extrae y recorta el texto plano del docx', async () => {
     mockExtractRawText.mockResolvedValue({

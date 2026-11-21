@@ -49,7 +49,7 @@ describe('IngestionService', () => {
   let gateway: jest.Mocked<IngestionGateway>;
   let embeddings: { embed: jest.Mock };
   let pdf: { countPages: jest.Mock; extract: jest.Mock; render: jest.Mock };
-  let docx: { extract: jest.Mock };
+  let docx: { extract: jest.Mock; extractLegacy: jest.Mock };
   let ocr: { withWorker: jest.Mock };
   let chunking: { chunk: jest.Mock };
   let mineru: { extract: jest.Mock };
@@ -64,7 +64,7 @@ describe('IngestionService', () => {
       extract: jest.fn(),
       render: jest.fn(),
     };
-    docx = { extract: jest.fn() };
+    docx = { extract: jest.fn(), extractLegacy: jest.fn() };
     ocr = { withWorker: jest.fn() };
     chunking = { chunk: jest.fn() };
     mineru = { extract: jest.fn() };
@@ -248,19 +248,23 @@ describe('IngestionService', () => {
     expect(gateway.complete).toHaveBeenCalledWith(job, null);
   });
 
-  it('rejects a legacy .doc (OLE2) as an unsupported format', async () => {
+  it('extrae un .doc heredado (OLE2) sin pasar por la ruta PDF', async () => {
+    const docFile = Buffer.from([
+      0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+    ]);
     gateway.claimNext.mockResolvedValue(job);
-    gateway.downloadPdf.mockResolvedValue(
-      Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
-    );
+    gateway.downloadPdf.mockResolvedValue(docFile);
+    docx.extractLegacy.mockResolvedValue('Texto del documento Word heredado.');
+    chunking.chunk.mockReturnValue([chunk]);
+    embeddings.embed.mockResolvedValue([vector()]);
 
-    await expect(service.processNext()).resolves.toBe(false);
-    expect(gateway.fail).toHaveBeenCalledWith(
-      job,
-      'INGESTION_FAILED',
-      'INGESTION_UNSUPPORTED_FORMAT',
-      true,
-    );
+    await expect(service.processNext()).resolves.toBe(true);
+
+    expect(docx.extractLegacy).toHaveBeenCalledWith(docFile);
+    expect(pdf.extract).not.toHaveBeenCalled();
+    expect(chunking.chunk).toHaveBeenCalledWith([
+      { pageNumber: 1, text: 'Texto del documento Word heredado.' },
+    ]);
   });
 
   it('fails closed when a misclassified binary would fall to the markdown path', async () => {

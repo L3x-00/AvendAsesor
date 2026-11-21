@@ -263,9 +263,9 @@ export class IngestionService {
       return [{ pageNumber: 1, text }];
     }
     if (format === 'doc') {
-      // .doc heredado (OLE2) no tiene extractor: se rechaza de forma explícita
-      // en vez de intentar parsearlo como PDF y fallar de forma opaca.
-      throw new Error('INGESTION_UNSUPPORTED_FORMAT');
+      // A18: el .doc heredado (OLE2) se extrae con word-extractor, sin
+      // dependencias del sistema en el contenedor de Render.
+      return [{ pageNumber: 1, text: await this.docx.extractLegacy(file) }];
     }
 
     // MinerU no se ejecuta dentro de la API (el runtime de Render no tiene sus
