@@ -13,6 +13,7 @@ describe('ingestionFailureCause', () => {
     ['INGESTION_FAILED', 'INGESTION_EMPTY_TEXT', 'no_text'],
     ['INGESTION_FAILED', 'INGESTION_UNSUPPORTED_FORMAT', 'unsupported_format'],
     ['INGESTION_FAILED', 'INGESTION_DOCUMENT_TOO_LARGE', 'too_large'],
+    ['INGESTION_FAILED', 'INGESTION_DOC_UNREADABLE', 'unreadable_file'],
     ['INGESTION_FAILED', 'INGESTION_INVALID_EMBEDDING', 'ai_service'],
     ['INGESTION_FAILED', '429 Rate limit reached for embeddings', 'ai_service'],
     ['INGESTION_FAILED', 'Invalid PDF structure', 'unknown'],
