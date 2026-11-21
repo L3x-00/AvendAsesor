@@ -35,6 +35,7 @@ import { resolveMedicalLeaveApplicability } from '../rag/medical-leave-applicabi
 import { exactDocumentReferencesIn } from '../rag/legal-reference';
 import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
+import { buildTeachingHoursDecisionAnswer } from '../rag/teaching-hours-answer';
 import {
   reviewedAdministrativeAnswer,
   reviewedAdministrativeContext,
@@ -2416,6 +2417,57 @@ export class ChatService {
     // extenderla a otro cargo o sector. Cuando la evidencia no permite
     // siquiera atribuir un enunciado al cargo, se cierra sin evidencia: el
     // contrato de persistencia no admite una respuesta «assistant» sin fuente.
+    // P1: «quién decide cuántas horas me tocan» se responde desde el fragmento
+    // verificado. El texto generado tendía a extendir la regla y era retenido
+    // por la protección administrativa; aquí solo se enuncia lo que dice el
+    // documento, con la cita creada por el servidor.
+    const hoursDecisionAnswer = salaryProfileForTurn.isSalaryQuestion
+      ? null
+      : buildTeachingHoursDecisionAnswer(effectiveQuestion, scopedSources);
+    if (hoursDecisionAnswer) {
+      if (input.abortSignal?.aborted) return;
+      const hoursCitations = toCitationBundle(
+        [...hoursDecisionAnswer.sources],
+        selectedModuleId,
+        relatedModule,
+        relatedSubmodule,
+        crossModuleAnswer || crossModulePersistence,
+      );
+      const finalAnswer = withSuggestion(hoursDecisionAnswer.answer);
+      const completed = await completeTurn({
+        answer: finalAnswer,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId: crossModulePersistence
+          ? (selectedModuleId ?? null)
+          : (relatedModule?.id ?? null),
+        detectedSubmoduleId: crossModulePersistence
+          ? null
+          : (relatedSubmodule?.id ?? null),
+        qualitySignals: [],
+        replyRole: 'assistant',
+        retrievalScope,
+        sources: hoursCitations.inputs,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield { data: { sources: hoursCitations.sources }, type: 'sources' };
+      yield { data: { text: finalAnswer }, type: 'token' };
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          ...(suggestionModules.length ? { modules: suggestionModules } : {}),
+          provider: 'rule',
+        },
+        type: 'done',
+      };
+      return;
+    }
+
     if (useExtractiveSalary) {
       if (input.abortSignal?.aborted) return;
       if (!extractiveSalary) {
