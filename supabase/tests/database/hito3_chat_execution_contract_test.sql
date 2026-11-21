@@ -5,7 +5,7 @@ select plan(26);
 select has_function(
   'public',
   'begin_chat_turn',
-  array['uuid', 'uuid', 'uuid', 'text'],
+  array['uuid', 'uuid', 'uuid', 'text', 'text'],
   'Chat turns begin through a controlled RPC'
 );
 select has_function(
@@ -23,7 +23,7 @@ select has_column(
 select ok(
   not has_function_privilege(
     'authenticated',
-    'public.begin_chat_turn(uuid,uuid,uuid,text)'::regprocedure,
+    'public.begin_chat_turn(uuid,uuid,uuid,text,text)'::regprocedure,
     'execute'
   ),
   'Authenticated clients cannot begin chat turns directly'

@@ -41,7 +41,7 @@ select ok(
 select has_function(
   'public',
   'begin_chat_turn_with_consultation_routing',
-  array['uuid', 'uuid', 'uuid', 'text'],
+  array['uuid', 'uuid', 'uuid', 'text', 'text'],
   'Chat turns use the consultation-aware start RPC'
 );
 select has_function(

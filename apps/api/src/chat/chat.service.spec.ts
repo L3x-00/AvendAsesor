@@ -994,6 +994,11 @@ describe('ChatService', () => {
         selectedModuleId,
       }),
     );
+    const beginCalls = historyGateway.beginTurn.mock.calls as Array<
+      [{ effectiveQuestion?: string | null }]
+    >;
+    expect(beginCalls.at(-1)?.[0].effectiveQuestion).toBeTruthy();
+    expect(beginCalls.at(-1)?.[0].effectiveQuestion).not.toBe('sí');
     expect(answerGateway.generate).toHaveBeenCalledTimes(1);
     expect(historyGateway.completeTurn).toHaveBeenCalledWith(
       expect.objectContaining({ replyRole: 'assistant' }),

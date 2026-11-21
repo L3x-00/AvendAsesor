@@ -102,6 +102,7 @@ describe('SupabaseChatGatewayAdapter', () => {
       {
         p_conversation_id: null,
         p_question: 'Consulta',
+        p_effective_question: null,
         p_selected_module_id: null,
         p_user_id: userId,
       },
