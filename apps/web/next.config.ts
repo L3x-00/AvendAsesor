@@ -25,6 +25,22 @@ const orientationRuntimePackages = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Reutiliza en el navegador el segmento ya renderizado de una página
+    // dinámica durante 30 s. Sin esto, volver a una pestaña del panel cuesta
+    // exactamente lo mismo que abrirla por primera vez: el servidor vuelve a
+    // ejecutar autorización y consultas.
+    //
+    // Es seguro porque cada mutación invalida con `revalidatePath` las rutas
+    // cuyos datos cambia (ver `src/app/admin/actions.invalidation.spec.ts`), y
+    // esa invalidación también descarta la entrada del cache de cliente.
+    // Consecuencia asumida: un dato modificado desde otro dispositivo puede
+    // tardar hasta 30 s en verse aquí.
+    staleTimes: {
+      dynamic: 30,
+      static: 300,
+    },
+  },
   // Dependencies are hoisted to the monorepo root. The CU-14 function loads
   // CJS-only runtime entries that @vercel/nft cannot infer from package ESM
   // exports, so include the bounded pdfkit/fontkit closure for this route only.
