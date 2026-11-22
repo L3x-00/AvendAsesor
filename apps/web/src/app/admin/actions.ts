@@ -303,6 +303,8 @@ export async function createModuleAction(
         updateTag("chat-modules");
         revalidatePath("/admin/modules", "layout");
         revalidatePath("/admin/documents", "layout");
+        // El inicio publica cuántos módulos y submódulos están activos.
+        revalidatePath("/admin");
 
         return {
           entityId: created.id,
@@ -364,6 +366,9 @@ export async function updateModuleAction(
       updateTag("chat-modules");
       revalidatePath("/admin/modules", "layout");
       revalidatePath("/admin/documents", "layout");
+      // El formulario puede cambiar la vigencia o el módulo padre, y ambos
+      // alteran los totales del inicio.
+      revalidatePath("/admin");
 
       return { message: "Módulo actualizado.", status: "success" };
     },
@@ -388,6 +393,10 @@ export async function setModuleStatusAction(
       await client.setModuleStatus(moduleId, isActive, reason);
       updateTag("chat-modules");
       revalidatePath("/admin/modules", "layout");
+      // Un módulo inactivo deja de contar en el inicio y sale del filtro de la
+      // biblioteca de documentos.
+      revalidatePath("/admin/documents", "layout");
+      revalidatePath("/admin");
 
       return {
         message: isActive ? "Módulo activado." : "Módulo desactivado.",
@@ -411,6 +420,8 @@ export async function deleteModuleAction(
       updateTag("chat-modules");
       revalidatePath("/admin/modules", "layout");
       revalidatePath("/admin/documents", "layout");
+      // La baja lógica cambia los totales de módulos y submódulos del inicio.
+      revalidatePath("/admin");
 
       return { message: "Módulo eliminado lógicamente.", status: "success" };
     },
@@ -475,6 +486,8 @@ export async function setDocumentStatusAction(
       await client.setDocumentStatus(documentId, isActive, reason);
       revalidatePath("/admin/documents", "layout");
       revalidatePath(`/admin/documents/${documentId}`);
+      // Cada módulo muestra cuántos documentos suyos están vigentes.
+      revalidatePath("/admin/modules", "layout");
 
       return {
         message: isActive ? "Documento activado." : "Documento desactivado.",
@@ -654,6 +667,9 @@ export async function deleteDocumentAction(
       await client.deleteDocument(documentId, reason);
       revalidatePath("/admin/documents", "layout");
       revalidatePath(`/admin/documents/${documentId}`);
+      // El inicio publica el total de documentos y cada módulo su propio conteo.
+      revalidatePath("/admin");
+      revalidatePath("/admin/modules", "layout");
 
       return { message: "Documento eliminado lógicamente.", status: "success" };
     },
@@ -672,6 +688,8 @@ export async function linkDocumentModuleAction(
       await client.linkDocumentModule(documentId, moduleId);
       revalidatePath(`/admin/documents/${documentId}`);
       revalidatePath("/admin/modules", "layout");
+      // La biblioteca muestra a qué módulos pertenece cada documento.
+      revalidatePath("/admin/documents", "layout");
 
       return { message: "Módulo asociado.", status: "success" };
     },
@@ -690,6 +708,8 @@ export async function unlinkDocumentModuleAction(
       await client.unlinkDocumentModule(documentId, moduleId);
       revalidatePath(`/admin/documents/${documentId}`);
       revalidatePath("/admin/modules", "layout");
+      // La biblioteca muestra a qué módulos pertenece cada documento.
+      revalidatePath("/admin/documents", "layout");
 
       return { message: "Módulo desvinculado.", status: "success" };
     },
@@ -752,7 +772,8 @@ export async function reviewUnansweredQuestionAction(
       reviewNote,
     });
     revalidatePath("/admin");
-    revalidatePath("/admin/operations");
+    // "layout" alcanza también las pantallas de grupo (`/admin/operations/grupos`).
+    revalidatePath("/admin/operations", "layout");
 
     return { message: "Consulta revisada.", status: "success" };
   });

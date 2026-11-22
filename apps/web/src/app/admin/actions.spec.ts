@@ -428,7 +428,8 @@ describe("admin server actions", () => {
         reviewNote: "Se requiere ampliar el documento fuente.",
       },
     );
-    expect(revalidatePath).toHaveBeenCalledWith("/admin/operations");
+    // "layout" cubre además las pantallas de grupo del módulo de consultas.
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/operations", "layout");
     expect(state.status).toBe("success");
   });
 

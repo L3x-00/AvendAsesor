@@ -70,7 +70,9 @@ function actionFailure(error: unknown): AdminActionState {
 }
 
 function revalidateCase(caseId: string): void {
-  revalidatePath("/admin/operations");
+  // Con "layout" se cubren también el detalle del caso y las pantallas de
+  // grupo, que son rutas hijas de `/admin/operations`.
+  revalidatePath("/admin/operations", "layout");
   revalidatePath(`/admin/operations/${caseId}`);
 }
 
@@ -235,7 +237,8 @@ export async function resolveUnansweredGroupAction(
       period,
       status,
     });
-    revalidatePath("/admin/operations");
+    // "layout" alcanza también las pantallas de grupo (`/admin/operations/grupos`).
+    revalidatePath("/admin/operations", "layout");
     const verb = status === "resolved" ? "resueltas" : "descartadas";
     const details = [
       result.skipped > 0
