@@ -107,6 +107,7 @@ import {
   isDirectRationalizationEvidence,
   rationalizationEvidenceQueries,
 } from './rationalization-retrieval';
+import { directorReplacementEvidenceQueries } from './director-replacement-retrieval';
 import {
   isDirectTeachingPositionEvidence,
   teachingPositionEvidenceQueries,
@@ -2225,6 +2226,7 @@ export class RagService {
             ...reassignmentEvidenceQueries(question),
             ...temporaryPlacementQueries(question),
             ...rationalizationEvidenceQueries(question),
+            ...directorReplacementEvidenceQueries(question),
             ...teachingPositionEvidenceQueries(salaryQuestion),
             ...legalEvidenceQueries(
               question,

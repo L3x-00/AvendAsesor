@@ -1995,6 +1995,18 @@ export class ChatService {
         ? resolveDetectedSubmodule(retrieval.sources, relatedModule.id)
         : null;
 
+    // Una respuesta con fuentes cruzadas no puede declarar un único módulo
+    // detectado: `private.validate_consultation_answer_routing` exige que
+    // TODAS las fuentes citadas pertenezcan a ese módulo raíz y falla con
+    // 23503 (409 para la persona) cuando vienen de módulos distintos. La
+    // conversación conserva el módulo elegido; solo se omite la etiqueta.
+    const detectedModuleId = crossModulePersistence
+      ? null
+      : (relatedModule?.id ?? null);
+    const detectedSubmoduleId = crossModulePersistence
+      ? null
+      : (relatedSubmodule?.id ?? null);
+
     yield {
       data: {
         conversationId: turn.conversationId,
@@ -2078,12 +2090,8 @@ export class ChatService {
             answer: finalMessage,
             conversationId: turn.conversationId,
             faqMemory,
-            detectedModuleId: crossModulePersistence
-              ? (selectedModuleId ?? null)
-              : (relatedModule?.id ?? null),
-            detectedSubmoduleId: crossModulePersistence
-              ? null
-              : (relatedSubmodule?.id ?? null),
+            detectedModuleId,
+            detectedSubmoduleId,
             qualitySignals: [],
             replyRole: 'assistant',
             retrievalScope,
@@ -2176,12 +2184,8 @@ export class ChatService {
         answer: finalReviewedAnswer,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: crossModulePersistence
-          ? (selectedModuleId ?? null)
-          : (relatedModule?.id ?? null),
-        detectedSubmoduleId: crossModulePersistence
-          ? null
-          : (relatedSubmodule?.id ?? null),
+        detectedModuleId,
+        detectedSubmoduleId,
         qualitySignals: quality.signals,
         qualityExcerpts: quality.excerpts,
         replyRole: 'assistant',
@@ -2438,12 +2442,8 @@ export class ChatService {
         answer: finalAnswer,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: crossModulePersistence
-          ? (selectedModuleId ?? null)
-          : (relatedModule?.id ?? null),
-        detectedSubmoduleId: crossModulePersistence
-          ? null
-          : (relatedSubmodule?.id ?? null),
+        detectedModuleId,
+        detectedSubmoduleId,
         qualitySignals: [],
         replyRole: 'assistant',
         retrievalScope,
@@ -2491,12 +2491,8 @@ export class ChatService {
         answer: finalAnswer,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: crossModulePersistence
-          ? (selectedModuleId ?? null)
-          : (relatedModule?.id ?? null),
-        detectedSubmoduleId: crossModulePersistence
-          ? null
-          : (relatedSubmodule?.id ?? null),
+        detectedModuleId,
+        detectedSubmoduleId,
         qualitySignals: [],
         replyRole: 'assistant',
         retrievalScope,
@@ -2536,12 +2532,8 @@ export class ChatService {
         answer: finalNoChangesMessage,
         conversationId: turn.conversationId,
         faqMemory,
-        detectedModuleId: crossModulePersistence
-          ? (selectedModuleId ?? null)
-          : (relatedModule?.id ?? null),
-        detectedSubmoduleId: crossModulePersistence
-          ? null
-          : (relatedSubmodule?.id ?? null),
+        detectedModuleId,
+        detectedSubmoduleId,
         qualitySignals: [],
         replyRole: 'assistant',
         retrievalScope,
@@ -2895,12 +2887,8 @@ export class ChatService {
       answer: finalAnswer,
       conversationId: turn.conversationId,
       faqMemory,
-      detectedModuleId: crossModulePersistence
-        ? (selectedModuleId ?? null)
-        : (relatedModule?.id ?? null),
-      detectedSubmoduleId: crossModulePersistence
-        ? null
-        : (relatedSubmodule?.id ?? null),
+      detectedModuleId,
+      detectedSubmoduleId,
       qualityExcerpts,
       qualitySignals: [...qualitySignals],
       replyRole: 'assistant',

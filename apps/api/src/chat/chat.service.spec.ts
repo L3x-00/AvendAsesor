@@ -4252,7 +4252,9 @@ describe('ChatService', () => {
     expect(completionCalls.at(-1)?.[0].sources).toHaveLength(2);
     expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
     expect(completionCalls.at(-1)?.[0].detectedSubmoduleId).toBeNull();
-    expect(completionCalls.at(-1)?.[0].detectedModuleId).toBe(root);
+    // Con fuentes cruzadas no se declara un módulo detectado: la BD exige que
+    // todas las fuentes citadas pertenezcan a ese módulo y fallaría con 23503.
+    expect(completionCalls.at(-1)?.[0].detectedModuleId).toBeNull();
   });
 
   it('comprueba las fuentes después de adoptar el módulo en un chat nuevo', async () => {
