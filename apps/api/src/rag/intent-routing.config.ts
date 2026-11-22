@@ -418,6 +418,11 @@ export const INTENT_EXPANSIONS = {
     'plazas excedentes reducción de plazas reubicación del personal docente',
   POSITION_CLASSIFIER_DETAIL:
     'clasificador de cargos niveles de cargo manual de organización y funciones institución educativa',
+  /** Para «quién se queda a cargo / asume el cargo cuando el director está de
+   * licencia»: el corpus nombra la encargatura y a la DRE/UGEL, no la frase
+   * coloquial que usa la persona. */
+  DIRECTOR_REPLACEMENT:
+    'reemplazo del director por licencia encargatura profesor encargado DRE UGEL plaza vacante mayor responsabilidad',
 
   // Ley y reglamento
   LEGAL_REGULATION:

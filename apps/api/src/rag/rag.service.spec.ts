@@ -2406,6 +2406,47 @@ describe('RagService', () => {
     });
   });
 
+  it('busca la encargatura cuando la persona dice que se queda a cargo del director', async () => {
+    const replacementSource = {
+      ...source,
+      chunkId: 'director-replacement-chunk',
+      moduleIds: ['module-a'],
+      moduleNames: ['Módulo A'],
+    };
+    gateway.search.mockImplementation(
+      (input: { query: string; selectedModuleId: string | null }) =>
+        Promise.resolve(
+          /reemplazo del director por licencia encargatura/iu.test(input.query)
+            ? [replacementSource]
+            : [],
+        ),
+    );
+
+    await expect(
+      service.retrieve(
+        'Mi director está de licencia y no sabemos quién se queda a cargo',
+        'module-a',
+      ),
+    ).resolves.toMatchObject({
+      kind: 'evidence',
+      sources: [
+        expect.objectContaining({ chunkId: 'director-replacement-chunk' }),
+      ],
+    });
+
+    const canonicalCalls = gateway.search.mock.calls
+      .map(
+        ([input]) =>
+          input as { query: string; selectedModuleId: string | null },
+      )
+      .filter((input) =>
+        /reemplazo del director por licencia encargatura/iu.test(input.query),
+      );
+    expect(canonicalCalls.map((input) => input.selectedModuleId)).toEqual(
+      expect.arrayContaining([null, 'module-a']),
+    );
+  });
+
   it('preserva el módulo real de una figura administrativa asociada a un módulo vecino', async () => {
     const tardinessSource = {
       ...source,
