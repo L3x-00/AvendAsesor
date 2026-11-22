@@ -1,106 +1,133 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuthorizationSupabaseClient } from "./resolve-admin-access";
 import { resolveChatAccess } from "./resolve-chat-access";
+import type { AuthorizationSupabaseClient } from "./resolve-admin-access";
 
-function clientFor(
-  role: unknown,
-  accountStatus: unknown = "active",
-  accessExpiresAt: unknown = null,
-): AuthorizationSupabaseClient {
-  const maybeSingle = vi.fn(async () => ({
-    data: {
-      access_expires_at: accessExpiresAt,
-      account_status: accountStatus,
-      full_name: "María Pérez",
-      role,
-    },
-    error: null,
-  }));
-  const eq = vi.fn(() => ({ maybeSingle }));
-  const select = vi.fn(() => ({ eq }));
-
+function row(overrides: Record<string, unknown> = {}) {
   return {
-    auth: {
-      getUser: vi.fn(async () => ({
-        data: { user: { id: "user-1" } },
-        error: null,
-      })),
-    },
-    from: vi.fn(() => ({ select })),
-  } as unknown as AuthorizationSupabaseClient;
+    access_expires_at: null,
+    account_status: "active",
+    full_name: "  Lucía Docente  ",
+    modules_access: false,
+    role: "docente",
+    user_id: "user-1",
+    ...overrides,
+  };
+}
+
+function createClient(
+  response: { data: unknown; error: unknown } | (() => never) = {
+    data: [row()],
+    error: null,
+  },
+): AuthorizationSupabaseClient & { rpc: ReturnType<typeof vi.fn> } {
+  const rpc = vi.fn(async () => {
+    if (typeof response === "function") return response();
+    return response;
+  });
+  return { rpc } as unknown as AuthorizationSupabaseClient & {
+    rpc: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe("resolveChatAccess", () => {
-  it.each(["docente", "admin", "superadmin"])(
-    "authorizes the %s role for chat only",
+  it("is unauthorized when there is no profile for the session", async () => {
+    await expect(
+      resolveChatAccess(createClient({ data: [], error: null })),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it("is unauthenticated when the anonymous key is rejected", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient({ data: null, error: { code: "42501" } }),
+      ),
+    ).resolves.toEqual({ status: "unauthenticated" });
+  });
+
+  it("is unauthorized on any other RPC failure", async () => {
+    await expect(
+      resolveChatAccess(createClient({ data: null, error: { code: "500" } })),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it("fails closed when the RPC throws", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient(() => {
+          throw new Error("network error");
+        }),
+      ),
+    ).resolves.toEqual({ status: "unauthenticated" });
+  });
+
+  it("fails closed on malformed rows", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient({ data: [row({ role: undefined })], error: null }),
+      ),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it.each(["docente", "admin", "superadmin"] as const)(
+    "accepts the confirmed %s role in one call",
     async (role) => {
-      await expect(resolveChatAccess(clientFor(role))).resolves.toEqual({
-        fullName: "María Pérez",
+      const client = createClient({ data: [row({ role })], error: null });
+
+      await expect(resolveChatAccess(client)).resolves.toEqual({
+        fullName: "Lucía Docente",
         role,
         status: "authorized",
         userId: "user-1",
       });
+      expect(client.rpc).toHaveBeenCalledExactlyOnceWith(
+        "current_user_access_context",
+      );
     },
   );
 
-  it("fails closed for absent or invalid profiles", async () => {
-    const absent = clientFor("docente");
-    absent.auth.getUser = vi.fn(async () => ({
-      data: { user: null },
-      error: null,
-    }));
-
-    await expect(resolveChatAccess(absent)).resolves.toEqual({
-      status: "unauthenticated",
-    });
-    await expect(resolveChatAccess(clientFor("unknown"))).resolves.toEqual({
-      status: "unauthorized",
-    });
-    await expect(
-      resolveChatAccess(clientFor("docente", "suspended")),
-    ).resolves.toEqual({ status: "unauthorized" });
+  it("fails closed for unknown roles", async () => {
     await expect(
       resolveChatAccess(
-        clientFor("docente", "active", "2020-01-01T00:00:00.000Z"),
+        createClient({ data: [row({ role: "invitado" })], error: null }),
       ),
     ).resolves.toEqual({ status: "unauthorized" });
-
-    const invalidName = clientFor("docente");
-    const maybeSingle = vi.fn(async () => ({
-      data: {
-        access_expires_at: null,
-        account_status: "active",
-        full_name: "   ",
-        role: "docente",
-      },
-      error: null,
-    }));
-    invalidName.from = vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({ maybeSingle })),
-      })),
-    })) as never;
-    await expect(resolveChatAccess(invalidName)).resolves.toEqual({
-      status: "unauthorized",
-    });
   });
 
-  it("fails closed when identity or profile lookups throw", async () => {
-    const identityFailure = clientFor("docente");
-    identityFailure.auth.getUser = vi.fn(async () =>
-      Promise.reject(new Error("offline")),
+  it("fails closed for a suspended account", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient({
+          data: [row({ account_status: "suspended" })],
+          error: null,
+        }),
+      ),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it("fails closed for an expired account", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient({
+          data: [row({ access_expires_at: "2020-01-01T00:00:00.000Z" })],
+          error: null,
+        }),
+      ),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it("does not give an administrative capability to a docente", async () => {
+    const result = await resolveChatAccess(
+      createClient({
+        data: [row({ role: "docente", modules_access: true })],
+        error: null,
+      }),
     );
 
-    await expect(resolveChatAccess(identityFailure)).resolves.toEqual({
-      status: "unauthenticated",
-    });
-
-    const profileFailure = clientFor("docente");
-    profileFailure.from = vi.fn(() => {
-      throw new Error("offline");
-    });
-    await expect(resolveChatAccess(profileFailure)).resolves.toEqual({
-      status: "unauthorized",
+    expect(result).toEqual({
+      fullName: "Lucía Docente",
+      role: "docente",
+      status: "authorized",
+      userId: "user-1",
     });
   });
 });
