@@ -304,6 +304,32 @@ describe('teaching-position-retrieval', () => {
   });
 
   describe('isDirectTeachingPositionEvidence', () => {
+    it('admite el manual del clasificador identificado por su título', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El Manual de Clasificador de Cargos ha sido formulado en base a la Ley N° 28175, Ley Marco del Empleo Público.',
+            'ANEXO-MANUAL-DE-CLASIFICADOR-DE-CARGOS-DRELM-Y-UGEL-DE-LIMA-',
+            ['Condición de plazas y clasificador'],
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('acusa un clasificador homónimo en una norma de otro proceso', () => {
+      expect(
+        isDirectTeachingPositionEvidence(
+          classifierQuestion,
+          source(
+            'El clasificador de cargos de la institución educativa describe los niveles y requisitos.',
+            'Norma de racionalización de plazas: Clasificador de cargos',
+            ['Ley y reglamento'],
+          ),
+        ),
+      ).toBe(false);
+    });
+
     it('admite la norma que regula el cuadro de distribución de horas', () => {
       expect(
         isDirectTeachingPositionEvidence(

@@ -303,6 +303,10 @@ function namesAspectInHeading(
   const heading = normalizeSpanishText(
     `${source.documentTitle} ${source.sectionTitle ?? ''}`,
   );
+  // Un título que nombra otro proceso no reclama el aspecto aunque contenga la
+  // misma sección: «Norma de encargatura: Clasificador de cargos» no regula el
+  // clasificador. Cubre también las fuentes sin módulo catalogado.
+  if (COMPETING_MODULE.test(heading)) return false;
   if (aspect === 'hours') {
     if (HOURS_PROCESS_DENOMINATION.test(heading)) return true;
     // Una sección «Distribución de horas» de una norma que efectivamente
@@ -381,5 +385,16 @@ export function isDirectTeachingPositionEvidence(
   source: PositionEvidenceSource,
 ): boolean {
   const aspects = aspectsInQuestion(question);
-  return aspects.some((aspect) => treatsPositionAspect(source, aspect));
+  if (!aspects.length) return false;
+  const evidence = evidenceText(source);
+  return aspects.some(
+    (aspect) =>
+      treatsPositionAspect(source, aspect) ||
+      // El manual del clasificador se identifica por su título
+      // («ANEXO-MANUAL-DE-CLASIFICADOR-DE-CARGOS...») aunque el cuerpo solo
+      // enumere cargos. Aquí la pregunta ya nombra el aspecto, así que el
+      // encabezado basta; `namesAspectInHeading` descarta los módulos que
+      // nombran otro proceso (encargatura, contratación, etc.).
+      namesAspectInHeading(aspect, source, evidence),
+  );
 }
