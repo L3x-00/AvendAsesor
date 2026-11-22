@@ -33,22 +33,36 @@ function createClient(
 }
 
 describe("resolveAdminAccess", () => {
-  it("is unauthenticated when the session has no row", async () => {
+  it("is unauthorized when there is no profile for the session", async () => {
     const client = createClient({ data: [], error: null });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthenticated",
+      status: "unauthorized",
     });
     expect(client.rpc).toHaveBeenCalledExactlyOnceWith(
       "current_user_access_context",
     );
   });
 
-  it("is unauthenticated when the RPC reports an error", async () => {
-    const client = createClient({ data: null, error: {} });
+  it("is unauthenticated only when PostgREST rejects the anonymous key", async () => {
+    const client = createClient({
+      data: null,
+      error: { code: "42501", message: "permission denied for function" },
+    });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
       status: "unauthenticated",
+    });
+  });
+
+  it("is unauthorized on any other RPC error", async () => {
+    const client = createClient({
+      data: null,
+      error: { code: "PGRST202", message: "function not found" },
+    });
+
+    await expect(resolveAdminAccess(client)).resolves.toEqual({
+      status: "unauthorized",
     });
   });
 

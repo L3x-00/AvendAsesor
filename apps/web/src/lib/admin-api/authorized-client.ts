@@ -33,8 +33,8 @@ interface SessionSupabaseClient extends AuthorizationSupabaseClient {
 }
 
 /**
- * Resolver el acceso cuesta tres viajes secuenciales a Supabase
- * (`auth.getUser`, la fila de `profiles` y el RPC de permiso de módulos).
+ * Resolver el acceso cuesta un viaje a Supabase: la RPC
+ * `current_user_access_context()` devuelve identidad, perfil y permiso.
  *
  * El layout del panel necesita el nombre, el rol y el permiso para pintar la
  * barra lateral, y cada página vuelve a resolver el acceso porque un layout no

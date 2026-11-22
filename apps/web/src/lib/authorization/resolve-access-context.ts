@@ -28,6 +28,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Sin sesión, el cliente de Supabase usa la clave anon y PostgREST rechaza la
+ * llamada con 42501 (o 401/403 si el token no es verificable). Esa es la única
+ * forma de distinguir "no hay sesión" de "hay sesión pero no hay contexto":
+ * un error posterior o cero filas son denegación, no caducidad de sesión.
+ */
+function isMissingSession(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+  return (
+    error.code === "42501" ||
+    error.code === 42501 ||
+    error.code === 401 ||
+    error.code === 403 ||
+    error.status === 401 ||
+    error.status === 403
+  );
+}
+
+/**
  * Resuelve la identidad y el contexto de acceso en un solo viaje a Supabase.
  *
  * La base de datos toma la identidad de `auth.uid()` (token verificado), por lo
@@ -49,15 +67,20 @@ export async function resolveAccessContext(
     return { status: "unauthenticated" };
   }
 
-  if (error || !Array.isArray(data)) {
-    return { status: "unauthenticated" };
+  if (error) {
+    return {
+      status: isMissingSession(error) ? "unauthenticated" : "unauthorized",
+    };
   }
 
-  // `auth.uid()` es nulo sin sesión, así que la RPC devuelve cero filas.
-  const row = data[0];
-  if (!isRecord(row)) {
-    return { status: data.length === 0 ? "unauthenticated" : "unauthorized" };
+  if (!Array.isArray(data) || data.length === 0 || !isRecord(data[0])) {
+    // Con sesión verificada, la RPC devuelve exactamente una fila. Cero filas
+    // significa que esa identidad no tiene perfil: se deniega, no se pide
+    // iniciar sesión de nuevo.
+    return { status: "unauthorized" };
   }
+
+  const row = data[0];
 
   const { access_expires_at, account_status, full_name, modules_access, role, user_id } = row;
 

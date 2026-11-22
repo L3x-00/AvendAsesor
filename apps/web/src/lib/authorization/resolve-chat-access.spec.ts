@@ -30,16 +30,24 @@ function createClient(
 }
 
 describe("resolveChatAccess", () => {
-  it("is unauthenticated without a session row", async () => {
+  it("is unauthorized when there is no profile for the session", async () => {
     await expect(
       resolveChatAccess(createClient({ data: [], error: null })),
+    ).resolves.toEqual({ status: "unauthorized" });
+  });
+
+  it("is unauthenticated when the anonymous key is rejected", async () => {
+    await expect(
+      resolveChatAccess(
+        createClient({ data: null, error: { code: "42501" } }),
+      ),
     ).resolves.toEqual({ status: "unauthenticated" });
   });
 
-  it("is unauthenticated on RPC failure", async () => {
+  it("is unauthorized on any other RPC failure", async () => {
     await expect(
-      resolveChatAccess(createClient({ data: null, error: {} })),
-    ).resolves.toEqual({ status: "unauthenticated" });
+      resolveChatAccess(createClient({ data: null, error: { code: "500" } })),
+    ).resolves.toEqual({ status: "unauthorized" });
   });
 
   it("fails closed when the RPC throws", async () => {
