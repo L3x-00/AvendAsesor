@@ -5,6 +5,7 @@ import {
   type ChatRole,
 } from "./policy";
 import type { AuthorizationSupabaseClient } from "./resolve-admin-access";
+import { resolveAccessContext } from "./resolve-access-context";
 
 export type ChatAccessResult =
   | {
@@ -20,59 +21,31 @@ export type ChatAccessResult =
  * The chat boundary accepts every confirmed product role. It deliberately
  * remains separate from administrative access so a docente cannot inherit an
  * administrative capability merely by loading the conversation UI.
+ *
+ * Como el panel, resuelve el contexto en una sola RPC; la política de rol,
+ * estado y vigencia se aplica aquí, no se delega en la base de datos.
  */
 export async function resolveChatAccess(
   client: AuthorizationSupabaseClient,
 ): Promise<ChatAccessResult> {
-  let userData: { user: { id: string } | null };
-  let userError: unknown;
+  const context = await resolveAccessContext(client);
 
-  try {
-    ({ data: userData, error: userError } = await client.auth.getUser());
-  } catch {
-    return { status: "unauthenticated" };
-  }
-
-  const user = userData.user;
-  if (userError || !user) return { status: "unauthenticated" };
-
-  let data: unknown;
-  let error: unknown;
-  try {
-    ({ data, error } = await client
-      .from("profiles")
-      .select("role, account_status, full_name, access_expires_at")
-      .eq("id", user.id)
-      .maybeSingle());
-  } catch {
-    return { status: "unauthorized" };
+  if (context.status !== "resolved") {
+    return { status: context.status };
   }
 
   if (
-    error ||
-    !data ||
-    typeof data !== "object" ||
-    !("role" in data) ||
-    !("account_status" in data) ||
-    !("full_name" in data) ||
-    !("access_expires_at" in data) ||
-    typeof (data as { full_name: unknown }).full_name !== "string" ||
-    !(data as { full_name: string }).full_name.trim() ||
-    !isActiveAccountStatus(
-      (data as { account_status: unknown }).account_status,
-    ) ||
-    !hasCurrentAccess(
-      (data as { access_expires_at: unknown }).access_expires_at,
-    ) ||
-    !isChatRole((data as { role: unknown }).role)
+    !isActiveAccountStatus(context.accountStatus) ||
+    !hasCurrentAccess(context.accessExpiresAt) ||
+    !isChatRole(context.role)
   ) {
     return { status: "unauthorized" };
   }
 
   return {
-    fullName: (data as { full_name: string }).full_name.trim(),
-    role: (data as { role: ChatRole }).role,
+    fullName: context.fullName,
+    role: context.role,
     status: "authorized",
-    userId: user.id,
+    userId: context.userId,
   };
 }

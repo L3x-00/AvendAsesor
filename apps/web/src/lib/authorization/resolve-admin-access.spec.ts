@@ -4,44 +4,57 @@ import {
   type AuthorizationSupabaseClient,
 } from "./resolve-admin-access";
 
-function createClient(
-  overrides: {
-    getUser?: AuthorizationSupabaseClient["auth"]["getUser"];
-    maybeSingle?: () => PromiseLike<{ data: unknown; error: unknown }>;
-    permission?: () => PromiseLike<{ data: unknown; error: unknown }>;
-  } = {},
-): AuthorizationSupabaseClient {
-  const maybeSingle =
-    overrides.maybeSingle ??
-    (async () => ({
-      data: {
-        access_expires_at: null,
-        account_status: "active",
-        full_name: "María Administradora",
-        role: "admin",
-      },
-      error: null,
-    }));
-  const eq = vi.fn(() => ({ maybeSingle }));
-  const select = vi.fn(() => ({ eq }));
-  const from = vi.fn(() => ({ select }));
-
+/** Fila tal como la devuelve `public.current_user_access_context()`. */
+function row(overrides: Record<string, unknown> = {}) {
   return {
-    auth: {
-      getUser:
-        overrides.getUser ??
-        vi.fn(async () => ({ data: { user: { id: "user-1" } }, error: null })),
-    },
-    from,
-    rpc:
-      overrides.permission ?? vi.fn(async () => ({ data: true, error: null })),
-  } as unknown as AuthorizationSupabaseClient;
+    access_expires_at: null,
+    account_status: "active",
+    full_name: "  María Administradora  ",
+    modules_access: true,
+    role: "admin",
+    user_id: "user-1",
+    ...overrides,
+  };
+}
+
+function createClient(
+  response: { data: unknown; error: unknown } | (() => never) = {
+    data: [row()],
+    error: null,
+  },
+): AuthorizationSupabaseClient & { rpc: ReturnType<typeof vi.fn> } {
+  const rpc = vi.fn(async () => {
+    if (typeof response === "function") return response();
+    return response;
+  });
+  return { rpc } as unknown as AuthorizationSupabaseClient & {
+    rpc: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe("resolveAdminAccess", () => {
-  it("is unauthenticated when the provider reports no user", async () => {
-    const client = createClient({
-      getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
+  it("is unauthenticated when the session has no row", async () => {
+    const client = createClient({ data: [], error: null });
+
+    await expect(resolveAdminAccess(client)).resolves.toEqual({
+      status: "unauthenticated",
+    });
+    expect(client.rpc).toHaveBeenCalledExactlyOnceWith(
+      "current_user_access_context",
+    );
+  });
+
+  it("is unauthenticated when the RPC reports an error", async () => {
+    const client = createClient({ data: null, error: {} });
+
+    await expect(resolveAdminAccess(client)).resolves.toEqual({
+      status: "unauthenticated",
+    });
+  });
+
+  it("is unauthenticated when the RPC throws unexpectedly", async () => {
+    const client = createClient(() => {
+      throw new Error("network error");
     });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
@@ -49,104 +62,25 @@ describe("resolveAdminAccess", () => {
     });
   });
 
-  it("is unauthenticated when the provider returns an error", async () => {
-    const client = createClient({
-      getUser: vi.fn(async () => ({ data: { user: null }, error: {} })),
-    });
-
-    await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthenticated",
-    });
-  });
-
-  it("is unauthenticated when user verification throws unexpectedly", async () => {
-    const client = createClient({
-      getUser: vi.fn(async () => Promise.reject(new Error("network error"))),
-    });
-
-    await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthenticated",
-    });
-  });
-
-  it("fails closed when the profile lookup errors", async () => {
-    const client = createClient({
-      maybeSingle: async () => ({ data: null, error: {} }),
-    });
+  it.each([
+    ["missing role", { role: undefined }],
+    ["missing account status", { account_status: undefined }],
+    ["missing expiry", { access_expires_at: undefined }],
+    ["empty name", { full_name: "   " }],
+    ["missing user id", { user_id: undefined }],
+    ["invalid module permission", { modules_access: "true" }],
+  ])("fails closed on malformed data: %s", async (_label, override) => {
+    const client = createClient({ data: [row(override)], error: null });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
       status: "unauthorized",
     });
   });
-
-  it("fails closed when the profile lookup throws unexpectedly", async () => {
-    const client = createClient({
-      maybeSingle: async () => Promise.reject(new Error("network error")),
-    });
-
-    await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthorized",
-    });
-  });
-
-  it("fails closed when no profile row exists", async () => {
-    const client = createClient({
-      maybeSingle: async () => ({ data: null, error: null }),
-    });
-
-    await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthorized",
-    });
-  });
-
-  it("fails closed on malformed provider data", async () => {
-    const client = createClient({
-      maybeSingle: async () => ({
-        data: { account_status: "active", role: 42 },
-        error: null,
-      }),
-    });
-
-    await expect(resolveAdminAccess(client)).resolves.toEqual({
-      status: "unauthorized",
-    });
-
-    const clientMissingRole = createClient({
-      maybeSingle: async () => ({ data: {}, error: null }),
-    });
-
-    await expect(resolveAdminAccess(clientMissingRole)).resolves.toEqual({
-      status: "unauthorized",
-    });
-  });
-
-  it.each(["   ", 42, null])(
-    "fails closed when the administrative profile name is invalid: %s",
-    async (fullName) => {
-      const client = createClient({
-        maybeSingle: async () => ({
-          data: {
-            access_expires_at: null,
-            account_status: "active",
-            full_name: fullName,
-            role: "superadmin",
-          },
-          error: null,
-        }),
-      });
-
-      await expect(resolveAdminAccess(client)).resolves.toEqual({
-        status: "unauthorized",
-      });
-    },
-  );
 
   it("is unauthorized for the docente role", async () => {
     const client = createClient({
-      maybeSingle: async () => ({
-        data: { account_status: "active", role: "docente" },
-        error: null,
-      }),
+      data: [row({ role: "docente" })],
+      error: null,
     });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
@@ -154,76 +88,31 @@ describe("resolveAdminAccess", () => {
     });
   });
 
-  it("is authorized for admin and superadmin roles and scopes the lookup to the user", async () => {
-    const adminClient = createClient({
-      maybeSingle: async () => ({
-        data: {
-          access_expires_at: null,
-          account_status: "active",
-          full_name: "  María Administradora  ",
-          role: "admin",
-        },
+  it.each(["admin", "superadmin"] as const)(
+    "is authorized for %s with the values resolved in one call",
+    async (role) => {
+      const client = createClient({
+        data: [row({ role, modules_access: false })],
         error: null,
-      }),
-    });
+      });
 
-    await expect(resolveAdminAccess(adminClient)).resolves.toEqual({
-      fullName: "María Administradora",
-      modulesAccess: true,
-      role: "admin",
-      status: "authorized",
-      userId: "user-1",
-    });
-    expect(adminClient.from).toHaveBeenCalledWith("profiles");
+      await expect(resolveAdminAccess(client)).resolves.toEqual({
+        fullName: "María Administradora",
+        modulesAccess: false,
+        role,
+        status: "authorized",
+        userId: "user-1",
+      });
+      expect(client.rpc).toHaveBeenCalledExactlyOnceWith(
+        "current_user_access_context",
+      );
+    },
+  );
 
-    const superadminClient = createClient({
-      maybeSingle: async () => ({
-        data: {
-          access_expires_at: null,
-          account_status: "active",
-          full_name: "Juan Superadministrador",
-          role: "superadmin",
-        },
-        error: null,
-      }),
-    });
-
-    await expect(resolveAdminAccess(superadminClient)).resolves.toEqual({
-      fullName: "Juan Superadministrador",
-      modulesAccess: true,
-      role: "superadmin",
-      status: "authorized",
-      userId: "user-1",
-    });
-  });
-
-  it("fails closed when the module permission lookup fails", async () => {
-    const unavailable = createClient({
-      permission: vi.fn(async () => ({ data: null, error: {} })),
-    });
-    const malformed = createClient({
-      permission: vi.fn(async () => ({ data: "yes", error: null })),
-    });
-
-    await expect(resolveAdminAccess(unavailable)).resolves.toEqual({
-      status: "unauthorized",
-    });
-    await expect(resolveAdminAccess(malformed)).resolves.toEqual({
-      status: "unauthorized",
-    });
-  });
-
-  it("fails closed when administrative access has expired", async () => {
+  it("fails closed when the account has been suspended", async () => {
     const client = createClient({
-      maybeSingle: async () => ({
-        data: {
-          access_expires_at: "2020-01-01T00:00:00.000Z",
-          account_status: "active",
-          full_name: "María Administradora",
-          role: "admin",
-        },
-        error: null,
-      }),
+      data: [row({ account_status: "suspended" })],
+      error: null,
     });
 
     await expect(resolveAdminAccess(client)).resolves.toEqual({
@@ -231,22 +120,27 @@ describe("resolveAdminAccess", () => {
     });
   });
 
-  it("fails closed for suspended or legacy-incomplete account state", async () => {
-    const suspended = createClient({
-      maybeSingle: async () => ({
-        data: { account_status: "suspended", role: "superadmin" },
-        error: null,
-      }),
-    });
-    const incomplete = createClient({
-      maybeSingle: async () => ({ data: { role: "admin" }, error: null }),
+  it("fails closed when access has expired", async () => {
+    const client = createClient({
+      data: [row({ access_expires_at: "2020-01-01T00:00:00.000Z" })],
+      error: null,
     });
 
-    await expect(resolveAdminAccess(suspended)).resolves.toEqual({
+    await expect(resolveAdminAccess(client)).resolves.toEqual({
       status: "unauthorized",
     });
-    await expect(resolveAdminAccess(incomplete)).resolves.toEqual({
-      status: "unauthorized",
+  });
+
+  it("keeps an unexpired access window open", async () => {
+    const client = createClient({
+      data: [
+        row({ access_expires_at: new Date(Date.now() + 86_400_000).toISOString() }),
+      ],
+      error: null,
+    });
+
+    await expect(resolveAdminAccess(client)).resolves.toMatchObject({
+      status: "authorized",
     });
   });
 });

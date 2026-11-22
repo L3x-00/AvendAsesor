@@ -24,7 +24,7 @@ export type AuthorizedAdminApiSession =
   | { status: "unauthenticated" | "unauthorized" };
 
 interface SessionSupabaseClient extends AuthorizationSupabaseClient {
-  auth: AuthorizationSupabaseClient["auth"] & {
+  auth: {
     getSession(): Promise<{
       data: { session: { access_token: string } | null };
       error: unknown;
