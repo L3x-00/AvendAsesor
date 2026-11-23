@@ -872,27 +872,6 @@ function consultationTopic(question: string): string | null {
 }
 
 /**
- * Cierra una respuesta con la sugerencia del módulo donde vive la evidencia.
- * Así, cuando la consulta se abrió en otro módulo, la persona puede continuar
- * en el módulo correcto con una respuesta más precisa. Respeta el tope de la
- * respuesta persistida.
- */
-function withModuleSuggestionNote(answer: string, moduleName: string): string {
-  const note = `\n\nEncontré esta información en ${moduleName}. Si quieres una respuesta más precisa sobre este tema, abre una consulta en ese módulo.`;
-  // El aviso de corte va al final y no debe perderse al recortar la respuesta.
-  const truncation = `\n\n${RAG_TRUNCATION_NOTE}`;
-  const truncated = answer.endsWith(truncation);
-  const body = truncated ? answer.slice(0, -truncation.length) : answer;
-  const suffix = truncated ? truncation : '';
-  const room = MAX_RAG_ANSWER_CHARS - note.length - suffix.length;
-  const trimmed =
-    body.length <= room
-      ? body
-      : `${body.slice(0, Math.max(0, room - 1)).trimEnd()}…`;
-  return `${trimmed}${note}${suffix}`;
-}
-
-/**
  * Insuficiencia específica de un módulo sin documentación cargada. No pide una
  * aclaración ni propone otros temas: la pregunta puede ser comprensible y aun
  * así no existir fuente. No afirma nada normativo ni reutiliza documentos de
@@ -1949,22 +1928,13 @@ export class ChatService {
       retrieval.sources.some(
         (source) => !sourceBelongsToModule(source, selectedModuleId ?? ''),
       );
-    const crossModuleSuggestion = crossModuleAnswer
-      ? retrieval.resolvedModule
-      : null;
-    // Módulos que se ofrecen al pie de la respuesta: los del panorama salarial
-    // o, si la evidencia vino de otro módulo, ese módulo.
-    const suggestionModules = broadSalaryModules.length
-      ? broadSalaryModules
-      : crossModuleSuggestion
-        ? [crossModuleSuggestion]
-        : [];
-    // Solo se añade la frase cuando hay un único módulo sugerido: el panorama
-    // salarial ofrece varios y la frase hablaría de uno solo.
-    const withSuggestion = (answer: string): string =>
-      crossModuleSuggestion && !broadSalaryModules.length
-        ? withModuleSuggestionNote(answer, crossModuleSuggestion.name)
-        : answer;
+    // P2: la respuesta con evidencia de otro módulo conserva la conversación
+    // en el módulo elegido y mantiene sus fuentes marcadas como cruzadas. No se
+    // ofrece el módulo de la evidencia como botón ni se añade la nota de
+    // "encontré esto en ...": el PO pidió que no parezca que se sale del chat.
+    // Los únicos módulos sugeridos son los del panorama salarial.
+    const suggestionModules = broadSalaryModules;
+    const withSuggestion = (answer: string): string => answer;
 
     const turn = await this.historyGateway.beginTurn({
       conversationId,
