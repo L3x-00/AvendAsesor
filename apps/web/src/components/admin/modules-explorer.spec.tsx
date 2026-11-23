@@ -17,8 +17,7 @@ import {
   updateModuleAction,
 } from "@/app/admin/actions";
 import type { AdminActionState } from "@/lib/admin-api/action-state";
-import { ModuleManageDetails } from "./modules-explorer";
-import { ModulesExplorer, type ModuleView } from "./modules-explorer";
+import { ModuleDetailHero, ModulesExplorer, type ModuleView } from "./modules-explorer";
 
 const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 
@@ -210,7 +209,7 @@ describe("ModulesExplorer", () => {
         name: "Buscar submódulo por nombre o código",
       }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: /Ingresar/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: /^Ver / })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "+ Crear submódulo" }),
     ).not.toBeInTheDocument();
@@ -346,7 +345,7 @@ describe("ModulesExplorer", () => {
     view.rerender(<ModulesExplorer {...props} modules={[child]} />);
     const card = screen
       .getByRole("heading", { name: child.name })
-      .closest("li");
+      .closest<HTMLElement>("li, tr");
     await waitFor(() => expect(card).toHaveFocus());
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
@@ -439,13 +438,15 @@ describe("ModulesExplorer", () => {
   it("keeps edit, deactivate and delete field errors separate", async () => {
     const user = userEvent.setup();
     const { container } = render(
-      <ModuleManageDetails
-        module={{ ...rootModules[0], submoduleCount: 0 }}
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
         parents={parents}
-        summary="Editar, ordenar o cambiar estado"
       />,
     );
-    await user.click(screen.getByText("Editar, ordenar o cambiar estado"));
+    await user.click(
+      screen.getByRole("button", { name: `Editar ${existingChild.name}` }),
+    );
     await user.clear(screen.getByLabelText("Nombre"));
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     await user.click(screen.getByRole("button", { name: "Desactivar" }));
@@ -497,13 +498,15 @@ describe("ModulesExplorer", () => {
   it("blocks deleting a module that still has submodules and says why", async () => {
     const user = userEvent.setup();
     render(
-      <ModuleManageDetails
-        module={rootModules[0]}
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[{ ...existingChild, submoduleCount: 3 }]}
         parents={parents}
-        summary="Editar, ordenar o cambiar estado"
       />,
     );
-    await user.click(screen.getByText("Editar, ordenar o cambiar estado"));
+    await user.click(
+      screen.getByRole("button", { name: `Editar ${existingChild.name}` }),
+    );
 
     expect(
       screen.queryByRole("button", { name: /^Eliminar (módulo|submódulo)$/ }),
@@ -539,7 +542,9 @@ const existingChild: ModuleView = {
 };
 
 function cardOf(name: string): HTMLElement {
-  const card = screen.getByRole("heading", { name }).closest("li");
+  const card = screen
+    .getByRole("heading", { name })
+    .closest<HTMLElement>("li, tr");
   if (!card) throw new Error(`Missing card for ${name}`);
   return card;
 }
@@ -895,7 +900,7 @@ describe("ModulesExplorer — modal de creación", () => {
     expect(screen.queryByText(/Puedes crear uno/)).not.toBeInTheDocument();
   });
 
-  it("labels submodule cards with the same spelling as the rest of the interface", () => {
+  it("labels submodule rows with the same spelling as the rest of the interface", () => {
     render(
       <ModulesExplorer
         context={moduleContext}
@@ -904,9 +909,195 @@ describe("ModulesExplorer — modal de creación", () => {
       />,
     );
     expect(
-      screen.getByText(`Submódulo: ${existingChild.name}`),
-    ).toBeInTheDocument();
+      screen.getByRole("columnheader", { name: "Submódulo" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: existingChild.name }),
+    ).toBeVisible();
     expect(screen.queryByText(/Sub Módulo/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ModulesExplorer — tabla de submódulos", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("shows the reference columns and the data of each submodule", () => {
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
+    );
+
+    for (const column of [
+      "Submódulo",
+      "Código",
+      "Orden",
+      "Estado",
+      "Documentos",
+    ]) {
+      expect(screen.getByRole("columnheader", { name: column })).toBeVisible();
+    }
+
+    const row = cardOf(existingChild.name);
+    expect(within(row).getByText(existingChild.code)).toBeVisible();
+    expect(within(row).getByText("1")).toBeVisible();
+    expect(within(row).getByText("Activo")).toBeVisible();
+    expect(within(row).getByText("0 documentos")).toBeVisible();
+  });
+
+  it("offers view, edit and delete actions for every submodule", () => {
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: `Ver ${existingChild.name}` }),
+    ).toHaveAttribute("href", "/admin/modules/s1");
+    expect(
+      screen.getByRole("button", { name: `Editar ${existingChild.name}` }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: `Eliminar ${existingChild.name}` }),
+    ).toBeVisible();
+  });
+
+  it("edits the submodule from its row without leaving the table", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: `Editar ${existingChild.name}` }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: `Editar ${existingChild.name}`,
+    });
+    expect(within(dialog).getByLabelText("Nombre")).toHaveValue(
+      existingChild.name,
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Guardar cambios" }),
+    );
+    await waitFor(() => expect(updateModuleAction).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(updateModuleAction).mock.calls[0][1];
+    expect(sent.get("moduleId")).toBe(existingChild.id);
+  });
+
+  it("asks for a reason before deleting the submodule", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModulesExplorer
+        context={moduleContext}
+        modules={[existingChild]}
+        parents={parents}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: `Eliminar ${existingChild.name}` }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Eliminar submódulo" });
+    const confirm = within(dialog).getByRole("button", {
+      name: "Sí, eliminar submódulo",
+    });
+
+    await user.click(confirm);
+    expect(within(dialog).getByLabelText(/Motivo de baja/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(deleteModuleAction).not.toHaveBeenCalled();
+
+    await user.type(
+      within(dialog).getByLabelText(/Motivo de baja/),
+      "Submódulo duplicado",
+    );
+    await user.click(confirm);
+    await waitFor(() => expect(deleteModuleAction).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(deleteModuleAction).mock.calls[0][1];
+    expect(sent.get("moduleId")).toBe(existingChild.id);
+    expect(sent.get("redirectTo")).toBe("/admin/modules/m1");
+  });
+});
+
+describe("ModuleDetailHero", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+  });
+
+  const heroModule: ModuleView = {
+    ...existingChild,
+    id: "m1",
+    name: "Evaluación docente",
+    parentModuleId: null,
+    submoduleCount: 2,
+  };
+
+  it("shows the module ficha with its code, order and description", () => {
+    render(<ModuleDetailHero module={heroModule} parents={parents} />);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: heroModule.name }),
+    ).toBeVisible();
+    expect(screen.getByText("Código")).toBeVisible();
+    expect(screen.getByText(heroModule.code)).toBeVisible();
+    expect(screen.getByText("Orden")).toBeVisible();
+    expect(screen.getByText(String(heroModule.sortOrder))).toBeVisible();
+    expect(screen.getByText("Módulo principal")).toBeVisible();
+    expect(screen.getByText("Activo")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Editar módulo" }),
+    ).toBeVisible();
+  });
+
+  it("edits the module from the ficha", async () => {
+    const user = userEvent.setup();
+    render(<ModuleDetailHero module={heroModule} parents={parents} />);
+
+    await user.click(screen.getByRole("button", { name: "Editar módulo" }));
+    const dialog = screen.getByRole("dialog", {
+      name: `Editar ${heroModule.name}`,
+    });
+    expect(within(dialog).getByLabelText("Nombre")).toHaveValue(
+      heroModule.name,
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Guardar cambios" }),
+    );
+    await waitFor(() => expect(updateModuleAction).toHaveBeenCalledTimes(1));
+    expect(
+      vi.mocked(updateModuleAction).mock.calls[0][1].get("moduleId"),
+    ).toBe(heroModule.id);
+  });
+
+  it("does not offer editing when the module is read-only", () => {
+    render(
+      <ModuleDetailHero
+        canManage={false}
+        module={heroModule}
+        parents={parents}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Editar módulo" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -998,5 +1189,35 @@ describe("modules-explorer.module.css — contratos visuales", () => {
   it("draws the search field with its own magnifier icon", () => {
     expect(css).toMatch(/\.search\s*\{[^}]*background-image:\s*url\("data:image\/svg\+xml/);
     expect(css).toMatch(/\.search\s*\{[^}]*padding:\s*0 0\.9rem 0 2\.75rem/);
+  });
+
+  it("reproduces the module ficha: icon tile, data chips and edit button", () => {
+    expect(css).toMatch(
+      /\.hero\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/,
+    );
+    expect(css).toMatch(
+      /\.heroIcon\s*\{[^}]*width:\s*4rem;[^}]*height:\s*4rem/,
+    );
+    expect(css).toMatch(
+      /\.heroMeta > div\s*\{[^}]*border-radius:\s*0\.55rem;[^}]*background:\s*#f1f7fe/,
+    );
+    expect(css).toMatch(
+      /\.editButton\s*\{[^}]*min-height:\s*2\.75rem;[^}]*background:\s*linear-gradient/,
+    );
+  });
+
+  it("draws the submodule table with a white card and circular row actions", () => {
+    expect(css).toMatch(
+      /\.tableCard\s*\{[^}]*border-radius:\s*1rem;[^}]*background:\s*var\(--avend-surface\)/,
+    );
+    expect(css).toMatch(/\.table\s*\{[^}]*border-collapse:\s*collapse/);
+    expect(css).toMatch(
+      /\.iconButton\s*\{[^}]*width:\s*2\.75rem;[^}]*height:\s*2\.75rem;[^}]*border-radius:\s*999px/,
+    );
+    expect(css).toMatch(/\.viewButton\s*\{[^}]*color:\s*#1462b8/);
+    expect(css).toMatch(/\.rowDeleteButton\s*\{[^}]*color:\s*var\(--avend-danger\)/);
+    expect(css).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{\s*\.rowNew\s*\{[^}]*animation:\s*none/,
+    );
   });
 });

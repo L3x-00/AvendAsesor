@@ -281,242 +281,396 @@ function PendingWatcher({
   return null;
 }
 
-/** Collapsible edit / status / logical-delete controls for a single module. */
-export function ModuleManageDetails({
+/** Formulario de edición de un módulo o submódulo. */
+function ModuleEditForm({
+  fieldId,
   module,
+  onDone,
   parents,
-  summary = "",
 }: {
+  fieldId: string;
   module: ModuleView;
+  onDone?: () => void;
   parents: ModuleParentOption[];
-  summary?: string;
 }) {
-  const fieldId = useId();
-  const [isOpen, setIsOpen] = useState(false);
-
-  const closeForm = useCallback(() => setIsOpen(false), []);
-
   return (
-    <details
-      className={styles.manage}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      open={isOpen}
+    <AdminActionForm
+      action={updateModuleAction}
+      rules={MODULE_RULES}
+      submitLabel="Guardar cambios"
+      successMessage="Módulo actualizado con éxito."
+      onSuccess={onDone}
     >
-      <summary className={styles.manageSummary}>{summary}</summary>
-      <div className={styles.manageGrid}>
-        <AdminActionForm
-          action={updateModuleAction}
-          rules={MODULE_RULES}
-          submitLabel="Guardar cambios"
-          successMessage="Módulo actualizado con éxito."
-          onSuccess={closeForm}
-        >
-          <input name="moduleId" type="hidden" value={module.id} />
-          <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
-            Nombre
+      <input name="moduleId" type="hidden" value={module.id} />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-name`}>
+        Nombre
+      </label>
+      <input
+        className={styles.input}
+        defaultValue={module.name}
+        id={`${fieldId}-name`}
+        maxLength={255}
+        minLength={2}
+        name="name"
+        required
+      />
+      <FieldError name="name" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-code`}>
+        Código
+      </label>
+      <input
+        className={styles.input}
+        defaultValue={module.code}
+        id={`${fieldId}-code`}
+        name="code"
+        pattern={CODE_PATTERN}
+        required
+        title={CODE_TITLE}
+      />
+      <FieldError name="code" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-description`}>
+        Descripción (opcional)
+      </label>
+      <textarea
+        className={styles.textarea}
+        defaultValue={module.description ?? ""}
+        id={`${fieldId}-description`}
+        maxLength={500}
+        minLength={2}
+        name="description"
+      />
+      <FieldError name="description" />
+      <label className={styles.fieldLabel} htmlFor={`${fieldId}-order`}>
+        Orden
+      </label>
+      <input
+        className={styles.input}
+        defaultValue={module.sortOrder}
+        id={`${fieldId}-order`}
+        min="0"
+        name="sortOrder"
+        type="number"
+      />
+      <FieldError name="sortOrder" />
+      {module.parentModuleId ? (
+        <>
+          <label className={styles.fieldLabel} htmlFor={`${fieldId}-parent`}>
+            Módulo padre
           </label>
-          <input
+          <select
             className={styles.input}
-            defaultValue={module.name}
-            id={`${fieldId}-name`}
-            maxLength={255}
-            minLength={2}
-            name="name"
-            required
-          />
-          <FieldError name="name" />
-          <label className={styles.fieldLabel} htmlFor={`${fieldId}-code`}>
-            Código
-          </label>
-          <input
-            className={styles.input}
-            defaultValue={module.code}
-            id={`${fieldId}-code`}
-            name="code"
-            pattern={CODE_PATTERN}
-            required
-            title={CODE_TITLE}
-          />
-          <FieldError name="code" />
-          <label
-            className={styles.fieldLabel}
-            htmlFor={`${fieldId}-description`}
+            defaultValue="__keep__"
+            id={`${fieldId}-parent`}
+            name="parentModuleId"
           >
-            Descripción (opcional)
-          </label>
-          <textarea
-            className={styles.textarea}
-            defaultValue={module.description ?? ""}
-            id={`${fieldId}-description`}
+            <option value="__keep__">Mantener padre actual</option>
+            {parents
+              .filter((parent) => parent.id !== module.id)
+              .map((parent) => (
+                <option key={parent.id} value={parent.id}>
+                  {parent.name} ({parent.code})
+                </option>
+              ))}
+          </select>
+          <FieldError name="parentModuleId" />
+        </>
+      ) : (
+        <p className={styles.presetParent}>
+          Módulo padre: <strong>Sin padre</strong>
+        </p>
+      )}
+      {onDone ? (
+        <div style={{ marginTop: "1rem" }}>
+          <button
+            className="avend-button avend-button--secondary"
+            onClick={onDone}
+            type="button"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : null}
+    </AdminActionForm>
+  );
+}
+
+/** Activar o desactivar un módulo, con el motivo que exige la baja. */
+function ModuleStatusForm({
+  fieldId,
+  module,
+  onDone,
+}: {
+  fieldId: string;
+  module: ModuleView;
+  onDone?: () => void;
+}) {
+  return (
+    <AdminActionForm
+      action={setModuleStatusAction}
+      rules={module.isActive ? MODULE_REASON_RULES : {}}
+      submitLabel={module.isActive ? "Desactivar" : "Activar"}
+      onSuccess={onDone}
+    >
+      <input name="moduleId" type="hidden" value={module.id} />
+      <input name="isActive" type="hidden" value={String(!module.isActive)} />
+      {module.isActive ? (
+        <label
+          className={styles.fieldLabel}
+          htmlFor={`${fieldId}-status-reason`}
+        >
+          Motivo de desactivación
+          <input
+            className={styles.input}
+            id={`${fieldId}-status-reason`}
             maxLength={500}
             minLength={2}
-            name="description"
+            name="reason"
+            required
           />
-          <FieldError name="description" />
-          <label className={styles.fieldLabel} htmlFor={`${fieldId}-order`}>
-            Orden
-          </label>
-          <input
-            className={styles.input}
-            defaultValue={module.sortOrder}
-            id={`${fieldId}-order`}
-            min="0"
-            name="sortOrder"
-            type="number"
-          />
-          <FieldError name="sortOrder" />
-          {module.parentModuleId ? (
-            <>
-              <label
-                className={styles.fieldLabel}
-                htmlFor={`${fieldId}-parent`}
-              >
-                Módulo padre
-              </label>
-              <select
-                className={styles.input}
-                defaultValue="__keep__"
-                id={`${fieldId}-parent`}
-                name="parentModuleId"
-              >
-                <option value="__keep__">Mantener padre actual</option>
-                {parents
-                  .filter((parent) => parent.id !== module.id)
-                  .map((parent) => (
-                    <option key={parent.id} value={parent.id}>
-                      {parent.name} ({parent.code})
-                    </option>
-                  ))}
-              </select>
-              <FieldError name="parentModuleId" />
-            </>
-          ) : (
-            <p className={styles.presetParent}>
-              Módulo padre: <strong>Sin padre</strong>
-            </p>
-          )}
-          <div style={{ marginTop: "1rem" }}>
-            <button className="avend-button" onClick={closeForm} type="button">
-              Cancelar
-            </button>
-          </div>
-        </AdminActionForm>
+          <FieldError name="reason" />
+        </label>
+      ) : null}
+    </AdminActionForm>
+  );
+}
 
-        <div className={styles.manageSide}>
-          <AdminActionForm
-            action={setModuleStatusAction}
-            rules={module.isActive ? MODULE_REASON_RULES : {}}
-            submitLabel={module.isActive ? "Desactivar" : "Activar"}
-            onSuccess={closeForm}
-          >
-            <input name="moduleId" type="hidden" value={module.id} />
-            <input
-              name="isActive"
-              type="hidden"
-              value={String(!module.isActive)}
-            />
-            {module.isActive ? (
-              <label
-                className={styles.fieldLabel}
-                htmlFor={`${fieldId}-status-reason`}
-              >
-                Motivo de desactivación
-                <input
-                  className={styles.input}
-                  id={`${fieldId}-status-reason`}
-                  maxLength={500}
-                  minLength={2}
-                  name="reason"
-                  required
-                />
-                <FieldError name="reason" />
-              </label>
-            ) : null}
-          </AdminActionForm>
-
-          {module.submoduleCount > 0 ? (
-            <p className={styles.presetParent} role="note">
-              Este módulo tiene {module.submoduleCount}{" "}
-              {submoduleWord(module.submoduleCount)}. Elimina primero sus
-              submódulos para poder eliminar el módulo.
-            </p>
-          ) : (
-            <DeleteDisclosure
-              description={
-                <p>
-                  {module.parentModuleId ? "El submódulo" : "El módulo"} dejará
-                  de aparecer para los docentes y en la gestión. La eliminación
-                  es lógica: se conserva su historial.
-                </p>
-              }
-              title={
-                module.parentModuleId
-                  ? "¿Eliminar este submódulo?"
-                  : "¿Eliminar este módulo?"
-              }
-              triggerLabel={
-                module.parentModuleId ? "Eliminar submódulo" : "Eliminar módulo"
-              }
-            >
-              <AdminActionForm
-                action={deleteModuleAction}
-                rules={MODULE_REASON_RULES}
-                submitLabel={
-                  module.parentModuleId
-                    ? "Sí, eliminar submódulo"
-                    : "Sí, eliminar módulo"
-                }
-                onSuccess={closeForm}
-                tone="danger"
-              >
-                <input name="moduleId" type="hidden" value={module.id} />
-                {/* Tras el borrado, el servidor redirige aquí para no quedar en la
-                  ruta del módulo eliminado (que daría 404). */}
-                <input
-                  name="redirectTo"
-                  type="hidden"
-                  value={
-                    module.parentModuleId
-                      ? `/admin/modules/${module.parentModuleId}`
-                      : "/admin/modules"
-                  }
-                />
-                <label
-                  className={styles.fieldLabel}
-                  htmlFor={`${fieldId}-delete-reason`}
-                >
-                  Motivo de baja
-                  <input
-                    className={styles.input}
-                    id={`${fieldId}-delete-reason`}
-                    maxLength={500}
-                    minLength={2}
-                    name="reason"
-                    required
-                  />
-                  <FieldError name="reason" />
-                </label>
-              </AdminActionForm>
-            </DeleteDisclosure>
-          )}
-        </div>
-      </div>
-    </details>
+/** Confirmación de la eliminación lógica con su motivo obligatorio. */
+function ModuleDeleteForm({
+  fieldId,
+  module,
+  onDone,
+}: {
+  fieldId: string;
+  module: ModuleView;
+  onDone?: () => void;
+}) {
+  return (
+    <AdminActionForm
+      action={deleteModuleAction}
+      rules={MODULE_REASON_RULES}
+      submitLabel={
+        module.parentModuleId
+          ? "Sí, eliminar submódulo"
+          : "Sí, eliminar módulo"
+      }
+      onSuccess={onDone}
+      tone="danger"
+    >
+      <input name="moduleId" type="hidden" value={module.id} />
+      {/* Tras el borrado, el servidor redirige aquí para no quedar en la
+        ruta del módulo eliminado (que daría 404). */}
+      <input
+        name="redirectTo"
+        type="hidden"
+        value={
+          module.parentModuleId
+            ? `/admin/modules/${module.parentModuleId}`
+            : "/admin/modules"
+        }
+      />
+      <label
+        className={styles.fieldLabel}
+        htmlFor={`${fieldId}-delete-reason`}
+      >
+        Motivo de baja
+        <input
+          className={styles.input}
+          id={`${fieldId}-delete-reason`}
+          maxLength={500}
+          minLength={2}
+          name="reason"
+          required
+        />
+        <FieldError name="reason" />
+      </label>
+    </AdminActionForm>
   );
 }
 
 /**
- * Modal accesible y autónomo para el formulario de creación. Encapsula el
- * formulario que antes se desplegaba al final del listado: se abre desde el
- * botón de la cabecera y se cierra con Escape, al hacer clic fuera o en el botón
- * de cerrar. Atrapa el foco, bloquea el desplazamiento del fondo y lo devuelve
- * al control que lo abrió. No cambia la lógica del formulario que envuelve.
+ * Acciones de una fila de submódulos. Iconos con trazo homogéneo y texto
+ * alternativo en el botón, para que se entiendan sin depender del color.
+ */
+function EyeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+      <path d="M14.5 6.5 17.5 9.5" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+/**
+ * Ficha del módulo que encabeza su página: icono temático, nombre, código,
+ * orden, estado y descripción, con el botón «Editar módulo» que abre el mismo
+ * formulario de gestión que usa el resto de la sección.
+ */
+export function ModuleDetailHero({
+  canManage = true,
+  module,
+  parents,
+}: {
+  canManage?: boolean;
+  module: ModuleView;
+  parents: ModuleParentOption[];
+}) {
+  const [isEditOpen, setEditOpen] = useState(false);
+  const titleId = `${useId()}-module-hero`;
+  const closeEdit = useCallback(() => setEditOpen(false), []);
+
+  return (
+    <section aria-labelledby={titleId} className={styles.hero}>
+      <span aria-hidden="true" className={styles.heroIcon}>
+        <ModuleIcon name={module.name} />
+      </span>
+      <div className={styles.heroBody}>
+        <div className={styles.heroTitleRow}>
+          <h1 className={styles.heroTitle} id={titleId}>
+            {module.name}
+          </h1>
+          <span
+            className={
+              module.isActive ? styles.badgeActive : styles.badgeInactive
+            }
+          >
+            {module.isActive ? "Activo" : "Inactivo"}
+          </span>
+        </div>
+        <dl className={styles.heroMeta}>
+          <div>
+            <dt>Código</dt>
+            <dd>{module.code}</dd>
+          </div>
+          <div>
+            <dt>Orden</dt>
+            <dd>{module.sortOrder}</dd>
+          </div>
+          <div>
+            <dt>Tipo</dt>
+            <dd>{module.parentModuleId ? "Submódulo" : "Módulo principal"}</dd>
+          </div>
+        </dl>
+        {module.description ? (
+          <p className={styles.heroDescription}>{module.description}</p>
+        ) : null}
+      </div>
+      {canManage ? (
+        <div className={styles.heroActions}>
+          <button
+            className={styles.editButton}
+            onClick={() => setEditOpen(true)}
+            type="button"
+          >
+            <PencilIcon />
+            Editar módulo
+          </button>
+        </div>
+      ) : null}
+      {isEditOpen ? (
+        <Modal
+          canClose
+          onClose={closeEdit}
+          title={`Editar ${module.name}`}
+          titleId={`${titleId}-edit`}
+        >
+          <div className={styles.manageGrid}>
+            <ModuleEditForm
+              fieldId={titleId}
+              module={module}
+              onDone={closeEdit}
+              parents={parents}
+            />
+            <div className={styles.manageSide}>
+              <ModuleStatusForm
+                fieldId={titleId}
+                module={module}
+                onDone={closeEdit}
+              />
+              {module.submoduleCount > 0 ? (
+                <p className={styles.presetParent} role="note">
+                  Este módulo tiene {module.submoduleCount}{" "}
+                  {submoduleWord(module.submoduleCount)}. Elimina primero sus
+                  submódulos para poder eliminar el módulo.
+                </p>
+              ) : (
+                <DeleteDisclosure
+                  description={
+                    <p>
+                      El módulo dejará de aparecer para los docentes y en la
+                      gestión. La eliminación es lógica: se conserva su
+                      historial.
+                    </p>
+                  }
+                  title="¿Eliminar este módulo?"
+                  triggerLabel="Eliminar módulo"
+                >
+                  <ModuleDeleteForm
+                    fieldId={titleId}
+                    module={module}
+                    onDone={closeEdit}
+                  />
+                </DeleteDisclosure>
+              )}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Modal accesible y autónomo para los formularios de alta y edición. Se abre
+ * desde un botón y se cierra con Escape, al hacer clic fuera o en el botón de
+ * cerrar. Atrapa el foco, bloquea el desplazamiento del fondo y lo devuelve al
+ * control que lo abrió. No cambia la lógica del formulario que envuelve.
  *
  * Mientras el envío está en curso no se puede cerrar: el resultado del servidor
  * llega al formulario del modal, y si este se desmontara el alta se haría sin
  * aviso ni resaltado, y la persona podría repetirla creyendo que falló.
  */
-function CreateModal({
+function Modal({
   canClose,
   children,
   onClose,
@@ -838,6 +992,10 @@ export function ModulesExplorer({
   const [view, setView] = useState<"grid" | "list">("grid");
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
+  // Fila cuyo panel de edición o de eliminación está abierto. Solo la vista de
+  // submódulos (tabla) usa estos diálogos; las tarjetas conservan sus detalles.
+  const [editingId, setEditingId] = useState<string>();
+  const [deletingId, setDeletingId] = useState<string>();
   // Elemento resaltado (parpadeo). Se retira siempre a los HIGHLIGHT_MS.
   const [highlightId, setHighlightId] = useState<string | undefined>(() =>
     initialHighlightId && !consumedInitialHighlights.has(initialHighlightId)
@@ -849,7 +1007,7 @@ export function ModulesExplorer({
   // con el foco dentro lo devolvería a <body> y se perdería la posición.
   const [focusedCardId, setFocusedCardId] = useState<string>();
   const revealedId = useRef<string | undefined>(undefined);
-  const cardRefs = useRef(new Map<string, HTMLLIElement>());
+  const cardRefs = useRef(new Map<string, HTMLElement>());
   const closeCreate = useCallback(() => setCreateOpen(false), []);
 
   /**
@@ -899,6 +1057,22 @@ export function ModulesExplorer({
       ),
     [modules, normalized],
   );
+  const editingModule = modules.find((module) => module.id === editingId);
+  const deletingModule = modules.find((module) => module.id === deletingId);
+  const closeEdit = useCallback(() => setEditingId(undefined), []);
+  const closeDelete = useCallback(() => setDeletingId(undefined), []);
+  const emptyMessage =
+    modules.length === 0
+      ? isRoot
+        ? canCreate
+          ? "Aún no hay módulos. Crea el primero con el botón «Crear módulo»."
+          : "No tienes módulos asignados."
+        : hasDirectDocuments
+          ? "Este módulo guarda sus documentos directamente, sin submódulos."
+          : canCreate
+            ? "Este módulo aún no tiene submódulos. Puedes crear uno o ver sus documentos."
+            : "No tienes submódulos asignados."
+      : "Ningún resultado coincide con la búsqueda.";
 
   const finishCreate = useCallback((state: AdminActionState) => {
     setCreateOpen(false);
@@ -996,116 +1170,89 @@ export function ModulesExplorer({
           </div>
         </div>
       ) : null}
-      <div className={styles.toolbar}>
-        <div className={isRoot ? styles.visuallyHidden : styles.toolbarHeading}>
-          <h2 className={styles.title}>{isRoot ? "Módulos" : "Submódulos"}</h2>
-          <span className={styles.count}>{modules.length} en total</span>
-        </div>
-        {/* El buscador va primero y a la izquierda en todas las páginas; el
-            botón de crear, cuando existe, queda al extremo derecho. En móvil
-            el botón sube a la primera línea a ancho completo. */}
-        <div className={styles.toolbarActions}>
-          <input
-            aria-label={
-              isRoot
-                ? "Buscar módulo por nombre o código"
-                : "Buscar submódulo por nombre o código"
-            }
-            className={styles.search}
-            id={`${searchId}-search`}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={
-              isRoot
-                ? "Buscar módulo por nombre o código…"
-                : "Buscar submódulo por nombre o código…"
-            }
-            type="search"
-            value={query}
-          />
-          {isRoot ? (
-            <div
-              className={styles.viewToggle}
-              role="group"
-              aria-label="Vista de módulos"
-            >
-              <button
-                type="button"
-                aria-label="Vista de tarjetas"
-                aria-pressed={view === "grid"}
-                onClick={() => changeView("grid")}
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
-                  <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
-                  <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
-                  <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label="Vista de lista"
-                aria-pressed={view === "list"}
-                onClick={() => changeView("list")}
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
+      {isRoot ? (
+        <>
+          <div className={styles.toolbar}>
+            <div className={styles.visuallyHidden}>
+              <h2 className={styles.title}>Módulos</h2>
+              <span className={styles.count}>{modules.length} en total</span>
             </div>
-          ) : null}
-          {showCreate ? (
-            <button
-              className={`avend-button avend-button--primary ${styles.createButton}`}
-              onClick={() => setCreateOpen(true)}
-              type="button"
-            >
-              {isRoot ? "+ Crear módulo" : "+ Crear submódulo"}
-            </button>
-          ) : null}
-        </div>
-        {canCreate && hasDirectDocuments ? (
-          <p className={styles.presetParent} role="note">
-            Este módulo ya tiene documentos propios, por eso no admite
-            submódulos. Si necesitas submódulos, primero cambia esos documentos
-            a otro módulo o submódulo.
-          </p>
-        ) : null}
-      </div>
+            {/* El buscador va primero y a la izquierda; el botón de crear queda
+                al extremo derecho. En móvil el botón sube a la primera línea a
+                ancho completo. */}
+            <div className={styles.toolbarActions}>
+              <input
+                aria-label="Buscar módulo por nombre o código"
+                className={styles.search}
+                id={`${searchId}-search`}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar módulo por nombre o código…"
+                type="search"
+                value={query}
+              />
+              <div
+                className={styles.viewToggle}
+                role="group"
+                aria-label="Vista de módulos"
+              >
+                <button
+                  type="button"
+                  aria-label="Vista de tarjetas"
+                  aria-pressed={view === "grid"}
+                  onClick={() => changeView("grid")}
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
+                    <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+                    <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
+                    <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Vista de lista"
+                  aria-pressed={view === "list"}
+                  onClick={() => changeView("list")}
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+              </div>
+              {showCreate ? (
+                <button
+                  className={`avend-button avend-button--primary ${styles.createButton}`}
+                  onClick={() => setCreateOpen(true)}
+                  type="button"
+                >
+                  + Crear módulo
+                </button>
+              ) : null}
+            </div>
+          </div>
 
-      {filtered.length === 0 ? (
-        <p className={styles.empty}>
-          {modules.length === 0
-            ? isRoot
-              ? canCreate
-                ? "Aún no hay módulos. Crea el primero con el botón «Crear módulo»."
-                : "No tienes módulos asignados."
-              : hasDirectDocuments
-                ? "Este módulo guarda sus documentos directamente, sin submódulos."
-                : canCreate
-                  ? "Este módulo aún no tiene submódulos. Puedes crear uno o ver sus documentos."
-                  : "No tienes submódulos asignados."
-            : "Ningún resultado coincide con la búsqueda."}
-        </p>
-      ) : (
-        <ul
-          className={`${styles.grid} ${isRoot && view === "list" ? styles.listView : ""}`}
-          role="list"
-        >
+          {filtered.length === 0 ? (
+            <p className={styles.empty}>{emptyMessage}</p>
+          ) : (
+            <ul
+              className={`${styles.grid} ${view === "list" ? styles.listView : ""}`}
+              role="list"
+            >
           {filtered.map((module, index) => {
             const isNew = highlightId === module.id;
             return (
@@ -1116,9 +1263,7 @@ export function ModulesExplorer({
                 style={
                   {
                     "--module-index": Math.min(index, 8),
-                    viewTransitionName: isRoot
-                      ? `module-card-${module.id.replace(/[^A-Za-z0-9_-]/gu, "")}`
-                      : undefined,
+                    viewTransitionName: `module-card-${module.id.replace(/[^A-Za-z0-9_-]/gu, "")}`,
                   } as CSSProperties
                 }
                 onBlur={
@@ -1140,11 +1285,7 @@ export function ModulesExplorer({
                   {/* Repite el nombre del título: se oculta al lector de
                       pantalla para que no lo lea dos veces. */}
                   <div aria-hidden="true" className={styles.moduleTag}>
-                    {isRoot ? (
-                      <ModuleIcon name={module.name} />
-                    ) : (
-                      `Submódulo: ${module.name}`
-                    )}
+                    <ModuleIcon name={module.name} />
                   </div>
                   <span
                     className={
@@ -1157,23 +1298,16 @@ export function ModulesExplorer({
                   </span>
                 </div>
                 <h3 className={styles.cardTitle}>{module.name}</h3>
-                {isRoot ? null : (
-                  <p className={styles.cardMeta}>
-                    Código {module.code} · Orden {module.sortOrder}
-                  </p>
-                )}
                 {module.description ? (
                   <p className={styles.cardDescription}>{module.description}</p>
                 ) : null}
                 <div className={styles.cardStats}>
-                  {isRoot ? (
-                    <span className={styles.cardChip}>
-                      <StatIcon kind="layers" />
-                      {module.submoduleCount}{" "}
-                      {submoduleWord(module.submoduleCount)}
-                    </span>
-                  ) : null}
-                  {isRoot && module.canManage === false ? (
+                  <span className={styles.cardChip}>
+                    <StatIcon kind="layers" />
+                    {module.submoduleCount}{" "}
+                    {submoduleWord(module.submoduleCount)}
+                  </span>
+                  {module.canManage === false ? (
                     <span className={styles.cardChip}>
                       Conteo de documentos no disponible
                     </span>
@@ -1196,11 +1330,278 @@ export function ModulesExplorer({
               </li>
             );
           })}
-        </ul>
+            </ul>
+          )}
+        </>
+      ) : (
+        <div className={styles.tableCard}>
+          <div className={styles.tableHeader}>
+            <div className={styles.tableHeading}>
+              <h2 className={styles.title}>Submódulos</h2>
+              <span className={styles.countBadge}>{modules.length}</span>
+            </div>
+            <div className={styles.tableTools}>
+              <input
+                aria-label="Buscar submódulo por nombre o código"
+                className={styles.search}
+                id={`${searchId}-search`}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar submódulo…"
+                type="search"
+                value={query}
+              />
+              {showCreate ? (
+                <button
+                  className={`avend-button avend-button--primary ${styles.createButton}`}
+                  onClick={() => setCreateOpen(true)}
+                  type="button"
+                >
+                  + Crear submódulo
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {canCreate && hasDirectDocuments ? (
+            <p className={styles.tableNote} role="note">
+              Este módulo ya tiene documentos propios, por eso no admite
+              submódulos. Si necesitas submódulos, primero cambia esos
+              documentos a otro módulo o submódulo.
+            </p>
+          ) : null}
+          {filtered.length === 0 ? (
+            <p className={styles.emptyTable}>{emptyMessage}</p>
+          ) : (
+            <div className={styles.tableScroll}>
+              <table className={styles.table} role="table">
+                <caption className={styles.visuallyHidden}>
+                  Submódulos de{" "}
+                  {context.kind === "module" ? context.moduleName : ""}
+                </caption>
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col">
+                      Submódulo
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Código
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Orden
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Estado
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Documentos
+                    </th>
+                    <th role="columnheader" scope="col">
+                      <span className={styles.visuallyHidden}>Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody role="rowgroup">
+                  {filtered.map((module) => {
+                    const isNew = highlightId === module.id;
+                    return (
+                      <tr
+                        className={`${styles.row} ${isNew ? styles.rowNew : ""}`}
+                        data-highlighted={isNew ? "true" : undefined}
+                        key={module.id}
+                        role="row"
+                        onBlur={
+                          focusedCardId === module.id
+                            ? (event) => {
+                                if (event.target === event.currentTarget) {
+                                  setFocusedCardId(undefined);
+                                }
+                              }
+                            : undefined
+                        }
+                        ref={(element) => {
+                          if (element) cardRefs.current.set(module.id, element);
+                          else cardRefs.current.delete(module.id);
+                        }}
+                        tabIndex={
+                          isNew || focusedCardId === module.id ? -1 : undefined
+                        }
+                      >
+                        <th
+                          className={styles.rowModule}
+                          role="rowheader"
+                          scope="row"
+                        >
+                          <div className={styles.rowModuleInner}>                            <span aria-hidden="true" className={styles.rowIcon}>
+                              <ModuleIcon name={module.name} />
+                            </span>
+                            <span className={styles.rowText}>
+                              <h3 className={styles.rowTitle}>{module.name}</h3>
+                              {module.description ? (
+                                <span className={styles.rowDescription}>
+                                  {module.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                        </th>
+                        <td data-label="Código" role="cell">
+                          <code className={styles.codeChip}>
+                            {module.code}
+                          </code>
+                        </td>
+                        <td data-label="Orden" role="cell">
+                          <span className={styles.orderBadge}>
+                            {module.sortOrder}
+                          </span>
+                        </td>
+                        <td data-label="Estado" role="cell">
+                          <span
+                            className={
+                              module.isActive
+                                ? styles.badgeActive
+                                : styles.badgeInactive
+                            }
+                          >
+                            {module.isActive ? "Activo" : "Inactivo"}
+                          </span>
+                        </td>
+                        <td data-label="Documentos" role="cell">
+                          <span className={styles.docCount}>
+                            <StatIcon kind="documents" />
+                            {module.documentCount}{" "}
+                            {documentWord(module.documentCount)}
+                          </span>
+                        </td>
+                        <td data-label="Acciones" role="cell">
+                          <div className={styles.rowActions}>
+                            <Link
+                              aria-label={`Ver ${module.name}`}
+                              className={`${styles.iconButton} ${styles.viewButton}`}
+                              href={`/admin/modules/${module.id}`}
+                              title="Ver contenido"
+                            >
+                              <EyeIcon />
+                            </Link>
+                            <button
+                              aria-label={`Editar ${module.name}`}
+                              className={`${styles.iconButton} ${styles.rowEditButton}`}
+                              onClick={() => setEditingId(module.id)}
+                              title="Editar"
+                              type="button"
+                            >
+                              <PencilIcon />
+                            </button>
+                            <button
+                              aria-label={`Eliminar ${module.name}`}
+                              className={`${styles.iconButton} ${styles.rowDeleteButton}`}
+                              onClick={() => setDeletingId(module.id)}
+                              title="Eliminar"
+                              type="button"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
+      {editingModule ? (
+        <Modal
+          canClose
+          onClose={closeEdit}
+          title={`Editar ${editingModule.name}`}
+          titleId={`${searchId}-edit-title`}
+        >
+          <div className={styles.manageGrid}>
+            <ModuleEditForm
+              fieldId={`${searchId}-edit`}
+              module={editingModule}
+              onDone={closeEdit}
+              parents={parents}
+            />
+            <div className={styles.manageSide}>
+              <ModuleStatusForm
+                fieldId={`${searchId}-edit`}
+                module={editingModule}
+                onDone={closeEdit}
+              />
+              {editingModule.submoduleCount > 0 ? (
+                <p className={styles.presetParent} role="note">
+                  Este módulo tiene {editingModule.submoduleCount}{" "}
+                  {submoduleWord(editingModule.submoduleCount)}. Elimina primero
+                  sus submódulos para poder eliminar el módulo.
+                </p>
+              ) : (
+                <DeleteDisclosure
+                  description={
+                    <p>
+                      El submódulo dejará de aparecer para los docentes y en la
+                      gestión. La eliminación es lógica: se conserva su
+                      historial.
+                    </p>
+                  }
+                  title="¿Eliminar este submódulo?"
+                  triggerLabel="Eliminar submódulo"
+                >
+                  <ModuleDeleteForm
+                    fieldId={`${searchId}-edit`}
+                    module={editingModule}
+                    onDone={closeEdit}
+                  />
+                </DeleteDisclosure>
+              )}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {deletingModule ? (
+        <Modal
+          canClose
+          onClose={closeDelete}
+          title="Eliminar submódulo"
+          titleId={`${searchId}-delete-title`}
+        >
+          {deletingModule.submoduleCount > 0 ? (
+            <p className={styles.modalText} role="note">
+              Este submódulo tiene {deletingModule.submoduleCount}{" "}
+              {submoduleWord(deletingModule.submoduleCount)}. Elimina primero
+              sus submódulos para poder eliminarlo.
+            </p>
+          ) : (
+            <>
+              <p className={styles.modalText}>
+                <strong>{deletingModule.name}</strong> dejará de aparecer para
+                los docentes y en la gestión. La eliminación es lógica: se
+                conserva su historial.
+              </p>
+              <ModuleDeleteForm
+                fieldId={`${searchId}-delete`}
+                module={deletingModule}
+                onDone={closeDelete}
+              />
+              <div className={styles.modalActions}>
+                <button
+                  className="avend-button avend-button--secondary"
+                  onClick={closeDelete}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </>
+          )}
+        </Modal>
+      ) : null}
+
       {isCreateOpen ? (
-        <CreateModal
+        <Modal
           canClose={!isSubmitting}
           onClose={closeCreate}
           title={isRoot ? "Crear módulo o submódulo" : "Crear submódulo"}
@@ -1214,7 +1615,7 @@ export function ModulesExplorer({
             onSuccess={finishCreate}
             parents={parents}
           />
-        </CreateModal>
+        </Modal>
       ) : null}
     </div>
   );
