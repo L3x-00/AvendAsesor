@@ -2,17 +2,18 @@ name: Mantener el API despierta
 
 # Mitigación del arranque en frío del plan Free de Render: la instancia se
 # duerme tras ~15 min sin tráfico y el primer request tarda 16-26 s. Una
-# petición cada 10 min mantiene el proceso caliente.
+# petición cada 5 min mantiene el proceso caliente y deja margen frente a la
+# ventana de reposo.
 #
 # Esto NO corrige los 0,1 vCPU del plan ni el arranque en frío posterior a un
-# despliegue. Es una mitigación, no una solución de rendimiento. Recomendación
-# abierta: un servicio de uptime con intervalo de 5 min (los cron de GitHub
-# Actions pueden retrasarse varios minutos bajo carga) y, cuando el producto
-# crezca, el plan Starter de Render.
+# despliegue. Es una mitigación, no una solución de rendimiento. Los cron de
+# GitHub Actions pueden retrasarse varios minutos bajo carga, así que este job
+# es el respaldo del servicio externo de uptime cada 5 min. Cuando el producto
+# crezca, la solución durable es el plan Starter de Render.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
