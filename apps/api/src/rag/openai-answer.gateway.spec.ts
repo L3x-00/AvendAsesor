@@ -201,6 +201,50 @@ describe('OpenAiAnswerGateway', () => {
     );
   });
 
+  it('en modo asesor prueba los dos modelos gratuitos y luego el de pago', async () => {
+    mockCreate
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          await Promise.resolve();
+          yield { choices: [{ delta: { content: 'Social.' } }] };
+        },
+      });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) => {
+        const models: Record<string, string> = {
+          RAG_ADVISORY_MODEL: 'inclusionai/ling-3.2-flash:free',
+          RAG_ADVISORY_FALLBACK_MODEL: 'google/gemma-4-31b-it:free',
+          RAG_ANSWER_FALLBACK_MODEL: 'openai/gpt-6.2-sol',
+        };
+        return (
+          models[key] ?? (key === 'OPENAI_API_KEY' ? 'test-key' : undefined)
+        );
+      }),
+    } as never);
+
+    const tokens: string[] = [];
+    for await (const token of gateway.generate({
+      conversationContext: [],
+      mode: 'advisory',
+      question: 'hola',
+      sources: [],
+    })) {
+      tokens.push(token);
+    }
+
+    expect(tokens).toEqual(['Social.']);
+    const calledModels = (
+      mockCreate.mock.calls as Array<[{ model: string }]>
+    ).map(([input]) => input.model);
+    expect(calledModels).toEqual([
+      'inclusionai/ling-3.2-flash:free',
+      'google/gemma-4-31b-it:free',
+      'openai/gpt-6.2-sol',
+    ]);
+  });
+
   it('en modo asesor usa la política de orientación general sin bloque de fuentes', async () => {
     mockCreate.mockResolvedValue({
       async *[Symbol.asyncIterator]() {

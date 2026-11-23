@@ -64,6 +64,10 @@ const environmentSchema = z
     RAG_ANSWER_MODEL: z.string().trim().min(1).default('gpt-4o-mini'),
     // Modelo pagado de respaldo; solo se usa ante error técnico del primario.
     RAG_ANSWER_FALLBACK_MODEL: z.string().trim().min(1).optional(),
+    // Modelos de la conversación social (modo advisory): se configuran aparte
+    // para que los saludos y temas ajenos no consuman el modelo de pago del RAG.
+    RAG_ADVISORY_MODEL: z.string().trim().min(1).optional(),
+    RAG_ADVISORY_FALLBACK_MODEL: z.string().trim().min(1).optional(),
     // Gateway único de IA. Con OPENROUTER_API_KEY se enruta todo por OpenRouter;
     // en su ausencia se usa OPENAI_API_KEY directo. AI_GATEWAY_BASE_URL permite
     // sobreescribir el endpoint compatible con la API de OpenAI.

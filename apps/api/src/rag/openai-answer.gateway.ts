@@ -31,27 +31,46 @@ export class OpenAiAnswerGateway implements AnswerGateway {
       this.configService,
       INTERACTIVE_AI_LIMITS,
     );
+    const advisory = input.mode === 'advisory';
     const primaryModel =
-      this.configService.get<string>('RAG_ANSWER_MODEL') ?? 'gpt-4o-mini';
-    const fallbackModel = this.configService.get<string>(
-      'RAG_ANSWER_FALLBACK_MODEL',
-    );
+      this.configService.get<string>(
+        advisory ? 'RAG_ADVISORY_MODEL' : 'RAG_ANSWER_MODEL',
+      ) ?? 'gpt-4o-mini';
+    // La conversación social usa modelos gratuitos y, si ambos fallan, el
+    // modelo pagado de respaldo: así un saludo no se cae por el límite del
+    // proveedor gratuito. El RAG mantiene su par pagado principal/respaldo.
+    const configuredFallbacks = advisory
+      ? [
+          this.configService.get<string>('RAG_ADVISORY_FALLBACK_MODEL'),
+          this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL'),
+        ]
+      : [this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL')];
+    const models = [
+      primaryModel,
+      ...new Set(
+        configuredFallbacks.filter(
+          (candidate): candidate is string =>
+            Boolean(candidate) && candidate !== primaryModel,
+        ),
+      ),
+    ];
 
-    const stream = await this.createStream(client, input, primaryModel).catch(
-      (error: unknown) => {
-        // Fallback SOLO ante error técnico del proveedor primario (límite, caída
-        // o modelo inválido). Nunca por falta de evidencia o ambigüedad: esas
-        // decisiones se toman antes de llegar aquí. Tampoco si se abortó.
-        if (
-          !fallbackModel ||
-          fallbackModel === primaryModel ||
-          input.abortSignal?.aborted
-        ) {
-          throw error;
-        }
-        return this.createStream(client, input, fallbackModel);
-      },
-    );
+    let stream:
+      Awaited<ReturnType<OpenAiAnswerGateway['createStream']>> | undefined;
+    let lastError: unknown;
+    for (const model of models) {
+      try {
+        stream = await this.createStream(client, input, model);
+        break;
+      } catch (error) {
+        // Fallback SOLO ante error técnico del proveedor (límite, caída o
+        // modelo inválido), nunca por falta de evidencia o ambigüedad, y nunca
+        // después de abortar. Los tokens solo se emiten cuando un stream abre.
+        if (input.abortSignal?.aborted) throw error;
+        lastError = error;
+      }
+    }
+    if (!stream) throw lastError;
 
     let finishReason: string | null = null;
     for await (const part of stream) {
