@@ -3931,7 +3931,7 @@ describe('ChatService', () => {
     );
   });
 
-  it('responde con la evidencia de otro módulo y ofrece ese módulo', async () => {
+  it('responde con la evidencia de otro módulo sin ofrecer cambio de módulo', async () => {
     const conversationId = '9c8b56af-6d0c-4fef-881e-7c00907540dd';
     const newModuleId = 'dc8b56af-6d0c-4fef-881e-7c00907540dd';
     const newSubmoduleId = 'ec8b56af-6d0c-4fef-881e-7c00907540dd';
@@ -3992,16 +3992,12 @@ describe('ChatService', () => {
     });
     expect(answerGateway.generate).toHaveBeenCalledTimes(1);
     const done = events.find((event) => event.type === 'done');
-    expect(done?.data).toEqual(
-      expect.objectContaining({
-        modules: [{ id: newModuleId, name: 'Vacaciones' }],
-      }),
-    );
+    expect(done?.data).not.toHaveProperty('modules');
     const completionCalls = historyGateway.completeTurn.mock.calls as Array<
       [Parameters<ChatHistoryGateway['completeTurn']>[0]]
     >;
-    expect(completionCalls.at(-1)?.[0].answer).toContain(
-      'Encontré esta información en Vacaciones',
+    expect(completionCalls.at(-1)?.[0].answer).not.toContain(
+      'Encontré esta información',
     );
     expect(completionCalls.at(-1)?.[0].sources[0]?.crossModule).toBe(true);
   });
@@ -4091,11 +4087,7 @@ describe('ChatService', () => {
     ]);
     expect(answerGateway.generate).toHaveBeenCalledTimes(1);
     const done = events.find((event) => event.type === 'done');
-    expect(done?.data).toEqual(
-      expect.objectContaining({
-        modules: [{ id: newModuleId, name: 'Reasignación' }],
-      }),
-    );
+    expect(done?.data).not.toHaveProperty('modules');
   });
 
   it('no emite una fuente ajena oculta en evidencia del módulo seleccionado', async () => {
