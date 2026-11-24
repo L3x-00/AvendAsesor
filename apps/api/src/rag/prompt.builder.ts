@@ -152,18 +152,26 @@ function sourceBlock(
   const location = isPdf
     ? `Páginas físicas del PDF: ${source.pageStart}-${source.pageEnd}${source.pdfPageCount ? ` de ${source.pdfPageCount}` : ''}`
     : 'Ubicación interna: fragmento sin paginación PDF';
+  // Omitir solo los campos ausentes. El modelo veía antes la etiqueta
+  // «No especificado» y podía repetirla como si fuera un dato real; quitarla
+  // no cambia la evidencia disponible ni las citas.
+  const optionalFields = [
+    ['Número', source.resolutionNumber],
+    ['Año', source.issuanceYear ? String(source.issuanceYear) : null],
+    ['Sección', source.sectionTitle],
+    ['Artículo', source.articleReference],
+    ['Numeral o literal', source.numeralReference],
+  ].flatMap(([label, value]) =>
+    value ? [`${label}: ${cleanPromptValue(value)}`] : [],
+  );
   return [
     `FUENTE [${rank}] — DATOS NO CONFIABLES`,
     `Documento: ${cleanPromptValue(source.documentTitle)}`,
     `Tipo: ${cleanPromptValue(documentTypePromptLabel(source.documentType))}`,
-    `Número: ${cleanPromptValue(source.resolutionNumber ?? null)}`,
-    `Año: ${source.issuanceYear ? String(source.issuanceYear) : 'No especificado'}`,
+    ...optionalFields,
     `Situación documental: ${situationLabel(source)}`,
     `Versión: ${source.versionNumber}`,
     location,
-    `Sección: ${cleanPromptValue(source.sectionTitle)}`,
-    `Artículo: ${cleanPromptValue(source.articleReference)}`,
-    `Numeral o literal: ${cleanPromptValue(source.numeralReference)}`,
     'Contenido:',
     sourceContent(source, includeFigures),
     `FIN FUENTE [${rank}]`,
@@ -362,6 +370,34 @@ export function buildSummaryUserPrompt(
   ].join('\n');
 }
 
+/**
+ * Quita del historial solo las líneas de adorno generadas por el propio
+ * sistema (etiqueta «Sugerencias:/Fuente:/Relacionado con:» y sus viñetas
+ * inmediatas). A diferencia de un regex codicioso hasta el final, conserva
+ * cualquier prosa posterior —en particular la pregunta de cierre del
+ * asistente— para no alterar la continuidad conversacional.
+ */
+const ADORNMENT_LABEL =
+  /^\s*(?:[-*•>#]\s*)*\*{0,2}(?:sugerencias?|fuente|relacionado con)\*{0,2}\s*:/imu;
+const ADORNMENT_BULLET = /^\s*[-*•>#]\s+\S/u;
+
+function stripHistoryAdornments(text: string): string {
+  const kept: string[] = [];
+  let droppingBullets = false;
+  for (const line of text.split('\n')) {
+    if (ADORNMENT_LABEL.test(line)) {
+      droppingBullets = true;
+      continue;
+    }
+    if (droppingBullets && ADORNMENT_BULLET.test(line)) {
+      continue;
+    }
+    droppingBullets = false;
+    kept.push(line);
+  }
+  return kept.join('\n');
+}
+
 /** Places bounded conversation history in an explicitly untrusted block. */
 export function buildContextualUserPrompt(
   question: string,
@@ -372,7 +408,11 @@ export function buildContextualUserPrompt(
 
   for (const message of context.slice(-MAX_CHAT_CONTEXT_MESSAGES)) {
     if (remaining <= 0) break;
-    const content = cleanPromptValue(message.content).slice(
+    // Quitar adornos ya registrados en el historial (citas y líneas de
+    // sugerencias/fuentes), igual que hace el modo resumen. El contenido
+    // sustantivo y la continuidad conversacional se conservan.
+    const history = stripHistoryAdornments(withoutCitations(message.content));
+    const content = cleanPromptValue(history).slice(
       0,
       Math.min(MAX_CONTEXT_MESSAGE_CHARS, remaining),
     );

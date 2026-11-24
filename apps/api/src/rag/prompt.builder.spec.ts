@@ -254,6 +254,39 @@ describe('buildEvidenceUserPrompt', () => {
     expect(prompt.endsWith('¿Cuál es el plazo?')).toBe(true);
   });
 
+  it('omite solo los metadatos ausentes y conserva los presentes', () => {
+    const complete = buildEvidenceUserPrompt(
+      '¿Cuál es el plazo?',
+      [],
+      [
+        {
+          ...source,
+          resolutionNumber: 'RVM 098-2025-MINEDU',
+          issuanceYear: 2025,
+          articleReference: 'Art. 201',
+          sectionTitle: 'Disposiciones generales',
+          numeralReference: '201.1',
+        },
+      ],
+    );
+    expect(complete).toContain('Número: RVM 098-2025-MINEDU');
+    expect(complete).toContain('Año: 2025');
+    expect(complete).toContain('Artículo: Art. 201');
+    expect(complete).toContain('Sección: Disposiciones generales');
+    expect(complete).toContain('Numeral o literal: 201.1');
+
+    const empty = buildEvidenceUserPrompt('¿Cuál es el plazo?', [], [source]);
+    expect(empty).not.toContain('Número: No especificado');
+    expect(empty).not.toContain('Año: No especificado');
+    expect(empty).not.toContain('Artículo: No especificado');
+    expect(empty).not.toContain('Sección: No especificado');
+    // La evidencia y los datos obligatorios siguen presentes.
+    expect(empty).toContain(source.chunkContent);
+    expect(empty).toContain('Situación documental:');
+    expect(empty).toContain('Versión:');
+    expect(empty).toContain('FUENTE [1]');
+  });
+
   it('incluye el contexto del tema como dato no confiable, acotado y no citable', () => {
     const prompt = buildEvidenceUserPrompt('¿Cuál es el plazo?', [], [source], {
       documents: [
@@ -435,6 +468,64 @@ describe('buildContextualUserPrompt', () => {
     ]);
 
     expect(prompt.length).toBeLessThan(2_200);
+  });
+
+  it('quita adornos del historial sin perder el contenido sustantivo', () => {
+    const prompt = buildContextualUserPrompt('¿Y el plazo?', [
+      {
+        content:
+          'El plazo es de 5 días [1].\n\nSugerencias:\n- Remuneraciones - Licencias\nFuente: Norma docente, pág. 3',
+        role: 'assistant',
+      },
+    ]);
+
+    expect(prompt).toContain('El plazo es de 5 días');
+    expect(prompt).not.toContain('[1]');
+    expect(prompt).not.toContain('Sugerencias:');
+    expect(prompt).not.toContain('Fuente:');
+    expect(prompt.endsWith('¿Y el plazo?')).toBe(true);
+  });
+
+  it('conserva la pregunta de cierre aunque haya sugerencias antes', () => {
+    const prompt = buildContextualUserPrompt('Sí, dime', [
+      {
+        content:
+          'El plazo es de 5 días.\n\nSugerencias:\n- Remuneraciones\n- Licencias\n\n¿Quieres que te explique el procedimiento?',
+        role: 'assistant',
+      },
+    ]);
+
+    expect(prompt).toContain('El plazo es de 5 días');
+    expect(prompt).not.toContain('Sugerencias:');
+    expect(prompt).not.toContain('Remuneraciones');
+    // La pregunta de cierre NO se pierde.
+    expect(prompt).toContain('¿Quieres que te explique el procedimiento?');
+  });
+
+  it('no confunde una frase con «fuente:» en medio con una etiqueta', () => {
+    const prompt = buildContextualUserPrompt('¿Y eso?', [
+      {
+        content:
+          'La fuente: de este trámite es la UGEL y el plazo es de 5 días.',
+        role: 'assistant',
+      },
+    ]);
+
+    expect(prompt).toContain('La fuente: de este trámite es la UGEL');
+    expect(prompt).toContain('el plazo es de 5 días');
+  });
+
+  it('conserva la continuidad conversacional después de limpiar', () => {
+    const prompt = buildContextualUserPrompt('¿Y cuál es el plazo?', [
+      { content: 'Mi consulta anterior fue sobre una licencia.', role: 'user' },
+      { content: 'La licencia por salud dura 30 días. [1]', role: 'assistant' },
+    ]);
+
+    expect(prompt).toContain(
+      'USER: Mi consulta anterior fue sobre una licencia.',
+    );
+    expect(prompt).toContain('ASSISTANT: La licencia por salud dura 30 días.');
+    expect(prompt).not.toContain('[1]');
   });
 });
 
