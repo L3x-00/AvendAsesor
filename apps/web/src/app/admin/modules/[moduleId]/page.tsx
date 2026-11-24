@@ -91,19 +91,19 @@ export default async function ModuleDetailPage({
           </span>
           Volver a módulos
         </Link>
-          {parentModule ? (
-            <nav aria-label="Ruta de navegación" className={styles.breadcrumb}>
-              <Link href="/admin/modules">Administración</Link>
-              <span aria-hidden="true">›</span>
-              <Link href={`/admin/modules/${parentModule.id}`}>
-                {parentModule.name}
-              </Link>
-              <span aria-hidden="true">›</span>
-              <span aria-current="page">{current.name}</span>
-            </nav>
-          ) : (
-            <p className={styles.detailEyebrow}>Administración · Módulos</p>
-          )}
+        {parentModule ? (
+          <nav aria-label="Ruta de navegación" className={styles.breadcrumb}>
+            <Link href="/admin/modules">Administración</Link>
+            <span aria-hidden="true">›</span>
+            <Link href={`/admin/modules/${parentModule.id}`}>
+              {parentModule.name}
+            </Link>
+            <span aria-hidden="true">›</span>
+            <span aria-current="page">{current.name}</span>
+          </nav>
+        ) : (
+          <p className={styles.detailEyebrow}>Administración · Módulos</p>
+        )}
       </header>
       <div className={styles.pageBody}>
         <div className="avend-admin-content">

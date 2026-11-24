@@ -315,6 +315,7 @@ export function SubmoduleContentView({
   const [search, setSearch] = useState("");
   const [situations, setSituations] = useState<SituationFilter[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [isCompact, setIsCompact] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadSection, setUploadSection] = useState<ContentSectionCode | null>(
@@ -390,6 +391,15 @@ export function SubmoduleContentView({
   );
 
   useEffect(() => {
+    const query = globalThis.matchMedia?.("(max-width: 63.99rem)");
+    if (!query) return;
+    const update = () => setIsCompact(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
     if (!highlight || highlight.scrolled) return;
     const container = containerRef.current;
     if (!container) return;
@@ -427,6 +437,8 @@ export function SubmoduleContentView({
       setActiveSection(section);
       setSearch("");
       setSituations([]);
+      setExpanded(true);
+      setSelectedIds([]);
       setHighlight({ documentId: created?.id, scrolled: false, section });
       const name = created?.title ? `«${created.title}»` : "El documento";
       setAnnouncement(
@@ -442,7 +454,17 @@ export function SubmoduleContentView({
         ? current.filter((value) => value !== situation)
         : [...current, situation],
     );
+    setExpanded(false);
+    setSelectedIds([]);
   };
+
+  const selectSection = useCallback((code: SectionCode) => {
+    setActiveSection(code);
+    setExpanded(false);
+    setSearch("");
+    setSituations([]);
+    setSelectedIds([]);
+  }, []);
 
   const toggleSelection = (id: string) => {
     setSelectedIds((current) =>
@@ -466,19 +488,27 @@ export function SubmoduleContentView({
         aria-label="Secciones del submódulo"
         className={styles.tabs}
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-          event.preventDefault();
-          const index = sections.findIndex(
+          let index = sections.findIndex(
             (section) => section.code === activeSection,
           );
-          const direction = event.key === "ArrowRight" ? 1 : -1;
-          const next =
-            sections[
-              (index + direction + sections.length) % sections.length
-            ];
-          setActiveSection(next.code);
-          document
-            .getElementById(`submodule-tab-${next.code.toLowerCase()}`)
+          if (event.key === "Home") {
+            index = 0;
+          } else if (event.key === "End") {
+            index = sections.length - 1;
+          } else if (event.key === "ArrowRight") {
+            index = (index + 1) % sections.length;
+          } else if (event.key === "ArrowLeft") {
+            index = (index - 1 + sections.length) % sections.length;
+          } else {
+            return;
+          }
+          event.preventDefault();
+          const next = sections[index];
+          selectSection(next.code);
+          containerRef.current
+            ?.querySelector<HTMLElement>(
+              `#submodule-tab-${next.code.toLowerCase()}`,
+            )
             ?.focus();
         }}
         role="tablist"
@@ -496,13 +526,7 @@ export function SubmoduleContentView({
               className={`${styles.tab}${selected ? ` ${styles.tabSelected}` : ""}`}
               id={`submodule-tab-${section.code.toLowerCase()}`}
               key={section.code}
-              onClick={() => {
-                setActiveSection(section.code);
-                setExpanded(false);
-                setSearch("");
-                setSituations([]);
-                setSelectedIds([]);
-              }}
+              onClick={() => selectSection(section.code)}
               role="tab"
               type="button"
             >
@@ -576,6 +600,7 @@ export function SubmoduleContentView({
               onChange={(event) => {
                 setSearch(event.target.value);
                 setExpanded(false);
+                setSelectedIds([]);
               }}
               placeholder="Buscar documento por nombre..."
               type="search"
@@ -654,9 +679,12 @@ export function SubmoduleContentView({
               ? `Sin ${activeTitle.toLowerCase()} todavía.`
               : "No encontramos documentos con esos criterios."}
           </p>
-        ) : viewMode === "list" ? (
+        ) : viewMode === "list" && !isCompact ? (
           <div className={styles.tableRegion}>
             <table className={styles.table} id="submodule-documents-table">
+              <caption className="sr-only">
+                Documentos de {activeTitle}
+              </caption>
               <thead>
                 <tr>
                   <th scope="col">
@@ -719,20 +747,12 @@ export function SubmoduleContentView({
                 data-document-id={document.id}
                 key={document.id}
               >
-                <div className={styles.gridCardTop}>
-                  <span aria-hidden="true" className={styles.docIcon}>
-                    <FileIcon />
-                  </span>
-                  <DocumentTitle code={activeSection} document={document} />
-                </div>
+                <DocumentTitle code={activeSection} document={document} />
                 <div className={styles.gridMeta}>
                   <span className={styles.typePill}>{typeText(document)}</span>
                   <StatusPill document={document} />
                 </div>
                 <div className={styles.gridFooter}>
-                  <span className={styles.tabCount}>
-                    {document.issuanceYear ?? "—"}
-                  </span>
                   <DocumentActions document={document} />
                 </div>
               </li>

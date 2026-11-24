@@ -278,6 +278,71 @@ describe("SubmoduleContentView", () => {
     expect(JSON.parse(String(payload.get("metadata")))).toEqual({
       contentSection: "NORMATIVA",
     });
+    expect(payload.get("moduleIds")).toBe(JSON.stringify([MODULE_ID]));
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status", { hidden: true })).toHaveTextContent(
+      "se cargó en Normativa",
+    );
+  });
+
+  it("abre todas las filas cuando el documento cargado queda fuera de los cinco primeros", async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ id: "nuevo-ultimo", title: "RM 900-2026" }), {
+        status: 201,
+      }),
+    );
+    const existing = Array.from({ length: 7 }, (_, index) =>
+      document({
+        documentType: "RESOLUCION_MINISTERIAL",
+        title: `RM ${index + 1}-2026`,
+      }),
+    );
+    const view = renderView(existing);
+    await user.click(screen.getByRole("button", { name: "+ Subir normativa" }));
+    const dialog = screen.getByRole("dialog");
+    await user.upload(
+      within(dialog).getByLabelText("Archivo (PDF, Word o Markdown)"),
+      new File(["%PDF-1.7"], "nuevo.pdf", { type: "application/pdf" }),
+    );
+    await user.clear(within(dialog).getByLabelText("Título"));
+    await user.type(within(dialog).getByLabelText("Título"), "RM 900-2026");
+    await user.selectOptions(
+      within(dialog).getByLabelText(/^Tipo documental/),
+      "LEY",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Subir norma" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    view.rerender(
+      <SubmoduleContentView
+        apiBaseUrl="https://api.avend.example"
+        canUpload
+        documents={[
+          ...existing,
+          document({
+            documentType: "RESOLUCION_MINISTERIAL",
+            id: "nuevo-ultimo",
+            title: "RM 900-2026",
+          }),
+        ]}
+        moduleId={MODULE_ID}
+        moduleName="Contrato docente"
+        uploadDefaults={defaults}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Ver menos/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    const row = await waitFor(() => {
+      const found = screen.getByText("RM 900-2026").closest("tr");
+      expect(found?.className).toMatch(/rowNew/);
+      return found!;
+    });
+    expect(row).toHaveAttribute("data-document-id", "nuevo-ultimo");
   });
 
   it("tras cargar resalta el documento nuevo en su sección", async () => {
