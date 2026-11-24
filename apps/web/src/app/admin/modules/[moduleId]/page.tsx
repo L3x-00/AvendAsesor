@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AdminPage } from "@/components/admin/admin-page";
+import type { ReactNode } from "react";
+import styles from "@/components/admin/modules-explorer.module.css";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { ModuleContentSections } from "@/components/admin/module-content-sections";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
-  ModuleManageDetails,
+  ModuleDetailHero,
   ModulesExplorer,
 } from "@/components/admin/modules-explorer";
 import { createAuthorizedAdminApiContext } from "@/lib/admin-api/authorized-client";
@@ -53,9 +54,6 @@ export default async function ModuleDetailPage({
   }
 
   const currentView = toModuleView(current);
-  const parent = current.parentModuleId
-    ? findVisibleModule(modules, current.parentModuleId)
-    : undefined;
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
   // Contexto del explorador de submódulos: un padre inactivo solo admite
@@ -68,24 +66,56 @@ export default async function ModuleDetailPage({
     moduleIsActive: current.isActive,
     moduleName: current.name,
   };
-  if (current.canManage === false) {
-    return (
-      <AdminPage
-        description="Selecciona uno de los submódulos asignados para consultar su contenido."
-        title={current.name}
-      >
-        <div className="space-y-6">
-          <Link className="text-base underline" href="/admin/modules">
-            Volver a módulos
-          </Link>
-          <ModulesExplorer
-            canCreate={false}
-            context={explorerContext}
-            modules={children}
-            parents={parents}
-          />
+  // Cabecera y ficha comunes a los dos estados de la página (con o sin permiso
+  // de gestión), para que el módulo se vea igual en ambos casos.
+  const pageFrame = (content: ReactNode) => (
+    <>
+      <header className={styles.detailHeader}>
+        <Link className={styles.backLink} href="/admin/modules">
+          <span aria-hidden="true" className={styles.backIcon}>
+            <svg
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Volver a módulos
+        </Link>
+        <p className={styles.detailEyebrow}>Administración · Módulos</p>
+      </header>
+      <div className={styles.pageBody}>
+        <div className="avend-admin-content">
+          <div className={styles.detailStack}>
+            <ModuleDetailHero
+              canManage={current.canManage !== false}
+              module={currentView}
+              parents={parents}
+            />
+            {content}
+          </div>
         </div>
-      </AdminPage>
+      </div>
+    </>
+  );
+  if (current.canManage === false) {
+    return pageFrame(
+      <div className="space-y-6">
+        <p className="text-base text-avend-text-muted">
+          Selecciona uno de los submódulos asignados para consultar su
+          contenido.
+        </p>
+        <ModulesExplorer
+          canCreate={false}
+          context={explorerContext}
+          modules={children}
+          parents={parents}
+        />
+      </div>,
     );
   }
   const requestedSearch = await searchParams;
@@ -169,134 +199,74 @@ export default async function ModuleDetailPage({
     currentLimaYear(),
   );
 
-  return (
-    <AdminPage
-      description="Organiza la estructura y carga documentos en el módulo o submódulo correspondiente. El Historial conserva la consulta general."
-      title={current.name}
-    >
-      <div className="flex flex-col gap-6">
-        <nav aria-label="Ruta de navegación" className="text-base">
-          <ol className="flex flex-wrap items-center gap-2 text-avend-text-muted">
-            <li>
-              <Link className="hover:underline" href="/admin/modules">
-                Módulos
-              </Link>
-            </li>
-            <li aria-hidden="true">›</li>
-            {parent ? (
-              <>
-                <li>
-                  <Link
-                    className="hover:underline"
-                    href={`/admin/modules/${parent.id}`}
-                  >
-                    {parent.name}
-                  </Link>
-                </li>
-                <li aria-hidden="true">›</li>
-              </>
-            ) : null}
-            <li aria-current="page" className="font-semibold text-avend-text">
-              {current.name}
-            </li>
-          </ol>
-        </nav>
+  return pageFrame(
+    <div className="flex flex-col gap-6">
+      {!current.isActive ? (
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-4 text-base text-amber-900">
+          Este módulo está inactivo. Actívalo antes de cargar un documento.
+        </p>
+      ) : null}
 
-        <section className="avend-elevated rounded-xl border border-avend-border bg-avend-surface p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold">{current.name}</h2>
-              <p className="mt-1 text-base text-avend-text-muted">
-                Código {current.code} · Orden {current.sortOrder} ·{" "}
-                {current.isActive ? "Activo" : "Inactivo"}
-              </p>
-              {current.description ? (
-                <p className="mt-2 text-base text-avend-text">
-                  {current.description}
-                </p>
-              ) : null}
-            </div>
-            <span className="flex-none rounded-full bg-avend-surface-muted px-3 py-1 text-base font-semibold text-avend-text">
-              {current.parentModuleId ? "Submódulo" : "Módulo principal"}
-            </span>
-          </div>
+      {current.parentModuleId ? null : (
+        <ModulesExplorer
+          canCreate
+          context={explorerContext}
+          initialHighlightId={createdModuleId}
+          modules={children}
+          parents={parents}
+        />
+      )}
 
-          <div className="mt-2 flex justify-end">
-            <ModuleManageDetails
-              module={currentView}
-              parents={parents}
-              summary="Editar este módulo"
-            />
-          </div>
+      {canUpload ? (
+        <DocumentUploadPanel
+          apiBaseUrl={getAdminApiUrl()}
+          defaultOpen={openUpload && !requestedSection}
+          key={`document-upload-${
+            openUpload && !requestedSection ? "open" : "closed"
+          }`}
+          moduleId={current.id}
+          moduleName={current.name}
+          replacementCandidates={replacementCandidates}
+          suggestions={suggestions}
+        />
+      ) : children.length > 0 ? (
+        <p className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
+          Los documentos se cargan dentro de cada submódulo. Para subir
+          normativa, cronogramas, anexos o preguntas frecuentes, entra en el
+          submódulo correspondiente de la lista de arriba.
+        </p>
+      ) : null}
 
-          {!current.isActive ? (
-            <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-base text-amber-900">
-              Este módulo está inactivo. Actívalo antes de cargar un documento.
-            </p>
-          ) : null}
-        </section>
-
-        {current.parentModuleId ? null : (
-          <ModulesExplorer
-            canCreate
-            context={explorerContext}
-            initialHighlightId={createdModuleId}
-            modules={children}
-            parents={parents}
-          />
-        )}
-
-        {canUpload ? (
-          <DocumentUploadPanel
+      {isLeaf ? (
+        <>
+          <ModuleContentSections
             apiBaseUrl={getAdminApiUrl()}
-            defaultOpen={openUpload && !requestedSection}
-            key={`document-upload-${
-              openUpload && !requestedSection ? "open" : "closed"
-            }`}
+            canUpload={canUpload}
+            complete={moduleContent.complete}
+            documents={moduleContent.documents}
+            initialUploadSection={requestedSection}
+            key={`module-content-${requestedSection ?? "none"}`}
             moduleId={current.id}
             moduleName={current.name}
-            replacementCandidates={replacementCandidates}
             suggestions={suggestions}
+            uploadBlockedReason={
+              current.isActive
+                ? undefined
+                : "Este módulo está inactivo: actívalo para subir documentos en estas secciones."
+            }
+            uploadDefaults={uploadDefaults}
           />
-        ) : children.length > 0 ? (
-          <p className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-5 text-base text-avend-text-muted">
-            Los documentos se cargan dentro de cada submódulo. Para subir
-            normativa, cronogramas, anexos o preguntas frecuentes, entra en el
-            submódulo correspondiente de la lista de arriba.
-          </p>
-        ) : null}
-
-        {isLeaf ? (
-          <>
-            <ModuleContentSections
-              apiBaseUrl={getAdminApiUrl()}
-              canUpload={canUpload}
-              complete={moduleContent.complete}
-              documents={moduleContent.documents}
-              initialUploadSection={requestedSection}
-              key={`module-content-${requestedSection ?? "none"}`}
-              moduleId={current.id}
-              moduleName={current.name}
-              suggestions={suggestions}
-              uploadBlockedReason={
-                current.isActive
-                  ? undefined
-                  : "Este módulo está inactivo: actívalo para subir documentos en estas secciones."
-              }
-              uploadDefaults={uploadDefaults}
-            />
-            <DocumentLibraryView
-              activeFilterCount={activeFilterCount}
-              basePath={`/admin/modules/${current.id}`}
-              library={library}
-              lockLocation
-              modules={modules}
-              query={scopedQuery}
-              resultsTitle="Documentos cargados"
-            />
-          </>
-        ) : null}
-      </div>
-    </AdminPage>
+          <DocumentLibraryView
+            activeFilterCount={activeFilterCount}
+            basePath={`/admin/modules/${current.id}`}
+            library={library}
+            lockLocation
+            modules={modules}
+            query={scopedQuery}
+            resultsTitle="Documentos cargados"
+          />
+        </>
+      ) : null}
+    </div>,
   );
 }
