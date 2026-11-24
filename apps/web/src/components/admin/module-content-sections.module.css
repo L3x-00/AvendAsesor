@@ -1,0 +1,278 @@
+/*
+ * «Contenido del tema»: panel blanco con las cuatro secciones estándar en
+ * tarjetas y cada documento como una ficha legible con sus tres acciones
+ * directas. Sigue el lenguaje visual de la ficha del módulo: bordes azules
+ * suaves, esquinas redondeadas, sombra discreta y textos de 16 px o más.
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: clamp(1rem, 2.2vw, 1.5rem);
+  border: 1px solid #e2edf9;
+  border-radius: 1rem;
+  background: var(--avend-surface);
+  box-shadow: 0 6px 22px rgb(16 61 115 / 6%);
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--avend-navy);
+  font-size: clamp(1.2rem, 1.8vw, 1.4rem);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.85rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #4b5563;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.panelIntro {
+  margin: 0;
+  max-width: 80ch;
+  color: #3c5673;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.panelNote {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid #dbe8f8;
+  border-radius: 0.7rem;
+  background: #f6faff;
+  color: #36506d;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.warning {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid #f2c96b;
+  border-radius: 0.7rem;
+  background: #fff8e8;
+  color: #7a4b00;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 64rem) {
+  .sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 1rem 1.1rem 1.15rem;
+  border: 1px solid #e4e9f1;
+  border-radius: 0.75rem;
+  background: var(--avend-surface);
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+
+
+.cardTitle {
+  margin: 0;
+  color: var(--avend-navy);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.uploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  margin-left: auto;
+  padding: 0 0.9rem;
+  border: 1px solid #cdd6e4;
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  color: #24334d;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.uploadButton:hover {
+  border-color: #a9b8cd;
+  background: #f4f6fa;
+}
+
+.uploadButton:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.cardHint {
+  margin: 0;
+  color: #5a6c83;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.cardEmpty {
+  margin: 0.15rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px dashed #d5dce7;
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  color: #5a6c83;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.documents {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.document {
+  padding: 0.7rem 0.85rem 0.55rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #f2f5fa;
+}
+
+.documentTitle {
+  margin: 0;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.documentMeta {
+  margin: 0.1rem 0 0;
+  color: #667085;
+  font-size: 1rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.documentStatus {
+  margin: 0.35rem 0 0;
+  color: #7a4b00;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.documentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: 0.35rem 0 0;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: #16233d;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.action:hover {
+  color: var(--avend-accent-strong);
+}
+
+.action:focus-visible {
+  border-radius: 0.35rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.showAll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 2.75rem;
+  margin-top: 0.55rem;
+  padding: 0 1rem;
+  border: 1px solid #cdd6e4;
+  border-radius: 0.5rem;
+  background: var(--avend-surface);
+  color: #24334d;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.showAll:hover {
+  background: #f4f6fa;
+}
+
+.showAll:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 40rem) {
+  .cardHeader {
+    align-items: flex-start;
+  }
+
+  .uploadButton {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .showAll {
+    align-self: stretch;
+  }
+}

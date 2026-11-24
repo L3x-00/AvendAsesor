@@ -23,7 +23,8 @@ import {
   ContextualUploadDialog,
   type ContextualUploadResult,
 } from "./contextual-upload-dialog";
-import styles from "./contextual-upload-dialog.module.css";
+import blinkStyles from "./contextual-upload-dialog.module.css";
+import styles from "./module-content-sections.module.css";
 
 /** Duración del parpadeo del documento nuevo (3 ciclos de 900 ms). */
 const HIGHLIGHT_MS = 2800;
@@ -67,23 +68,20 @@ function typeText(document: DocumentLibraryItem): string {
     : documentTypeLabel(document.documentType);
 }
 
-const quickActionClass =
-  "inline-flex min-h-11 items-center rounded-md px-2 font-semibold text-avend-accent-strong underline";
-
 function DocumentQuickActions({ document }: { document: DocumentLibraryItem }) {
   return (
-    <p className="mt-1 flex flex-wrap gap-x-2 text-base">
-      <Link className={quickActionClass} href={`/admin/documents/${document.id}`}>
+    <p className={styles.documentActions}>
+      <Link className={styles.action} href={`/admin/documents/${document.id}`}>
         Ver y editar
       </Link>
       <Link
-        className={quickActionClass}
+        className={styles.action}
         href={`/admin/documents/${document.id}#new-version`}
       >
         Nueva versión
       </Link>
       <Link
-        className={quickActionClass}
+        className={styles.action}
         href={`/admin/documents/${document.id}#document-lifecycle`}
       >
         Archivar o desactivar
@@ -105,22 +103,22 @@ function DocumentLine({
   const showNumber = number !== null && !titleStartsWithAnnexNumber(document.title);
   return (
     <li
-      className={`rounded-md bg-avend-surface-muted p-3${
-        highlighted ? ` ${styles.itemNew}` : ""
+      className={`${styles.document}${
+        highlighted ? ` ${blinkStyles.itemNew}` : ""
       }`}
       data-document-id={document.id}
     >
-      <p className="text-base font-semibold">
+      <p className={styles.documentTitle}>
         {showNumber ? `Anexo ${number}: ` : ""}
         {document.title}
       </p>
-      <p className="text-base text-avend-text-muted">
+      <p className={styles.documentMeta}>
         {typeText(document)}
         {document.issuanceYear ? ` · ${document.issuanceYear}` : ""} ·{" "}
         {situationText(document)}
       </p>
       {document.technicalStatus !== "ready" ? (
-        <p className="mt-1 text-base font-semibold text-amber-900">
+        <p className={styles.documentStatus}>
           {getDocumentTechnicalStatusContent(document.technicalStatus).label}
           {document.technicalStatus === "pending_approval"
             ? ": el asistente aún no lo usa. Apruébalo desde «Ver y editar»."
@@ -183,7 +181,7 @@ function SectionDocuments({
 
   return (
     <>
-      <ul className="mt-2 space-y-2" id={listId}>
+      <ul className={styles.documents} id={listId}>
         {visible.map((document) => (
           <DocumentLine
             code={code}
@@ -197,7 +195,7 @@ function SectionDocuments({
         <button
           aria-controls={listId}
           aria-expanded={expanded}
-          className="avend-button avend-button--secondary mt-3"
+          className={styles.showAll}
           onClick={() => setExpanded((current) => !current)}
           type="button"
         >
@@ -331,31 +329,35 @@ export function ModuleContentSections({
   return (
     <section
       aria-labelledby="module-content-title"
-      className="rounded-xl border border-avend-border bg-avend-surface p-5"
+      className={styles.panel}
       ref={containerRef}
     >
-      <h2 className="text-xl font-bold" id="module-content-title">
-        Contenido del tema
-      </h2>
-      <p className="mt-1 text-base leading-7 text-avend-text-muted">
+      <div className={styles.panelHeader}>
+        <h2 className={styles.panelTitle} id="module-content-title">
+          Contenido del tema
+        </h2>
+        <span className={styles.countBadge}>
+          {documents.length}{" "}
+          {documents.length === 1 ? "documento" : "documentos"}
+        </span>
+      </div>
+      <p className={styles.panelIntro}>
         Todos los documentos de este tema, ordenados en normativa, cronograma,
         anexos y preguntas frecuentes. Los anexos se ordenan por su número.
       </p>
       {!complete ? (
-        <p className="mt-2 text-base text-avend-text-muted">
+        <p className={styles.panelNote}>
           Este tema tiene muchos documentos: aquí se muestran los primeros. Usa
           «Documentos cargados» para buscar el resto.
         </p>
       ) : null}
       {!canUpload && uploadBlockedReason ? (
-        <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-base text-amber-900">
-          {uploadBlockedReason}
-        </p>
+        <p className={styles.warning}>{uploadBlockedReason}</p>
       ) : null}
       <p aria-live="polite" className="sr-only" role="status">
         {announcement}
       </p>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className={styles.sections}>
         {sections.map((section) => {
           const title = CONTENT_SECTION_TITLES[section.code];
           const sectionHighlighted =
@@ -364,20 +366,20 @@ export function ModuleContentSections({
             !highlightedDocumentPresent;
           return (
             <article
-              className={`rounded-lg border border-avend-border p-4${
-                sectionHighlighted ? ` ${styles.sectionNew}` : ""
+              className={`${styles.card}${
+                sectionHighlighted ? ` ${blinkStyles.sectionNew}` : ""
               }`}
               data-section={section.code}
               key={section.code}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-bold">
+              <div className={styles.cardHeader}>
+                <h3 className={styles.cardTitle}>
                   {title} ({section.items.length})
                 </h3>
                 {canUpload ? (
                   <button
                     aria-haspopup="dialog"
-                    className="avend-button avend-button--secondary"
+                    className={styles.uploadButton}
                     onClick={() => setUploadSection(section.code)}
                     type="button"
                   >
@@ -385,11 +387,11 @@ export function ModuleContentSections({
                   </button>
                 ) : null}
               </div>
-              <p className="mt-1 text-base text-avend-text-muted">
+              <p className={styles.cardHint}>
                 {CONTENT_SECTION_HINTS[section.code]}
               </p>
               {section.items.length === 0 ? (
-                <p className="mt-2 text-base text-avend-text-muted">
+                <p className={styles.cardEmpty}>
                   Sin {title.toLowerCase()} todavía.
                 </p>
               ) : (
@@ -406,11 +408,13 @@ export function ModuleContentSections({
           );
         })}
         {others.length ? (
-          <article className="rounded-lg border border-avend-border p-4">
-            <h3 className="text-base font-bold">
-              Otros documentos ({others.length})
-            </h3>
-            <p className="mt-1 text-base text-avend-text-muted">
+          <article className={styles.card}>
+            <div className={styles.cardHeader}>
+              <h3 className={styles.cardTitle}>
+                Otros documentos ({others.length})
+              </h3>
+            </div>
+            <p className={styles.cardHint}>
               Otros tipos cargados en este tema.
             </p>
             <SectionDocuments
