@@ -549,10 +549,13 @@ function TrashIcon() {
 export function ModuleDetailHero({
   canManage = true,
   module,
+  parentName,
   parents,
 }: {
   canManage?: boolean;
   module: ModuleView;
+  /** Módulo al que pertenece el submódulo; se muestra como contexto. */
+  parentName?: string;
   parents: ModuleParentOption[];
 }) {
   const [isEditOpen, setEditOpen] = useState(false);
@@ -578,6 +581,12 @@ export function ModuleDetailHero({
           </span>
         </div>
         <dl className={styles.heroMeta}>
+          {parentName ? (
+            <div>
+              <dt>Módulo</dt>
+              <dd>{parentName}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>Código</dt>
             <dd>{module.code}</dd>

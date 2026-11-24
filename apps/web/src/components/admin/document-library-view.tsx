@@ -420,11 +420,17 @@ function PreviewDocumentCard({
 
 function EmptyLibraryState({
   activeFilterCount,
+  className = "",
 }: {
   activeFilterCount: number;
+  className?: string;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-avend-border bg-avend-surface p-6">
+    <div
+      className={`rounded-xl border border-dashed border-avend-border bg-avend-surface p-6${
+        className ? ` ${className}` : ""
+      }`}
+    >
       <h3 className="text-lg font-bold">
         {activeFilterCount > 0
           ? "No encontramos coincidencias"
@@ -1005,7 +1011,9 @@ export function DocumentLibraryView({
 
   return (
     <div
-      className={`${styles.library}${historyLayout ? ` ${styles.historyLayout}` : ""}`}
+      className={`${styles.library}${historyLayout ? ` ${styles.historyLayout}` : ""}${
+        lockLocation ? ` ${styles.scoped}` : ""
+      }`}
     >
       {/*
         Vista minimalista: a la vista solo queda la búsqueda. El resto de los
@@ -1355,12 +1363,17 @@ export function DocumentLibraryView({
           aria-labelledby="document-library-results"
           className={styles.resultsSection}
         >
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div
+            className={`${styles.resultsHeader} flex flex-wrap items-baseline justify-between gap-3`}
+          >
             <h2 className="text-xl font-bold" id="document-library-results">
               {historyLayout ? "Resultados" : resultsTitle}
             </h2>
             {loadError ? null : (
-              <p aria-live="polite" className="text-base text-avend-text-muted">
+              <p
+                aria-live="polite"
+                className={`${styles.resultsCount} text-base text-avend-text-muted`}
+              >
                 {library.total}{" "}
                 {library.total === 1 ? "documento" : "documentos"}
               </p>
@@ -1379,7 +1392,10 @@ export function DocumentLibraryView({
               <Link href={retryHref}>Reintentar</Link>
             </div>
           ) : library.items.length === 0 ? (
-            <EmptyLibraryState activeFilterCount={activeFilterCount} />
+            <EmptyLibraryState
+              activeFilterCount={activeFilterCount}
+              className={styles.emptyState}
+            />
           ) : (
             <>
               {/*
@@ -1493,7 +1509,7 @@ export function DocumentLibraryView({
                 </table>
               </div>
 
-              <ul className="space-y-4 lg:hidden" role="list">
+              <ul className={`${styles.scopedCards} space-y-4 lg:hidden`} role="list">
                 {library.items.map((document) => (
                   <li
                     className="rounded-xl border border-avend-border bg-avend-surface p-5 shadow-sm"
@@ -1562,7 +1578,7 @@ export function DocumentLibraryView({
           {totalPages > 1 ? (
             <nav
               aria-label="Paginación de documentos"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3"
+              className={`${styles.resultsPagination} flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3`}
             >
               <span className="text-base text-avend-text-muted">
                 Página {query.page} de {totalPages}

@@ -1223,3 +1223,225 @@
 .cardTitle:hover {
   text-decoration: underline;
 }
+
+/* ---------- Vista acotada a un módulo o submódulo ----------
+   En la página de un tema esta biblioteca convive con la ficha del módulo y
+   con «Contenido del tema». Se muestra como una tarjeta blanca más: búsqueda
+   en una cápsula amplia y «Documentos cargados» con su encabezado, la tabla a
+   todo el ancho y la paginación como pie. El Historial conserva su diseño. */
+.scoped > * + * {
+  margin-top: 1.25rem;
+}
+
+.scoped .searchCard {
+  border: 1px solid #e2edf9;
+  border-radius: 1rem;
+  box-shadow: 0 6px 22px rgb(16 61 115 / 6%);
+  padding: 1rem 1.15rem;
+}
+
+.scoped .searchField {
+  border-color: #cfdff2;
+  border-radius: 0.8rem;
+  min-height: 3rem;
+}
+
+.scoped .searchField:focus-within {
+  border-color: var(--avend-accent);
+  box-shadow: 0 0 0 3px var(--avend-soft-blue);
+}
+
+.scoped .searchRow button {
+  border-radius: 0.8rem;
+  min-height: 3rem;
+  padding-inline: 1.5rem;
+}
+
+.scoped .advancedToggle {
+  border-color: #d9e6f7;
+  border-radius: 0.8rem;
+  color: #0f5db8;
+  min-height: 3rem;
+}
+
+.scoped .advancedToggle:hover {
+  background: #f2f8ff;
+}
+
+.scoped .resultsSection {
+  background: var(--avend-surface);
+  border: 1px solid #e2edf9;
+  border-radius: 1rem;
+  box-shadow: 0 6px 22px rgb(16 61 115 / 6%);
+  overflow: hidden;
+  padding: 0;
+}
+
+.scoped .resultsSection > * + * {
+  margin-top: 0;
+}
+
+.scoped .resultsHeader {
+  align-items: baseline;
+  background: transparent;
+  padding: 1.2rem 1.35rem 0.85rem;
+}
+
+.scoped .resultsHeader h2 {
+  color: var(--avend-navy);
+  font-size: clamp(1.2rem, 1.8vw, 1.4rem);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.scoped .resultsCount {
+  color: #667085;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.scoped .tableRegion {
+  background: var(--avend-surface);
+  border: 0;
+  border-radius: 0;
+}
+
+.scoped .table {
+  min-width: 66rem;
+  table-layout: fixed;
+}
+
+.scoped .table thead th:nth-child(1) {
+  width: 19%;
+}
+
+.scoped .table thead th:nth-child(2) {
+  width: 7%;
+}
+
+.scoped .table thead th:nth-child(3) {
+  width: 12%;
+}
+
+.scoped .table thead th:nth-child(4) {
+  width: 16%;
+}
+
+.scoped .table thead th:nth-child(5) {
+  width: 12%;
+}
+
+.scoped .table thead th:nth-child(6) {
+  width: 11%;
+}
+
+.scoped .table thead th:nth-child(7) {
+  width: 13%;
+}
+
+.scoped .table thead th {
+  background: #f1f2f4;
+  border-bottom: 0;
+  border-right: 1px solid #e1e4e9;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.9rem 0.85rem;
+}
+
+.scoped .table thead th:last-child {
+  border-right: 0;
+}
+
+.scoped .table thead .actionsCell {
+  background: #e8eaee;
+}
+
+.scoped .table tbody td,
+.scoped .table tbody .actionsCell {
+  border-right: 1px solid #eef0f3;
+}
+
+.scoped .table tbody tr > *:last-child {
+  border-right: 0;
+}
+
+.scoped .table .actionsCell {
+  background: #f7f8fa;
+}
+
+.scoped .documentGroup {
+  border-top: 1px solid #e9ecf0;
+}
+
+.scoped .documentGroup:first-of-type {
+  border-top: 0;
+}
+
+.scoped .documentGroup:hover {
+  background: #f7f9fc;
+}
+
+.scoped .titleCell {
+  padding: 1rem 1.15rem 0.25rem;
+}
+
+.scoped .titleLink {
+  color: #111827;
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.scoped .titleLink:hover {
+  color: var(--avend-accent-strong);
+}
+
+.scoped .resultsError,
+.scoped .emptyState {
+  margin: 1rem 1.1rem 1.15rem;
+}
+
+.scoped .scopedCards {
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+@media (max-width: 63.99rem) {
+  .scoped .scopedCards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+}
+
+.scoped .scopedCards > li {
+  border-color: #e2edf9;
+  border-radius: 0.9rem;
+  box-shadow: 0 4px 14px rgb(16 61 115 / 6%);
+}
+
+.scoped .resultsPagination {
+  border: 0;
+  border-top: 1px solid #e8f1fb;
+  border-radius: 0;
+  margin: 0;
+  padding: 0.9rem 1.35rem;
+}
+
+@media (max-width: 40rem) {
+  .scoped .resultsHeader {
+    align-items: flex-start;
+    padding: 0.95rem 1.1rem;
+  }
+
+  .scoped .resultsError,
+  .scoped .emptyState {
+    margin: 0.85rem;
+  }
+
+  .scoped .resultsPagination {
+    padding: 0.85rem;
+  }
+}
+

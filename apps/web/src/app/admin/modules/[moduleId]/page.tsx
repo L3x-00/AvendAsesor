@@ -56,6 +56,11 @@ export default async function ModuleDetailPage({
   const currentView = toModuleView(current);
   const children = childModuleViews(modules, moduleId);
   const parents = parentOptions(modules);
+  // Un submódulo se presenta dentro de su módulo: la ruta y la ficha lo sitúan
+  // sin obligar a volver a la lista para saber dónde está.
+  const parentModule = current.parentModuleId
+    ? modules.find((module) => module.id === current.parentModuleId)
+    : undefined;
   // Contexto del explorador de submódulos: un padre inactivo solo admite
   // submódulos inactivos, y un módulo con documentos propios no admite
   // submódulos (la base de datos lo rechazaría).
@@ -86,7 +91,11 @@ export default async function ModuleDetailPage({
           </span>
           Volver a módulos
         </Link>
-        <p className={styles.detailEyebrow}>Administración · Módulos</p>
+        <p className={styles.detailEyebrow}>
+          {parentModule
+            ? `Administración · Módulos · ${parentModule.name}`
+            : "Administración · Módulos"}
+        </p>
       </header>
       <div className={styles.pageBody}>
         <div className="avend-admin-content">
@@ -94,6 +103,7 @@ export default async function ModuleDetailPage({
             <ModuleDetailHero
               canManage={current.canManage !== false}
               module={currentView}
+              parentName={parentModule?.name}
               parents={parents}
             />
             {content}
