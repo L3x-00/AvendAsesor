@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import styles from "@/components/admin/modules-explorer.module.css";
 import { DocumentLibraryView } from "@/components/admin/document-library-view";
-import { ModuleContentSections } from "@/components/admin/module-content-sections";
+import { SubmoduleContentView } from "@/components/admin/submodule-content-view";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
   ModuleDetailHero,
@@ -91,11 +91,19 @@ export default async function ModuleDetailPage({
           </span>
           Volver a módulos
         </Link>
-        <p className={styles.detailEyebrow}>
-          {parentModule
-            ? `Administración · Módulos · ${parentModule.name}`
-            : "Administración · Módulos"}
-        </p>
+        {parentModule ? (
+          <nav aria-label="Ruta de navegación" className={styles.breadcrumb}>
+            <Link href="/admin/modules">Administración</Link>
+            <span aria-hidden="true">›</span>
+            <Link href={`/admin/modules/${parentModule.id}`}>
+              {parentModule.name}
+            </Link>
+            <span aria-hidden="true">›</span>
+            <span aria-current="page">{current.name}</span>
+          </nav>
+        ) : (
+          <p className={styles.detailEyebrow}>Administración · Módulos</p>
+        )}
       </header>
       <div className={styles.pageBody}>
         <div className="avend-admin-content">
@@ -249,7 +257,7 @@ export default async function ModuleDetailPage({
 
       {isLeaf ? (
         <>
-          <ModuleContentSections
+          <SubmoduleContentView
             apiBaseUrl={getAdminApiUrl()}
             canUpload={canUpload}
             complete={moduleContent.complete}

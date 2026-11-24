@@ -51,8 +51,8 @@ vi.mock("@/components/admin/admin-page", () => ({
 vi.mock("@/components/admin/document-library-view", () => ({
   DocumentLibraryView: () => null,
 }));
-vi.mock("@/components/admin/module-content-sections", () => ({
-  ModuleContentSections: () => null,
+vi.mock("@/components/admin/submodule-content-view", () => ({
+  SubmoduleContentView: () => null,
 }));
 vi.mock("@/components/admin/document-upload-panel", () => ({
   DocumentUploadPanel: () => null,

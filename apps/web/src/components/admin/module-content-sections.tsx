@@ -237,6 +237,10 @@ export interface ModuleContentSectionsProps {
  * recargar la página; al terminar, lleva la vista a la sección y hace parpadear
  * el documento nuevo.
  */
+/**
+ * @deprecated La vista del submódulo usa `SubmoduleContentView`. Se conserva
+ * mientras se migra cualquier otro consumidor.
+ */
 export function ModuleContentSections({
   apiBaseUrl = "",
   canUpload,
