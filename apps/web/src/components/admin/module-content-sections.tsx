@@ -337,10 +337,8 @@ export function ModuleContentSections({
           Contenido del tema
         </h2>
         <span className={styles.countBadge}>
-          {documents.length}
-          <span className="sr-only">
-            {documents.length === 1 ? " documento" : " documentos"}
-          </span>
+          {documents.length}{" "}
+          {documents.length === 1 ? "documento" : "documentos"}
         </span>
       </div>
       <p className={styles.panelIntro}>

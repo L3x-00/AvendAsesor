@@ -1364,7 +1364,7 @@ export function DocumentLibraryView({
           className={styles.resultsSection}
         >
           <div
-            className={`${styles.resultsHeader} flex flex-wrap items-baseline justify-between gap-3`}
+            className={`${lockLocation ? styles.resultsHeader : ""} flex flex-wrap items-baseline justify-between gap-3`}
           >
             <h2 className="text-xl font-bold" id="document-library-results">
               {historyLayout ? "Resultados" : resultsTitle}
@@ -1372,7 +1372,7 @@ export function DocumentLibraryView({
             {loadError ? null : (
               <p
                 aria-live="polite"
-                className={`${styles.resultsCount} text-base text-avend-text-muted`}
+                className={`${lockLocation ? styles.resultsCount : ""} text-base text-avend-text-muted`}
               >
                 {library.total}{" "}
                 {library.total === 1 ? "documento" : "documentos"}
@@ -1394,7 +1394,7 @@ export function DocumentLibraryView({
           ) : library.items.length === 0 ? (
             <EmptyLibraryState
               activeFilterCount={activeFilterCount}
-              className={styles.emptyState}
+              className={lockLocation ? styles.emptyState : ""}
             />
           ) : (
             <>
@@ -1509,7 +1509,10 @@ export function DocumentLibraryView({
                 </table>
               </div>
 
-              <ul className={`${styles.scopedCards} space-y-4 lg:hidden`} role="list">
+              <ul
+                className={`${lockLocation ? styles.scopedCards : ""} space-y-4 lg:hidden`}
+                role="list"
+              >
                 {library.items.map((document) => (
                   <li
                     className="rounded-xl border border-avend-border bg-avend-surface p-5 shadow-sm"
@@ -1578,7 +1581,7 @@ export function DocumentLibraryView({
           {totalPages > 1 ? (
             <nav
               aria-label="Paginación de documentos"
-              className={`${styles.resultsPagination} flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3`}
+              className={`${lockLocation ? styles.resultsPagination : ""} flex flex-wrap items-center justify-between gap-3 rounded-lg border border-avend-border bg-avend-surface p-3`}
             >
               <span className="text-base text-avend-text-muted">
                 Página {query.page} de {totalPages}
