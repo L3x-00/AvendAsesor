@@ -561,59 +561,73 @@ export function ModuleDetailHero({
   const [isEditOpen, setEditOpen] = useState(false);
   const titleId = `${useId()}-module-hero`;
   const closeEdit = useCallback(() => setEditOpen(false), []);
+  const isSubmodule = Boolean(parentName);
 
   return (
-    <section aria-labelledby={titleId} className={styles.hero}>
+    <section
+      aria-labelledby={titleId}
+      className={`${styles.hero}${isSubmodule ? ` ${styles.heroSub}` : ""}`}
+    >
       <span aria-hidden="true" className={styles.heroIcon}>
         <ModuleIcon name={module.name} />
       </span>
       <div className={styles.heroBody}>
+        {isSubmodule ? <p className={styles.heroSubPill}>Submódulo</p> : null}
         <div className={styles.heroTitleRow}>
           <h1 className={styles.heroTitle} id={titleId}>
             {module.name}
           </h1>
-          <span
-            className={
-              module.isActive ? styles.badgeActive : styles.badgeInactive
-            }
-          >
-            {module.isActive ? "Activo" : "Inactivo"}
-          </span>
-        </div>
-        <dl className={styles.heroMeta}>
-          {parentName ? (
-            <div>
-              <dt>Módulo</dt>
-              <dd>{parentName}</dd>
-            </div>
+          {!isSubmodule ? (
+            <span
+              className={
+                module.isActive ? styles.badgeActive : styles.badgeInactive
+              }
+            >
+              {module.isActive ? "Activo" : "Inactivo"}
+            </span>
           ) : null}
-          <div>
-            <dt>Código</dt>
-            <dd>{module.code}</dd>
-          </div>
-          <div>
-            <dt>Orden</dt>
-            <dd>{module.sortOrder}</dd>
-          </div>
-          <div>
-            <dt>Tipo</dt>
-            <dd>{module.parentModuleId ? "Submódulo" : "Módulo principal"}</dd>
-          </div>
-        </dl>
+        </div>
+        {!isSubmodule ? (
+          <dl className={styles.heroMeta}>
+            <div>
+              <dt>Código</dt>
+              <dd>{module.code}</dd>
+            </div>
+            <div>
+              <dt>Orden</dt>
+              <dd>{module.sortOrder}</dd>
+            </div>
+            <div>
+              <dt>Tipo</dt>
+              <dd>{module.parentModuleId ? "Submódulo" : "Módulo principal"}</dd>
+            </div>
+          </dl>
+        ) : null}
         {module.description ? (
           <p className={styles.heroDescription}>{module.description}</p>
         ) : null}
       </div>
-      {canManage ? (
+      {canManage || isSubmodule ? (
         <div className={styles.heroActions}>
-          <button
-            className={styles.editButton}
-            onClick={() => setEditOpen(true)}
-            type="button"
-          >
-            <PencilIcon />
-            Editar módulo
-          </button>
+          {isSubmodule ? (
+            <span
+              className={
+                module.isActive ? styles.badgeActiveSub : styles.badgeInactive
+              }
+            >
+              {module.isActive ? "Activo" : "Inactivo"}
+            </span>
+          ) : null}
+          {canManage ? (
+            <button
+              className={isSubmodule ? styles.editSubButton : styles.editButton}
+              onClick={() => setEditOpen(true)}
+              type="button"
+            >
+              <PencilIcon />
+              {isSubmodule ? "Editar submódulo" : "Editar módulo"}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {isEditOpen ? (

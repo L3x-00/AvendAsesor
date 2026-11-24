@@ -1390,3 +1390,113 @@
     min-width: 0;
   }
 }
+
+/* ---------- Ruta y ficha del submódulo ---------- */
+.breadcrumb {
+  align-items: center;
+  color: #5a6c83;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  min-height: 2.75rem;
+}
+
+.breadcrumb a {
+  align-items: center;
+  color: var(--avend-accent-strong);
+  display: inline-flex;
+  min-height: 2.75rem;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb a:focus-visible {
+  border-radius: 0.35rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.breadcrumb [aria-current="page"] {
+  color: var(--avend-navy);
+  font-weight: 700;
+}
+
+.heroSubPill {
+  align-self: flex-start;
+  background: #eaf4ff;
+  border-radius: 999px;
+  color: #0f66c4;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  padding: 0.1rem 0.65rem;
+}
+
+.heroSub .heroTitle {
+  font-size: clamp(1.6rem, 2.8vw, 2rem);
+}
+
+.heroSub .heroActions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.badgeActiveSub {
+  align-items: center;
+  background: #eaf8f0;
+  border-radius: 999px;
+  color: #05713d;
+  display: inline-flex;
+  flex: none;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  padding: 0.15rem 0.65rem;
+}
+
+.badgeActiveSub::before {
+  background: currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.editSubButton {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid #d9e2ef;
+  border-radius: 0.65rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.editSubButton:hover {
+  background: #f4f8ff;
+  border-color: #bcd5f2;
+}
+
+.editSubButton:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 3px;
+}
+
+.editSubButton svg {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
