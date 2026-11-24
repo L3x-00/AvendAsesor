@@ -201,6 +201,78 @@ describe('OpenAiAnswerGateway', () => {
     );
   });
 
+  it('en modo resumen usa el modelo económico y respalda con el del RAG', async () => {
+    mockCreate
+      .mockRejectedValueOnce(new Error('rate limited'))
+      .mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          await Promise.resolve();
+          yield { choices: [{ delta: { content: 'Resumen.' } }] };
+        },
+      });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) => {
+        const models: Record<string, string> = {
+          RAG_SUMMARY_MODEL: 'tencent/hy4-flash',
+          RAG_ANSWER_MODEL: 'qwen/qwen4-max',
+        };
+        return (
+          models[key] ?? (key === 'OPENAI_API_KEY' ? 'test-key' : undefined)
+        );
+      }),
+    } as never);
+
+    const tokens: string[] = [];
+    for await (const token of gateway.generate({
+      conversationContext: [],
+      mode: 'summary',
+      question: 'Resume lo que hablamos',
+      sources: [],
+    })) {
+      tokens.push(token);
+    }
+
+    expect(tokens).toEqual(['Resumen.']);
+    const calledModels = (
+      mockCreate.mock.calls as Array<[{ model: string }]>
+    ).map(([input]) => input.model);
+    expect(calledModels).toEqual(['tencent/hy4-flash', 'qwen/qwen4-max']);
+  });
+
+  it('usa el modelo del RAG en resúmenes si no hay modelo económico configurado', async () => {
+    mockCreate.mockResolvedValue({
+      async *[Symbol.asyncIterator]() {
+        await Promise.resolve();
+        yield { choices: [{ delta: { content: 'Resumen.' } }] };
+      },
+    });
+    const gateway = new OpenAiAnswerGateway({
+      get: jest.fn((key: string) =>
+        key === 'RAG_ANSWER_MODEL'
+          ? 'qwen/qwen4-max'
+          : key === 'OPENAI_API_KEY'
+            ? 'test-key'
+            : undefined,
+      ),
+    } as never);
+
+    let drained = '';
+    for await (const token of gateway.generate({
+      conversationContext: [],
+      mode: 'summary',
+      question: 'Resume',
+      sources: [],
+    })) {
+      drained += token;
+    }
+    expect(drained).toBe('Resumen.');
+
+    const calledModels = (
+      mockCreate.mock.calls as Array<[{ model: string }]>
+    ).map(([input]) => input.model);
+    expect(calledModels).toEqual(['qwen/qwen4-max']);
+  });
+
   it('en modo asesor prueba los dos modelos gratuitos y luego el de pago', async () => {
     mockCreate
       .mockRejectedValueOnce(new Error('rate limited'))
