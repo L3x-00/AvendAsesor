@@ -1,5 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentLibraryItem } from "@/lib/admin-api/types";
 import { SubmoduleContentView } from "./submodule-content-view";
@@ -454,6 +456,20 @@ describe("SubmoduleContentView", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("submodule-content-view.module.css — contratos visuales", () => {
+  const css = readFileSync(
+    resolve(process.cwd(), "src/components/admin/submodule-content-view.module.css"),
+    "utf8",
+  );
+
+  it("la tabla ocupa el ancho disponible sin desplazamiento horizontal", () => {
+    expect(css).toMatch(/\.tableRegion\s*\{[^}]*overflow-x:\s*hidden/);
+    const table = /\.table\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(table).toMatch(/width:\s*100%/);
+    expect(table).not.toMatch(/min-width/);
   });
 });
 
