@@ -68,6 +68,9 @@ const environmentSchema = z
     // para que los saludos y temas ajenos no consuman el modelo de pago del RAG.
     RAG_ADVISORY_MODEL: z.string().trim().min(1).optional(),
     RAG_ADVISORY_FALLBACK_MODEL: z.string().trim().min(1).optional(),
+    // Modelo económico para resúmenes de conversación. Si falla, se usa el
+    // modelo del RAG. Los resúmenes pasan validadores fail-closed.
+    RAG_SUMMARY_MODEL: z.string().trim().min(1).optional(),
     // Gateway único de IA. Con OPENROUTER_API_KEY se enruta todo por OpenRouter;
     // en su ausencia se usa OPENAI_API_KEY directo. AI_GATEWAY_BASE_URL permite
     // sobreescribir el endpoint compatible con la API de OpenAI.

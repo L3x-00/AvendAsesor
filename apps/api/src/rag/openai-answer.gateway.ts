@@ -32,19 +32,26 @@ export class OpenAiAnswerGateway implements AnswerGateway {
       INTERACTIVE_AI_LIMITS,
     );
     const advisory = input.mode === 'advisory';
+    const summary = input.mode === 'summary';
     const primaryModel =
-      this.configService.get<string>(
-        advisory ? 'RAG_ADVISORY_MODEL' : 'RAG_ANSWER_MODEL',
-      ) ?? 'gpt-4o-mini';
+      (summary
+        ? (this.configService.get<string>('RAG_SUMMARY_MODEL') ??
+          this.configService.get<string>('RAG_ANSWER_MODEL'))
+        : this.configService.get<string>(
+            advisory ? 'RAG_ADVISORY_MODEL' : 'RAG_ANSWER_MODEL',
+          )) ?? 'gpt-4o-mini';
     // La conversación social usa modelos gratuitos y, si ambos fallan, el
     // modelo pagado de respaldo: así un saludo no se cae por el límite del
-    // proveedor gratuito. El RAG mantiene su par pagado principal/respaldo.
-    const configuredFallbacks = advisory
-      ? [
-          this.configService.get<string>('RAG_ADVISORY_FALLBACK_MODEL'),
-          this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL'),
-        ]
-      : [this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL')];
+    // proveedor gratuito. Los resúmenes usan un modelo económico con respaldo
+    // al modelo del RAG. Este último mantiene su par pagado principal/respaldo.
+    const configuredFallbacks = summary
+      ? [this.configService.get<string>('RAG_ANSWER_MODEL')]
+      : advisory
+        ? [
+            this.configService.get<string>('RAG_ADVISORY_FALLBACK_MODEL'),
+            this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL'),
+          ]
+        : [this.configService.get<string>('RAG_ANSWER_FALLBACK_MODEL')];
     const models = [
       primaryModel,
       ...new Set(
