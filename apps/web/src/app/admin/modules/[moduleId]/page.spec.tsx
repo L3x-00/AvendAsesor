@@ -49,10 +49,10 @@ vi.mock("@/components/admin/admin-page", () => ({
   ),
 }));
 vi.mock("@/components/admin/document-library-view", () => ({
-  DocumentLibraryView: () => null,
+  DocumentLibraryView: () => <div data-testid="document-library-view" />,
 }));
 vi.mock("@/components/admin/submodule-content-view", () => ({
-  SubmoduleContentView: () => null,
+  SubmoduleContentView: () => <div data-testid="submodule-content-view" />,
 }));
 vi.mock("@/components/admin/document-upload-panel", () => ({
   DocumentUploadPanel: () => null,
@@ -142,6 +142,13 @@ describe("página de un módulo: alta de submódulos", () => {
     expect(screen.getByRole("combobox", { name: /Estado/ })).toHaveValue(
       "true",
     );
+  });
+
+  it("un submódulo muestra sus secciones sin repetir la tabla global de documentos", async () => {
+    await renderPage(summary({ parentModuleId: "padre" }));
+
+    expect(screen.getByTestId("submodule-content-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("document-library-view")).toBeNull();
   });
 
   it("un módulo con documentos propios no ofrece crear submódulos y explica por qué", async () => {

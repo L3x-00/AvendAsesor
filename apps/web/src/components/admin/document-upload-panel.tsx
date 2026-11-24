@@ -154,28 +154,6 @@ function OptionalDocumentFields({ prefix }: { prefix: string }) {
           name="articleReference"
         />
       </label>
-      <label
-        className="block lg:col-span-2"
-        htmlFor={`${prefix}-metadata`}
-      >
-        <span className="text-base font-semibold">
-          Palabras clave JSON (opcional)
-        </span>
-        <textarea
-          aria-describedby={`${prefix}-metadata-help`}
-          className="mt-1 min-h-24 w-full rounded-md border border-avend-border px-3 py-2 font-mono text-base"
-          id={`${prefix}-metadata`}
-          name="metadata"
-          placeholder='{"keywords":["licencia","salud"]}'
-        />
-        <span
-          className="mt-1 block text-base text-avend-text-muted"
-          id={`${prefix}-metadata-help`}
-        >
-          Opción avanzada. Para palabras clave sencillas usa el campo «Palabras
-          clave». Aquí debe ir un objeto JSON válido.
-        </span>
-      </label>
     </>
   );
 }

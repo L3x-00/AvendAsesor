@@ -57,6 +57,7 @@ describe("DocumentUploadPanel", () => {
     expect(screen.getByRole("option", { name: "Anexo" })).toBeInTheDocument();
     expect(screen.getByLabelText("Situación")).toBeInTheDocument();
     expect(screen.getByLabelText("Palabras clave (opcional)")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Palabras clave JSON/)).toBeNull();
     expect(screen.getByText(/hasta 300 páginas/)).toBeVisible();
   });
 

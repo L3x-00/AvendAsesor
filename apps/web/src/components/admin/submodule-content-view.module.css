@@ -412,13 +412,12 @@
 .tableRegion {
   border-top: 1px solid #e9eef6;
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   width: 100%;
 }
 
 .table {
   border-collapse: collapse;
-  min-width: 48rem;
   table-layout: fixed;
   width: 100%;
 }
@@ -550,7 +549,9 @@
   color: #0f66c4;
   display: inline-flex;
   font-weight: 600;
+  overflow-wrap: anywhere;
   padding: 0.2rem 0.65rem;
+  white-space: normal;
 }
 
 .statusPill {
@@ -718,10 +719,6 @@
   /* En pantallas pequeñas se muestra directamente la vista de tarjetas. */
   .viewToggle {
     display: none;
-  }
-
-  .table {
-    min-width: 0;
   }
 
   /* En pantallas pequeñas el tipo y el año ya están bajo el título: se

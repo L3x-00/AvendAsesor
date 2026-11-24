@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import styles from "@/components/admin/modules-explorer.module.css";
-import { DocumentLibraryView } from "@/components/admin/document-library-view";
 import { SubmoduleContentView } from "@/components/admin/submodule-content-view";
 import { DocumentUploadPanel } from "@/components/admin/document-upload-panel";
 import {
@@ -273,15 +272,6 @@ export default async function ModuleDetailPage({
                 : "Este módulo está inactivo: actívalo para subir documentos en estas secciones."
             }
             uploadDefaults={uploadDefaults}
-          />
-          <DocumentLibraryView
-            activeFilterCount={activeFilterCount}
-            basePath={`/admin/modules/${current.id}`}
-            library={library}
-            lockLocation
-            modules={modules}
-            query={scopedQuery}
-            resultsTitle="Documentos cargados"
           />
         </>
       ) : null}
