@@ -15,6 +15,13 @@ describe('isAboutTheSystem', () => {
     'Hola, ¿en qué me puedes ayudar?',
     'Estoy diciendo cómo me puedes ayudar',
     '¿Hasta dónde llega tu alcance?',
+    'que me puedes ayuda o en que me peudes ayudar?',
+    'que me puedes ayudar',
+    'que me puedes ayuda?',
+    'como me podrias ayudar',
+    'en qué me puede ayudar?',
+    'soy un docente que no hace uso de la tecnologia y que esta actualizado con este tema, como me podrias ayudar',
+    'soy docente, ¿cómo me ayudas?',
   ])('reconoce preguntas sobre el sistema: %s', (question) => {
     expect(isAboutTheSystem(question)).toBe(true);
   });
@@ -42,6 +49,10 @@ describe('isAboutTheSystem', () => {
     '¿En qué me puedes ayudar con mi escala?',
     '¿En qué me puedes ayudar con mi expediente?',
     '¿En qué me puedes ayudar con el DS 004-2013-ED?',
+    'tengo un problema con mi escala, como me ayudas?',
+    'soy docente, vine por una racionalizacion, en que me puedes ayudar?',
+    'soy docente, ¿cómo me ayudas con mi licencia?',
+    'soy profesor y quiero saber en qué me ayudas con mi plaza',
   ])('no intercepta consultas del ámbito: %s', (question) => {
     expect(isAboutTheSystem(question)).toBe(false);
   });
