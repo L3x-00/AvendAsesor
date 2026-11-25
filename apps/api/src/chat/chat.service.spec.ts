@@ -1738,6 +1738,24 @@ describe('ChatService', () => {
     expect(reply.data.message).toContain('AVEND ASESOR');
   });
 
+  it('responde sobre el sistema con errores de escritura y presentación previa', async () => {
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Soy AVEND ASESOR y puedo ayudarte con trámites educativos.';
+      })(),
+    );
+
+    for (const question of [
+      'que me puedes ayuda o en que me peudes ayudar?',
+      'soy un docente que no hace uso de la tecnologia y que esta actualizado con este tema, como me podrias ayudar',
+    ]) {
+      const events = await collect(service, { question });
+      expect(events.map((event) => event.type)).toEqual(['conversational']);
+      expect(ragService.retrieve).not.toHaveBeenCalled();
+    }
+  });
+
   it('usa una respuesta de respaldo si el proveedor falla al explicar el sistema', async () => {
     answerGateway.generate.mockImplementation(() => {
       throw new Error('provider down');

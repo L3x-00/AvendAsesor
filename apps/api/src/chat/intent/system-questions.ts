@@ -14,6 +14,41 @@ const SYSTEM_ABOUT =
  * confundirlas con una consulta normativa que empiece por «¿cómo funciona…?».
  */
 const SYSTEM_SELF = /\b(?:te|tu|tus|ti|eres|yo|me|construido|llamas|creo)\b/u;
+/**
+ * Interrogantes de capacidad, con las grafías y errores frecuentes de la
+ * gente al escribir («peudes», «ayuda» sin r, «podrias»). Se buscan para
+ * separar la presentación del usuario del núcleo de la pregunta.
+ */
+const CAPABILITY_QUESTIONS: readonly RegExp[] = [
+  /\b(?:en|sobre) que (?:me )?(?:puedes|puede|podrias|podria|peudes) ayudar(?:me)?/u,
+  /\b(?:diciendo )?como (?:me )?(?:puedes|podrias) ayudar(?:me)?/u,
+  /\bque (?:me )?(?:puedes|puede|podrias|podria|peudes) ayudar(?:me)?/u,
+  /\bcomo (?:me )?(?:puedes|puede|podrias|podria) ayudar(?:me)?/u,
+  /\bque (?:me )?puedes ayuda(?!r)\b/u,
+  /\bcomo me ayudas/u,
+  /\ben que (?:me )?ayudas/u,
+  /\bque puedes hacer/u,
+  /\bquien eres|\bque eres|\beres una|\bcomo te llamas/u,
+  /\bcomo funcionas|\bpara que sirves/u,
+  /\bcomo funciona(?:s)?|\bhasta donde (?:es|llega) tu alcance/u,
+  /\bquien te creo|\bquien te crearon|\bcomo estas construido/u,
+  /\bcomo hago uso|\bcomo se usa/u,
+];
+
+/** Primer interrogante de capacidad del texto: dónde empieza y cuánto mide. */
+function firstCapabilityQuestion(
+  text: string,
+): { index: number; length: number } | null {
+  let best: { index: number; length: number } | null = null;
+  for (const pattern of CAPABILITY_QUESTIONS) {
+    const found = pattern.exec(text);
+    if (!found || found.index === undefined) continue;
+    if (!best || found.index < best.index) {
+      best = { index: found.index, length: found[0].length };
+    }
+  }
+  return best;
+}
 const SYSTEM_SELF_TOPIC =
   /\b(?:como funciona(?:s)?|hasta donde (?:es|llega) tu alcance|quien te creo|quien te crearon|quien eres|que eres|eres una|como te llamas|como estas construido|como hago uso|como se usa|(?:en que|diciendo como) (?:me )?puedes ayudar|que puedes hacer|para que sirves|construido|disenado|diseñado|creado|crearon)\b/u;
 /** Términos de corpus que, aunque `hasTopicTerm` no los cubra, delatan una consulta normativa. */
@@ -28,12 +63,27 @@ export function isAboutTheSystem(question: string): boolean {
   const text = normalizeSpanishText(question);
   if (hasTopicTerm(text)) return false;
   if (/\b(?:contrataciones|nombramientos)\b/u.test(text)) return false;
-  if (DOMAIN_NOUN.test(text)) return false;
+
+  // Detección inteligente: una persona puede presentarse antes de preguntar
+  // («soy docente que no usa tecnología…, ¿cómo me podrías ayudar?»). Esa
+  // presentación NO convierte la pregunta en normativa. Solo se revisa el
+  // texto DESPUÉS del interrogante de capacidad: si ahí aparece un objeto de
+  // dominio («¿en qué me ayudas con mi carrera pública?»), va al RAG.
+  const hasDomainNoun = DOMAIN_NOUN.test(text);
+  const capability = firstCapabilityQuestion(text);
+  if (capability && SYSTEM_SELF.test(text)) {
+    const after = text.slice(capability.index + capability.length);
+    // «soy docente, ¿cómo me ayudas con mi licencia?» no llega aquí porque
+    // `licencia` es TOPIC, pero la guía global evita que un sustantivo de
+    // dominio residual (escala, racionalización, cuadro de horas) colocado
+    // ANTES del interrogante se cuele como pregunta sobre el sistema.
+    if (!hasDomainNoun && !DOMAIN_NOUN.test(after) && !hasDomainSignal(after))
+      return true;
+  }
+
+  if (hasDomainNoun) return false;
   return (
     (SYSTEM_SUBJECT.test(text) && SYSTEM_ABOUT.test(text)) ||
-    // La rama dirigida al asistente exige AUSENCIA total de señal de dominio:
-    // «¿en qué me puedes ayudar con mi carrera pública?» es normativa, no una
-    // pregunta sobre el sistema, aunque use la misma fórmula.
     (SYSTEM_SELF.test(text) &&
       SYSTEM_SELF_TOPIC.test(text) &&
       !hasDomainSignal(text))
