@@ -1717,6 +1717,27 @@ describe('ChatService', () => {
     expect(calls[0]?.[0].systemPromptOverride).toContain('PROPÓSITO');
   });
 
+  it('responde sobre el sistema sin RAG aunque la pregunta no nombre el sistema', async () => {
+    answerGateway.generate.mockReturnValue(
+      (async function* () {
+        await Promise.resolve();
+        yield 'Soy AVEND ASESOR, tu asistente para trámites educativos.';
+      })(),
+    );
+
+    const events = await collect(service, {
+      question: '¿Cómo funciona? ¿Hasta dónde es tu alcance?',
+    });
+
+    expect(events.map((event) => event.type)).toEqual(['conversational']);
+    expect(ragService.retrieve).not.toHaveBeenCalled();
+    const reply = events[0];
+    if (!reply || reply.type !== 'conversational') {
+      throw new Error('Expected a conversational event.');
+    }
+    expect(reply.data.message).toContain('AVEND ASESOR');
+  });
+
   it('usa una respuesta de respaldo si el proveedor falla al explicar el sistema', async () => {
     answerGateway.generate.mockImplementation(() => {
       throw new Error('provider down');
