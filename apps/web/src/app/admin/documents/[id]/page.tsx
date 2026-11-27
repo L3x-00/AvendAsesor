@@ -537,21 +537,64 @@ export default async function DocumentDetailPage({
                   </p>
                 </div>
               </div>
-              <div className="mt-4">
-              {status === "error" ? (
-                  <DocumentIngestionRecovery
-                    canRetry={currentVersion?.ingestionStatus === "failed"}
-                    cause={currentVersion?.ingestionFailureCause}
-                    documentId={document.id}
-                  />
-                ) : (
-                  <DocumentTechnicalStatusForm
-                    approvalStatus={document.approvalStatus}
-                    approvedVersionId={document.approvedVersionId}
-                    currentIngestionStatus={currentVersion?.ingestionStatus}
-                    documentId={document.id}
-                  />
-                )}
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <div className="min-w-0 flex-1">
+                  {status === "error" ? (
+                    <DocumentIngestionRecovery
+                      canRetry={currentVersion?.ingestionStatus === "failed"}
+                      cause={currentVersion?.ingestionFailureCause}
+                      documentId={document.id}
+                    />
+                  ) : (
+                    <DocumentTechnicalStatusForm
+                      approvalStatus={document.approvalStatus}
+                      approvedVersionId={document.approvedVersionId}
+                      currentIngestionStatus={currentVersion?.ingestionStatus}
+                      documentId={document.id}
+                    />
+                  )}
+                </div>
+                <div className="shrink-0" id="delete-document">
+                  <DeleteDisclosure
+                    description={
+                      <p>
+                        La eliminación es lógica: el documento sale de la gestión
+                        habitual, pero se conservan el PDF, sus versiones y el
+                        historial.
+                      </p>
+                    }
+                    size="compact"
+                    title="¿Eliminar este documento?"
+                    triggerLabel="Eliminar documento"
+                  >
+                    <AdminActionForm
+                      action={deleteDocumentAction}
+                      className="space-y-3"
+                      submitLabel="Sí, eliminar documento"
+                      tone="danger"
+                      rules={{
+                        reason: [
+                          { kind: "required", label: "El motivo" },
+                          { kind: "minLength", label: "El motivo", min: 2 },
+                        ],
+                      }}
+                    >
+                      <input name="documentId" type="hidden" value={document.id} />
+                      <label className="block" htmlFor="detail-delete-reason">
+                        <span className="text-base font-semibold text-red-900">
+                          Motivo
+                        </span>
+                        <input
+                          className="mt-1 min-h-11 w-full rounded-md border border-red-400 px-3 text-base"
+                          id="detail-delete-reason"
+                          minLength={2}
+                          name="reason"
+                          required
+                        />
+                      </label>
+                    </AdminActionForm>
+                  </DeleteDisclosure>
+                </div>
               </div>
             </section>
 
@@ -765,52 +808,6 @@ export default async function DocumentDetailPage({
                   </AdminActionForm>
                 ) : null}
               </div>
-            </section>
-
-            {/* Bloque Eliminar Documento (se mantiene separado por ser acción destructiva) */}
-            <section
-              aria-label="Eliminar documento"
-              className="rounded-xl border border-avend-border bg-avend-surface p-5"
-              id="delete-document"
-            >
-              <DeleteDisclosure
-                description={
-                  <p>
-                    La eliminación es lógica: el documento sale de la gestión
-                    habitual, pero se conservan el PDF, sus versiones y el
-                    historial.
-                  </p>
-                }
-                title="¿Eliminar este documento?"
-                triggerLabel="Eliminar documento"
-              >
-                <AdminActionForm
-                  action={deleteDocumentAction}
-                  className="space-y-3"
-                  submitLabel="Sí, eliminar documento"
-                  tone="danger"
-                  rules={{
-                    reason: [
-                      { kind: "required", label: "El motivo" },
-                      { kind: "minLength", label: "El motivo", min: 2 },
-                    ],
-                  }}
-                >
-                  <input name="documentId" type="hidden" value={document.id} />
-                  <label className="block" htmlFor="detail-delete-reason">
-                    <span className="text-base font-semibold text-red-900">
-                      Motivo
-                    </span>
-                    <input
-                      className="mt-1 min-h-11 w-full rounded-md border border-red-400 px-3 text-base"
-                      id="detail-delete-reason"
-                      minLength={2}
-                      name="reason"
-                      required
-                    />
-                  </label>
-                </AdminActionForm>
-              </DeleteDisclosure>
             </section>
           </div>
         </div>

@@ -251,6 +251,25 @@ export function DocumentMetadataFields({
         </label>
       ) : null}
 
+      {compact ? null : (
+        <div className="block">
+          <label
+            className="text-base font-semibold"
+            htmlFor={`${prefix}-additional-detail`}
+          >
+            Detalle adicional / Área / Oficina (opcional)
+          </label>
+          <input
+            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
+            id={`${prefix}-additional-detail`}
+            maxLength={255}
+            name="additionalDetail"
+            onChange={(event) => setAdditionalDetail(event.target.value)}
+            value={additionalDetail}
+          />
+        </div>
+      )}
+
       {showPrefilledSummary ? (
         <PrefilledSummary
           dependency={specificDependency}
@@ -395,25 +414,6 @@ export function DocumentMetadataFields({
         </div>
       ) : null}
         </>
-      )}
-
-      {compact ? null : (
-        <div className="block">
-          <label
-            className="text-base font-semibold"
-            htmlFor={`${prefix}-additional-detail`}
-          >
-            Detalle adicional / Área / Oficina (opcional)
-          </label>
-          <input
-            className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
-            id={`${prefix}-additional-detail`}
-            maxLength={255}
-            name="additionalDetail"
-            onChange={(event) => setAdditionalDetail(event.target.value)}
-            value={additionalDetail}
-          />
-        </div>
       )}
 
       {/* La biblioteca ya indexaba metadata.keywords, pero ningún formulario

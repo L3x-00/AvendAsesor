@@ -49,9 +49,13 @@ describe("DocumentMetadataFields", () => {
   it("offers the exact governed taxonomies and a dynamic year range", () => {
     renderFields();
 
+    const detail = screen.getByLabelText(/Detalle adicional/);
+    const year = screen.getByRole("combobox", { name: "Año del documento" });
+    expect(
+      detail.compareDocumentPosition(year) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     const type = screen.getByRole("combobox", { name: "Tipo documental" });
     const entity = screen.getByRole("combobox", { name: "Entidad emisora" });
-    const year = screen.getByRole("combobox", { name: "Año del documento" });
 
     expect(within(type).getAllByRole("option").slice(1)).toHaveLength(19);
     expect(

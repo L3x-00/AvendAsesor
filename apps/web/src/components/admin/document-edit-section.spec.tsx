@@ -22,6 +22,7 @@ describe("DocumentEditSection", () => {
       screen.getByRole("dialog", { name: "Editar datos del documento" }),
     ).toBeVisible();
     expect(screen.getByText("Contenido del formulario")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Cerrar" })).toHaveLength(1);
   });
 
   it("asocia el botón con el diálogo y conserva el ancla", () => {
