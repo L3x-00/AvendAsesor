@@ -80,10 +80,9 @@ describe("OrientationPreview", () => {
     expect(
       screen.getByText("La solicitud se presenta por mesa de partes."),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
-      "href",
-      `#fuente-${context.messageId}-1`,
-    );
+    expect(
+      screen.queryByRole("link", { name: /\[\d+\]/u }),
+    ).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("María Pérez")).toBeVisible();
     // El alcance se declara en la página, antes de descargar, y dentro del
     // documento; no debe aparecer una tercera vez.
@@ -95,7 +94,22 @@ describe("OrientationPreview", () => {
         screen.getByRole("article", { name: "Vista previa de la ficha" }),
       ).getByRole("note"),
     ).toHaveTextContent(/No constituye un acto administrativo/i);
-    expect(screen.getByText("Licencias por salud")).toBeVisible();
+    const references = screen.getByRole("region", { name: "Referencias" });
+    expect(
+      within(references).getByRole("heading", {
+        name: "Referencias",
+        level: 3,
+      }),
+    ).toBeVisible();
+    expect(
+      within(references).getByText("Ley de Reforma Magisterial"),
+    ).toBeVisible();
+    expect(
+      within(references).queryByText(/Versión 2|Página 33|Vigente/u),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("table", { name: /Fuentes documentales/u }),
+    ).not.toBeInTheDocument();
     // La ficha se presenta como documento: no ofrece la lista de archivos del chat.
     expect(
       screen.queryByText("Documentos disponibles", {
@@ -136,11 +150,7 @@ describe("OrientationPreview", () => {
     ).toBeVisible();
     expect(within(table).getAllByText("3 500,70")).toHaveLength(2);
     expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
-    expect(screen.getByText("Fuente:")).toBeVisible();
-    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
-      "href",
-      `#fuente-${salaryContext.messageId}-1`,
-    );
+    expect(screen.queryByText(/\[1\]/u)).not.toBeInTheDocument();
   });
 
   it("mantiene como tabla una escala salarial Markdown con una fuente única", () => {
@@ -169,10 +179,10 @@ describe("OrientationPreview", () => {
     });
     expect(within(table).getAllByText("3,300.60")).toHaveLength(2);
     expect(screen.queryByText(/Modalidad \/ Forma:/u)).not.toBeInTheDocument();
-    expect(screen.getByText("Fuente:")).toBeVisible();
+    expect(screen.queryByText(/\[1\]/u)).not.toBeInTheDocument();
   });
 
-  it("mantiene cada cita junto a su párrafo cuando proviene de documentos distintos", () => {
+  it("omite las citas [n] y lista cada documento de referencia una sola vez", () => {
     const secondSource = {
       ...context.sources[0]!,
       documentTitle: "Reglamento de la Ley de Reforma Magisterial",
@@ -184,9 +194,9 @@ describe("OrientationPreview", () => {
       answer: [
         "La solicitud se presenta por mesa de partes. [1]",
         "",
-        "El reglamento precisa la documentación. [2]",
+        "El reglamento precisa la documentación. [1, 2]",
       ].join("\n"),
-      sources: [context.sources[0]!, secondSource],
+      sources: [context.sources[0]!, secondSource, secondSource],
     };
 
     render(
@@ -196,15 +206,26 @@ describe("OrientationPreview", () => {
       />,
     );
 
-    expect(screen.getByRole("link", { name: "[1]" })).toHaveAttribute(
-      "href",
-      `#fuente-${citedContext.messageId}-1`,
-    );
-    expect(screen.getByRole("link", { name: "[2]" })).toHaveAttribute(
-      "href",
-      `#fuente-${citedContext.messageId}-2`,
-    );
-    expect(screen.queryByText("Fuente:")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("La solicitud se presenta por mesa de partes."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("El reglamento precisa la documentación."),
+    ).toBeVisible();
+    expect(screen.queryByText(/\[1, 2\]/u)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /\[\d+\]/u }),
+    ).not.toBeInTheDocument();
+    const references = screen.getByRole("region", { name: "Referencias" });
+    expect(within(references).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      within(references).getByText("Ley de Reforma Magisterial"),
+    ).toBeVisible();
+    expect(
+      within(references).getByText(
+        "Reglamento de la Ley de Reforma Magisterial",
+      ),
+    ).toBeVisible();
   });
 
   it("previews optional fields as text and never interprets them as HTML", () => {

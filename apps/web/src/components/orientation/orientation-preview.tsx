@@ -1,15 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, type ReactNode, useRef, useState } from "react";
-import {
-  CITATION_TOKEN,
-  citationRanks,
-  ChatSources,
-  singleCitedSource,
-  sourceAnchorId,
-  sourceCitationLabel,
-} from "@/components/chat/chat-sources";
+import { type ReactNode, useRef, useState } from "react";
+import { groupReferenceSources } from "@/components/chat/chat-sources";
 import {
   classifyTableAt,
   columnAlignments,
@@ -21,6 +14,10 @@ import {
 import { ChatTable } from "@/components/chat/chat-table";
 import { useToast } from "@/components/ui/toast";
 import { ValidatedForm } from "@/components/ui/validated-form";
+import {
+  singleCitedSource,
+  withoutCitationTokens,
+} from "@/lib/chat-api/citations";
 import type { ChatSource } from "@/lib/chat-api/types";
 import {
   ORIENTATION_DISCLAIMER,
@@ -70,54 +67,12 @@ interface OrientationPreviewProps {
   initialTeacherName: string;
 }
 
-function withoutCitationTokens(text: string): string {
-  return text
-    .split(CITATION_TOKEN)
-    .filter(
-      (part, index) => index % 2 === 0 || citationRanks(part).length === 0,
-    )
-    .join("")
-    .replace(/[ \t]+([.,;:])/gu, "$1")
-    .replace(/[ \t]{2,}/gu, " ")
-    .trim();
-}
-
-function orientationInline(
-  text: string,
-  messageId: string,
-  sources: readonly ChatSource[],
-): ReactNode[] {
-  return text.split(CITATION_TOKEN).map((part, index) => {
-    if (index % 2 === 0) return part;
-    const ranks = [...new Set(citationRanks(part))].filter((rank) =>
-      sources.some((source) => source.rank === rank),
-    );
-    if (!ranks.length) return null;
-    return (
-      <Fragment key={`${index}-${part}`}>
-        {ranks.map((rank, position) => {
-          const source = sources.find((candidate) => candidate.rank === rank);
-          return source ? (
-            <Fragment key={source.id}>
-              {position ? " " : ""}
-              <a href={`#${sourceAnchorId(messageId, rank)}`}>
-                {sourceCitationLabel(source)}
-              </a>
-            </Fragment>
-          ) : null;
-        })}
-      </Fragment>
-    );
-  });
-}
-
+/** La ficha es un documento: las citas [n] del chat se sustituyen por la lista de referencias. */
 function OrientationAnswer({
   answer,
-  messageId,
   sources,
 }: {
   answer: string;
-  messageId: string;
   sources: ChatSource[];
 }) {
   const normalized = structuredSalaryRowsToMarkdown(answer);
@@ -128,15 +83,11 @@ function OrientationAnswer({
   let listItems: string[] = [];
   let tableIndex = 0;
 
-  const visible = (text: string) =>
-    consolidated ? withoutCitationTokens(text) : text.trim();
-  const inline = (text: string) =>
-    orientationInline(visible(text), messageId, sources);
+  const visible = (text: string) => withoutCitationTokens(text);
   const flushParagraph = () => {
     const text = visible(paragraph.join(" "));
     paragraph = [];
-    if (text)
-      blocks.push(<p key={`paragraph-${blocks.length}`}>{inline(text)}</p>);
+    if (text) blocks.push(<p key={`paragraph-${blocks.length}`}>{text}</p>);
   };
   const flushList = () => {
     const items = listItems.map(visible).filter(Boolean);
@@ -145,9 +96,7 @@ function OrientationAnswer({
     blocks.push(
       <ul key={`list-${blocks.length}`}>
         {items.map((item, index) => (
-          <li key={`${index}-${item}`}>
-            {orientationInline(item, messageId, sources)}
-          </li>
+          <li key={`${index}-${item}`}>{item}</li>
         ))}
       </ul>,
     );
@@ -166,13 +115,11 @@ function OrientationAnswer({
       const baseTable = consolidated
         ? withoutCitationColumns(classified.table)
         : classified.table;
-      const table = consolidated
-        ? {
-            ...baseTable,
-            headers: baseTable.headers.map(withoutCitationTokens),
-            rows: baseTable.rows.map((row) => row.map(withoutCitationTokens)),
-          }
-        : baseTable;
+      const table = {
+        ...baseTable,
+        headers: baseTable.headers.map(withoutCitationTokens),
+        rows: baseTable.rows.map((row) => row.map(withoutCitationTokens)),
+      };
       if (classified.asGrid) {
         tableIndex += 1;
         blocks.push(
@@ -181,7 +128,7 @@ function OrientationAnswer({
             headers={table.headers}
             index={tableIndex}
             key={`table-${tableIndex}`}
-            renderCell={(text) => orientationInline(text, messageId, sources)}
+            renderCell={(text) => text}
             rows={table.rows}
           />,
         );
@@ -192,9 +139,7 @@ function OrientationAnswer({
         blocks.push(
           <ul key={`table-list-${blocks.length}`}>
             {rows.map((row, index) => (
-              <li key={`${index}-${row}`}>
-                {orientationInline(row, messageId, sources)}
-              </li>
+              <li key={`${index}-${row}`}>{row}</li>
             ))}
           </ul>,
         );
@@ -223,18 +168,27 @@ function OrientationAnswer({
   flushParagraph();
   flushList();
 
-  if (consolidated) {
-    blocks.push(
-      <p className={styles.sourceNote} key="source-note">
-        Fuente:{" "}
-        <a href={`#${sourceAnchorId(messageId, consolidated.rank)}`}>
-          {sourceCitationLabel(consolidated)}
-        </a>
-      </p>,
-    );
-  }
-
   return <div className={styles.answer}>{blocks}</div>;
+}
+
+/** Referencias en una lista sobria: sin tabla de metadatos ni enlaces [n]. */
+function OrientationReferences({ sources }: { sources: ChatSource[] }) {
+  const documents = groupReferenceSources(sources);
+  if (!documents.length) return null;
+
+  return (
+    <section
+      aria-labelledby="orientation-references"
+      className={styles.references}
+    >
+      <h3 id="orientation-references">Referencias</h3>
+      <ol className={styles.referenceList}>
+        {documents.map(({ source }) => (
+          <li key={source.id}>{source.documentTitle}</li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 function downloadError(status: number): string {
@@ -526,7 +480,6 @@ export function OrientationPreview({
             <h3>Orientación recibida</h3>
             <OrientationAnswer
               answer={context.answer}
-              messageId={context.messageId}
               sources={context.sources}
             />
           </section>
@@ -537,13 +490,7 @@ export function OrientationPreview({
             </section>
           ) : null}
 
-          <div className={styles.sources}>
-            <ChatSources
-              messageId={context.messageId}
-              showDownloads={false}
-              sources={context.sources}
-            />
-          </div>
+          <OrientationReferences sources={context.sources} />
         </article>
       </div>
     </section>
