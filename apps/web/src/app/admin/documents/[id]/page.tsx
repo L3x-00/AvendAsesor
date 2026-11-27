@@ -31,7 +31,6 @@ import {
   issuingEntityLabel,
 } from "@/lib/admin-api/document-taxonomy";
 import {
-  formatDocumentSituation,
   getDocumentIngestionStatusContent,
   getDocumentTechnicalStatusContent,
 } from "@/lib/admin-api/labels";
@@ -252,26 +251,11 @@ export default async function DocumentDetailPage({
 
         <section
           aria-labelledby="document-summary"
-          className="grid gap-3 overflow-hidden rounded-xl border border-avend-border bg-avend-surface md:grid-cols-2 md:divide-x xl:grid-cols-4"
+          className="grid gap-3 overflow-hidden rounded-xl border border-avend-border bg-avend-surface md:grid-cols-2 md:divide-x xl:grid-cols-3"
         >
           <h2 className="sr-only" id="document-summary">
             Resumen del documento
           </h2>
-          <article className="flex items-center gap-3 p-4">
-            <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-full bg-emerald-100 p-1 text-emerald-700">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="7" />
-              </svg>
-            </span>
-            <div>
-              <h3 className="text-base font-semibold text-avend-text-muted">
-                Situación
-              </h3>
-              <p className="mt-1 text-lg font-bold text-avend-navy">
-                {formatDocumentSituation(document.situation)}
-              </p>
-            </div>
-          </article>
           <article className="flex items-center gap-3 p-4">
             <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-full bg-emerald-100 p-1 text-emerald-700">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" viewBox="0 0 24 24">
@@ -333,10 +317,12 @@ export default async function DocumentDetailPage({
           replacement={replacementDocument}
         />
 
-        <section
-          className="rounded-xl border border-avend-border bg-avend-surface p-5"
-          id="pdf-viewer"
-        >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+          <div className="space-y-4">
+            <section
+              className="rounded-xl border border-avend-border bg-avend-surface p-5"
+              id="pdf-viewer"
+            >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold">Vista del documento</h2>
@@ -365,7 +351,7 @@ export default async function DocumentDetailPage({
           </div>
           {viewerVersion && isPdfVersion(viewerVersion) ? (
             <iframe
-              className="mt-4 h-[20rem] w-full rounded-lg border border-avend-border bg-white md:h-[26rem]"
+              className="mt-4 h-[15rem] w-full rounded-lg border border-avend-border bg-white md:h-[18rem]"
               src={accessHref(document.id, "inline", viewerVersion.id)}
               title={`PDF de ${document.title}, versión ${viewerVersion.versionNumber}`}
             />
@@ -387,10 +373,8 @@ export default async function DocumentDetailPage({
               El registro no tiene una versión visualizable.
             </p>
           )}
-        </section>
+            </section>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
-          <div className="space-y-6">
             <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

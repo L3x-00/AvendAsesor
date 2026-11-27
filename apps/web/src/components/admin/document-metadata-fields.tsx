@@ -148,12 +148,14 @@ export function DocumentMetadataFields({
     return [...new Set([...canonical, ...suggestions.specificDependencies])];
   }, [entity, suggestions.specificDependencies]);
 
-  function notifySuggestedValue(name: string) {
-    queueMicrotask(() => {
-      containerRef.current?.querySelector<HTMLInputElement>(`input[name="${name}"]`)
-        ?.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  }
+  const dependencyOptions = useMemo(() => {
+    const values = [
+      ...dependencySuggestions,
+      specificDependency,
+      initial?.specificDependency ?? "",
+    ];
+    return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  }, [dependencySuggestions, initial?.specificDependency, specificDependency]);
 
   function resetControlledFields(event: Event) {
     if (event.defaultPrevented) return;
@@ -375,49 +377,21 @@ export function DocumentMetadataFields({
               ? "DRE/GRE específica"
               : "Dependencia específica"}
           </label>
-          <input
+          <select
             className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
             id={`${prefix}-dependency`}
-            list={`${prefix}-dependency-suggestions`}
-            maxLength={255}
             name="specificDependency"
             onChange={(event) => setSpecificDependency(event.target.value)}
-            placeholder={
-              entity === "UGEL"
-                ? "Selecciona o escribe la UGEL"
-                : entity === "DRE_GRE"
-                  ? "Ej. DRE Lima Metropolitana"
-                  : "Selecciona o escribe la dependencia"
-            }
             required={required}
             value={specificDependency}
-          />
-          <datalist id={`${prefix}-dependency-suggestions`}>
-            {dependencySuggestions.map((value) => (
-              <option key={value} value={value} />
+          >
+            <option disabled value="">Selecciona la dependencia</option>
+            {dependencyOptions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
             ))}
-          </datalist>
-          {dependencySuggestions.length > 0 ? (
-            <div
-              aria-label="Sugerencias de dependencia"
-              className="mt-2 flex flex-wrap gap-2"
-              role="group"
-            >
-              {dependencySuggestions.slice(0, 6).map((value) => (
-                <button
-                  className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
-                  key={value}
-                  onClick={() => {
-                    setSpecificDependency(value);
-                    notifySuggestedValue("specificDependency");
-                  }}
-                  type="button"
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          </select>
         </div>
       ) : null}
         </>
@@ -434,37 +408,11 @@ export function DocumentMetadataFields({
           <input
             className="mt-1 min-h-11 w-full rounded-md border border-avend-border px-3 text-base"
             id={`${prefix}-additional-detail`}
-            list={`${prefix}-additional-detail-suggestions`}
             maxLength={255}
             name="additionalDetail"
             onChange={(event) => setAdditionalDetail(event.target.value)}
             value={additionalDetail}
           />
-          <datalist id={`${prefix}-additional-detail-suggestions`}>
-            {suggestions.additionalDetails.map((value) => (
-              <option key={value} value={value} />
-            ))}
-          </datalist>
-          {suggestions.additionalDetails.length > 0 ? (
-            <div
-              aria-label="Sugerencias de detalle adicional"
-              className="mt-2 flex flex-wrap gap-2"
-            >
-              {suggestions.additionalDetails.slice(0, 6).map((value) => (
-                <button
-                  className="min-h-11 rounded-full border border-avend-border bg-avend-surface-muted px-3 text-sm font-semibold text-avend-navy"
-                  key={value}
-                  onClick={() => {
-                    setAdditionalDetail(value);
-                    notifySuggestedValue("additionalDetail");
-                  }}
-                  type="button"
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
       )}
 
