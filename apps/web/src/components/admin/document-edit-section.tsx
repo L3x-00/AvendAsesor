@@ -96,6 +96,7 @@ export function DocumentEditSection({
         onClose={close}
         open={open}
         panelId="document-edit-dialog"
+        showCloseFooter={false}
         title="Editar datos del documento"
       >
         {children}

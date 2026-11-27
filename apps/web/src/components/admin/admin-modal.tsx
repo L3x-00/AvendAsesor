@@ -37,6 +37,8 @@ interface AdminModalProps {
   panelId?: string;
   /** Id del control que lo abrió: recibe el foco al cerrar. */
   returnFocusTo?: string;
+  /** Oculta el pie con «Cerrar» cuando el diálogo ya tiene la X. */
+  showCloseFooter?: boolean;
   title: string;
 }
 
@@ -55,6 +57,7 @@ export function AdminModal({
   open,
   panelId,
   returnFocusTo,
+  showCloseFooter = true,
   title,
 }: AdminModalProps) {
   const baseId = useId();
@@ -167,15 +170,17 @@ export function AdminModal({
           </button>
         </div>
         <div className={styles.actionPanelBody}>{children}</div>
-        <div className={styles.actionPanelFooter}>
-          <button
-            className={styles.actionPanelClose}
-            onClick={onClose}
-            type="button"
-          >
-            {closeLabel}
-          </button>
-        </div>
+        {showCloseFooter ? (
+          <div className={styles.actionPanelFooter}>
+            <button
+              className={styles.actionPanelClose}
+              onClick={onClose}
+              type="button"
+            >
+              {closeLabel}
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>,
     document.body,
