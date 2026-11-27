@@ -108,28 +108,31 @@ describe("DocumentMetadataFields", () => {
     ).toBeRequired();
   });
 
-  it("resets dependency on entity change and prioritizes relevant quick values", async () => {
+  it("resets dependency on entity change and offers the dependency as a list", async () => {
     const user = userEvent.setup();
-    const { container } = renderFields();
+    renderFields();
 
     const dependency = screen.getByRole("combobox", {
       name: "Dependencia específica",
     });
     expect(dependency).toHaveValue("DIGEDD");
+    expect(within(dependency).getByRole("option", { name: "DIGEDD" })).toBeVisible();
+    expect(
+      screen.queryByRole("group", { name: "Sugerencias de dependencia" }),
+    ).toBeNull();
 
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Entidad emisora" }),
       "UGEL",
     );
     expect(dependency).toHaveValue("");
+    expect(within(dependency).getByRole("option", { name: "UGEL 05" })).toBeVisible();
 
-    const quickValues = [
-      ...container.querySelectorAll('button[type="button"]'),
-    ].map((button) => button.textContent);
-    expect(quickValues.slice(0, 3)).toEqual(["UGEL 01", "UGEL 02", "UGEL 03"]);
-
-    await user.click(screen.getByRole("button", { name: "UGEL 05" }));
+    await user.selectOptions(dependency, "UGEL 05");
     expect(dependency).toHaveValue("UGEL 05");
+    expect(
+      screen.queryByRole("group", { name: "Sugerencias de detalle adicional" }),
+    ).toBeNull();
   });
 
   it("captures an exact pre-2014 year and Cancel restores controlled values", async () => {
