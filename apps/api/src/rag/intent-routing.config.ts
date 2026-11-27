@@ -302,6 +302,9 @@ export const INTENT_EXPANSIONS = {
     'asignación por trabajo en ámbito rural padrón de instituciones educativas instrumento habilitante',
   AUXILIARY_REQUIREMENTS_PROCESS:
     'contratación auxiliares educación requisitos por nivel modalidad capacitación edad documentos expediente',
+  /** Requisitos generales para ser docente (Ley 29944 Art. 4 y 18), sin ID fijo. */
+  TEACHING_REQUIREMENTS_PROCESS:
+    'título de profesor licenciado en educación requisitos generales para postular Carrera Pública Magisterial formación inicial Ley 29944',
   DISCIPLINARY_PROCESS:
     'proceso administrativo disciplinario docente derecho de defensa descargos notificación',
   RATIONALIZATION_PROCESS:

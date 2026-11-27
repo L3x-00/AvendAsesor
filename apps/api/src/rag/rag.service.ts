@@ -109,6 +109,10 @@ import {
 } from './rationalization-retrieval';
 import { directorReplacementEvidenceQueries } from './director-replacement-retrieval';
 import {
+  isTeacherRequirementsQuestion,
+  teacherRequirementsEvidenceQueries,
+} from './teacher-requirements-retrieval';
+import {
   isDirectTeachingPositionEvidence,
   teachingPositionEvidenceQueries,
 } from './teaching-position-retrieval';
@@ -939,6 +943,10 @@ function contextualQuery(
  */
 export function isEllipticalFollowUp(question: string): boolean {
   const normalized = normalizeSpanishText(question);
+  // «Qué se requiere para ser docente?» no nombra un trámite del léxico, pero
+  // sí es una pregunta nueva con tema propio: no debe heredar el sueldo del
+  // turno anterior.
+  if (isTeacherRequirementsQuestion(question)) return false;
   return !hasTopicTerm(normalized) || refersBack(question);
 }
 
@@ -970,6 +978,9 @@ export function inheritedFactorQuestions(
   if (isCareerProgressionQuestion(question) && !profile.isSalaryQuestion) {
     return [];
   }
+  // Los requisitos generales para ser docente son un tema nuevo: no heredan
+  // jornada, vínculo ni escala de una consulta salarial anterior.
+  if (isTeacherRequirementsQuestion(question)) return [];
   if (!profile.isSalaryQuestion && SELF_CONTAINED_NON_SALARY.test(normalized)) {
     return [];
   }
@@ -2227,6 +2238,7 @@ export class RagService {
             ...temporaryPlacementQueries(question),
             ...rationalizationEvidenceQueries(question),
             ...directorReplacementEvidenceQueries(question),
+            ...teacherRequirementsEvidenceQueries(question),
             ...teachingPositionEvidenceQueries(salaryQuestion),
             ...legalEvidenceQueries(
               question,
@@ -2620,6 +2632,7 @@ export class RagService {
         ...reassignmentEvidenceQueries(question),
         ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
+        ...teacherRequirementsEvidenceQueries(question),
         ...teachingPositionEvidenceQueries(salaryQuestion),
         // El módulo legal necesita el mismo rescate que los otros temas: sin
         // él, un seguimiento ("¿qué autoridad impone destitución?") se queda
