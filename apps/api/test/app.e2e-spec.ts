@@ -91,6 +91,10 @@ describe('API endpoints (e2e)', () => {
       Promise<unknown>,
       [string, Record<string, unknown>, AuthorizationContext]
     >(),
+    exportUsers: jest.fn<
+      Promise<Buffer>,
+      [Record<string, unknown>, AuthorizationContext]
+    >(),
   };
   const administrationService = {
     getDashboard: jest.fn<Promise<unknown>, [AuthorizationContext]>(),
@@ -420,6 +424,35 @@ describe('API endpoints (e2e)', () => {
       { limit: 100, status: 'pending_review' },
       expect.objectContaining({ role: 'admin' }),
     );
+  });
+
+  it('/admin/users/export envía el xlsx como binario, no como JSON de Buffer', async () => {
+    resolveContext.mockResolvedValue({
+      email: 'superadmin@example.com',
+      emailConfirmedAt: '2026-08-09T00:00:00.000Z',
+      role: 'superadmin',
+      userId: '70a15a92-9899-4ee2-81e0-30d7c3f7677c',
+    });
+    const xlsx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x0a, 0x00]);
+    userAdministrationService.exportUsers.mockResolvedValue(xlsx);
+
+    const response = await request(app.getHttpServer())
+      .get('/admin/users/export')
+      .set('Authorization', 'Bearer superadmin-token')
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(response.headers['content-disposition']).toContain(
+      'usuarios-avend.xlsx',
+    );
+    // El body NO debe ser el JSON {"type":"Buffer","data":[...]} que producia
+    // Nest al devolver el Buffer directamente. Se lee como texto y se valida
+    // que empiece por "PK" (cabecera ZIP de un xlsx), nunca por "{".
+    const raw = response.text ?? String(response.body);
+    expect(raw.startsWith('{')).toBe(false);
+    expect(Buffer.from(raw, 'latin1').subarray(0, 2).toString()).toBe('PK');
   });
 
   it('/admin/users preserves the legacy list and exposes paginated SUPERADMIN results', async () => {

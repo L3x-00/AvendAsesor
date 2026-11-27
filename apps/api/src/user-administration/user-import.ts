@@ -137,7 +137,10 @@ export async function parseUserImportWorkbook(
   const workbook = new Workbook();
   await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
 
-  const sheet = workbook.worksheets[0];
+  // Los archivos exportados llevan una portada institucional en la primera
+  // hoja; la hoja de datos se identifica por nombre. Se mantiene el fallback a
+  // la primera hoja para aceptar plantillas antiguas sin portada.
+  const sheet = workbook.getWorksheet('Usuarios') ?? workbook.worksheets[0];
   if (!sheet) {
     return {
       errors: [

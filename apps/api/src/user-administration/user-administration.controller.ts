@@ -2,10 +2,10 @@ import {
   Body,
   Controller,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Post,
+  Res,
   UploadedFile,
   UseFilters,
   UseInterceptors,
@@ -16,6 +16,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   AuthorizationGuard,
@@ -93,16 +94,28 @@ export class UserAdministrationController {
   }
 
   @Get('export')
-  @Header(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  )
-  @Header('Content-Disposition', 'attachment; filename="usuarios-avend.xlsx"')
-  exportUsers(
+  async exportUsers(
     @Query() dto: ListAdministrativeUsersQueryDto,
     @CurrentAuthorization() authorization: AuthorizationContext,
-  ): Promise<Buffer> {
-    return this.userAdministrationService.exportUsers(dto, authorization);
+    @Res() response: Response,
+  ): Promise<void> {
+    // Nest serializa un Buffer devuelto directamente como
+    // {"type":"Buffer","data":[...]}; se envia por Express para que llegue el
+    // binario real y Excel abra el .xlsx.
+    const buffer = await this.userAdministrationService.exportUsers(
+      dto,
+      authorization,
+    );
+    response.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    response.setHeader(
+      'Content-Disposition',
+      'attachment; filename="usuarios-avend.xlsx"',
+    );
+    response.setHeader('Content-Length', String(buffer.length));
+    response.send(buffer);
   }
 
   @Get('counts')
