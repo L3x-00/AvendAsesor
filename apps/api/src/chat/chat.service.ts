@@ -37,6 +37,10 @@ import { formatSalaryBulletsAsTable } from '../rag/salary-table-format';
 import { buildExtractiveSalaryAnswer } from '../rag/salary-extractive-answer';
 import { buildTeachingHoursDecisionAnswer } from '../rag/teaching-hours-answer';
 import {
+  verifiedRemovalAnswer,
+  verifiedTeacherRequirementsAnswer,
+} from '../rag/verified-coverage-answer';
+import {
   reviewedAdministrativeAnswer,
   reviewedAdministrativeContext,
 } from '../rag/reviewed-administrative-evidence';
@@ -2398,6 +2402,54 @@ export class ChatService {
     const hoursDecisionAnswer = salaryProfileForTurn.isSalaryQuestion
       ? null
       : buildTeachingHoursDecisionAnswer(effectiveQuestion, scopedSources);
+
+    // Paso 3: respuestas extractivas para requisitos docentes y remoción del
+    // cargo. Solo se emiten si un fragmento verificado dice expresamente el
+    // contenido; se rechaza la encargatura, que no regula ninguno de los dos.
+    const coverageAnswer = salaryProfileForTurn.isSalaryQuestion
+      ? null
+      : (verifiedTeacherRequirementsAnswer(effectiveQuestion, scopedSources) ??
+        verifiedRemovalAnswer(effectiveQuestion, scopedSources));
+    if (coverageAnswer) {
+      if (input.abortSignal?.aborted) return;
+      const coverageCitations = toCitationBundle(
+        [...coverageAnswer.sources],
+        selectedModuleId,
+        relatedModule,
+        relatedSubmodule,
+        crossModuleAnswer || crossModulePersistence,
+      );
+      const finalAnswer = withSuggestion(coverageAnswer.answer);
+      const completed = await completeTurn({
+        answer: finalAnswer,
+        conversationId: turn.conversationId,
+        faqMemory,
+        detectedModuleId,
+        detectedSubmoduleId,
+        qualitySignals: [],
+        replyRole: 'assistant',
+        retrievalScope,
+        sources: coverageCitations.inputs,
+        topRelevanceScore: retrieval.topRelevanceScore,
+        unansweredReason: null,
+        userId: input.authorization.userId,
+        userMessageId: turn.userMessageId,
+      });
+      yield { data: { sources: coverageCitations.sources }, type: 'sources' };
+      yield { data: { text: finalAnswer }, type: 'token' };
+      yield {
+        data: {
+          conversationId: turn.conversationId,
+          inReplyToMessageId: turn.userMessageId,
+          messageId: completed.answerMessageId,
+          ...(suggestionModules.length ? { modules: suggestionModules } : {}),
+          provider: 'rule',
+        },
+        type: 'done',
+      };
+      return;
+    }
+
     if (hoursDecisionAnswer) {
       if (input.abortSignal?.aborted) return;
       const hoursCitations = toCitationBundle(
