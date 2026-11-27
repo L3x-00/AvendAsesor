@@ -179,10 +179,16 @@ export function isDisciplinaryQuestion(question: string): boolean {
 }
 
 function hasDisciplinarySignal(text: string): boolean {
+  // «Remover una plaza / alumnos» no es disciplinario: es racionalización o
+  // gestión de plazas. El mismo guard se aplica en hasTopicTerm.
+  const withoutPlaceRemoval = text.replace(
+    /\b(?:remov(?:er|ido|ida|idos|idas|ieron)|remuev(?:en|e))\s+(?:una?|la|el|las|los|esta|ese|al\s+)?\s*(?:plaza|alumno|estudiante|matricula)\b|\bremocion\s+de\s+(?:plazas?|alumnos?|estudiantes?|matricula)\b/gu,
+    ' ',
+  );
   return (
-    DISCIPLINARY_PROCESS_SIGNAL.test(text) ||
-    (DISCIPLINARY_SUBJECT_SIGNAL.test(text) &&
-      DISCIPLINARY_CONTEXT_SIGNAL.test(text))
+    DISCIPLINARY_PROCESS_SIGNAL.test(withoutPlaceRemoval) ||
+    (DISCIPLINARY_SUBJECT_SIGNAL.test(withoutPlaceRemoval) &&
+      DISCIPLINARY_CONTEXT_SIGNAL.test(withoutPlaceRemoval))
   );
 }
 

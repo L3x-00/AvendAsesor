@@ -196,9 +196,9 @@ export const INTENT_TRIGGERS = {
   DISCIPLINARY_PROCESS_SIGNAL:
     /\b(?:procedimiento\s+(?:administrativo\s+)?disciplinario|proceso\s+(?:administrativo\s+)?disciplinario|pad)\b/u,
   DISCIPLINARY_SUBJECT_SIGNAL:
-    /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?|destitu(?:i|y)\p{L}*|destitucion)\b/u,
+    /\b(?:sancion(?:es|ad[oa]s?)?|sancionar|defen[sd](?:a|er(?:se)?)|descargos?|destitu(?:i|y)\p{L}*|destitucion|remocion|remov(?:er|ido|ida|idos|idas))\b/u,
   DISCIPLINARY_CONTEXT_SIGNAL:
-    /\b(?:docent(?:e|es)?|profesor(?:a|es|as)?|derecho|notificaci[oó]n|procedimiento)\b/u,
+    /\b(?:docent(?:e|es)?|profesor(?:a|es|as)?|director(?:a|es|as)?|cargo|puesto|derecho|notificaci[oó]n|procedimiento)\b/u,
   WORKDAY_SIGNAL:
     /\b(?:jornada|horas?|carga\s+horaria|horas?\s+de\s+clase|pedagogic[ao]s?|complementarias?)\b/u,
   SCHOOL_LEVEL_SIGNAL: /\b(?:secundaria|inicial|primaria|eb[rae]|cetpro)\b/u,
@@ -268,7 +268,7 @@ export const INTENT_TRIGGERS = {
   LEGAL_RIGHTS_TRIGGER: /\bderechos?\b/u,
   LEGAL_DUTIES_TRIGGER: /\bdeberes?\b|\bobligaciones?\b/u,
   LEGAL_SANCTIONS_TRIGGER:
-    /\bsancion|\bdestitucion|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u,
+    /\bsancion|\bdestitucion|\bremocion|\bremov(?:er|ido|ida)|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u,
   LEGAL_LICENSES_TRIGGER: /\blicencia|\bpermiso/u,
   LEGAL_PERSONAL_LEAVE_TRIGGER: /motivos particulares/u,
   LEGAL_MODIFICATIONS_TRIGGER:

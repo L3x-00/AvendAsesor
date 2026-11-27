@@ -193,8 +193,19 @@ describe('enrutamiento declarativo de intenciones', () => {
       'renuev',
     );
     expect(INTENT_TRIGGERS.LEGAL_SANCTIONS_TRIGGER.source).toBe(
-      '\\bsancion|\\bdestitucion|\\bfalta|\\bdisciplin|\\bpierde\\b|\\bp[eé]rdida\\b|\\bnombramiento\\b',
+      '\\bsancion|\\bdestitucion|\\bremocion|\\bremov(?:er|ido|ida)|\\bfalta|\\bdisciplin|\\bpierde\\b|\\bp[eé]rdida\\b|\\bnombramiento\\b',
     );
+    // «Remoción/removido» activan la expansión legal de sanciones; «cese» y
+    // «destitución» ya lo hacían y no deben duplicarse.
+    expect(
+      INTENT_TRIGGERS.LEGAL_SANCTIONS_TRIGGER.test(
+        '¿cuándo un director es removido de su cargo?',
+      ),
+    ).toBe(true);
+    // El pipeline normaliza el texto antes de evaluar los triggers.
+    expect(
+      INTENT_TRIGGERS.LEGAL_SANCTIONS_TRIGGER.test('remocion de un docente'),
+    ).toBe(true);
     expect(
       INTENT_TRIGGERS.EVALUATION_MASTERS_TRIGGER.test('tengo maestría'),
     ).toBe(true);
