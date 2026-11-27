@@ -89,6 +89,12 @@ describe("OrientationPreview", () => {
       screen.getAllByText(/No constituye un acto administrativo/i),
     ).toHaveLength(2);
     expect(screen.getByText("Licencias por salud")).toBeVisible();
+    // La ficha se presenta como documento: no ofrece la lista de archivos del chat.
+    expect(
+      screen.queryByText("Documentos disponibles", {
+        selector: "summary span",
+      }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Volver a la conversación" }),
     ).toHaveAttribute("href", `/chat/${context.conversationId}`);

@@ -3,22 +3,30 @@
 import Image from "next/image";
 import { type ReactNode } from "react";
 import { documentTypeLabel } from "@/lib/admin-api/document-taxonomy";
+import { sourceDocumentKey } from "@/lib/chat-api/citations";
 import type { ChatSource } from "@/lib/chat-api/types";
 import styles from "./chat-sources.module.css";
+
+export {
+  CITATION_TOKEN,
+  citationRanks,
+  citedSourceRanks,
+  singleCitedSource,
+  sourceDocumentKey,
+} from "@/lib/chat-api/citations";
 
 interface ChatSourcesProps {
   /** Números [n] citados en el texto de la respuesta; si faltan, se listan todas. */
   citedRanks?: number[];
   /** Mensaje al que pertenecen: permite enlazar cada cita [n] con su fila. */
   messageId?: string;
+  /**
+   * Archivos disponibles para descargar. La ficha de orientación los oculta:
+   * se presenta como documento y allí la lista de archivos del chat distrae de
+   * la orientación y de sus referencias.
+   */
+  showDownloads?: boolean;
   sources: ChatSource[];
-}
-
-/** La versión identifica un documento real; sin ella, el historial es ambiguo. */
-function sourceDocumentKey(source: ChatSource): string {
-  return source.documentVersionId
-    ? `version:${source.documentVersionId}`
-    : `source:${source.id}`;
 }
 
 function uniqueDocuments(sources: ChatSource[]): ChatSource[] {
@@ -64,76 +72,6 @@ export function groupReferenceSources(
 /** Ancla estable de la fila n de las referencias de un mensaje. */
 export function sourceAnchorId(messageId: string, rank: number): string {
   return `fuente-${messageId}-${rank}`;
-}
-
-/**
- * Cita del modelo: [n], [[n]] o agrupada ([1, 2], [1-3], [1 y 2]). Con el
- * grupo de captura sirve para partir el texto conservando las citas.
- */
-export const CITATION_TOKEN =
-  /(\[\[?\s*\d+(?:\s*(?:[,;–-]|y)\s*\d+)*\s*\]\]?)/u;
-const CITATION_ONLY = new RegExp(`^${CITATION_TOKEN.source}$`, "u");
-const MAX_CITATION_RANGE = 20;
-
-/** Números de fuente de una cita («[1, 2]» → 1, 2; «[1-3]» → 1, 2, 3). */
-export function citationRanks(citation: string): number[] {
-  if (!CITATION_ONLY.test(citation)) return [];
-  const ranks: number[] = [];
-  const inner = citation.replace(/[[\]\s]/gu, "");
-  for (const part of inner.split(/[,;]|y/u)) {
-    const bounds = part.split(/[–-]/u).map(Number);
-    const [from, to] = bounds;
-    if (bounds.length === 1 && Number.isInteger(from)) {
-      ranks.push(from);
-      continue;
-    }
-    // Una fecha ([12-05-2024]) o un rango absurdo queda como texto literal.
-    if (bounds.length !== 2 || to < from || to - from > MAX_CITATION_RANGE) {
-      return [];
-    }
-    for (let rank = from; rank <= to; rank += 1) ranks.push(rank);
-  }
-  return ranks;
-}
-
-/** Números de fuente citados en el texto de una respuesta. */
-export function citedSourceRanks(content: string): number[] {
-  return [
-    ...new Set(
-      content
-        .split(CITATION_TOKEN)
-        .filter((_, index) => index % 2 === 1)
-        .flatMap(citationRanks),
-    ),
-  ];
-}
-
-/**
- * Fuente única de una respuesta. Si todas las citas del texto apuntan al mismo
- * documento, basta mostrarla una vez (bajo la tabla o al final) en lugar de
- * repetirla en cada párrafo, viñeta o fila. Devuelve la fuente de la primera
- * cita, la que enlaza con su fila en «Referencias». Con citas a documentos
- * distintos, o sin citas conocidas, devuelve `undefined` y cada cita se queda
- * donde la escribió el modelo.
- */
-export function singleCitedSource(
-  content: string,
-  sources: readonly ChatSource[],
-): ChatSource | undefined {
-  const ranks = citedSourceRanks(content);
-  const cited = ranks
-    .map((rank) => sources.find((source) => source.rank === rank))
-    .filter((source): source is ChatSource => source !== undefined);
-  if (cited.length !== ranks.length) return undefined;
-  const [first] = cited;
-  if (!first) return undefined;
-  // Misma identidad que `uniqueDocuments`: en historiales sin versión cada
-  // fuente cuenta como un documento distinto y no se agrupa.
-  return cited.every(
-    (source) => sourceDocumentKey(source) === sourceDocumentKey(first),
-  )
-    ? first
-    : undefined;
 }
 
 function pageRange(source: ChatSource): string {
@@ -638,6 +576,7 @@ export function ChatDownloads({ sources }: { sources: ChatSource[] }) {
 export function ChatSources({
   citedRanks,
   messageId,
+  showDownloads = true,
   sources,
 }: ChatSourcesProps) {
   const cited = citedRanks?.length
@@ -666,7 +605,7 @@ export function ChatSources({
         messageId={messageId}
         sources={primary}
       />
-      <ChatDownloads sources={sources} />
+      {showDownloads ? <ChatDownloads sources={sources} /> : null}
     </section>
   );
 }
