@@ -396,6 +396,22 @@ describe('isEllipticalFollowUp', () => {
     expect(isEllipticalFollowUp('¿Entonces qué requisitos?')).toBe(true);
   });
 
+  it('trata «¿y un docente?» como pregunta nueva, no como elipsis', () => {
+    // Tras hablar de un director, «¿y un docente?» cambia de rol: no debe
+    // heredar el tema anterior ni caer en la aclaración de módulos.
+    expect(isEllipticalFollowUp('¿y un docente?')).toBe(false);
+    expect(isEllipticalFollowUp('y un director')).toBe(false);
+    expect(isEllipticalFollowUp('¿y un auxiliar?')).toBe(false);
+    expect(isEllipticalFollowUp('¿y los docentes?')).toBe(false);
+    expect(isEllipticalFollowUp('¿y auxiliares?')).toBe(false);
+    expect(isEllipticalFollowUp('¿y las maestras?')).toBe(false);
+    expect(isEllipticalFollowUp('¿y un docente de aula?')).toBe(false);
+    expect(isEllipticalFollowUp('además un director')).toBe(false);
+    // Las elipsis reales siguen siéndolo.
+    expect(isEllipticalFollowUp('¿y el plazo?')).toBe(true);
+    expect(isEllipticalFollowUp('¿y para auxiliares?')).toBe(true);
+  });
+
   it('no hereda el sueldo en una pregunta nueva de requisitos docentes', () => {
     // Después de «¿cuánto gana un docente?», esta pregunta tiene tema propio:
     // conservar la elipsis hacía que el RAG recuperara Remuneraciones.

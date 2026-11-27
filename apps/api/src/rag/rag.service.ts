@@ -942,12 +942,22 @@ function contextualQuery(
  * con las consultas previas. Uno que nombra su propio tema sin remitir a lo
  * anterior ("¿y para una permuta?") se busca por sí mismo en la búsqueda global.
  */
+/**
+ * «¿Y un docente?», «¿y un director?» o «¿y un auxiliar?» introducen un ROL
+ * nuevo aunque no nombren un trámite: son una pregunta nueva, no una elipsis
+ * del turno anterior. «¿Y el plazo?» o «¿y para auxiliares?» sí son elipsis.
+ */
+const NEW_ROLE_FOLLOW_UP =
+  /^[¿?]?\s*(?:(?:y|e|o|pero|entonces|ademas|tambien)\s+)?(?:(?:un|una|los|las|el|la)\s+)?(?:docentes?|profesor(?:a|es|as)?|profes?|maestr[oa]s?|director(?:a|es|as)?|auxiliar(?:es)?(?: de educacion)?|subdirector(?:a|es|as)?)(?:\s+de\s+aula)?\s*[.?!¿?]*$/u;
+
 export function isEllipticalFollowUp(question: string): boolean {
   const normalized = normalizeSpanishText(question);
   // «Qué se requiere para ser docente?» no nombra un trámite del léxico, pero
   // sí es una pregunta nueva con tema propio: no debe heredar el sueldo del
   // turno anterior.
   if (isTeacherRequirementsQuestion(question)) return false;
+  // Un seguimiento que cambia de rol es una pregunta nueva.
+  if (NEW_ROLE_FOLLOW_UP.test(normalized)) return false;
   return !hasTopicTerm(normalized) || refersBack(question);
 }
 
