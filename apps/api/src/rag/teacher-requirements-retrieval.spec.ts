@@ -49,5 +49,10 @@ describe('requisitos para ser docente', () => {
     // otra fuente con el mismo contenido puede responder.
     expect(query).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/iu);
     expect(query).not.toContain('.pdf');
+    // Robustez: la expansión es vocabulario (incluye el nombre de la norma),
+    // pero no un identificador: sin id, versión, ruta de storage ni número de
+    // resolución. Si la norma cambia, otra con el mismo contenido responde.
+    expect(query).not.toMatch(/\b(?:version|storage|uuid|id)[_:\s-]/iu);
+    expect(query).not.toMatch(/\b\d{3,4}-\d{4}\b/u);
   });
 });

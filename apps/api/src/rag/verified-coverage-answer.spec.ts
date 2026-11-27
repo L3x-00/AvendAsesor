@@ -80,6 +80,48 @@ describe('respuesta verificada de requisitos docentes', () => {
   });
 });
 
+describe('robustez ante cambio de documento (paso 4)', () => {
+  it('responde igual si otra norma distinta trae el mismo contenido', () => {
+    const otraNorma = {
+      ...chunk(
+        'Artículo 4. Para ser docente se requiere título de profesor o licenciado en educación y cumplir los requisitos generales de postulación.',
+        'Norma de formación docente 2030',
+      ),
+      documentId: 'otro-documento-id',
+      documentVersionId: 'otra-version-id',
+      chunkId: 'otro-chunk-id',
+    };
+    const result = verifiedTeacherRequirementsAnswer(REQ_Q, [otraNorma]);
+    expect(result).not.toBeNull();
+    expect(result?.sources).toEqual([otraNorma]);
+    expect(result?.answer).toContain('título de profesor');
+  });
+
+  it('la remoción también responde desde otra fuente con el mismo contenido', () => {
+    const otraNorma = {
+      ...chunk(
+        'Las sanciones son suspensión en el cargo, cese temporal y destitución del servicio, previo proceso administrativo disciplinario.',
+        'Reglamento disciplinario 2031',
+      ),
+      documentId: 'otro-documento-id-2',
+      documentVersionId: 'otra-version-id-2',
+      chunkId: 'otro-chunk-id-2',
+    };
+    const result = verifiedRemovalAnswer(REM_Q, [otraNorma]);
+    expect(result).not.toBeNull();
+    expect(result?.sources).toEqual([otraNorma]);
+  });
+
+  it('si la fuente preferida desaparece y no hay otra válida, no inventa', () => {
+    const soloAjena = chunk(
+      'La encargatura exige impedimentos y requisitos para postular.',
+      'Anexo 6 de la RVM 098-2025',
+    );
+    expect(verifiedTeacherRequirementsAnswer(REQ_Q, [soloAjena])).toBeNull();
+    expect(verifiedRemovalAnswer(REM_Q, [soloAjena])).toBeNull();
+  });
+});
+
 describe('respuesta verificada de remoción del cargo', () => {
   const sanciones = chunk(
     'Las sanciones son: a) Amonestación escrita. b) Suspensión en el cargo hasta por treinta (30) días sin goce de remuneraciones. c) Cese temporal en el cargo desde treinta y un (31) días hasta doce (12) meses. d) Destitución del servicio. Las sanciones de cese temporal y destitución se aplican previo proceso administrativo disciplinario.',
