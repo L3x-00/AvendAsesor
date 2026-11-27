@@ -112,6 +112,7 @@ import {
   isTeacherRequirementsQuestion,
   teacherRequirementsEvidenceQueries,
 } from './teacher-requirements-retrieval';
+import { removalEvidenceQueries } from './removal-retrieval';
 import {
   isDirectTeachingPositionEvidence,
   teachingPositionEvidenceQueries,
@@ -2239,6 +2240,7 @@ export class RagService {
             ...rationalizationEvidenceQueries(question),
             ...directorReplacementEvidenceQueries(question),
             ...teacherRequirementsEvidenceQueries(question),
+            ...removalEvidenceQueries(question),
             ...teachingPositionEvidenceQueries(salaryQuestion),
             ...legalEvidenceQueries(
               question,
@@ -2633,6 +2635,7 @@ export class RagService {
         ...temporaryPlacementQueries(question),
         ...rationalizationEvidenceQueries(question),
         ...teacherRequirementsEvidenceQueries(question),
+        ...removalEvidenceQueries(question),
         ...teachingPositionEvidenceQueries(salaryQuestion),
         // El módulo legal necesita el mismo rescate que los otros temas: sin
         // él, un seguimiento ("¿qué autoridad impone destitución?") se queda
