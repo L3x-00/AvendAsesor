@@ -73,6 +73,10 @@ describe('buildUserDirectoryWorkbook', () => {
     expect(cellText('C17')).toContain('de 3');
     expect(cellText('C18')).toContain('limitada');
     expect(workbook.creator).toBe('AVEND ASESOR');
+    // Al abrir se muestra la hoja con los datos, no solo la portada.
+    expect(workbook.views[0]?.activeTab).toBe(
+      workbook.worksheets.indexOf(workbook.getWorksheet('Usuarios')!),
+    );
   });
 
   it('aplica estilo de cabecera y filtro sin romper la fila 1', async () => {
