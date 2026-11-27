@@ -30,8 +30,10 @@ async function rosterWith(endDay: string): Promise<Buffer> {
 async function read(buffer: Buffer) {
   const workbook = new Workbook();
   await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  const sheet = workbook.worksheets[0];
+  const sheet = workbook.getWorksheet('Usuarios');
+  if (!sheet) throw new Error('Falta la hoja Usuarios');
   return {
+    workbook,
     headers: (sheet.getRow(1).values as unknown[]).slice(1).map(String),
     rowAt: (index: number) =>
       (sheet.getRow(index).values as unknown[]).slice(1).map(String),
@@ -40,6 +42,50 @@ async function read(buffer: Buffer) {
 }
 
 describe('buildUserDirectoryWorkbook', () => {
+  it('genera un xlsx binario válido (no un JSON de Buffer)', async () => {
+    const buffer = await buildUserDirectoryWorkbook([user]);
+
+    // Un xlsx es un ZIP: debe empezar por "PK" (0x50 0x4b), nunca por "{".
+    expect(buffer.subarray(0, 2).toString()).toBe('PK');
+    expect(buffer[0]).toBe(0x50);
+    expect(buffer[1]).toBe(0x4b);
+    expect(
+      buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06])),
+    ).toBeGreaterThan(0);
+  });
+
+  it('incluye portada institucional con logo y metadatos', async () => {
+    const buffer = await buildUserDirectoryWorkbook([user], 3);
+    const { workbook } = await read(buffer);
+
+    const cover = workbook.getWorksheet('Portada');
+    expect(cover).toBeDefined();
+    const cellText = (ref: string) =>
+      typeof cover?.getCell(ref).value === 'string'
+        ? (cover.getCell(ref).value as string)
+        : '';
+    expect(cellText('B10')).toContain('AVEND ASESOR');
+    expect(cellText('B11')).toContain('Directorio de usuarios');
+    // El logo se incrusta en el libro: el ZIP resultante debe contener el
+    // directorio de imágenes de Excel (xl/media/).
+    const zipText = buffer.toString('latin1');
+    expect(zipText).toContain('xl/media/');
+    expect(cellText('C17')).toContain('de 3');
+    expect(cellText('C18')).toContain('limitada');
+    expect(workbook.creator).toBe('AVEND ASESOR');
+  });
+
+  it('aplica estilo de cabecera y filtro sin romper la fila 1', async () => {
+    const { workbook } = await read(await buildUserDirectoryWorkbook([user]));
+    const sheet = workbook.getWorksheet('Usuarios');
+
+    expect(sheet?.getRow(1).font?.bold).toBe(true);
+    expect(sheet?.getRow(1).fill).toMatchObject({ type: 'pattern' });
+    expect(sheet?.getRow(1).height).toBeGreaterThan(0);
+    expect(sheet?.views[0]?.state).toBe('frozen');
+    expect(sheet?.getRow(1).getCell(1).value).toBe('Nombre y apellidos');
+  });
+
   it('exports every column the specification lists', async () => {
     const sheet = await read(await buildUserDirectoryWorkbook([user]));
 
@@ -69,6 +115,20 @@ describe('buildUserDirectoryWorkbook', () => {
     expect(row[4]).toBe('01/01/2027');
     expect(row[5]).toBe('31/12/2027');
     expect(row[8]).toBe('Superadministrador Demo');
+  });
+
+  it('el archivo exportado con portada se puede reimportar', async () => {
+    // Ida y vuelta con el buffer REAL (incluye la portada), no con una
+    // plantilla artificial: el importador debe encontrar la hoja "Usuarios".
+    const exported = await buildUserDirectoryWorkbook([user]);
+    const parsed = await parseUserImportWorkbook(
+      exported,
+      Date.parse('2026-09-05T12:00:00.000Z'),
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0].email).toBe('ana@example.test');
   });
 
   it('writes days the importer can read back', async () => {
