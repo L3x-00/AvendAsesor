@@ -285,23 +285,21 @@ export async function buildUserDirectoryWorkbook(
   };
 
   addCoverSheet(workbook, exportedAt, users.length, total);
-  // La portada se crea al final; se activa para que Excel la muestre primero
-  // al abrir. El importador ya no depende del orden: busca "Usuarios" por
-  // nombre (user-import.ts), así que el ciclo exportar -> importar sigue intacto.
-  const cover = workbook.getWorksheet('Portada');
-  if (cover) {
-    workbook.views = [
-      {
-        activeTab: workbook.worksheets.indexOf(cover),
-        firstSheet: 0,
-        visibility: 'visible',
-        x: 0,
-        y: 0,
-        width: 16_000,
-        height: 9_000,
-      },
-    ];
-  }
+  // Se abre directamente en "Usuarios" (índice 0) para que la persona vea los
+  // datos al abrir; la portada queda como segunda pestaña con el logo y el
+  // diseño institucional. El importador busca la hoja por nombre, así que el
+  // ciclo exportar -> importar no depende de este orden.
+  workbook.views = [
+    {
+      activeTab: 0,
+      firstSheet: 0,
+      visibility: 'visible',
+      x: 0,
+      y: 0,
+      width: 16_000,
+      height: 9_000,
+    },
+  ];
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
