@@ -85,9 +85,10 @@ describe("OrientationPreview", () => {
       `#fuente-${context.messageId}-1`,
     );
     expect(screen.getByDisplayValue("María Pérez")).toBeVisible();
+    // El alcance se declara una sola vez, dentro del documento que se descarga.
     expect(
       screen.getAllByText(/No constituye un acto administrativo/i),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(screen.getByText("Licencias por salud")).toBeVisible();
     // La ficha se presenta como documento: no ofrece la lista de archivos del chat.
     expect(
