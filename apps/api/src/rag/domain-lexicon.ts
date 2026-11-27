@@ -23,7 +23,7 @@ const TOPIC_PATTERNS: readonly RegExp[] = [
   // Remuneraciones y beneficios
   /\b(remuneracion(?:es)?|sueldos?|salarios?|haberes|pagos?|pagar(?:me|nos)?|pagan|paguen|cobrar|cobro|cuanto (?:gana|ganan|gano|ganaria)|bonificacion(?:es)?|bonos?|cts|pension(?:es)?|jubilacion|jubilar(?:me|se)?|jubilo|cesantia|descuentos?|descontar(?:on|me)?|descuentan|aguinaldo|gratificacion(?:es)?|escolaridad|asignacion(?:es)?|sepelio)\b/u,
   // Régimen disciplinario, conflictos y término del vínculo
-  /\b(ces(?:e|a|an|ar|aron|en|o)|renuncia(?:r)?|sancion\p{L}*|amonestacion|suspension|destitu(?:cion(?:es)?|i|y)\p{L}*|expuls(?:a|an|aron|ar|ad[oa]s?|e|en|o|ion(?:es)?)|desped(?:ir|ido|e|en|o)|despid(?:a|an|as|e|en|o|os|io|ieron)|(?:bot|sac|separ)(?:ar|aron|an|o|a)\s+(?:de|del)\s+(?:cargo|puesto|trabajo)|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
+  /\b(ces(?:e|a|an|ar|aron|en|o)|remocion|remov(?:er|ido|ida|idos|idas|ieron)|remuev(?:en|e)|renuncia(?:r)?|sancion\p{L}*|amonestacion|suspension|destitu(?:cion(?:es)?|i|y)\p{L}*|expuls(?:a|an|aron|ar|ad[oa]s?|e|en|o|ion(?:es)?)|desped(?:ir|ido|e|en|o)|despid(?:a|an|as|e|en|o|os|io|ieron)|(?:bot|sac|separ)(?:ar|aron|an|o|a)\s+(?:de|del)\s+(?:cargo|puesto|trabajo)|disciplinari[oa]s?|proceso administrativo|pad|descargos?|apelacion|apelar|recursos? de|reclamos?|quejas?|denuncia(?:r|ron|do)?|hostigamiento|acoso|maltrato|abandono de (?:cargo|puesto)|evaluacion(?:es)?|desempeno)\b/u,
   // Calendario escolar: no son consultas salariales ni de licencias
   /\b(ano escolar|ano academico|calendario escolar|periodo escolar|inicio del ano escolar|fin del ano escolar|culminacion del ano escolar|inicio de clases|primer dia de clases|fin de clases|semana de gestion|vacaciones escolares|matricula escolar|clausura del ano escolar|clases?)\b/u,
 ];
@@ -51,8 +51,21 @@ function matchesAny(patterns: readonly RegExp[], normalized: string): boolean {
   return patterns.some((pattern) => pattern.test(normalized));
 }
 
+/**
+ * «Remover/remoción» solo nombra un tema disciplinario cuando el objeto es una
+ * persona o un cargo. «Remover una plaza» es racionalización, no PAD; se
+ * descarta aquí para no enrutar mal ese caso.
+ */
+const REMOVAL_OF_PLACE_OR_STUDENT =
+  /\b(?:remov(?:er|ido|ida|idos|idas|ieron)|remuev(?:en|e))\s+(?:una?|la|el|las|los|esta|ese|al\s+)?\s*(?:plaza|alumno|estudiante|matricula)\b|\bremocion\s+de\s+(?:plazas?|alumnos?|estudiantes?|matricula)\b/u;
+
 /** Nombra un proceso o situación concreta (la consulta tiene tema propio). */
 export function hasTopicTerm(normalized: string): boolean {
+  if (REMOVAL_OF_PLACE_OR_STUDENT.test(normalized)) {
+    // Puede haber otro término de tema válido en la frase; se evalúa el resto.
+    const withoutRemoval = normalized.replace(REMOVAL_OF_PLACE_OR_STUDENT, ' ');
+    return matchesAny(TOPIC_PATTERNS, withoutRemoval);
+  }
   return matchesAny(TOPIC_PATTERNS, normalized);
 }
 

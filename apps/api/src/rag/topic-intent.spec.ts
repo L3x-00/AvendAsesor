@@ -11,6 +11,19 @@ import { temporaryPlacementQueries } from './temporary-placement-retrieval';
  * salarial, una licencia genérica, una permuta o una pregunta de jornada).
  */
 describe('detectTopicIntent', () => {
+  it('no enruta a disciplinario una remoción de plaza ni de alumnos', () => {
+    expect(
+      detectTopicIntent('¿Se puede remover una plaza de docente?')?.id,
+    ).not.toBe('disciplinary');
+    expect(detectTopicIntent('¿remoción de alumnos?')?.id).not.toBe(
+      'disciplinary',
+    );
+    // Sí enruta a disciplinario la remoción de una persona del cargo.
+    expect(
+      detectTopicIntent('¿Cuándo un director es removido de su cargo?')?.id,
+    ).toBe('disciplinary');
+  });
+
   it('no confunde cambio de horario familiar con reasignación', () => {
     expect(
       detectTopicIntent(
@@ -349,6 +362,44 @@ describe('detectTopicIntent', () => {
       expect(temporaryPlacementQueries(question)).toEqual([]);
     },
   );
+
+  it('reconoce la remoción del cargo como tema propio, no como seguimiento', () => {
+    // «Removido/remoción» son palabras que la persona usa y que antes no
+    // disparaban ningún término del léxico (a diferencia de cese/destitución).
+    expect(
+      hasTopicTerm(
+        normalizeSpanishText('¿Cuándo un director es removido de su cargo?'),
+      ),
+    ).toBe(true);
+    expect(
+      hasTopicTerm(normalizeSpanishText('¿cuál es la remoción de un docente?')),
+    ).toBe(true);
+    expect(hasTopicTerm(normalizeSpanishText('fue removido del cargo'))).toBe(
+      true,
+    );
+    expect(hasTopicTerm(normalizeSpanishText('¿removieron al director?'))).toBe(
+      true,
+    );
+    expect(hasTopicTerm(normalizeSpanishText('¿remueven al docente?'))).toBe(
+      true,
+    );
+    // Falso positivo: remover una plaza es racionalización, no disciplinario.
+    expect(
+      hasTopicTerm(
+        normalizeSpanishText('¿Se puede remover una plaza de docente?'),
+      ),
+    ).toBe(false);
+    expect(hasTopicTerm(normalizeSpanishText('¿remoción de alumnos?'))).toBe(
+      false,
+    );
+    // «Cese» y «destitución» ya eran TOPIC: no se duplica la señal.
+    expect(hasTopicTerm(normalizeSpanishText('cese temporal del cargo'))).toBe(
+      true,
+    );
+    expect(
+      hasTopicTerm(normalizeSpanishText('destitución de un docente')),
+    ).toBe(true);
+  });
 
   it('reconoce la expulsión del cargo como tema propio, no como seguimiento', () => {
     // Antes del arreglo, «cuándo es expulsado un docente» no nombraba ningún

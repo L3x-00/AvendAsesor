@@ -153,7 +153,7 @@ export function isCoreLegalEvidence(
     return /\bdeberes de los profesores\b|\bdeberes del profesor\b/u.test(text);
   }
   if (
-    /\bsancion|\bdestitucion|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u.test(
+    /\bsancion|\bdestitucion|\bremocion|\bremov(?:er|ido|ida|ieron)|remuev(?:en|e)|\bfalta|\bdisciplin|\bpierde\b|\bp[eé]rdida\b|\bnombramiento\b/u.test(
       asked,
     )
   ) {
@@ -164,7 +164,7 @@ export function isCoreLegalEvidence(
         /proceso administrativo disciplinario|29988|hostigamiento sexual/u.test(
           title,
         )) &&
-      /\bdestitucion\b|\bsancion(?:es)?\b|\bproceso administrativo disciplinario\b/u.test(
+      /\bdestitucion\b|\bremocion\b|\bremov(?:ido|ida|ieron)\b|\bsancion(?:es)?\b|\bproceso administrativo disciplinario\b/u.test(
         text,
       )
     );
