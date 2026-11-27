@@ -100,6 +100,29 @@ describe('AuthForm', () => {
     expect(window.localStorage.getItem('avend-remembered-email')).toBeNull();
   });
 
+  it('permite mostrar y ocultar la contraseña sin perder el valor', async () => {
+    const user = userEvent.setup();
+    render(
+      <AuthForm
+        action={vi.fn()}
+        description="Descripción"
+        fields={signInFields}
+        submitLabel="Iniciar sesión"
+        title="Bienvenido"
+      />,
+    );
+    const password = screen.getByLabelText('Contraseña');
+    expect(password).toHaveAttribute('type', 'password');
+    await user.type(password, 'Secreta123');
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar contraseña' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(password).toHaveValue('Secreta123');
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar contraseña' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
   it('shows a calm notice above the form when one is provided', () => {
     render(
       <AuthForm

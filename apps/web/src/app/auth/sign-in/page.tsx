@@ -33,12 +33,14 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
           autoComplete: 'email',
           label: 'Correo electrónico',
           name: 'email',
+          placeholder: 'Ingresa tu correo electrónico',
           type: 'email',
         },
         {
           autoComplete: 'current-password',
           label: 'Contraseña',
           name: 'password',
+          placeholder: 'Ingresa tu contraseña',
           type: 'password',
         },
       ]}

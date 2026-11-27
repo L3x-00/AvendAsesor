@@ -104,35 +104,38 @@ body {
 /* Hito 1: acceso y estados de autenticación. */
 .avend-auth-page {
   align-items: center;
-  background: var(--avend-surface-muted);
+  background: linear-gradient(140deg, #eef6ff 0%, #d8eaff 55%, #eaf4ff 100%);
   display: flex;
   justify-content: center;
   min-height: 100dvh;
-  padding: 1rem;
+  padding: clamp(0.75rem, 2vw, 2rem);
 }
 
 .avend-auth-layout {
   background: var(--avend-surface);
-  border: 1px solid var(--avend-border);
-  border-radius: 1.25rem;
-  box-shadow: 0 12px 32px rgb(13 27 61 / 8%);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 1.5rem;
+  box-shadow: 0 24px 60px rgb(13 27 61 / 14%);
   display: grid;
-  max-width: 70rem;
+  max-width: 72rem;
   overflow: hidden;
   width: 100%;
 }
 
 .avend-auth-aside {
-  background: var(--avend-navy);
+  background:
+    radial-gradient(120% 80% at 10% 105%, rgb(42 121 236 / 85%) 0%, transparent 60%),
+    radial-gradient(90% 60% at 100% 0%, rgb(37 100 205 / 55%) 0%, transparent 55%),
+    linear-gradient(155deg, #0a2a63 0%, #0d3f90 100%);
   color: var(--avend-surface);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1.5rem;
+  gap: 1.5rem;
+  padding: 2rem;
 }
 
 .avend-auth-logo {
-  max-width: 4.75rem;
+  max-width: 7rem;
 }
 
 .avend-auth-aside-copy h2,
@@ -147,15 +150,19 @@ body {
 
 .avend-auth-aside-copy h2 {
   color: var(--avend-surface);
-  font-size: 1.2rem;
+  font-size: clamp(1.6rem, 2.4vw, 2rem);
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 1.25rem 0 0;
+  max-width: 22rem;
 }
 
-.avend-auth-aside-copy p,
-.avend-auth-principles {
-  color: rgb(255 255 255 / 82%);
+.avend-auth-aside-copy p {
+  color: rgb(255 255 255 / 85%);
   font-size: 1rem;
   line-height: 1.6;
   margin: 0.75rem 0 0;
+  max-width: 24rem;
 }
 
 .avend-auth-aside-copy p,
@@ -164,66 +171,171 @@ body {
 }
 
 .avend-auth-principles {
-  border-top: 1px solid rgb(255 255 255 / 22%);
+  display: none;
+  flex-direction: column;
+  gap: 1rem;
   list-style: none;
   margin: auto 0 0;
-  padding: 1.25rem 0 0;
+  padding: 1.5rem 0 0;
 }
 
 .avend-auth-principles li {
-  padding: 0.5rem 0 0.5rem 1.25rem;
-  position: relative;
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0;
 }
 
-.avend-auth-principles li::before {
-  background: var(--avend-accent);
-  border-radius: 50%;
-  content: "";
-  height: 0.45rem;
-  left: 0;
-  position: absolute;
-  top: 1rem;
-  width: 0.45rem;
+.avend-auth-feature-icon {
+  align-items: center;
+  background: rgb(255 255 255 / 16%);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 0.7rem;
+  display: inline-flex;
+  flex: none;
+  height: 2.75rem;
+  justify-content: center;
+  width: 2.75rem;
+}
+
+.avend-auth-feature-icon svg {
+  fill: none;
+  height: 1.4rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 1.4rem;
+}
+
+.avend-auth-feature-copy strong {
+  color: #fff;
+  display: block;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.avend-auth-feature-copy > span {
+  color: rgb(255 255 255 / 78%);
+  display: block;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-top: 0.15rem;
 }
 
 .avend-auth-content {
   align-items: center;
   display: flex;
   min-width: 0;
-  padding: 1.5rem;
+  padding: 1.75rem;
 }
 
 .avend-auth-card {
   margin: 0 auto;
-  max-width: 29rem;
-  padding: 1.25rem 0.25rem;
+  max-width: 28rem;
+  padding: 0.25rem 0;
   width: 100%;
 }
 
 .avend-auth-heading {
-  max-width: 36rem;
+  max-width: 30rem;
 }
 
 .avend-eyebrow {
-  color: var(--avend-navy);
+  color: var(--avend-accent-strong);
   font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   margin: 0 0 0.625rem;
   text-transform: uppercase;
+}
+
+.avend-auth-heading h1 {
+  font-size: clamp(1.9rem, 2.6vw, 2.25rem);
 }
 
 .avend-auth-heading > p:not(.avend-eyebrow) {
   color: var(--avend-text-muted);
   font-size: 1rem;
   line-height: 1.6;
-  margin: 1rem 0 0;
+  margin: 0.6rem 0 0;
 }
 
 .avend-auth-form {
   display: grid;
-  gap: 1.125rem;
-  margin-top: 2rem;
+  gap: 1.15rem;
+  margin-top: 1.75rem;
+}
+
+.avend-auth-input-wrap {
+  position: relative;
+}
+
+.avend-auth-input-icon {
+  align-items: center;
+  color: #7b8ba5;
+  display: inline-flex;
+  height: 1.25rem;
+  left: 0.9rem;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.25rem;
+}
+
+.avend-auth-input-icon svg {
+  fill: none;
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 100%;
+}
+
+.avend-auth-content .avend-auth-input-wrap .avend-field {
+  padding-left: 2.8rem;
+}
+
+.avend-auth-content .avend-auth-input-wrap .avend-auth-has-toggle {
+  padding-right: 3rem;
+}
+
+.avend-auth-password-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.4rem;
+  color: #7b8ba5;
+  cursor: pointer;
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.75rem;
+}
+
+.avend-auth-password-toggle:hover {
+  color: var(--avend-accent-strong);
+}
+
+.avend-auth-password-toggle:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 1px;
+}
+
+.avend-auth-password-toggle svg {
+  fill: none;
+  height: 1.3rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 1.3rem;
 }
 
 .avend-field-label {
@@ -553,11 +665,13 @@ textarea[aria-invalid="true"]:focus,
    contraseña" y "Crear una cuenta" caían siempre en renglones distintos. El
    `wrap` deja que se partan solo si de verdad no caben. */
 .avend-auth-links {
+  border-top: 1px solid var(--avend-border);
   column-gap: 1.5rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
+  padding-top: 1rem;
   row-gap: 0.25rem;
 }
 
@@ -2248,26 +2362,25 @@ textarea[aria-invalid="true"]:focus,
   }
 
   .avend-auth-layout {
-    grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.15fr);
-    min-height: 38rem;
+    grid-template-columns: minmax(19rem, 0.85fr) minmax(0, 1.15fr);
+    min-height: 40rem;
   }
 
   .avend-auth-aside {
-    gap: 2rem;
+    gap: 1.75rem;
     padding: 2.5rem;
   }
 
   .avend-auth-logo {
-    max-width: 8.75rem;
+    max-width: 8.5rem;
   }
 
-  .avend-auth-aside-copy h2 {
-    font-size: 1.35rem;
-  }
-
-  .avend-auth-aside-copy p,
-  .avend-auth-principles {
+  .avend-auth-aside-copy p {
     display: block;
+  }
+
+  .avend-auth-principles {
+    display: flex;
   }
 
   .avend-auth-content {
