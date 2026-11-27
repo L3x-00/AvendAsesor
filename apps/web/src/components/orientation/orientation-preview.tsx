@@ -346,128 +346,126 @@ export function OrientationPreview({
         <p className="avend-eyebrow">Documento orientativo</p>
         <h1 id="orientation-title">Ficha de orientación AVEND</h1>
         <p>
-          Revisa la orientación, añade los datos de presentación que necesites y
-          descarga la ficha lista para presentar.
+          Revisa la orientación y completa únicamente los datos de presentación
+          que desees incluir antes de descargar.
         </p>
       </header>
+
+      <aside className={styles.disclaimer} role="note">
+        <strong>Alcance del documento:</strong> {ORIENTATION_DISCLAIMER}
+      </aside>
 
       <div className={styles.layout}>
         <ValidatedForm
           aria-busy={downloading !== null}
-          className={`${styles.panel} avend-form-surface`}
+          className={`${styles.form} avend-form-surface`}
           onValidSubmit={(formData) => void download(formData)}
           rules={PRESENTATION_RULES}
         >
-          <div className={styles.panelHeader}>
-            <h2>Datos de presentación</h2>
+          <div>
+            <h2>Datos opcionales</h2>
             <p>
-              Todos son opcionales. No modifican la consulta, la respuesta ni
-              sus fuentes: esos datos se recuperan de la conversación
-              autenticada.
+              No se modifica la consulta, la respuesta ni sus fuentes. Esos
+              datos se recuperan de la conversación autenticada.
             </p>
           </div>
 
-          <div className={styles.fields}>
-            <label htmlFor="orientation-teacher-name">
-              Nombre del docente
-              <input
-                autoComplete="name"
-                id="orientation-teacher-name"
-                maxLength={ORIENTATION_FIELD_LIMITS.teacherName}
-                name="teacherName"
-                onChange={(event) => setTeacherName(event.target.value)}
-                placeholder="Ejemplo: María Pérez"
-                value={teacherName}
-              />
-            </label>
+          <label htmlFor="orientation-teacher-name">
+            Nombre del docente
+            <input
+              autoComplete="name"
+              id="orientation-teacher-name"
+              maxLength={ORIENTATION_FIELD_LIMITS.teacherName}
+              name="teacherName"
+              onChange={(event) => setTeacherName(event.target.value)}
+              placeholder="Ejemplo: María Pérez"
+              value={teacherName}
+            />
+          </label>
 
-            <label htmlFor="orientation-institution">
-              Institución educativa
-              <input
-                autoComplete="organization"
-                id="orientation-institution"
-                maxLength={ORIENTATION_FIELD_LIMITS.institution}
-                name="institution"
-                onChange={(event) => setInstitution(event.target.value)}
-                placeholder="Nombre de la institución"
-                value={institution}
-              />
-            </label>
+          <label htmlFor="orientation-institution">
+            Institución educativa
+            <input
+              autoComplete="organization"
+              id="orientation-institution"
+              maxLength={ORIENTATION_FIELD_LIMITS.institution}
+              name="institution"
+              onChange={(event) => setInstitution(event.target.value)}
+              placeholder="Nombre de la institución"
+              value={institution}
+            />
+          </label>
 
-            <label htmlFor="orientation-case-title">
-              Título del caso
-              <input
-                id="orientation-case-title"
-                maxLength={ORIENTATION_FIELD_LIMITS.caseTitle}
-                name="caseTitle"
-                onChange={(event) => setCaseTitle(event.target.value)}
-                placeholder="Ficha de orientación AVEND"
-                value={caseTitle}
-              />
-            </label>
+          <label htmlFor="orientation-case-title">
+            Título del caso
+            <input
+              id="orientation-case-title"
+              maxLength={ORIENTATION_FIELD_LIMITS.caseTitle}
+              name="caseTitle"
+              onChange={(event) => setCaseTitle(event.target.value)}
+              placeholder="Ficha de orientación AVEND"
+              value={caseTitle}
+            />
+          </label>
 
-            <label htmlFor="orientation-case-notes">
-              Notas del caso
-              <textarea
-                aria-describedby="orientation-notes-help"
-                id="orientation-case-notes"
-                maxLength={ORIENTATION_FIELD_LIMITS.caseNotes}
-                name="caseNotes"
-                onChange={(event) => setCaseNotes(event.target.value)}
-                placeholder="Añade solo información necesaria para presentar la ficha."
-                rows={6}
-                value={caseNotes}
-              />
-            </label>
-            <p className={styles.help} id="orientation-notes-help">
-              Evita incluir datos personales sensibles que no sean necesarios.
-            </p>
+          <label htmlFor="orientation-case-notes">
+            Notas del caso
+            <textarea
+              aria-describedby="orientation-notes-help"
+              id="orientation-case-notes"
+              maxLength={ORIENTATION_FIELD_LIMITS.caseNotes}
+              name="caseNotes"
+              onChange={(event) => setCaseNotes(event.target.value)}
+              placeholder="Añade solo información necesaria para presentar la ficha."
+              rows={6}
+              value={caseNotes}
+            />
+          </label>
+          <p className={styles.help} id="orientation-notes-help">
+            Evita incluir datos personales sensibles que no sean necesarios.
+          </p>
+
+          <div className={styles.actions}>
+            <button
+              className="avend-button avend-button--primary"
+              disabled={downloading !== null}
+              name="format"
+              type="submit"
+              value="docx"
+            >
+              {downloading === "docx" ? "Preparando DOCX…" : "Descargar DOCX"}
+            </button>
+            <button
+              className="avend-button avend-button--secondary"
+              disabled={downloading !== null}
+              name="format"
+              type="submit"
+              value="pdf"
+            >
+              {downloading === "pdf" ? "Preparando PDF…" : "Descargar PDF"}
+            </button>
           </div>
 
-          <div className={styles.download}>
-            <p className={styles.downloadLabel}>Descargar la ficha</p>
-            <div className={styles.actions}>
-              <button
-                className="avend-button avend-button--primary"
-                disabled={downloading !== null}
-                name="format"
-                type="submit"
-                value="docx"
+          <div className={styles.feedback}>
+            {feedback ? (
+              <p
+                className={`avend-feedback avend-feedback--${feedback.kind}`}
+                role={feedback.kind === "error" ? "alert" : "status"}
               >
-                {downloading === "docx" ? "Preparando DOCX…" : "Descargar DOCX"}
-              </button>
-              <button
-                className="avend-button avend-button--secondary"
-                disabled={downloading !== null}
-                name="format"
-                type="submit"
-                value="pdf"
-              >
-                {downloading === "pdf" ? "Preparando PDF…" : "Descargar PDF"}
-              </button>
-            </div>
-
-            <div aria-live="polite" className={styles.feedback}>
-              {feedback ? (
-                <p
-                  className={`avend-feedback avend-feedback--${feedback.kind}`}
-                  role={feedback.kind === "error" ? "alert" : "status"}
-                >
-                  {feedback.kind === "success" ? (
-                    <svg
-                      aria-hidden="true"
-                      className={styles.feedbackIcon}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="m8 12.5 2.5 2.5L16 9.5" />
-                    </svg>
-                  ) : null}
-                  {feedback.message}
-                </p>
-              ) : null}
-            </div>
+                {feedback.kind === "success" ? (
+                  <svg
+                    aria-hidden="true"
+                    className={styles.feedbackIcon}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8 12.5 2.5 2.5L16 9.5" />
+                  </svg>
+                ) : null}
+                {feedback.message}
+              </p>
+            ) : null}
           </div>
 
           <Link
@@ -480,16 +478,12 @@ export function OrientationPreview({
 
         <article
           aria-label="Vista previa de la ficha"
-          className={styles.document}
+          className={styles.preview}
         >
-          <div className={styles.masthead}>
-            <span className={styles.brand}>AVEND ASESOR</span>
-            <span className={styles.documentKind}>Ficha de orientación</span>
-          </div>
-
-          <h2 className={styles.documentTitle}>
-            {previewTitle || "Ficha de orientación AVEND"}
-          </h2>
+          <div className={styles.previewBrand}>AVEND ASESOR</div>
+          <p className={styles.previewType}>Ficha de orientación AVEND</p>
+          <h2>{previewTitle || "Ficha de orientación AVEND"}</h2>
+          <p className={styles.previewDisclaimer}>{ORIENTATION_DISCLAIMER}</p>
 
           <dl className={styles.identity}>
             {previewTeacherName ? (
@@ -510,15 +504,11 @@ export function OrientationPreview({
             </div>
           </dl>
 
-          <p className={styles.notice}>
-            <strong>Alcance del documento:</strong> {ORIENTATION_DISCLAIMER}
-          </p>
-
-          <section className={styles.section}>
+          <section className={styles.previewSection}>
             <h3>Consulta</h3>
-            <p className={styles.question}>{context.question}</p>
+            <p>{context.question}</p>
           </section>
-          <section className={styles.section}>
+          <section className={styles.previewSection}>
             <h3>Orientación recibida</h3>
             <OrientationAnswer
               answer={context.answer}
@@ -527,19 +517,17 @@ export function OrientationPreview({
             />
           </section>
           {previewNotes ? (
-            <section className={styles.section}>
+            <section className={styles.previewSection}>
               <h3>Notas del caso</h3>
-              <p className={styles.notes}>{previewNotes}</p>
+              <p>{previewNotes}</p>
             </section>
           ) : null}
 
-          <div className={styles.sources}>
-            <ChatSources
-              messageId={context.messageId}
-              showDownloads={false}
-              sources={context.sources}
-            />
-          </div>
+          <ChatSources
+            messageId={context.messageId}
+            showDownloads={false}
+            sources={context.sources}
+          />
         </article>
       </div>
     </section>
