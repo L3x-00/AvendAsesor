@@ -85,6 +85,31 @@ describe('búsqueda de comparaciones salariales', () => {
 describe('inheritedFactorQuestions', () => {
   const salary = '¿Cuánto gana un docente de 30 horas?';
 
+  it('sí hereda la jornada en una aclaración salarial con «necesito»', () => {
+    // El guard de requisitos docentes es específico: no debe ensanchar
+    // SELF_CONTAINED_NON_SALARY y romper aclaraciones como esta.
+    expect(
+      inheritedFactorQuestions('¿y si necesito 30 horas?', [salary], false),
+    ).toEqual([salary]);
+  });
+
+  it('no hereda la jornada de una consulta salarial en requisitos docentes', () => {
+    expect(
+      inheritedFactorQuestions(
+        '¿Qué se requiere para ser docente?',
+        [salary],
+        false,
+      ),
+    ).toEqual([]);
+    expect(
+      inheritedFactorQuestions(
+        'no entiendo, ¿qué requisitos para ser docente educativo?',
+        [salary],
+        false,
+      ),
+    ).toEqual([]);
+  });
+
   it('preserves the salary subject when the next turn only replaces the employment regime and scale', () => {
     const contracted = 'cuanto gana un profesor contratado';
     expect(
@@ -369,6 +394,19 @@ describe('isEllipticalFollowUp', () => {
   it('sigue tratando como elipsis una pregunta que depende del turno previo', () => {
     expect(isEllipticalFollowUp('¿Y el plazo?')).toBe(true);
     expect(isEllipticalFollowUp('¿Entonces qué requisitos?')).toBe(true);
+  });
+
+  it('no hereda el sueldo en una pregunta nueva de requisitos docentes', () => {
+    // Después de «¿cuánto gana un docente?», esta pregunta tiene tema propio:
+    // conservar la elipsis hacía que el RAG recuperara Remuneraciones.
+    expect(isEllipticalFollowUp('¿Qué se requiere para ser docente?')).toBe(
+      false,
+    );
+    expect(
+      isEllipticalFollowUp(
+        'no entiendo, lo que quiero saber es qué requisitos se necesita para ser docente educativo',
+      ),
+    ).toBe(false);
   });
 
   it('reconoce un tema propio aunque no use un verbo de trámite', () => {
