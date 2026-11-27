@@ -2,6 +2,7 @@
 
 import { type ReactNode, useId, useState } from "react";
 import { AdminModal } from "./admin-modal";
+import styles from "./document-detail-actions.module.css";
 
 interface DocumentHistoryDialogProps {
   children: ReactNode;
@@ -28,11 +29,17 @@ export function DocumentHistoryDialog({
         aria-controls={panelId}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="avend-button"
+        className={styles.tabButton}
         id={triggerId}
         onClick={() => setOpen(true)}
         type="button"
       >
+        <span aria-hidden="true" className={styles.tabIcon}>
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M12 7.5V12l3 2" />
+          </svg>
+        </span>
         Ver historial
       </button>
       <AdminModal

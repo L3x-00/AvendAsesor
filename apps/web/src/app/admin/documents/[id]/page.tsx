@@ -12,7 +12,10 @@ import { DeleteDisclosure } from "@/components/admin/delete-disclosure";
 import { DocumentAuditHistory } from "@/components/admin/document-audit-history";
 import { DocumentEditButton } from "@/components/admin/document-edit-button";
 import { DocumentEditCancelButton } from "@/components/admin/document-edit-cancel-button";
-import { DocumentEditSection } from "@/components/admin/document-edit-section";
+import {
+  DocumentEditDataButton,
+  DocumentEditSection,
+} from "@/components/admin/document-edit-section";
 import { DocumentHistoryDialog } from "@/components/admin/document-history-dialog";
 import { DocumentIngestionRecovery } from "@/components/admin/document-ingestion-recovery";
 import { DocumentMetadataFields } from "@/components/admin/document-metadata-fields";
@@ -70,6 +73,15 @@ function isPdfVersion(version: ManagedDocumentVersion): boolean {
   return version.originalFileName.toLocaleLowerCase("en").endsWith(".pdf");
 }
 
+function editableMetadata(metadata: Record<string, unknown>): string {
+  const editable = { ...metadata };
+  delete editable.additionalDetail;
+  delete editable.documentTypeOther;
+  delete editable.issuingEntityOther;
+  delete editable.specificDependency;
+  return Object.keys(editable).length ? JSON.stringify(editable) : "";
+}
+
 function technicalStatus(
   document: ManagedDocumentDetails,
   version: ManagedDocumentVersion | undefined,
@@ -93,15 +105,6 @@ function modulePath(
     ? modules.find((candidate) => candidate.id === module.parentModuleId)
     : undefined;
   return parent ? `${parent.name} › ${module.name}` : module.name;
-}
-
-function editableMetadata(metadata: Record<string, unknown>): string {
-  const editable = { ...metadata };
-  delete editable.additionalDetail;
-  delete editable.documentTypeOther;
-  delete editable.issuingEntityOther;
-  delete editable.specificDependency;
-  return Object.keys(editable).length ? JSON.stringify(editable, null, 2) : "";
 }
 
 export default async function DocumentDetailPage({
@@ -238,7 +241,7 @@ export default async function DocumentDetailPage({
           </ol>
         </nav>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-6 border-b border-avend-border">
           <DocumentEditButton />
           <HistoryModal
             document={document}
@@ -249,50 +252,79 @@ export default async function DocumentDetailPage({
 
         <section
           aria-labelledby="document-summary"
-          className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+          className="grid gap-3 overflow-hidden rounded-xl border border-avend-border bg-avend-surface md:grid-cols-2 md:divide-x xl:grid-cols-4"
         >
           <h2 className="sr-only" id="document-summary">
             Resumen del documento
           </h2>
-          <article className="rounded-xl border border-avend-border bg-avend-surface p-4">
-            <h3 className="text-base font-semibold text-avend-text-muted">
-              Situación
-            </h3>
-            <p className="mt-2 text-lg font-bold text-avend-navy">
-              {formatDocumentSituation(document.situation)}
-            </p>
+          <article className="flex items-center gap-3 p-4">
+            <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-full bg-emerald-100 p-1 text-emerald-700">
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="7" />
+              </svg>
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-avend-text-muted">
+                Situación
+              </h3>
+              <p className="mt-1 text-lg font-bold text-avend-navy">
+                {formatDocumentSituation(document.situation)}
+              </p>
+            </div>
           </article>
-          <article className="rounded-xl border border-avend-border bg-avend-surface p-4">
-            <h3 className="text-base font-semibold text-avend-text-muted">
-              Estado técnico
-            </h3>
-            <p className={`mt-2 text-lg font-bold ${statusColorClass}`}>
-              {technicalContent.label}
-            </p>
-            <p className="mt-1 text-base text-avend-text-muted">
-              {technicalContent.description}
-            </p>
+          <article className="flex items-center gap-3 p-4">
+            <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-full bg-emerald-100 p-1 text-emerald-700">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" viewBox="0 0 24 24">
+                <path d="m5 12.5 4.5 4.5L19 7" />
+              </svg>
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-avend-text-muted">
+                Estado técnico
+              </h3>
+              <p className={`mt-1 text-lg font-bold ${statusColorClass}`}>
+                {technicalContent.label}
+              </p>
+              <p className="mt-0.5 text-base text-avend-text-muted">
+                {technicalContent.description}
+              </p>
+            </div>
           </article>
 
-          <article className="rounded-xl border border-avend-border bg-avend-surface p-4">
-            <h3 className="text-base font-semibold text-avend-text-muted">
-              Versión para consultas
-            </h3>
-            <p className="mt-2 text-lg font-bold text-avend-navy">
-              {approvedVersion
-                ? `v${approvedVersion.versionNumber}`
-                : status === "error"
-                  ? "Sin versión aprobada"
-                  : "Pendiente de aprobación"}
-            </p>
+          <article className="flex items-center gap-3 p-4">
+            <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                <path d="M12 4 4 8l8 4 8-4zM4 12l8 4 8-4M4 16l8 4 8-4" />
+              </svg>
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-avend-text-muted">
+                Versión para consultas
+              </h3>
+              <p className="mt-1 text-lg font-bold text-avend-navy">
+                {approvedVersion
+                  ? `v${approvedVersion.versionNumber}`
+                  : status === "error"
+                    ? "Sin versión aprobada"
+                    : "Pendiente de aprobación"}
+              </p>
+            </div>
           </article>
-          <article className="rounded-xl border border-avend-border bg-avend-surface p-4">
-            <h3 className="text-base font-semibold text-avend-text-muted">
-              Responsable
-            </h3>
-            <p className="mt-2 text-base font-bold text-avend-navy">
-              {document.createdByName ?? "Cuenta no disponible"}
-            </p>
+          <article className="flex items-center gap-3 p-4">
+            <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                <circle cx="12" cy="8" r="3.5" />
+                <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-avend-text-muted">
+                Responsable
+              </h3>
+              <p className="mt-1 text-base font-bold text-avend-navy">
+                {document.createdByName ?? "Cuenta no disponible"}
+              </p>
+            </div>
           </article>
         </section>
 
@@ -333,7 +365,7 @@ export default async function DocumentDetailPage({
           </div>
           {viewerVersion && isPdfVersion(viewerVersion) ? (
             <iframe
-              className="mt-4 h-[50vh] min-h-[24rem] w-full rounded-lg border border-avend-border bg-white md:h-[70vh] md:min-h-[32rem]"
+              className="mt-4 h-[20rem] w-full rounded-lg border border-avend-border bg-white md:h-[26rem]"
               src={accessHref(document.id, "inline", viewerVersion.id)}
               title={`PDF de ${document.title}, versión ${viewerVersion.versionNumber}`}
             />
@@ -360,19 +392,27 @@ export default async function DocumentDetailPage({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
           <div className="space-y-6">
             <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
-              <h2 className="text-xl font-bold">Datos documentales</h2>
-              <dl className="mt-4 grid gap-4 text-base sm:grid-cols-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
+                  <h2 className="text-xl font-bold">Datos documentales</h2>
+                  <p className="mt-1 text-base text-avend-text-muted">
+                    Información principal y clasificación del documento.
+                  </p>
+                </div>
+                <DocumentEditDataButton />
+              </div>
+              <dl className="mt-4 grid gap-3 text-base sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Título
                   </dt>
                   <dd>{document.title}</dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">Año</dt>
                   <dd>{document.issuanceYear ?? "No registrado"}</dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Tipo documental
                   </dt>
@@ -382,7 +422,7 @@ export default async function DocumentDetailPage({
                       : documentTypeLabel(document.documentType)}
                   </dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Entidad
                   </dt>
@@ -394,25 +434,25 @@ export default async function DocumentDetailPage({
                         : "No registrada"}
                   </dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Dependencia específica
                   </dt>
                   <dd>{document.specificDependency ?? "No registrada"}</dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Detalle / Área / Oficina
                   </dt>
                   <dd>{document.additionalDetail ?? "No registrado"}</dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Número
                   </dt>
                   <dd>{document.resolutionNumber ?? "No registrado"}</dd>
                 </div>
-                <div>
+                <div className="rounded-lg border border-avend-border bg-avend-surface-muted p-3">
                   <dt className="font-semibold text-avend-text-muted">
                     Referencia
                   </dt>
@@ -420,7 +460,7 @@ export default async function DocumentDetailPage({
                 </div>
               </dl>
 
-              <DocumentEditSection id="edit-document">
+              <DocumentEditSection id="edit-document" showTrigger={false}>
                 <AdminActionForm
                   action={updateDocumentAction}
                   className="grid gap-3 sm:grid-cols-2"
@@ -430,11 +470,17 @@ export default async function DocumentDetailPage({
                       { kind: "minLength", label: "El título", min: 2 },
                       { kind: "maxLength", label: "El título", max: 500 },
                     ],
-                    metadata: [{ kind: "jsonObject", label: "Los metadatos" }],
                   }}
                   submitLabel="Guardar cambios"
                 >
                   <input name="documentId" type="hidden" value={document.id} />
+                  {/* El campo JSON no se muestra, pero se reenvía el metadata
+                      vigente para no borrar palabras clave ni otras claves. */}
+                  <input
+                    name="metadata"
+                    type="hidden"
+                    value={editableMetadata(document.metadata)}
+                  />
                   <label className="block sm:col-span-2" htmlFor="detail-title">
                     <span className="text-base font-semibold avend-field-label--required">
                       Título
@@ -485,31 +531,30 @@ export default async function DocumentDetailPage({
                       name="articleReference"
                     />
                   </label>
-                  <label
-                    className="block sm:col-span-2"
-                    htmlFor="detail-metadata"
-                  >
-                    <span className="text-base font-semibold">
-                      Palabras clave JSON (opcional)
-                    </span>
-                    <textarea
-                      className="mt-1 min-h-24 w-full rounded-md border border-avend-border px-3 py-2 font-mono text-base"
-                      defaultValue={editableMetadata(document.metadata)}
-                      id="detail-metadata"
-                      name="metadata"
-                    />
-                  </label>
                   <DocumentEditCancelButton />
                 </AdminActionForm>
               </DocumentEditSection>
             </section>
           </div>
 
-          <div className="space-y-6">
-            <section className="divide-y divide-avend-border rounded-xl border border-avend-border bg-avend-surface">
-              <div className="p-5">
-                <h2 className="text-xl font-bold">Estado técnico</h2>
-                {status === "error" ? (
+          <div className="space-y-4">
+            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 2-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.8v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2-2 .1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H4v-2.8h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-2 .1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h2.8v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2 2-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v2.8h-.2a1.7 1.7 0 0 0-1.5 1Z" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold">Estado técnico</h2>
+                  <p className="mt-1 text-base text-avend-text-muted">
+                    Define el estado de procesamiento del documento.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
+              {status === "error" ? (
                   <DocumentIngestionRecovery
                     canRetry={currentVersion?.ingestionStatus === "failed"}
                     cause={currentVersion?.ingestionFailureCause}
@@ -524,15 +569,24 @@ export default async function DocumentDetailPage({
                   />
                 )}
               </div>
+            </section>
 
-              <div className="p-5" id="document-lifecycle">
-                <h2 className="text-xl font-bold">Gestión documental</h2>
-                <p className="mt-1 text-base text-avend-text-muted">
-                  Cambia la vigencia o archiva el documento. Al archivar o
-                  reemplazar, el documento deja de alimentar las respuestas del
-                  chat y se conserva como antecedente histórico. El motivo y la
-                  observación quedarán registrados en su historial.
-                </p>
+            <section className="rounded-xl border border-avend-border bg-avend-surface p-5" id="document-lifecycle">
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path d="M4 7.5h16v12H4zM8 7.5V5h8v2.5M4 12h16" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold">Gestión documental</h2>
+                  <p className="mt-1 text-base text-avend-text-muted">
+                    Cambia la vigencia o archiva el documento. Se conserva el
+                    historial con el motivo de cada cambio.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
                 <DocumentSituationActions
                   documentId={document.id}
                   embedded
@@ -540,13 +594,24 @@ export default async function DocumentDetailPage({
                   situation={document.situation}
                 />
               </div>
+            </section>
 
-              <div className="p-5" id="new-version">
-                <h2 className="text-xl font-bold">Nueva versión</h2>
-                <p className="mt-1 text-base text-avend-text-muted">
-                  La versión anterior permanecerá intacta y disponible en el
-                  historial.
-                </p>
+            <section className="rounded-xl border border-avend-border bg-avend-surface p-5" id="new-version">
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path d="M12 4 4 8l8 4 8-4zM4 12l8 4 8-4M4 16l8 4 8-4" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold">Nueva versión</h2>
+                  <p className="mt-1 text-base text-avend-text-muted">
+                    Sube una nueva versión del documento. La anterior se conserva
+                    en el historial.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
                 <DocumentPdfUploadForm
                   apiBaseUrl={getAdminApiUrl()}
                   className="mt-4 space-y-3"
@@ -607,10 +672,25 @@ export default async function DocumentDetailPage({
                   </label>
                 </DocumentPdfUploadForm>
               </div>
+            </section>
 
-              <div className="p-5">
-                <h2 className="text-xl font-bold">Módulos y submódulos</h2>
-                {associatedModules.length ? (
+            <section className="rounded-xl border border-avend-border bg-avend-surface p-5">
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="flex flex-none items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600">
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1-1" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold">Módulos y submódulos</h2>
+                  <p className="mt-1 text-base text-avend-text-muted">
+                    Gestiona la asociación del documento con un módulo y
+                    submódulo.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
+              {associatedModules.length ? (
                   <ul className="mt-3 space-y-2">
                     {associatedModules.map((module) => (
                       <li

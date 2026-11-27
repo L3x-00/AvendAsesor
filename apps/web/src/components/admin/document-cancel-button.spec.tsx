@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { CLOSE_DOCUMENT_EDIT_EVENT } from "./document-edit-section";
 import { DocumentEditCancelButton } from "./document-edit-cancel-button";
 
 describe("DocumentEditCancelButton", () => {
@@ -11,37 +13,15 @@ describe("DocumentEditCancelButton", () => {
     expect(button).toHaveAttribute("type", "button");
   });
 
-  it("closes the edit-document details when clicked", () => {
-    const details = document.createElement("details");
-    details.id = "edit-document";
-    details.open = true;
-    document.body.appendChild(details);
-
-    render(<DocumentEditCancelButton />);
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-
-    expect(details.open).toBe(false);
-
-    document.body.removeChild(details);
-  });
-
-  it("prevents the default action on click", () => {
+  it("pide cerrar el diálogo de edición al hacer clic", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    window.addEventListener(CLOSE_DOCUMENT_EDIT_EVENT, onClose);
     render(<DocumentEditCancelButton />);
 
-    const button = screen.getByRole("button", { name: "Cancelar" });
-    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
-    const preventDefaultSpy = vi.spyOn(event, "preventDefault");
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
 
-    button.dispatchEvent(event);
-
-    expect(preventDefaultSpy).toHaveBeenCalled();
-  });
-
-  it("does nothing when the edit-document details is not present", () => {
-    render(<DocumentEditCancelButton />);
-
-    expect(() =>
-      fireEvent.click(screen.getByRole("button", { name: "Cancelar" })),
-    ).not.toThrow();
+    window.removeEventListener(CLOSE_DOCUMENT_EDIT_EVENT, onClose);
   });
 });

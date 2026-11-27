@@ -1,0 +1,78 @@
+/* Acciones de la ficha de un documento: pestañas de navegación y botón que
+   abre el formulario de edición en un diálogo, sin alargar la página. */
+
+.tabButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #5a6c83;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
+}
+
+.tabButton:hover {
+  color: var(--avend-accent-strong);
+}
+
+.tabButton:focus-visible {
+  border-radius: 0.35rem;
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
+
+.tabActive {
+  border-bottom-color: var(--avend-accent);
+  color: var(--avend-accent-strong);
+}
+
+.tabIcon {
+  display: inline-flex;
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.tabIcon svg {
+  fill: none;
+  height: 100%;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 100%;
+}
+
+.editDataButton {
+  align-items: center;
+  background: var(--avend-surface);
+  border: 1px solid #cdd6e4;
+  border-radius: 0.55rem;
+  color: var(--avend-navy);
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.editDataButton:hover {
+  background: #f4f8ff;
+  border-color: #bcd5f2;
+}
+
+.editDataButton:focus-visible {
+  outline: 3px solid var(--avend-focus);
+  outline-offset: 2px;
+}
