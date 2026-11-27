@@ -1,16 +1,16 @@
 "use client";
 
-export function DocumentEditCancelButton() {
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    const editDetails = document.getElementById("edit-document") as HTMLDetailsElement | null;
-    if (editDetails) {
-      editDetails.open = false;
-    }
-  };
+import { CLOSE_DOCUMENT_EDIT_EVENT } from "./document-edit-section";
 
+export function DocumentEditCancelButton() {
   return (
-    <button className="avend-button" onClick={handleClick} type="button">
+    <button
+      className="avend-button"
+      onClick={() =>
+        window.dispatchEvent(new Event(CLOSE_DOCUMENT_EDIT_EVENT))
+      }
+      type="button"
+    >
       Cancelar
     </button>
   );
