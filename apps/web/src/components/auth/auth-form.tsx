@@ -1,10 +1,17 @@
 'use client';
 
-import { useActionState, useEffect, useRef } from 'react';
+import {
+  useActionState,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { useFormStatus } from 'react-dom';
-import { FormField } from '@/components/ui/form-field';
 import { useToast } from '@/components/ui/toast';
 import { ValidatedForm } from '@/components/ui/validated-form';
+
 import {
   initialAuthActionState,
   type AuthActionState,
@@ -22,6 +29,7 @@ export interface AuthField {
   autoComplete: string;
   label: string;
   name: AuthFieldName;
+  placeholder?: string;
   type: 'email' | 'password' | 'text';
 }
 
@@ -41,6 +49,104 @@ interface AuthFormProps {
   rememberOption?: boolean;
   submitLabel: string;
   title: string;
+  variant?: 'sign-in' | 'sign-up';
+}
+
+function FieldIcon({ name }: { name: AuthFieldName }) {
+  if (name === 'email') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <rect height="14" rx="2" width="18" x="3" y="5" />
+        <path d="m3.5 6.5 8.5 6 8.5-6" />
+      </svg>
+    );
+  }
+  if (name === 'fullName') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+      </svg>
+    );
+  }
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <rect height="10" rx="2" width="14" x="5" y="10.5" />
+      <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" />
+    </svg>
+  );
+}
+
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {hidden ? <path d="M4 20 20 4" /> : null}
+    </svg>
+  );
+}
+
+function AuthFieldRow({
+  emailInputRef,
+  field,
+  onToggle,
+  passwordInputRef,
+  visible,
+}: {
+  emailInputRef: RefObject<HTMLInputElement | null>;
+  field: AuthField;
+  onToggle: () => void;
+  passwordInputRef: RefObject<HTMLInputElement | null>;
+  visible: boolean;
+}) {
+  const id = useId();
+  const isPassword = field.type === 'password';
+
+  return (
+    <div className="avend-form-field">
+      <label
+        className="avend-field-label avend-field-label--required"
+        htmlFor={id}
+      >
+        {field.label}
+      </label>
+      <div className="avend-auth-input-wrap">
+        <span aria-hidden="true" className="avend-auth-input-icon">
+          <FieldIcon name={field.name} />
+        </span>
+        <input
+          autoComplete={field.autoComplete}
+          className={`avend-field${isPassword ? ' avend-auth-has-toggle' : ''}`}
+          id={id}
+          name={field.name}
+          placeholder={field.placeholder}
+          style={{
+            paddingLeft: '2.8rem',
+            ...(isPassword ? { paddingRight: '3rem' } : {}),
+          }}
+          ref={
+            field.name === 'email'
+              ? emailInputRef
+              : field.name === 'password'
+                ? passwordInputRef
+                : undefined
+          }
+          type={visible ? 'text' : field.type}
+        />
+        {isPassword ? (
+          <button
+            aria-label={`${visible ? 'Ocultar' : 'Mostrar'} contraseña`}
+            className="avend-auth-password-toggle"
+            onClick={onToggle}
+            type="button"
+          >
+            <EyeIcon hidden={visible} />
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -169,7 +275,9 @@ export function AuthForm({
   rememberOption = false,
   submitLabel,
   title,
+  variant = 'sign-in',
 }: AuthFormProps) {
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [state, formAction] = useActionState(action, initialAuthActionState);
   const { showToast } = useToast();
   const announced = useRef<AuthActionState | null>(null);
@@ -205,7 +313,7 @@ export function AuthForm({
   }, [showToast, state]);
 
   return (
-    <AuthLayout>
+    <AuthLayout variant={variant}>
       <section aria-labelledby="auth-title">
         <header className="avend-auth-heading">
           <p className="avend-eyebrow">Acceso seguro</p>
@@ -239,21 +347,19 @@ export function AuthForm({
           submissionState={state}
         >
           {fields.map((field) => (
-            <FormField key={field.name} label={field.label} name={field.name} required>
-              <input
-                autoComplete={field.autoComplete}
-                className="avend-field"
-                name={field.name}
-                ref={
-                  field.name === 'email'
-                    ? emailInputRef
-                    : field.name === 'password'
-                      ? passwordInputRef
-                      : undefined
-                }
-                type={field.type}
-              />
-            </FormField>
+            <AuthFieldRow
+              emailInputRef={emailInputRef}
+              field={field}
+              key={field.name}
+              onToggle={() =>
+                setVisiblePasswords((current) => ({
+                  ...current,
+                  [field.name]: current[field.name] !== true,
+                }))
+              }
+              passwordInputRef={passwordInputRef}
+              visible={visiblePasswords[field.name] === true}
+            />
           ))}
 
           {rememberOption ? <RememberMe /> : null}

@@ -11,30 +11,35 @@ export default function SignUpPage() {
           autoComplete: 'name',
           label: 'Nombre completo',
           name: 'fullName',
+          placeholder: 'Ingresa tu nombre completo',
           type: 'text',
         },
         {
           autoComplete: 'email',
           label: 'Correo electrónico',
           name: 'email',
+          placeholder: 'Ingresa tu correo electrónico',
           type: 'email',
         },
         {
           autoComplete: 'new-password',
           label: 'Contraseña',
           name: 'password',
+          placeholder: 'Crea una contraseña',
           type: 'password',
         },
         {
           autoComplete: 'new-password',
           label: 'Confirmar contraseña',
           name: 'passwordConfirmation',
+          placeholder: 'Repite tu contraseña',
           type: 'password',
         },
       ]}
       links={[{ href: '/auth/sign-in', label: 'Ya tengo una cuenta' }]}
       submitLabel="Crear cuenta"
       title="Crea tu cuenta"
+      variant="sign-up"
     />
   );
 }
