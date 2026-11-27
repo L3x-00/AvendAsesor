@@ -198,6 +198,41 @@ describe("ChatSources", () => {
     ).toHaveTextContent("Ver documento");
   }, 15_000);
 
+  it("oculta los archivos descargables cuando la ficha no los necesita", () => {
+    render(
+      <ChatSources
+        messageId="m-ficha"
+        showDownloads={false}
+        sources={[
+          {
+            articleReference: null,
+            documentSituation: "current",
+            documentTitle: "Ley 32498 remuneraciones",
+            id: "9c8b56af-6d0c-4fef-881e-7c00907540dd",
+            moduleName: null,
+            numeralReference: null,
+            pageEnd: 2,
+            pageStart: 2,
+            rank: 1,
+            relevanceScore: 0.9,
+            sectionTitle: null,
+            versionNumber: 2,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Referencias" })).toBeVisible();
+    expect(
+      screen.queryByText("Documentos disponibles", {
+        selector: "summary span",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^Descargar Ley 32498/u }),
+    ).not.toBeInTheDocument();
+  });
+
   it("muestra una sola referencia por documento y reúne sus páginas citadas", () => {
     const documentVersionId = "33333333-3333-4333-8333-333333333333";
     const common = {

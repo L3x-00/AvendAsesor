@@ -525,6 +525,7 @@ export function OrientationPreview({
 
           <ChatSources
             messageId={context.messageId}
+            showDownloads={false}
             sources={context.sources}
           />
         </article>

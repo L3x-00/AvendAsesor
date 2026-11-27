@@ -119,10 +119,13 @@ describe("orientation binary builders", () => {
   });
 
   it("renders a Markdown salary table as a real DOCX table", async () => {
+    // La cita del párrafo es la que habilita la regla de tabla salarial nativa
+    // de la vista previa (`isNativeSalaryTable` con fuente única comprobada);
+    // sin ella, pantalla y archivo muestran las filas como texto.
     const binary = await buildOrientationDocx({
       ...content,
       answer: [
-        "La escala es:",
+        "La escala es: [1]",
         "",
         "| Modalidad | Nivel | Jornada | Remuneración |",
         "| --- | --- | --- | --- |",
@@ -137,6 +140,79 @@ describe("orientation binary builders", () => {
     expect(documentXml).toContain("S/ 3,300.60");
     expect(documentXml).not.toContain("| --- |");
     expect(() => new SaxesParser().write(documentXml).close()).not.toThrow();
+  });
+
+  it("keeps the salary grid when the citation column is dropped for a single source", async () => {
+    // Forma real de la respuesta: la cita vive en la última columna de cada
+    // fila y, al consolidarse la fuente única, esa columna desaparece. Antes la
+    // tabla se rechazaba por sus celdas vacías y el DOCX imprimía las barras.
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer: [
+        "La remuneración mensual es S/ 3 500,70. [1]",
+        "",
+        "| Modalidad / Forma | Nivel / Ciclo | Jornada laboral | Remuneración mensual | Cita |",
+        "| --- | --- | --- | --- | --- |",
+        "| EBR | Inicial | 30 horas | S/ 3 500,70 | [1] |",
+        "| EBR | Primaria | 30 horas | S/ 3 500,70 | [1] |",
+        "| EBE | Inicial | 30 horas | S/ 3 500,70 | [1] |",
+      ].join("\n"),
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain("Primaria");
+    expect(documentXml).not.toContain("| ---");
+    expect(documentXml).not.toContain('<w:t xml:space="preserve">Cita</w:t>');
+    expect(documentXml.match(/\[1\]/gu)).toHaveLength(1);
+  });
+
+  it("keeps the citation column when the answer cites two documents", async () => {
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer: [
+        "La escala vigente y la anterior se comparan. [1][2]",
+        "",
+        "| Modalidad | Nivel | Remuneración | Cita |",
+        "| --- | --- | --- | --- |",
+        "| EBR | Inicial | S/ 3 500,70 | [1] |",
+        "| EBR | Inicial | S/ 3 300,60 | [2] |",
+      ].join("\n"),
+      sources: [
+        { ...content.sources[0]!, documentVersionId: "version-1" },
+        {
+          ...content.sources[0]!,
+          documentTitle: "Ley 32498 remuneraciones",
+          documentVersionId: "version-2",
+          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+      ],
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    // Con dos documentos la cita se queda en su columna: es la evidencia de
+    // cada fila y no se consolida en una sola nota.
+    expect(documentXml).toContain("<w:tbl>");
+    expect(documentXml).toContain('<w:t xml:space="preserve">Cita</w:t>');
+    expect(documentXml).toContain("[1]");
+    expect(documentXml).toContain("[2]");
+  });
+
+  it("reads a table without evidence row by row instead of printing pipes", async () => {
+    const binary = await buildOrientationDocx({
+      ...content,
+      answer: [
+        "| Requisito | Plazo |",
+        "| --- | --- |",
+        "| Título pedagógico | 15 días |",
+      ].join("\n"),
+    });
+    const documentXml = readZipEntry(binary, "word/document.xml");
+
+    expect(documentXml).not.toContain("<w:tbl>");
+    expect(documentXml).not.toContain("|");
+    expect(documentXml).toContain("Requisito: Título pedagógico");
   });
 
   it("repairs structured salary bullets before building the DOCX table", async () => {
@@ -202,24 +278,13 @@ describe("orientation binary builders", () => {
     const binary = await buildOrientationPdf({
       ...content,
       answer: [
-        "La escala es:",
+        "La escala es: [1]",
         "",
-        "| Modalidad | Nivel | Jornada | Remuneración |",
-        "| --- | --- | --- | --- |",
-        "| EBR | Inicial | 30 | S/ 3,300.60 |",
-        "| EBR | Primaria | 30 | S/ 3,300.60 |",
-        "",
-        "La jornada menor se paga de forma proporcional. [1][2]",
+        "| Modalidad | Nivel | Jornada | Remuneración | Cita |",
+        "| --- | --- | --- | --- | --- |",
+        "| EBR | Inicial | 30 | S/ 3,300.60 | [1] |",
+        "| EBR | Primaria | 30 | S/ 3,300.60 | [1] |",
       ].join("\n"),
-      sources: [
-        { ...content.sources[0]!, documentVersionId: "version-1" },
-        {
-          ...content.sources[0]!,
-          documentVersionId: "version-1",
-          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
-          rank: 2,
-        },
-      ],
     });
     const parser = new PDFParse({ data: binary });
     const extracted = await parser.getText();
@@ -228,8 +293,10 @@ describe("orientation binary builders", () => {
     expect(extracted.text).toContain("Modalidad");
     expect(extracted.text).toContain("Inicial");
     expect(extracted.text).toContain("3,300.60");
+    expect(extracted.text).not.toContain("| ---");
+    // La columna «Cita» no se imprime: la fuente única se lista al final.
+    expect(extracted.text).not.toMatch(/\bCita\b/u);
     expect(extracted.text.match(/\[1\]/gu)).toHaveLength(1);
-    expect(extracted.text).not.toContain("[2]");
   }, 30_000);
 
   it("creates a parseable A4 PDF and preserves Latin Extended plus emoji", async () => {
@@ -249,5 +316,66 @@ describe("orientation binary builders", () => {
     expect(extracted.text).toContain("Ǎngela Pérez 😀");
     expect(extracted.text).toContain("Consulta");
     // Real font embedding plus PDF text extraction is heavy under v8 coverage.
+  }, 30_000);
+
+  it("keeps the table header when the grid continues on a new page", async () => {
+    const longCell = "Texto extenso de referencia. ".repeat(6).trim();
+    const rows = Array.from(
+      { length: 12 },
+      (_, index) =>
+        `| Modalidad ${index + 1} | ${longCell} | 30 horas | S/ 3 500,70 | [1] |`,
+    );
+    const binary = await buildOrientationPdf({
+      ...content,
+      answer: [
+        `Dato inicial. [1]`,
+        "",
+        "| Modalidad | Detalle | Jornada | Remuneración | Cita |",
+        "| :--- | --- | ---: | ---: | :---: |",
+        ...rows,
+      ].join("\n"),
+    });
+    const parser = new PDFParse({ data: binary });
+    const extracted = await parser.getText();
+    await parser.destroy();
+
+    expect(extracted.text).toContain("-- 2 of 2 --");
+    // «Remuneración» solo aparece en la cabecera de la tabla: que se lea dos
+    // veces demuestra que se repitió al continuar en la página siguiente.
+    expect(
+      extracted.text.match(/Remuneración/gu)?.length,
+    ).toBeGreaterThanOrEqual(2);
+  }, 30_000);
+
+  it("prints a table with two documents and keeps each citation in its cell", async () => {
+    const binary = await buildOrientationPdf({
+      ...content,
+      answer: [
+        "La escala vigente y la anterior se comparan. [1][2]",
+        "",
+        "| Modalidad | Nivel | Remuneración | Cita |",
+        "| --- | --- | --- | --- |",
+        "| EBR | Inicial | S/ 3 500,70 | [1] |",
+        "| EBR | Primaria | S/ 3 500,70 | [2] |",
+      ].join("\n"),
+      sources: [
+        { ...content.sources[0]!, documentVersionId: "version-1" },
+        {
+          ...content.sources[0]!,
+          documentTitle: "Ley 32498 remuneraciones",
+          documentVersionId: "version-2",
+          id: "8c8b56af-6d0c-4fef-881e-7c00907540dd",
+          rank: 2,
+        },
+      ],
+    });
+    const parser = new PDFParse({ data: binary });
+    const extracted = await parser.getText();
+    await parser.destroy();
+
+    expect(extracted.text).toContain("Cita");
+    expect(extracted.text).not.toContain("| ---");
+    expect(extracted.text.match(/\[1\]/gu)?.length).toBeGreaterThanOrEqual(1);
+    expect(extracted.text.match(/\[2\]/gu)?.length).toBeGreaterThanOrEqual(1);
   }, 30_000);
 });
